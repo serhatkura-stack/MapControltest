@@ -110,13 +110,14 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
 
     // --- İzin yok durumu ---
-    private val needAccessText = text(context, LauncherTheme.BODY_SP, maxLines = 4).apply {
+    // Tek seferlik kurulum adımı: ana ekranın en baskın öğesi olmasın diye vurgu değil, tonal düğme.
+    private val needAccessText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 4).apply {
         setText(R.string.launcher_media_need_access)
     }
-    private val grantButton = text(context, LauncherTheme.BODY_SP, LauncherTheme.ON_ACCENT, medium = true).apply {
+    private val grantButton = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
         setText(R.string.launcher_media_grant)
         gravity = Gravity.CENTER
-        background = rounded(context, LauncherTheme.ACCENT, 16f)
+        background = rounded(context, LauncherTheme.CONTROL, 16f)
         val h = context.dp(40)
         setPadding(h, 0, h, 0)
         minWidth = context.dp(160)

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Outline
 import android.graphics.drawable.Drawable
+import android.util.TypedValue
 import android.view.Display
 import android.view.Gravity
 import android.view.View
@@ -84,6 +85,9 @@ class AppDock(private val context: Context) : LauncherWidget {
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            // Uzun adlar ("YouTube Music") kesilmek yerine yuvaya sığana kadar küçülür.
+            setAutoSizeTextTypeUniformWithConfiguration(
+                LABEL_MIN_SP, LauncherTheme.LABEL_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
         }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -154,7 +158,7 @@ class AppDock(private val context: Context) : LauncherWidget {
         slot.root.contentDescription = entry.label
     }
 
-    /** Boş yuva: CONTROL renkli yuvarlak kare içinde artı ikonu. */
+    /** Boş yuva: CONTROL renkli yuvarlak kare içinde artı ikonu; etiket yok, şerit tekrar eden yazıyla dolmasın. */
     private fun bindEmpty(i: Int) {
         val slot = slots[i]
         current[i] = null
@@ -163,10 +167,8 @@ class AppDock(private val context: Context) : LauncherWidget {
         slot.icon.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
         slot.icon.setPadding(pad, pad, pad, pad)
         slot.icon.setImageResource(R.drawable.ic_mdi_plus)
-        val emptyLabel = context.getString(R.string.launcher_app_empty)
-        slot.label.text = emptyLabel
-        slot.label.setTextColor(LauncherTheme.TEXT_SECONDARY)
-        slot.root.contentDescription = emptyLabel
+        slot.label.text = ""
+        slot.root.contentDescription = context.getString(R.string.launcher_app_empty)
     }
 
     /** Henüz çözülmemiş dolu yuva: ikon ve etiket gelene kadar boş bırakılır. */
@@ -239,6 +241,7 @@ class AppDock(private val context: Context) : LauncherWidget {
         const val ICON_DP = 56
         const val PLUS_DP = 28
         const val ICON_RADIUS_DP = 16f
+        const val LABEL_MIN_SP = 13
 
         /**
          * Yuvalar hiç ayarlanmamışken, bu sıradan kurulu olan ilk [SLOT_COUNT] uygulama kullanılır.

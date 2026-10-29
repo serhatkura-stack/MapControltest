@@ -85,6 +85,16 @@ internal abstract class VehicleTile(
 
     protected fun setValue(@StringRes res: Int, color: Int) = setValue(context.getString(res), color)
 
+    /**
+     * Veri yok: değer yerine soluk bir çizgi, geniş boyutta nedeni. Kutucuk "bozuk" gibi bağırmaz;
+     * ekran okuyucu çizgi yerine nedeni okur.
+     */
+    protected fun showMissing(@StringRes reason: Int = R.string.launcher_waiting_data) {
+        setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
+        showDetail(context.getString(reason))
+        root.contentDescription = context.getString(reason)
+    }
+
     protected fun setValue(value: CharSequence, color: Int) {
         valueText.text = value
         valueText.setTextColor(color)
@@ -123,14 +133,15 @@ internal class RangeTile(context: Context) : VehicleTile(context, R.drawable.ic_
         snapshot = next
         val range = next.rangeKm
         if (!next.connected || range == INVALID || range < 0) {
-            setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
-        } else {
-            setValue(context.getString(R.string.launcher_range_value, range), LauncherTheme.TEXT)
+            showMissing()
+            return
         }
+        setValue(context.getString(R.string.launcher_range_value, range), LauncherTheme.TEXT)
         bindFuel()
     }
 
     private fun bindFuel() {
+        if (snapshot.rangeKm == INVALID || snapshot.rangeKm < 0 || !snapshot.connected) return
         val fuel = snapshot.fuelPercent
         val show = snapshot.connected && fuel != INVALID && fuel >= 0
         showDetail(if (show) context.getString(R.string.launcher_fuel_short, fuel) else null)
@@ -196,11 +207,10 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
             }
             null -> {
                 setIcon(R.drawable.ic_mdi_lock, LauncherTheme.TEXT_SECONDARY)
-                setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
+                showMissing()
             }
         }
         root.isEnabled = locked != null
-        root.alpha = if (locked != null) 1f else DISABLED_ALPHA
     }
 
     /** Kilit komutu senkron binder çağrısı; ana thread'i bloklamasın diye arka planda gönderilir. */
@@ -217,10 +227,6 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
                 // Komut gitmediyse dinleyici gerçek durumu göstermeye devam eder.
             }
         }
-    }
-
-    private companion object {
-        const val DISABLED_ALPHA = 0.4f
     }
 }
 
@@ -317,8 +323,7 @@ internal class TireTile(context: Context) : VehicleTile(context, R.drawable.ic_m
             }
             else -> {
                 setIcon(R.drawable.ic_mdi_tire, LauncherTheme.TEXT_SECONDARY)
-                setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
-                showDetail(null)
+                showMissing()
             }
         }
     }

@@ -194,18 +194,14 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     )
 
     /**
-     * 88dp kare düğme: ikon + kısa etiket; açıkken vurgu renginde. Koltuk düğmelerinde
-     * seviye, renkten bağımsız olarak üç küçük nokta ile de gösterilir.
+     * 88dp kare düğme: ikon + kısa etiket; açıkken vurgu renginde. Koltuk düğmelerinde etiket
+     * seviyeyi yazıyla söyler (Kapalı / Düşük / Orta / Yüksek): renk ya da nokta saymaya gerek kalmaz.
      */
-    private inner class ToggleTile(iconRes: Int, labelRes: Int, private val levels: Boolean = false, onTap: () -> Unit) {
+    private inner class ToggleTile(iconRes: Int, private val labelRes: Int, private val levels: Boolean = false, onTap: () -> Unit) {
         private val iconView: ImageView = icon(context, iconRes, 32)
-        private val labelView = text(context, LauncherTheme.LABEL_SP, medium = true)
-        private val dots = List(ClimateAutomationStore.LEVEL_MAX) {
-            View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(context.dp(8), context.dp(8)).apply {
-                    marginStart = context.dp(3); marginEnd = context.dp(3)
-                }
-            }
+        private val labelView = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
+            gravity = Gravity.CENTER
+            setText(if (levels) R.string.launcher_seat_off else labelRes)
         }
         val root: LinearLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -216,14 +212,7 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
             isClickable = true
             addView(iconView)
             addView(gap(context, 8, vertical = true))
-            if (levels) {
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    dots.forEach { addView(it) }
-                })
-            } else {
-                addView(labelView.apply { setText(labelRes) })
-            }
+            addView(labelView)
             setOnClickListener { onTap() }
             pressFeedback()
         }
@@ -236,13 +225,10 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
             val fg = if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT
             iconView.imageTintList = ColorStateList.valueOf(fg)
             labelView.setTextColor(fg)
-            dots.forEachIndexed { i, dot ->
-                // Açık düğme vurgu renginde: dolu nokta ON_ACCENT. Boş nokta her iki temada görünür kalsın diye ikincil metin renginde.
-                dot.background = oval(when {
-                    i < level -> if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT
-                    else -> LauncherTheme.TEXT_SECONDARY
-                })
-                dot.alpha = if (i < level) 1f else 0.45f
+            if (levels) {
+                val levelText = context.getString(SEAT_LEVEL_LABELS[level.coerceIn(0, SEAT_LEVEL_LABELS.lastIndex)])
+                labelView.text = levelText
+                root.contentDescription = context.getString(labelRes) + ", " + levelText
             }
         }
     }
@@ -254,5 +240,9 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
         const val POLL_MS = 3_000L
         const val CONFIRM_DELAY_MS = 800L
         const val DISABLED_ALPHA = 0.4f
+        /** Seviye 0..3 → etiket; ClimateAutomationStore.LEVEL_MAX = 3. */
+        val SEAT_LEVEL_LABELS = intArrayOf(
+            R.string.launcher_seat_off, R.string.launcher_seat_low, R.string.launcher_seat_mid, R.string.launcher_seat_high,
+        )
     }
 }

@@ -24,7 +24,8 @@ data class Span(val w: Int, val h: Int) {
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, val sizes: List<Span>) {
     MEDIA("media", R.string.launcher_widget_media, listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3))),
-    NAVIGATION("navigation", R.string.launcher_widget_navigation, listOf(Span(3, 2), Span(3, 3), Span(2, 1))),
+    NAVIGATION("navigation", R.string.launcher_widget_navigation, listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1))),
+    VEHICLE("vehicle", R.string.launcher_widget_vehicle, listOf(Span(3, 2), Span(2, 2))),
     RANGE("range", R.string.launcher_widget_range, listOf(Span(1, 1), Span(2, 1))),
     LOCK("lock", R.string.launcher_widget_lock, listOf(Span(1, 1))),
     TIRES("tires", R.string.launcher_widget_tires, listOf(Span(1, 1), Span(2, 1))),
@@ -63,13 +64,11 @@ interface SizedWidget : LauncherWidget {
     fun applySpan(span: Span)
 }
 
-/** Varsayılan yerleşim: büyük medya, "Nereye?" ve altında üç küçük araç kutucuğu. */
+/** Varsayılan yerleşim: büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?". */
 fun defaultLayout(): List<PlacedWidget> = listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
-    PlacedWidget("navigation", WidgetType.NAVIGATION, 3, 0, Span(3, 2)),
-    PlacedWidget("range", WidgetType.RANGE, 3, 2, Span(1, 1)),
-    PlacedWidget("lock", WidgetType.LOCK, 4, 2, Span(1, 1)),
-    PlacedWidget("tires", WidgetType.TIRES, 5, 2, Span(1, 1)),
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
+    PlacedWidget("navigation", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
 )
 
 /** Widget örneğini türüne göre üretir. Activity gerekir: bazı widget'lar diyalog açar. */
@@ -77,6 +76,7 @@ object WidgetFactory {
     fun create(activity: Activity, placed: PlacedWidget): SizedWidget = when (placed.type) {
         WidgetType.MEDIA -> MediaCard(activity)
         WidgetType.NAVIGATION -> NavigationCard(activity)
+        WidgetType.VEHICLE -> VehicleHeroCard(activity)
         WidgetType.RANGE -> RangeTile(activity)
         WidgetType.LOCK -> LockTile(activity)
         WidgetType.TIRES -> TireTile(activity)

@@ -8,7 +8,7 @@
     <string name="launcher_nav_search_hint">Search address or place</string>
     <string name="launcher_nav_home">Home</string>
     <string name="launcher_nav_work">Work</string>
-    <string name="launcher_nav_not_set">Hold to set</string>
+    <string name="launcher_nav_not_set">Tap to add</string>
     <string name="launcher_nav_dialog_home">Home address</string>
     <string name="launcher_nav_dialog_work">Work address</string>
     <string name="launcher_nav_dialog_hint">Street, district, city</string>
@@ -78,7 +78,7 @@
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
     <string name="launcher_tires_check">Check pressure</string>
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
-    <string name="launcher_unavailable">Unavailable</string>
+    <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test version: read only</string>
     <string name="launcher_theme">Theme</string>
     <string name="launcher_theme_auto">Automatic (follow the car)</string>
@@ -86,4 +86,15 @@
     <string name="launcher_theme_night">Night</string>
     <string name="launcher_vehicle_settings">Vehicle settings</string>
     <string name="launcher_mapcontrol_settings">MapControl settings</string>
+    <string name="launcher_waiting_data">Waiting for car data</string>
+    <string name="launcher_not_equipped">Not on this car</string>
+    <string name="launcher_seat_off">Off</string>
+    <string name="launcher_seat_low">Low</string>
+    <string name="launcher_seat_mid">Medium</string>
+    <string name="launcher_seat_high">High</string>
+    <string name="launcher_widget_vehicle">Vehicle</string>
+    <string name="launcher_doors_closed">Doors closed</string>
+    <string name="launcher_part_open" formatted="true">%1$s open</string>
+    <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
+    <string name="launcher_normal">Normal</string>
 </resources>

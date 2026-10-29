@@ -44,11 +44,6 @@ internal abstract class MetricsTile(
 
     /** Değeri ve (geniş boyutta) ikinci satırı [snapshot]'tan yeniden kurar. */
     protected abstract fun bind()
-
-    protected fun showUnavailable() {
-        setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
-        showDetail(null)
-    }
 }
 
 /** Sürüş modu: Eko, Normal, Spor ve arazi modları. İkon rengi aracın mod rengini alır. */
@@ -60,7 +55,7 @@ internal class DriveModeTile(context: Context) :
         val label = if (snapshot.connected && snapshot.hasDriveMode()) modeLabel(mode) else null
         if (label == null) {
             setIcon(R.drawable.ic_mdi_car_sports, LauncherTheme.TEXT_SECONDARY)
-            showUnavailable()
+            showMissing()
             return
         }
         val tint = if (DriveModeStyle.isThemed(mode)) DriveModeStyle.accentColor(context, mode) else LauncherTheme.TEXT_SECONDARY
@@ -98,7 +93,7 @@ internal class DoorsTile(context: Context) :
         val known = s.hasDoorLf() || s.hasDoorRf() || s.hasDoorLr() || s.hasDoorRr() || s.hasTrunk()
         if (!s.connected || !known) {
             setIcon(R.drawable.ic_mdi_car_door, LauncherTheme.TEXT_SECONDARY)
-            showUnavailable()
+            showMissing()
             return
         }
         val open = buildList {
@@ -128,13 +123,12 @@ internal class SunroofTile(context: Context) :
         val s = snapshot
         if (!s.connected) {
             setIcon(R.drawable.ic_mdi_car_sunroof, LauncherTheme.TEXT_SECONDARY)
-            showUnavailable()
+            showMissing()
             return
         }
         if (!s.hasSunroof()) {
             setIcon(R.drawable.ic_mdi_car_sunroof, LauncherTheme.TEXT_SECONDARY)
-            setValue(R.string.launcher_none, LauncherTheme.TEXT_SECONDARY)
-            showDetail(null)
+            showMissing(R.string.launcher_not_equipped)
             return
         }
         val open = s.sunroofOpenOrNull()
