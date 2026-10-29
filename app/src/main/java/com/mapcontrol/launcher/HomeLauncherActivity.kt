@@ -2,7 +2,6 @@ package com.mapcontrol.launcher
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -12,7 +11,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.Toast
 import com.mapcontrol.R
-import com.mapcontrol.ui.activity.MainActivity
 import com.mapcontrol.vehicle.VehicleMetricsRepository
 
 /**
@@ -223,7 +221,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     // --- Diğer ---
 
     private fun openSettings() {
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        LauncherEdition.openSettings(this)
     }
 
     private fun hideSystemBars() {

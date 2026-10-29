@@ -50,6 +50,11 @@ class AppDock(private val context: Context) : LauncherWidget {
 
     private val slots: List<Slot> = List(SLOT_COUNT) { buildSlot(it) }
 
+    /** Ayarlanmamış yuvaların paketleri: adaylardan kurulu olanlar, sırayla. */
+    private val defaults: List<String> by lazy {
+        DEFAULT_CANDIDATES.filter { isInstalled(it) }.take(SLOT_COUNT)
+    }
+
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
@@ -102,7 +107,7 @@ class AppDock(private val context: Context) : LauncherWidget {
 
     /** Kayıtlı seçimi okuyup yuvaları çizer; önbellekte olmayan paketleri arka planda çözer. */
     private fun refresh() {
-        val packages = List(SLOT_COUNT) { prefs.getString(slotKey(it), DEFAULT_PACKAGES[it]).orEmpty() }
+        val packages = List(SLOT_COUNT) { prefs.getString(slotKey(it), null) ?: defaults.getOrElse(it) { "" } }
         bindSlots(packages, cache)
 
         val snapshot = HashMap(cache)
@@ -217,6 +222,13 @@ class AppDock(private val context: Context) : LauncherWidget {
         null
     }
 
+    private fun isInstalled(packageName: String): Boolean = try {
+        context.packageManager.getApplicationInfo(packageName, 0)
+        true
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
+
     private fun slotKey(index: Int) = "slot_$index"
 
     private companion object {
@@ -228,14 +240,21 @@ class AppDock(private val context: Context) : LauncherWidget {
         const val PLUS_DP = 28
         const val ICON_RADIUS_DP = 16f
 
-        /** Yalnızca anahtar hiç yazılmamışken kullanılır; kurulu değilse yuva boş görünür. */
-        val DEFAULT_PACKAGES = listOf(
+        /**
+         * Yuvalar hiç ayarlanmamışken, bu sıradan kurulu olan ilk [SLOT_COUNT] uygulama kullanılır.
+         * Sona aracın kendi uygulamaları eklendi: telefon uygulamaları yoksa şerit yine dolu görünür.
+         */
+        val DEFAULT_CANDIDATES = listOf(
             "com.spotify.music",
             "com.google.android.apps.youtube.music",
             "com.google.android.apps.maps",
             "ru.yandex.yandexnavi",
-            "",
-            "",
+            "com.waze",
+            "com.desaysv.svaudioapp",
+            "com.desaysv.bluetooth.phone",
+            "com.desaysv.vehiclesetting",
+            "com.desaysv.videoapp",
+            "com.frostnav",
         )
     }
 }

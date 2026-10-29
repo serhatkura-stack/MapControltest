@@ -1,0 +1,77 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Salt-okur launcher test uygulaması. Kaynak kodu :app'ten seçilerek kopyalanır; listede olmayan hiçbir
+// MapControl kodu (sürüş yardımları, servisler, web sunucusu, kurulum) bu APK'ya girmez.
+// Araca komut gönderen tek nokta olan LauncherEdition.kt bu modülün kendi, boş sürümüdür.
+def appJava = file('../app/src/main/java')
+def syncedJava = layout.buildDirectory.dir('synced-src/java')
+
+def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
+    from(appJava) {
+        include 'com/mapcontrol/launcher/**'
+        exclude 'com/mapcontrol/launcher/LauncherEdition.kt'
+        include 'com/mapcontrol/weather/OpenMeteoWeather*.java'
+        include 'com/mapcontrol/media/LauncherMediaController.java'
+        include 'com/mapcontrol/vehicle/VehicleMetricsRepository.java'
+        include 'com/mapcontrol/vehicle/VehicleMetricsSnapshot.java'
+        include 'com/mapcontrol/vehicle/VehicleMetricsCache.java'
+        include 'com/mapcontrol/vehicle/DriveModeStyle.java'
+        include 'com/mapcontrol/ui/theme/UiStyles.java'
+        include 'com/mapcontrol/vehicle/VehicleQuickControls.java'
+        include 'com/mapcontrol/vehicle/ClimateAutomationStore.java'
+        include 'com/mapcontrol/util/ProjectionTargetApps.java'
+        include 'com/mapcontrol/util/AppLaunchHelper.java'
+        include 'com/mapcontrol/util/AppIconHelper.java'
+        // Araç veri yolu istemcisi (VDBus / CarInfoProxy).
+        include 'com/desaysv/**'
+    }
+    into syncedJava
+}
+
+android {
+    namespace 'com.mapcontrol'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.mapcontrol.launchertest'
+        minSdk 29
+        targetSdk 28
+        versionCode 1
+        versionName '0.1-test'
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = ['src/main/java', syncedJava.get().asFile]
+            res.srcDirs = ['../app/src/main/res']
+        }
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
+        disable 'ExpiredTargetSdkVersion'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+tasks.named('preBuild') { dependsOn syncLauncherSources }
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}

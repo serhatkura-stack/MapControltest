@@ -58,4 +58,5 @@
     <string name="launcher_tires_check">Check pressure</string>
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">Unavailable</string>
+    <string name="launcher_read_only">Test version: read only</string>
 </resources>

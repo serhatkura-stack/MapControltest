@@ -58,4 +58,5 @@
     <string name="launcher_tires_check">Basıncı kontrol et</string>
     <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">Okunamıyor</string>
+    <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
 </resources>

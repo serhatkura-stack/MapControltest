@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Toast
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
@@ -127,28 +128,32 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     private fun setAc(on: Boolean) {
         val v = if (on) 1 else 0
         send(state.copy(acOn = on)) {
-            it.sendItemValue(HVAC, HvacID.ID_AC_STATE, v)
-            it.sendItemValue(HVAC, HvacID.ID_AC_WORKING, v)
-            it.sendItemValue(HVAC, HvacID.ID_AC_AUTO_STATE, v)
+            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_STATE, v)
+            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_WORKING, v)
+            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_AUTO_STATE, v)
         }
     }
 
     private fun setDefrost(on: Boolean) {
         val v = if (on) 1 else 0
         send(state.copy(defrostOn = on)) {
-            it.sendItemValue(HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v)
-            it.sendItemValue(HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, v)
+            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v)
+            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, v)
         }
     }
 
     private fun setSeatLevel(driver: Boolean, level: Int) {
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_HEAT else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
         val optimistic = if (driver) state.copy(driverSeat = level) else state.copy(passengerSeat = level)
-        send(optimistic) { it.sendItemValue(SETTING, id, encodeSeat(level)) }
+        send(optimistic) { LauncherEdition.sendItemValue(it, SETTING, id, encodeSeat(level)) }
     }
 
     /** Ekranı hemen günceller (iyimser), komutu arka planda yollar, kısa süre sonra gerçek durumu okur. */
     private fun send(optimistic: ClimateState, command: (CarInfoProxy) -> Unit) {
+        if (LauncherEdition.READ_ONLY) {
+            Toast.makeText(context, R.string.launcher_read_only, Toast.LENGTH_SHORT).show()
+            return
+        }
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return
         state = optimistic

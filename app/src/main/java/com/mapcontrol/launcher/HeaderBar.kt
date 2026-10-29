@@ -71,8 +71,10 @@ class HeaderBar(
         addView(gap(context, 32))
         addView(iconButton(context, R.drawable.ic_mdi_view_grid, context.getString(R.string.launcher_edit),
             background = LauncherTheme.CARD) { onEdit() })
-        addView(gap(context, 16))
-        addView(settingsButton())
+        if (LauncherEdition.HAS_SETTINGS) {
+            addView(gap(context, 16))
+            addView(settingsButton())
+        }
     }
 
     private fun settingsButton(): View = LinearLayout(context).apply {

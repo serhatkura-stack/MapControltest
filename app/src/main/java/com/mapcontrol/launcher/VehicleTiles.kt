@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
@@ -205,9 +206,13 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
     /** Kilit komutu senkron binder çağrısı; ana thread'i bloklamasın diye arka planda gönderilir. */
     private fun toggle() {
         val current = locked ?: return
+        if (LauncherEdition.READ_ONLY) {
+            Toast.makeText(appContext, R.string.launcher_read_only, Toast.LENGTH_SHORT).show()
+            return
+        }
         io.runSafely {
             try {
-                controls().setCentralLock(!current)
+                LauncherEdition.setCentralLock(appContext, !current)
             } catch (e: RuntimeException) {
                 // Komut gitmediyse dinleyici gerçek durumu göstermeye devam eder.
             }

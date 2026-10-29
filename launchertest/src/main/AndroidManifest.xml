@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Hava durumu (Open-Meteo). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Araç verisini okumak için araç veri servisine bağlanma. -->
+    <uses-permission android:name="ivi.vds.permission.SERVICE" />
+    <!-- Alt şeritteki uygulama seçicisi. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="Launcher Test"
+        android:supportsRtl="true">
+
+        <!-- HOME kategorisi yok: aracın kendi ana ekranı değişmez; uygulama listesinden açılır. -->
+        <activity
+            android:name=".launcher.HomeLauncherActivity"
+            android:exported="true"
+            android:label="Launcher Test"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Medya kartı: çalan şarkıyı okumak için bildirim erişimi (kullanıcı ayarlardan verir). -->
+        <service
+            android:name=".media.LauncherMediaNotificationListener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
