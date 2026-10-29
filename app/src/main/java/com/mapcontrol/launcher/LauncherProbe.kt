@@ -18,7 +18,12 @@ import com.desaysv.ivi.extra.project.carinfo.RadarID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.RvcID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
+import com.desaysv.ivi.vdb.IVDBusNotify
+import com.desaysv.ivi.vdb.client.VDBus
+import com.desaysv.ivi.vdb.client.bind.VDServiceDef
+import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
+import com.desaysv.ivi.vdb.event.id.carlan.VDEventCarLan
 import java.lang.reflect.Modifier
 
 /**
@@ -30,6 +35,8 @@ import java.lang.reflect.Modifier
  *    "LauncherProbe" etiketiyle loga yazar (cevapsızlar yalnızca sayılır).
  * 2) İzleme: cevap veren sinyalleri [WATCH_MS] boyunca [POLL_MS]'de bir yeniden okur, yalnızca
  *    değişenleri yazar. Sürücü kapıyı açar, klimayı değiştirir; hangi sinyalin karşılık geldiği görülür.
+ * 3) Navigasyon: aynı süre boyunca CAR_LAN navigasyon olaylarını (yön, şerit, mesafe, gösterge/HUD alanı)
+ *    yalnızca DİNLER ve içeriklerini yazar; HUD'a yön oklarının nasıl gittiğini anlamak için.
  */
 internal object LauncherProbe {
 
@@ -53,6 +60,20 @@ internal object LauncherProbe {
         AmbientLightID::class.java to VDEventCarInfo.MODULE_AMBIENT_LIGHT,
         RvcID::class.java to VDEventCarInfo.MODULE_RVC,
     )
+
+    /** CAR_LAN navigasyon olayları: yön, şerit, toplam bilgi, gösterge/HUD alanı. */
+    private val NAVI_EVENTS = intArrayOf(
+        VDEventCarLan.NAVIGATION_LANE_INFO, VDEventCarLan.NAVIGATION_ROAD_INFO, VDEventCarLan.NAVIGATION_ROAD_INFO2,
+        VDEventCarLan.NAVIGATION_TOTAL_INFO, VDEventCarLan.NAVIGATION_TOTAL_INFO2, VDEventCarLan.NAVIGATION_DIGITAL_INFO,
+        VDEventCarLan.NAVIGATION_DISPLAY_TO_CLUSTER, VDEventCarLan.NAVIGATION_DISPLAY_AREA,
+        VDEventCarLan.NAVIGATION_COMPASS_FUCTION, VDEventCarLan.NAVIGATION_AREA_DISPLAY_REQUEST,
+    )
+
+    private val naviListener = object : IVDBusNotify.Stub() {
+        override fun onVDBusNotify(event: VDEvent?) {
+            if (event != null) Log.i(TAG, "NAVI-EVENT ${event.id} ${describe(event)}")
+        }
+    }
 
     private class Signal(val module: String, val name: String, val moduleId: Int, val id: Int) {
         var last: String? = null
@@ -106,6 +127,7 @@ internal object LauncherProbe {
         }
         Log.i(TAG, "SCAN-DONE cevap=${live.size} sessiz=$silent; izleme ${WATCH_MS / 60_000} dk")
 
+        listenNavigation(subscribe = true)
         val end = SystemClock.elapsedRealtime() + WATCH_MS
         while (runToken == token && SystemClock.elapsedRealtime() < end) {
             SystemClock.sleep(POLL_MS)
@@ -117,8 +139,49 @@ internal object LauncherProbe {
                 }
             }
         }
+        listenNavigation(subscribe = false)
         Log.i(TAG, "WATCH-DONE")
     }
 
     private fun read(s: Signal): String? = CarSignals.read(s.moduleId, s.id)?.joinToString(",", "[", "]")
+
+    /** Navigasyon olaylarına abone olur ya da aboneliği bırakır; önce son durumları bir kez okur. Göndermez. */
+    private fun listenNavigation(subscribe: Boolean) {
+        val bus = VDBus.getDefault()
+        try {
+            if (subscribe) {
+                bus.bindService(VDServiceDef.ServiceType.CAR_LAN)
+                for (id in NAVI_EVENTS) {
+                    bus.getOnce(VDEvent(id))?.let { Log.i(TAG, "NAVI-NOW $id ${describe(it)}") }
+                    bus.subscribe(VDEvent(id), naviListener)
+                }
+                bus.subscribeCommit()
+                Log.i(TAG, "NAVI-LISTEN ${NAVI_EVENTS.size} olay")
+            } else {
+                for (id in NAVI_EVENTS) bus.unsubscribe(VDEvent(id), naviListener)
+            }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "NAVI-FAIL ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    /** Olay içeriğinin kısa özeti: anahtarlar ve değerler (Parcelable'lar toString ile), 400 karakter. */
+    private fun describe(event: VDEvent): String = try {
+        val payload = event.payload
+        if (payload == null) "{}" else describePayload(payload)
+    } catch (e: RuntimeException) {
+        "okunamadı: ${e.javaClass.simpleName}"
+    }
+
+    private fun describePayload(payload: android.os.Bundle): String {
+        payload.classLoader = LauncherProbe::class.java.classLoader
+        return payload.keySet().joinToString(", ", "{", "}") { k ->
+            val v = payload.get(k)
+            "$k=" + when (v) {
+                is IntArray -> v.joinToString(",", "[", "]")
+                is ByteArray -> "bytes(${v.size})"
+                else -> v.toString()
+            }
+        }.take(400)
+    }
 }
