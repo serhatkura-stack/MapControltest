@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Navigasyon kartı: kısa arama ipucu (2×1) -->
+<resources>
+    <string name="launcher_nav_search_short">Search</string>
+</resources>

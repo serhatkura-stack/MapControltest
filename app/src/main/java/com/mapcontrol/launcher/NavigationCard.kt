@@ -36,12 +36,18 @@ class NavigationCard(private val context: Context) : SizedWidget {
 
     private val shortcutRow = LinearLayout(context)
 
+    /** Son hedef satırları (3×2 ve üstü); kayıt yoksa boş ve görünmez kalır. */
+    private val recentsBox = LinearLayout(context)
+    private var recents: List<NavRecent> = emptyList()
+    private var recentRowsFit = 0
+
     /** Tam yerleşim: başlık, arama alanı, boşluk, altta Ev / İş düğmeleri. */
     private val fullLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(title)
         addView(titleGap)
         addView(searchField())
+        addView(recentsBox.apply { orientation = LinearLayout.VERTICAL })
         // Kısayollar kartın altına yaslanır; medya kartındaki kontrollerle aynı hizada durur.
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(gap(context, 16, vertical = true))
@@ -86,6 +92,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
 
     init {
         bindAddresses()
+        bindRecents()
     }
 
     /**
@@ -127,6 +134,16 @@ class NavigationCard(private val context: Context) : SizedWidget {
             lp.height = context.dp(buttonDp)
             shortcutRow.layoutParams = lp
         }
+        // Son hedef satırları: arama ile kısayollar arasında kalan boşluğa sığdığı kadar.
+        val titleBlock = if (title.visibility == View.VISIBLE) title.height + titleGap.height else 0
+        val fixed = view.paddingTop + view.paddingBottom + titleBlock +
+            context.dp(LauncherTheme.TOUCH_MIN_DP) + context.dp(16 + 16) + context.dp(buttonDp)
+        val rowPx = context.dp(RECENT_ROW_DP + RECENT_GAP_DP)
+        val fit = ((heightPx - fixed) / rowPx).coerceIn(0, NavShortcutStore.MAX_RECENTS)
+        if (fit != recentRowsFit) {
+            recentRowsFit = fit
+            showRecentRows()
+        }
     }
 
     private fun addressText(): TextView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
@@ -164,7 +181,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
         addView(icon(context, R.drawable.ic_mdi_magnify, 24, LauncherTheme.TEXT_SECONDARY))
         addView(gap(context, 8))
         addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-            setText(R.string.launcher_nav_search_hint)
+            setText(R.string.launcher_nav_search_short)
         })
         contentDescription = context.getString(R.string.launcher_nav_search_hint)
         isClickable = true
@@ -217,6 +234,48 @@ class NavigationCard(private val context: Context) : SizedWidget {
         bind(workAddress, store.get(NavPlace.WORK))
     }
 
+    /** Son hedefleri okuyup satırları yeniden kurar (en çok 3 görünüm, dinleyici/iş parçacığı yok). */
+    private fun bindRecents() {
+        val latest = store.recents()
+        if (latest == recents && recentsBox.childCount == latest.size) return
+        recents = latest
+        recentsBox.removeAllViews()
+        for (r in latest) {
+            recentsBox.addView(gap(context, RECENT_GAP_DP, vertical = true))
+            recentsBox.addView(recentRow(r))
+        }
+        showRecentRows()
+    }
+
+    /** Sığan satırları gösterir; her satır kendi aralığıyla birlikte (gap + satır) çiftidir. */
+    private fun showRecentRows() {
+        for (i in 0 until recentsBox.childCount) {
+            recentsBox.getChildAt(i).visibility = if (i / 2 < recentRowsFit) View.VISIBLE else View.GONE
+        }
+    }
+
+    /** Büyük dokunma satırı: ikon + tek satır ad; dokununca aynı navigasyon yeniden başlar. */
+    private fun recentRow(r: NavRecent): View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = rounded(context, LauncherTheme.CONTROL, 20f)
+        val p = context.dp(24)
+        setPadding(p, 0, p, 0)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(RECENT_ROW_DP))
+        addView(icon(context, R.drawable.ic_mdi_map_marker, 32, LauncherTheme.TEXT_SECONDARY))
+        addView(gap(context, 16))
+        addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { text = r.label }, weightLp(1f).apply { height = LinearLayout.LayoutParams.WRAP_CONTENT })
+        contentDescription = r.label
+        isClickable = true
+        isFocusable = true
+        setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(r.uri))
+            if (r.pkg.isNotEmpty()) intent.setPackage(r.pkg)
+            launch(intent)
+        }
+        pressFeedback()
+    }
+
     private fun bind(target: TextView, address: String) {
         if (address.isEmpty()) target.setText(R.string.launcher_nav_not_set) else target.text = address
     }
@@ -261,6 +320,10 @@ class NavigationCard(private val context: Context) : SizedWidget {
             else -> null
         }
         launch(intent)
+        if (intent != null) {
+            store.addRecent(address, intent.dataString.orEmpty(), intent.`package`.orEmpty())
+            bindRecents()
+        }
     }
 
     private fun launch(intent: Intent?) {
@@ -279,7 +342,10 @@ class NavigationCard(private val context: Context) : SizedWidget {
 
     private fun noApp() = Toast.makeText(context, R.string.launcher_nav_no_app, Toast.LENGTH_LONG).show()
 
-    override fun onVisible() = bindAddresses()
+    override fun onVisible() {
+        bindAddresses()
+        bindRecents()
+    }
 
     override fun onHidden() {
         // Çalışan bir şey yok.
@@ -293,5 +359,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
         const val COMPACT_PADDING_DP = 16
         const val COMPACT_GAP_DP = 12
         const val COMPACT_BUTTON_PAD_DP = 12
+        const val RECENT_ROW_DP = 76
+        const val RECENT_GAP_DP = 12
     }
 }
