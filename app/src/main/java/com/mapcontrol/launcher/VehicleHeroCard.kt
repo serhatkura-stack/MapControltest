@@ -20,6 +20,19 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
+ * Yakıt, onda birlik yüzde (694 = %69,4). Araç bazen tam yüzde (<=100) bazen onda bir (>100) verir;
+ * kural VehicleMetricsFormatter.fuelPercentOrZero ile aynı. Bağlı değilse ya da geçersizse null.
+ */
+internal fun VehicleMetricsSnapshot.fuelTenthsOrNull(): Int? {
+    val raw = fuelPercent
+    if (!connected || !VehicleMetricsSnapshot.isValid(raw) || raw < 0) return null
+    return (if (raw <= 100) raw * 10 else raw).coerceAtMost(1000)
+}
+
+/** Yakıtın yuvarlanmış tam yüzdesi (0..100); bağlı değilse ya da geçersizse null. */
+internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? = fuelTenthsOrNull()?.let { (it + 5) / 10 }
+
+/**
  * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Solda büyük menzil ve yakıt, sağda araç silüeti,
  * altta kilit · kapılar · lastikler. Her şey yolundaysa sakin; bir sorun varsa yalnızca o parça uyarı renginde.
  *
@@ -36,6 +49,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private var locked: Boolean? = null
     private var tireWarning: Boolean? = null
     private var lowFuel = false
+    /** Gösterilen tam yüzde; değer 0,1'lik oynadıkça zıplamasın diye histerezisle tutulur. */
+    private var shownFuel: Int? = null
     private val tripListener = TripSource.Listener {
         lowFuel = it.lowFuel == true
         render()
@@ -58,7 +73,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private val doorsChip = StatusChip()
     private val tiresChip = StatusChip()
 
-    override val view: View = card(context, LinearLayout.HORIZONTAL).apply {
+    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = 24).apply {
         // Sol: menzil üstte, durumlar altta. Sağ: araç kartın tüm yüksekliğinde.
         // İçerikle boyutlanan satırlar açıkça WRAP_CONTENT, yoksa 1px'lik boşluğa göre daralırlar.
         addView(LinearLayout(context).apply {
@@ -72,7 +87,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
                     setText(R.string.launcher_widget_range)
                 })
             }, wrapLp())
-            addView(gap(context, 8, vertical = true))
+            addView(gap(context, 4, vertical = true))
             addView(rangeText, wrapLp())
             addView(gap(context, 4, vertical = true))
             addView(fuelText, wrapLp())
@@ -89,10 +104,31 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         addView(gap(context, 16))
         addView(carImage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CAR_WEIGHT))
         addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
+            fitRange(v)
             if (r - l != or_ - ol) {
                 // Dar kartta (2×2) silüet sığmaz; menzil ve durum yeter.
                 carImage.visibility = if (r - l >= v.context.dp(MIN_WIDTH_FOR_CAR_DP)) View.VISIBLE else View.GONE
             }
+        }
+    }
+
+    /**
+     * Kart içeriğin altında kalırsa en alttaki durum satırı kırpılır. Menzil yazısı esnek olan tek parça:
+     * sığmıyorsa küçültülür, böylece ikonlu durum satırı her zaman görünür.
+     */
+    private fun fitRange(card: View) {
+        val avail = card.height - card.paddingTop - card.paddingBottom
+        if (avail <= 0) return
+        val fixed = context.dp(28 + 4 + 4 + CHIP_HEIGHT_DP) + fuelText.lineHeight + context.dp(8)
+        // Boyutlar yazıya dokunmadan ölçülür; yalnızca değişince uygulanır, yoksa her yerleşim yenisini tetikler.
+        val paint = android.text.TextPaint(rangeText.paint)
+        val size = RANGE_SIZES_SP.firstOrNull { sp ->
+            paint.textSize = sp * context.resources.displayMetrics.scaledDensity
+            fixed + paint.getFontMetricsInt(null) <= avail
+        } ?: RANGE_SIZES_SP.last()
+        val px = size * context.resources.displayMetrics.scaledDensity
+        if (Math.abs(rangeText.textSize - px) > 0.5f) {
+            rangeText.post { rangeText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, size) }
         }
     }
 
@@ -170,11 +206,17 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             rangeText.setText(R.string.launcher_unavailable)
             rangeText.setTextColor(LauncherTheme.TEXT_SECONDARY)
         }
-        val fuel = s.fuelPercent
-        val hasFuel = s.connected && VehicleMetricsSnapshot.isValid(fuel) && fuel >= 0
+        val tenths = s.fuelTenthsOrNull()
+        val hasFuel = tenths != null
+        // Tam yüzde ancak onda bir değer gösterilenden 0,6 uzaklaşınca değişir; düşük yakıtta anlık izlenir.
+        val fuel = if (tenths == null) null else {
+            val shown = shownFuel
+            if (shown == null || lowFuel || Math.abs(tenths - shown * 10) >= FUEL_HYSTERESIS_TENTHS) (tenths + 5) / 10 else shown
+        }
+        shownFuel = fuel
         fuelText.text = when {
-            hasFuel && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
-            hasFuel -> context.getString(R.string.launcher_fuel_short, fuel)
+            fuel != null && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
+            fuel != null -> context.getString(R.string.launcher_fuel_short, fuel)
             else -> context.getString(R.string.launcher_waiting_data)
         }
         fuelText.setTextColor(if (hasFuel && lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
@@ -253,6 +295,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         const val CHIP_HEIGHT_DP = 48
         /** Sol sütuna göre araç görselinin payı; 3×2'de görsel kartın yüksekliğini doldurur. */
         const val CAR_WEIGHT = 0.8f
+        const val FUEL_HYSTERESIS_TENTHS = 6
+        /** Menzil yazısı boyutları, büyükten küçüğe; kart alçaldıkça ilk sığan seçilir. */
+        val RANGE_SIZES_SP = listOf(LauncherTheme.TIME_SP, 44f, 36f)
         const val TIRE_POLL_MS = 10_000L
     }
 }

@@ -142,9 +142,8 @@ internal class RangeTile(context: Context) : VehicleTile(context, R.drawable.ic_
 
     private fun bindFuel() {
         if (snapshot.rangeKm == INVALID || snapshot.rangeKm < 0 || !snapshot.connected) return
-        val fuel = snapshot.fuelPercent
-        val show = snapshot.connected && fuel != INVALID && fuel >= 0
-        showDetail(if (show) context.getString(R.string.launcher_fuel_short, fuel) else null)
+        val fuel = snapshot.fuelPercentOrNull()
+        showDetail(if (fuel != null) context.getString(R.string.launcher_fuel_short, fuel) else null)
     }
 }
 

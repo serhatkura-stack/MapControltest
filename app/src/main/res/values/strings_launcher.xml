@@ -103,6 +103,8 @@
     <string name="launcher_widget_trip">Trip</string>
     <string name="launcher_widget_health">Car health</string>
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
+    <string name="launcher_consumption_idle">Stationary</string>
+    <string name="launcher_app_vehicle_settings">Vehicle settings</string>
     <string name="launcher_drive_avg" formatted="true">This drive %1$s</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>

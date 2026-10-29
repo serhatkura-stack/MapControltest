@@ -104,7 +104,7 @@ public final class VehicleMetricsFormatter {
         if (!VehicleMetricsSnapshot.isValid(combined) || combined <= 0) {
             return dash();
         }
-        int rpm = combined * 10;
+        int rpm = VehicleMetricsSnapshot.rpmFromCombined(combined);
         return String.format(Locale.getDefault(), "%,d", rpm);
     }
 
@@ -218,7 +218,7 @@ public final class VehicleMetricsFormatter {
         if (!VehicleMetricsSnapshot.isValid(combined) || combined <= 0) {
             return context.getString(R.string.vehicle_info_engine_off);
         }
-        int rpm = combined * 10;
+        int rpm = VehicleMetricsSnapshot.rpmFromCombined(combined);
         return String.format(Locale.getDefault(), "%,d devir/dakika", rpm);
     }
 

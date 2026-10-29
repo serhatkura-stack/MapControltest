@@ -121,6 +121,13 @@ public final class VehicleMetricsSnapshot {
         return 0;
     }
 
+    /** Tiggo 7 araç testinde ölçüldü: motor devri = ham birleşik değer x 4 (ör. 188 -> 752 dev/dk rölanti). */
+    public static final int RPM_FACTOR = 4;
+
+    public static int rpmFromCombined(int combined) {
+        return combined * RPM_FACTOR;
+    }
+
     public static boolean isValid(int value) {
         return value != VehicleMetricsCache.INVALID;
     }

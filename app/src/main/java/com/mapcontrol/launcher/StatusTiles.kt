@@ -82,8 +82,8 @@ internal class DriveModeTile(context: Context) :
         // DriveModeStyle.shortLabel ile aynı araç değerleri.
         const val MODE_SNOW = 3
         const val MODE_MUD = 4
-        const val MODE_OFFROAD = 5
-        const val MODE_SAND = 7
+        const val MODE_OFFROAD = 6
+        const val MODE_SAND = 5
     }
 }
 

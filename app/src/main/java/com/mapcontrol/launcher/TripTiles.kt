@@ -34,11 +34,12 @@ internal object CarSignals {
 }
 
 /**
- * Yolculuk bilgisayarı verisi. Çevrimler FrostNav/MapControl'ün kullandıklarıyla aynı; [instantL100] ve
- * [driveAvgL100] Tiggo 7'de henüz doğrulanmadı (ham değer / 10 varsayıldı, araç testinde kontrol edilecek).
+ * Yolculuk bilgisayarı verisi. Çevrimler Tiggo 7'de doğrulandı (2026-10-29, gösterge TripB ile eşleşti);
+ * [driveAvgL100] hâlâ doğrulanmadı (okunan [0,0] = 0). [instantL100] yalnızca araç hareket ederken geçerli.
  */
 internal data class TripData(
     val connected: Boolean = false,
+    val moving: Boolean? = null,
     val instantL100: Double? = null,
     val driveAvgL100: Double? = null,
     val tripKm: Double? = null,
@@ -105,12 +106,16 @@ internal object TripSource {
             return TripData()
         }
         fun ro(id: Int) = CarSignals.readInt(RO, id)
+        // Anlık tüketim duruyorken 0xFFFF döner; yalnızca hızı > 0 iken geçerli.
+        val speed = ro(ReadOnlyID.ID_CAR_SPEED)
+        val moving = speed?.let { it in 1..300 }
         return TripData(
             connected = true,
-            instantL100 = ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION)?.takeIf { it in 0..999 }?.let { it / 10.0 },
+            moving = moving,
+            instantL100 = if (moving == true) ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION)?.takeIf { it in 0..999 }?.let { it / 10.0 } else null,
             driveAvgL100 = ro(ReadOnlyID.ID_AVERAGE_FUEL_CONS_AFTER_RUNNING)?.takeIf { it in 1..999 }?.let { it / 10.0 },
-            tripKm = ro(ReadOnlyID.ID_TRIP)?.takeIf { it >= 0 }?.let { if (it > 100_000) it.toDouble() else it / 10.0 },
-            avgL100 = ro(ReadOnlyID.ID_AVG_FUEL_CONS)?.takeIf { it in 1..999 }?.let { it / 10.0 },
+            tripKm = ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)?.takeIf { it >= 0 }?.let { it / 10.0 },
+            avgL100 = ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)?.takeIf { it in 1..999 }?.let { it / 10.0 },
             avgSpeedKmh = ro(ReadOnlyID.ID_AVG_SPEED)?.takeIf { it in 1..300 },
             batteryV = ro(ReadOnlyID.ID_IBS_VOLTAGE)?.takeIf { it in 5_000..20_000 }?.let { it / 1000.0 },
             coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
@@ -152,6 +157,11 @@ internal class ConsumptionTile(context: Context) :
 
     override fun bind() {
         val now = data.instantL100
+        if (data.connected && now == null && data.moving == false) {
+            setValue(context.getString(R.string.launcher_consumption_idle), LauncherTheme.TEXT_SECONDARY)
+            showDetail(data.driveAvgL100?.let { context.getString(R.string.launcher_drive_avg, one(it)) })
+            return
+        }
         if (!data.connected || now == null) {
             showMissing()
             return

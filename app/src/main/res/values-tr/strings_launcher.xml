@@ -103,6 +103,8 @@
     <string name="launcher_widget_trip">Yolculuk</string>
     <string name="launcher_widget_health">Araç sağlığı</string>
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
+    <string name="launcher_consumption_idle">Araç duruyor</string>
+    <string name="launcher_app_vehicle_settings">Araç ayarları</string>
     <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>

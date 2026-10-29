@@ -168,7 +168,8 @@ public final class VehicleQuickControls {
     }
 
     private void applyCentralLockValue(int rawValue, boolean notify) {
-        centralLocked = rawValue == 2;
+        // Araçta ölçüldü: 0 kilitli, 1 açık.
+        centralLocked = rawValue == 0;
         if (notify) {
             notifyListeners();
         }

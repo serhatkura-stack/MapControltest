@@ -218,7 +218,12 @@ class AppDock(private val context: Context) : LauncherWidget {
     private fun resolve(packageName: String): AppEntry? = try {
         val pm = context.packageManager
         val info = pm.getApplicationInfo(packageName, 0)
-        val label = pm.getApplicationLabel(info).toString().trim().ifEmpty { packageName }
+        val raw = pm.getApplicationLabel(info).toString().trim()
+        val label = if (raw.isEmpty() || raw == packageName) {
+            CAR_LABELS[packageName]?.let { context.getString(it) } ?: packageName
+        } else {
+            raw
+        }
         AppEntry(label, AppIconHelper.load(context, packageName))
     } catch (e: PackageManager.NameNotFoundException) {
         null
@@ -235,6 +240,11 @@ class AppDock(private val context: Context) : LauncherWidget {
 
     private companion object {
         const val PREFS_NAME = "launcher_apps"
+
+        /** Araçta uygulama etiketi olmayan paketler için yedek ad. */
+        val CAR_LABELS = mapOf(
+            "com.desaysv.vehiclesetting" to R.string.launcher_app_vehicle_settings,
+        )
         const val SLOT_COUNT = 6
         const val SLOT_WIDTH_DP = 120
         const val SLOT_GAP_DP = 8
