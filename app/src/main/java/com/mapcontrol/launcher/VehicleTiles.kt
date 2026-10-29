@@ -111,8 +111,8 @@ internal abstract class VehicleTile(
     }
 
     protected fun setValue(value: CharSequence, color: Int) {
-        valueText.text = value
         valueText.setTextColor(color)
+        valueText.setTextSmooth(unitStyled(value))
         root.contentDescription = value
     }
 

@@ -201,8 +201,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         val s = snapshot
         val range = s.rangeKm
         if (s.connected && VehicleMetricsSnapshot.isValid(range) && range >= 0) {
-            rangeText.text = context.getString(R.string.launcher_range_value, range)
             rangeText.setTextColor(LauncherTheme.TEXT)
+            rangeText.setTextSmooth(unitStyled(context.getString(R.string.launcher_range_value, range)))
         } else {
             rangeText.setText(R.string.launcher_unavailable)
             rangeText.setTextColor(LauncherTheme.TEXT_SECONDARY)

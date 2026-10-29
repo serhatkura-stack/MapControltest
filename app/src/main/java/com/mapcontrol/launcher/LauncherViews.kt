@@ -85,6 +85,42 @@ fun text(
     ellipsize = android.text.TextUtils.TruncateAt.END
 }
 
+private val UNIT_RE = Regex("^(-?[0-9][0-9.,]*)\\s+(km/h|km|L/100 km|L/100|V|°C)$")
+
+/**
+ * "540 km" -> "540" normal boyutta + " km" küçük ve ikincil tonda. Eşleşmeyen metin olduğu gibi döner.
+ * Yalnızca bir kez, değer değişince çağrılır; kare başı iş yok.
+ */
+fun unitStyled(value: CharSequence): CharSequence {
+    val m = UNIT_RE.find(value) ?: return value
+    val num = m.groupValues[1]
+    val sp = android.text.SpannableStringBuilder(num).append(' ')
+    val start = sp.length
+    sp.append(m.groupValues[2])
+    sp.setSpan(android.text.style.RelativeSizeSpan(0.6f), start - 1, sp.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    sp.setSpan(android.text.style.ForegroundColorSpan(LauncherTheme.TEXT_SECONDARY), start - 1, sp.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    return sp
+}
+
+/**
+ * Metni yalnızca gerçekten değiştiyse yazar; ekranda görünen bir kutucukta kısa (150ms) alfa geçişiyle.
+ * Aynı metinde hiçbir şey yapmaz (her yoklamada animasyon yok); yalnızca alfa, yerleşimi etkilemez.
+ */
+fun TextView.setTextSmooth(value: CharSequence) {
+    if (text.toString() == value.toString()) {
+        // Renk aralıkları değişmiş olabilir (tema); metin aynıysa yine de yeni aralıkları ata.
+        text = value
+        return
+    }
+    val visible = isAttachedToWindow && width > 0 && alpha == 1f && text.isNotEmpty()
+    text = value
+    if (visible) {
+        animate().cancel()
+        alpha = 0.35f
+        animate().alpha(1f).setDuration(LauncherTheme.CROSSFADE_MS).start()
+    }
+}
+
 fun icon(context: Context, @DrawableRes res: Int, sizeDp: Int, tint: Int = LauncherTheme.TEXT): ImageView =
     ImageView(context).apply {
         setImageResource(res)
