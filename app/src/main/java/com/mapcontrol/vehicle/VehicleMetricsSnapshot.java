@@ -132,6 +132,28 @@ public final class VehicleMetricsSnapshot {
         return value != VehicleMetricsCache.INVALID;
     }
 
+    /**
+     * Yakıt onda bir birimine çevirir (tek kaynak kural). Değer her zaman onda birdir:
+     * Tiggo 7 testinde FUEL_PERCENT [2,182] birleşince 694 çıktı, yani %69,4 (doğrulandı).
+     * Diğer modeller doğrulanmadı. Geçersiz ({@link VehicleMetricsCache#INVALID} veya negatif) ise
+     * {@code -1}; üst sınır 1000 (%100).
+     */
+    public static int fuelTenths(int raw) {
+        if (!isValid(raw) || raw < 0) {
+            return -1;
+        }
+        return Math.min(raw, 1000);
+    }
+
+    /** {@link #fuelTenths(int)} değerinin en yakın tam yüzdesi (0–100); geçersizse {@code -1}. */
+    public static int fuelPercentRounded(int raw) {
+        int tenths = fuelTenths(raw);
+        if (tenths < 0) {
+            return -1;
+        }
+        return (tenths + 5) / 10;
+    }
+
     /** OEM kapı/bagaj: 1 = açık. */
     public static boolean isBodyOpen(int rawSignal) {
         return isValid(rawSignal) && rawSignal == 1;

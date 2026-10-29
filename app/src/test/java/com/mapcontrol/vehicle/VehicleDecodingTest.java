@@ -35,6 +35,29 @@ public class VehicleDecodingTest {
     }
 
     @Test
+    public void fuelTenthsIsRawAsTenthsClampedTo1000() {
+        // Tiggo 7: FUEL_PERCENT [2,182] -> 694 = %69,4 (doğrulandı); diğer modeller doğrulanmadı.
+        assertEquals(694, VehicleMetricsSnapshot.fuelTenths(694));
+        assertEquals(60, VehicleMetricsSnapshot.fuelTenths(60));
+        assertEquals(100, VehicleMetricsSnapshot.fuelTenths(100));
+        assertEquals(0, VehicleMetricsSnapshot.fuelTenths(0));
+        assertEquals(1000, VehicleMetricsSnapshot.fuelTenths(1200));
+        assertEquals(-1, VehicleMetricsSnapshot.fuelTenths(-5));
+        assertEquals(-1, VehicleMetricsSnapshot.fuelTenths(VehicleMetricsCache.INVALID));
+    }
+
+    @Test
+    public void fuelPercentRoundedFromTenths() {
+        assertEquals(69, VehicleMetricsSnapshot.fuelPercentRounded(694));
+        assertEquals(70, VehicleMetricsSnapshot.fuelPercentRounded(695));
+        assertEquals(6, VehicleMetricsSnapshot.fuelPercentRounded(60));
+        assertEquals(10, VehicleMetricsSnapshot.fuelPercentRounded(100));
+        assertEquals(100, VehicleMetricsSnapshot.fuelPercentRounded(1200));
+        assertEquals(-1, VehicleMetricsSnapshot.fuelPercentRounded(-1));
+        assertEquals(-1, VehicleMetricsSnapshot.fuelPercentRounded(VehicleMetricsCache.INVALID));
+    }
+
+    @Test
     public void driveModeShortLabels() {
         assertEquals("ECO", DriveModeStyle.shortLabel(0));
         assertEquals("NORMAL", DriveModeStyle.shortLabel(1));

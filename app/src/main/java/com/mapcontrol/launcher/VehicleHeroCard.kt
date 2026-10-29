@@ -19,17 +19,17 @@ import com.mapcontrol.vehicle.VehicleQuickControls
 import java.util.concurrent.Executor
 
 /**
- * Yakıt, onda birlik yüzde (694 = %69,4). Araç bazen tam yüzde (<=100) bazen onda bir (>100) verir;
- * kural VehicleMetricsFormatter.fuelPercentOrZero ile aynı. Bağlı değilse ya da geçersizse null.
+ * Yakıt, onda birlik yüzde (694 = %69,4); her zaman onda bir, tek kaynak VehicleMetricsSnapshot.fuelTenths.
+ * Bağlı değilse ya da geçersizse null.
  */
 internal fun VehicleMetricsSnapshot.fuelTenthsOrNull(): Int? {
-    val raw = fuelPercent
-    if (!connected || !VehicleMetricsSnapshot.isValid(raw) || raw < 0) return null
-    return (if (raw <= 100) raw * 10 else raw).coerceAtMost(1000)
+    if (!connected) return null
+    return VehicleMetricsSnapshot.fuelTenths(fuelPercent).takeIf { it >= 0 }
 }
 
 /** Yakıtın yuvarlanmış tam yüzdesi (0..100); bağlı değilse ya da geçersizse null. */
-internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? = fuelTenthsOrNull()?.let { (it + 5) / 10 }
+internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
+    if (!connected) null else VehicleMetricsSnapshot.fuelPercentRounded(fuelPercent).takeIf { it >= 0 }
 
 /**
  * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Solda büyük menzil ve yakıt, sağda araç silüeti,
