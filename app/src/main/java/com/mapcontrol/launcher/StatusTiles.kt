@@ -19,15 +19,18 @@ internal abstract class MetricsTile(
 ) : VehicleTile(context, iconRes, labelRes) {
 
     private val metrics = VehicleMetricsRepository(context)
-    protected var snapshot: VehicleMetricsSnapshot = metrics.currentSnapshot()
+    protected var snapshot: VehicleMetricsSnapshot = current()
         private set
     private val listener = VehicleMetricsRepository.Listener {
+        if (LauncherDemo.enabled) return@Listener
         snapshot = it
         bind()
     }
 
+    private fun current() = if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot()
+
     override fun onVisible() {
-        snapshot = metrics.currentSnapshot()
+        snapshot = current()
         bind()
         metrics.addListener(listener)
     }

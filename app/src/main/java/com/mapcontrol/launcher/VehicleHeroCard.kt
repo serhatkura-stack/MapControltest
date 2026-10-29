@@ -95,6 +95,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private fun wrapLp() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
 
     private val metricsListener = VehicleMetricsRepository.Listener {
+        if (LauncherDemo.enabled) return@Listener
         snapshot = it
         render()
     }
@@ -102,6 +103,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private fun controls() = VehicleQuickControls.getInstance(appContext)
 
     private val lockListener = VehicleQuickControls.Listener { isLocked, connected ->
+        if (LauncherDemo.enabled) return@Listener
         main.post {
             locked = if (connected) isLocked else null
             render()
@@ -124,7 +126,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     override fun applySpan(span: Span) = render()
 
     override fun onVisible() {
-        snapshot = metrics.currentSnapshot()
+        snapshot = if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot()
+        if (LauncherDemo.enabled) locked = LauncherDemo.LOCKED
         render()
         metrics.addListener(metricsListener)
         controls().addListener(lockListener)
@@ -143,7 +146,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         io.shutdownNow()
     }
 
-    private fun readTireFlag(): Int? = try {
+    private fun readTireFlag(): Int? = if (LauncherDemo.enabled) (if (LauncherDemo.TIRE_WARNING) 1 else 0) else try {
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) null
         else proxy.getItemValues(VDEventCarInfo.MODULE_READONLY_INFO, ReadOnlyID.ID_TIRE_PRESSURE_WARNING)?.firstOrNull()

@@ -94,6 +94,14 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     }
 
     private fun readState(): ClimateState {
+        if (LauncherDemo.enabled) return ClimateState(
+            connected = true,
+            acOn = LauncherDemo.AC_ON,
+            defrostOn = LauncherDemo.DEFROST_ON,
+            driverSeat = LauncherDemo.DRIVER_SEAT_LEVEL,
+            passengerSeat = LauncherDemo.PASSENGER_SEAT_LEVEL,
+            outsideC = LauncherDemo.OUTSIDE_C,
+        )
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return ClimateState()
         return try {

@@ -218,7 +218,7 @@ class MediaCard(private val context: Context) : SizedWidget {
         }
     }
 
-    private val listener = LauncherMediaController.Listener { state -> bind(state) }
+    private val listener = LauncherMediaController.Listener { state -> if (!LauncherDemo.enabled) bind(state) }
 
     override fun onVisible() {
         if (!listening) {
@@ -226,7 +226,7 @@ class MediaCard(private val context: Context) : SizedWidget {
             listening = true
         }
         controller.start()
-        bind(controller.currentState())
+        bind(if (LauncherDemo.enabled) LauncherDemo.media() else controller.currentState())
     }
 
     override fun onHidden() {

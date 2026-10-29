@@ -112,10 +112,10 @@ internal class RangeTile(context: Context) : VehicleTile(context, R.drawable.ic_
 
     private val metrics = VehicleMetricsRepository(context)
     private var snapshot: VehicleMetricsSnapshot = metrics.currentSnapshot()
-    private val listener = VehicleMetricsRepository.Listener { bind(it) }
+    private val listener = VehicleMetricsRepository.Listener { if (!LauncherDemo.enabled) bind(it) }
 
     override fun onVisible() {
-        bind(metrics.currentSnapshot())
+        bind(if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot())
         metrics.addListener(listener)
     }
 
@@ -165,6 +165,7 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
     private var locked: Boolean? = null
 
     private val listener = VehicleQuickControls.Listener { isLocked, connected ->
+        if (LauncherDemo.enabled) return@Listener
         locked = if (connected) isLocked else null
         main.post { bind() }
     }
@@ -179,7 +180,7 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
     override fun onVisible() {
         // Durum yalnızca dinleyiciden gelir: ana thread'de bağlantı kurmaya çalışmayız ve
         // yükleme bitmeden yanlış "kilit açık" göstermeyiz.
-        locked = null
+        locked = if (LauncherDemo.enabled) LauncherDemo.LOCKED else null
         bind()
         controls().addListener(listener)
     }
@@ -276,7 +277,7 @@ internal class TireTile(context: Context) : VehicleTile(context, R.drawable.ic_m
 
     override fun bindDetail() = render()
 
-    private fun readFlag(): Int? = try {
+    private fun readFlag(): Int? = if (LauncherDemo.enabled) (if (LauncherDemo.TIRE_WARNING) 1 else 0) else try {
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) null
         else proxy.getItemValues(VDEventCarInfo.MODULE_READONLY_INFO, ReadOnlyID.ID_TIRE_PRESSURE_WARNING)
