@@ -35,6 +35,11 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private var snapshot: VehicleMetricsSnapshot = metrics.currentSnapshot()
     private var locked: Boolean? = null
     private var tireWarning: Boolean? = null
+    private var lowFuel = false
+    private val tripListener = TripSource.Listener {
+        lowFuel = it.lowFuel == true
+        render()
+    }
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
@@ -132,11 +137,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         controls().addListener(lockListener)
         main.removeCallbacks(tirePoll)
         main.post(tirePoll)
+        TripSource.add(context, tripListener)
     }
 
     override fun onHidden() {
         metrics.removeListener(metricsListener)
         controls().removeListener(lockListener)
+        TripSource.remove(tripListener)
         main.removeCallbacksAndMessages(null)
     }
 
@@ -164,11 +171,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             rangeText.setTextColor(LauncherTheme.TEXT_SECONDARY)
         }
         val fuel = s.fuelPercent
-        fuelText.text = if (s.connected && VehicleMetricsSnapshot.isValid(fuel) && fuel >= 0) {
-            context.getString(R.string.launcher_fuel_short, fuel)
-        } else {
-            context.getString(R.string.launcher_waiting_data)
+        val hasFuel = s.connected && VehicleMetricsSnapshot.isValid(fuel) && fuel >= 0
+        fuelText.text = when {
+            hasFuel && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
+            hasFuel -> context.getString(R.string.launcher_fuel_short, fuel)
+            else -> context.getString(R.string.launcher_waiting_data)
         }
+        fuelText.setTextColor(if (hasFuel && lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
 
         when (locked) {
             true -> lockChip.bind(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_locked))

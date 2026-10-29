@@ -99,4 +99,14 @@
     <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Kapat</string>
     <string name="launcher_edit_no_room">Yer yok</string>
+    <string name="launcher_widget_consumption">Anlık tüketim</string>
+    <string name="launcher_widget_trip">Yolculuk</string>
+    <string name="launcher_widget_health">Araç sağlığı</string>
+    <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
+    <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s</string>
+    <string name="launcher_km_value" formatted="true">%1$s km</string>
+    <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
+    <string name="launcher_volt_value" formatted="true">%1$s V</string>
+    <string name="launcher_coolant_value" formatted="true">Motor suyu %1$d°</string>
+    <string name="launcher_fuel_low" formatted="true">Yakıt az · %%%1$d</string>
 </resources>

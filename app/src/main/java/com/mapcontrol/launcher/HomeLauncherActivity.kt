@@ -190,7 +190,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     /**
-     * "Widget ekle" paneli: dört sütunlu kutucuklar, her birinde ikon, ad ve boyutlar.
+     * "Widget ekle" paneli: beş sütunlu kutucuklar, her birinde ikon, ad ve boyutlar.
      * Izgarada yer kalmayan türler soluk ve "Yer yok" der; dokunmak hiçbir şey eklemez.
      */
     private fun showAddDialog() {
@@ -301,8 +301,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private companion object {
-        const val ADD_COLUMNS = 4
-        const val ADD_SHEET_WIDTH_DP = 1040
+        const val ADD_COLUMNS = 5
+        const val ADD_SHEET_WIDTH_DP = 1280
         const val ADD_TILE_HEIGHT_DP = 136
         const val RESET_SHEET_WIDTH_DP = 640
         const val NO_ROOM_ALPHA = 0.45f

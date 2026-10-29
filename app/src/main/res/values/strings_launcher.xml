@@ -99,4 +99,14 @@
     <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Close</string>
     <string name="launcher_edit_no_room">No room</string>
+    <string name="launcher_widget_consumption">Consumption</string>
+    <string name="launcher_widget_trip">Trip</string>
+    <string name="launcher_widget_health">Car health</string>
+    <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
+    <string name="launcher_drive_avg" formatted="true">This drive %1$s</string>
+    <string name="launcher_km_value" formatted="true">%1$s km</string>
+    <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>
+    <string name="launcher_volt_value" formatted="true">%1$s V</string>
+    <string name="launcher_coolant_value" formatted="true">Coolant %1$d°</string>
+    <string name="launcher_fuel_low" formatted="true">Low fuel · %1$d%%</string>
 </resources>

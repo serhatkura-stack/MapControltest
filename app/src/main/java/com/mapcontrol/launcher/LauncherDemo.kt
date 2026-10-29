@@ -52,6 +52,11 @@ internal object LauncherDemo {
     const val PASSENGER_SEAT_LEVEL = 0
     const val OUTSIDE_C = 17.0
 
+    fun trip(): TripData = TripData(
+        connected = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 42.6,
+        avgL100 = 7.9, avgSpeedKmh = 46, batteryV = 14.1, coolantC = 89, lowFuel = false,
+    )
+
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */
     fun media(): MediaState = MediaState(
         true, true, true,

@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.AmbientLightID
@@ -19,9 +18,6 @@ import com.desaysv.ivi.extra.project.carinfo.RadarID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.RvcID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
-import com.desaysv.ivi.extra.project.carinfo.proxy.Constants
-import com.desaysv.ivi.vdb.client.VDBus
-import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import java.lang.reflect.Modifier
 
@@ -124,12 +120,5 @@ internal object LauncherProbe {
         Log.i(TAG, "WATCH-DONE")
     }
 
-    /** Tek okuma; cevap yoksa null (CarInfoProxy.getItemValues bunu {0} ile gizler). */
-    private fun read(s: Signal): String? = try {
-        val bundle = Bundle().apply { putInt(Constants.CMD_ID, s.id) }
-        VDBus.getDefault().getOnce(VDEvent(s.moduleId, bundle))?.payload?.getIntArray(Constants.VALUE)
-            ?.joinToString(",", "[", "]")
-    } catch (e: RuntimeException) {
-        null
-    }
+    private fun read(s: Signal): String? = CarSignals.read(s.moduleId, s.id)?.joinToString(",", "[", "]")
 }
