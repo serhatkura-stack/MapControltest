@@ -62,7 +62,10 @@ class MediaCard(private val context: Context) : SizedWidget {
     // --- İlerleme ---
     private val progressFill = View(context).apply {
         background = rounded(context, LauncherTheme.ACCENT, 4f)
-        layoutParams = FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT)
+        // Genişlik sabit, ilerleme scaleX ile çizilir: yerleşim turu gerektirmez.
+        layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        pivotX = 0f
+        scaleX = 0f
     }
     private val progressTrack = FrameLayout(context).apply {
         background = rounded(context, LauncherTheme.TRACK, 4f)
@@ -71,16 +74,18 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
     private val elapsedView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
     private val totalView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
+    private val timesGap = gap(context, 8, vertical = true)
+    private val timesRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        addView(elapsedView)
+        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(totalView)
+    }
     private val progressBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(progressTrack)
-        addView(gap(context, 8, vertical = true))
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(elapsedView)
-            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(totalView)
-        })
+        addView(timesGap)
+        addView(timesRow)
     }
 
     // --- Kontroller ---
@@ -154,12 +159,14 @@ class MediaCard(private val context: Context) : SizedWidget {
         addView(gap(context, 24))
     }
 
+    private val sourceGap = gap(context, 4, vertical = true)
+    private val artistGap = gap(context, 4, vertical = true)
     private val mainBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(sourceLabel)
-        addView(gap(context, 4, vertical = true))
+        addView(sourceGap)
         addView(titleView)
-        addView(gap(context, 4, vertical = true))
+        addView(artistGap)
         addView(artistView)
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(progressBox)
@@ -180,13 +187,6 @@ class MediaCard(private val context: Context) : SizedWidget {
         }
     }
 
-    init {
-        progressTrack.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            lastFillWidth = -1
-            if (mode == Mode.SESSION) updateProgress()
-        }
-    }
-
     // --- Son bağlanan durum (gereksiz yeniden bağlamayı önlemek için) ---
     private var listening = false
     private var mode: Mode? = null
@@ -198,7 +198,8 @@ class MediaCard(private val context: Context) : SizedWidget {
     private var shownPlaying: Boolean? = null
     private var lastArtworkSize = -1
     private var lastCompact: Boolean? = null
-    private var lastTight: Boolean? = null
+    private var lastPlayDp = -1
+    private var lastTiny: Boolean? = null
     private var lastShort: Boolean? = null
     private var layoutCompact = false
 
@@ -209,7 +210,7 @@ class MediaCard(private val context: Context) : SizedWidget {
     private var playing = false
     private var lastElapsedSec = -1L
     private var lastTotalSec = -1L
-    private var lastFillWidth = -1
+    private var lastFillPermille = -1
 
     private val tick = object : Runnable {
         override fun run() {
@@ -276,19 +277,19 @@ class MediaCard(private val context: Context) : SizedWidget {
         }
         updateContainers()
 
-        lastFillWidth = -1
+        lastFillPermille = -1
         if (compact) {
             // Kapak, ilerleme ve sayaç yok; düğmeler sabit 72dp.
             handler.removeCallbacks(tick)
             artworkBox.visibility = View.GONE
             artworkGap.visibility = View.GONE
             lastArtworkSize = -1
-            lastTight = null
+            lastPlayDp = -1
             for (b in arrayOf(prevButton, playButton, nextButton)) resize(b, LauncherTheme.TOUCH_MIN_DP)
         } else {
             lastArtworkSize = -1
             lastCompact = null
-            lastTight = null
+            lastPlayDp = -1
             if (view.width > 0) applySizes(view.width, view.height - view.paddingTop - view.paddingBottom)
             if (listening && mode == Mode.SESSION) {
                 updateProgress()
@@ -338,21 +339,33 @@ class MediaCard(private val context: Context) : SizedWidget {
             lastCompact = compact
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 40f else LauncherTheme.TITLE_SP)
         }
-        // Kısa kartta düğmeler küçülür (yine de en az 72dp); kontroller kartın dışına taşmaz.
-        val tight = contentHeight < context.dp(TIGHT_HEIGHT_DP)
-        if (tight != lastTight) {
-            lastTight = tight
-            resize(playButton, if (tight) LauncherTheme.MEDIA_BUTTON_DP else LauncherTheme.PLAY_BUTTON_DP)
-            resize(prevButton, if (tight) LauncherTheme.TOUCH_MIN_DP else LauncherTheme.MEDIA_BUTTON_DP)
-            resize(nextButton, if (tight) LauncherTheme.TOUCH_MIN_DP else LauncherTheme.MEDIA_BUTTON_DP)
-        }
-        // Çok kısa kartta (ör. 3×2) kaynak ve sanatçı satırları gizlenir; başlık ve kontroller sığar.
+        // Çok kısa kartta (ör. 3×2) kaynak ve sanatçı satırları, daha kısada süre satırı gizlenir.
         val short = contentHeight < context.dp(SHORT_HEIGHT_DP)
-        if (short != lastShort) {
+        val tiny = contentHeight < context.dp(TINY_HEIGHT_DP)
+        if (short != lastShort || tiny != lastTiny) {
             lastShort = short
+            lastTiny = tiny
             val vis = if (short) View.GONE else View.VISIBLE
             sourceLabel.visibility = vis
+            sourceGap.visibility = vis
             artistView.visibility = vis
+            artistGap.visibility = vis
+            val timesVis = if (tiny) View.GONE else View.VISIBLE
+            timesRow.visibility = timesVis
+            timesGap.visibility = timesVis
+        }
+        // Düğmeler kalan yüksekliğe sığacak kadar küçülür (en çok tam boy, en az 56dp); kontroller kesilmez.
+        var reserved = titleView.lineHeight + context.dp(16) + context.dp(8)
+        if (!tiny) reserved += context.dp(8) + elapsedView.lineHeight
+        if (!short) reserved += sourceLabel.lineHeight + artistView.lineHeight + context.dp(8)
+        val playPx = (contentHeight - reserved).coerceIn(context.dp(MIN_PLAY_DP), context.dp(LauncherTheme.PLAY_BUTTON_DP))
+        val playDp = (playPx / density).toInt()
+        val sideDp = minOf((playDp * 0.85f).toInt(), LauncherTheme.MEDIA_BUTTON_DP)
+        if (playDp != lastPlayDp) {
+            lastPlayDp = playDp
+            resize(playButton, playDp)
+            resize(prevButton, sideDp)
+            resize(nextButton, sideDp)
         }
     }
 
@@ -414,7 +427,7 @@ class MediaCard(private val context: Context) : SizedWidget {
         if (state.durationMs != durationMs) {
             durationMs = state.durationMs
             lastTotalSec = -1L
-            lastFillWidth = -1
+            lastFillPermille = -1
         }
         setPlaying(state.playing)
         if (textChanged || playingChanged) {
@@ -493,13 +506,10 @@ class MediaCard(private val context: Context) : SizedWidget {
             lastTotalSec = totalSec
             totalView.text = if (durationMs > 0L) formatTime(totalSec) else ""
         }
-        val trackWidth = progressTrack.width
-        val fill = if (durationMs > 0L && trackWidth > 0) (trackWidth * pos / durationMs).toInt() else 0
-        if (fill != lastFillWidth) {
-            lastFillWidth = fill
-            val lp = progressFill.layoutParams
-            lp.width = fill
-            progressFill.layoutParams = lp
+        val permille = if (durationMs > 0L) (1000L * pos / durationMs).toInt() else 0
+        if (permille != lastFillPermille) {
+            lastFillPermille = permille
+            progressFill.scaleX = permille / 1000f
         }
     }
 
@@ -518,10 +528,11 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
 
     private companion object {
-        /** Bu yüksekliğin altında medya düğmeleri küçülür. */
-        const val TIGHT_HEIGHT_DP = 300
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */
         const val SHORT_HEIGHT_DP = 250
+        /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
+        const val TINY_HEIGHT_DP = 190
+        const val MIN_PLAY_DP = 56
 
         /** Kompakt (2×1) yerleşimde başlık boyutu ve kart iç boşluğu. */
         const val COMPACT_TITLE_SP = 28f

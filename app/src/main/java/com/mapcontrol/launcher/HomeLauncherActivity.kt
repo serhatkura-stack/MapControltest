@@ -42,7 +42,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings)
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = ::recreate, onEditHome = ::enterEditMode)
         val apps = AppDock(this)
         val climate = ClimateBar(this, apps.view)
         fixedWidgets = listOf(header, apps, climate)
@@ -281,7 +281,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     // --- Diğer ---
 
     private fun openSettings() {
-        settings.show()
+        // Tam sürümde doğrudan MapControl ayarları; salt-okur test sürümünde launcher paneli.
+        if (LauncherEdition.HAS_SETTINGS) LauncherEdition.openSettings(this) else settings.show()
     }
 
     private fun hideSystemBars() {

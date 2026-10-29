@@ -108,6 +108,19 @@ class NavigationCard(private val context: Context) : SizedWidget {
             title.visibility = visibility
             titleGap.visibility = visibility
         }
+        // Sıkışık (tek satır) kartta düğmeler iç yüksekliğe sığacak kadar küçülür; alt kenardan kesilmesin.
+        if (compactLayout.visibility == View.VISIBLE) {
+            val inner = heightPx - view.paddingTop - view.paddingBottom
+            val h = minOf(context.dp(LauncherTheme.TOUCH_MIN_DP), inner).coerceAtLeast(context.dp(48))
+            for (i in 0 until compactLayout.childCount step 2) {
+                val child = compactLayout.getChildAt(i)
+                val clp = child.layoutParams
+                if (clp.height != h) {
+                    clp.height = h
+                    child.layoutParams = clp
+                }
+            }
+        }
         val buttonDp = if (heightPx < context.dp(TIGHT_HEIGHT_DP)) LauncherTheme.TOUCH_MIN_DP else LauncherTheme.MEDIA_BUTTON_DP
         val lp = shortcutRow.layoutParams
         if (lp != null && lp.height != context.dp(buttonDp)) {

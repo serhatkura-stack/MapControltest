@@ -23,6 +23,8 @@ import kotlin.math.roundToInt
 class HeaderBar(
     private val context: Context,
     private val onSettings: () -> Unit,
+    private val onThemeChanged: () -> Unit,
+    private val onEditHome: () -> Unit,
 ) : LauncherWidget {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -68,8 +70,43 @@ class HeaderBar(
         weatherBox.addView(weatherLabel)
         addView(weatherBox)
         addView(gap(context, 32))
+        addView(themeButton())
+        addView(gap(context, 16))
+        addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
+        addView(gap(context, 16))
         addView(settingsButton())
     }
+
+    /** Tema düğmesi: Otomatik → Gündüz → Gece → Otomatik; ikon geçerli modu gösterir. */
+    private fun themeButton(): View {
+        val mode = ThemeMode.read(context)
+        val res = when (mode) {
+            ThemeMode.AUTO -> R.drawable.ic_mdi_theme_light_dark
+            ThemeMode.DAY -> R.drawable.ic_mdi_weather_sunny
+            ThemeMode.NIGHT -> R.drawable.ic_mdi_weather_night
+        }
+        val label = context.getString(R.string.launcher_theme) + ": " + context.getString(mode.label)
+        return squareButton(res, label) {
+            val next = ThemeMode.values()[(mode.ordinal + 1) % ThemeMode.values().size]
+            ThemeMode.write(context, next)
+            onThemeChanged()
+        }
+    }
+
+    /** Yalnızca ikonlu kare düğme; ayarlar düğmesiyle aynı yükseklik, zemin ve basma geri bildirimi. */
+    private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): View =
+        LinearLayout(context).apply {
+            gravity = Gravity.CENTER
+            background = rounded(context, LauncherTheme.CARD)
+            val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
+            layoutParams = LinearLayout.LayoutParams(size, size)
+            addView(icon(context, res, 32))
+            contentDescription = label
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            pressFeedback()
+        }
 
     private fun settingsButton(): View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
