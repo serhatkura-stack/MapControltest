@@ -59,4 +59,10 @@
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">Unavailable</string>
     <string name="launcher_read_only">Test version: read only</string>
+    <string name="launcher_theme">Theme</string>
+    <string name="launcher_theme_auto">Automatic (follow the car)</string>
+    <string name="launcher_theme_day">Day</string>
+    <string name="launcher_theme_night">Night</string>
+    <string name="launcher_vehicle_settings">Vehicle settings</string>
+    <string name="launcher_mapcontrol_settings">MapControl settings</string>
 </resources>

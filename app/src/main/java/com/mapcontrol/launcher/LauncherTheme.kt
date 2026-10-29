@@ -51,9 +51,16 @@ object LauncherTheme {
     /** Düzenleme modunda widget içeriğinin üstüne gelen örtü; içerik etiketlerle çakışmasın diye çok opak. */
     val EDIT_SCRIM: Int get() = if (night) NIGHT_EDIT_SCRIM else DAY_EDIT_SCRIM
 
-    /** Sistemin gündüz/gece durumunu okur. Bilinmeyen durum gece sayılır (araçta güvenli varsayılan). */
-    fun applyFrom(config: Configuration) {
-        night = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_NO
+    /**
+     * Görünümü seçer. [ThemeMode.AUTO] sistemin gündüz/gece durumunu izler; bilinmeyen durum gece sayılır
+     * (araçta güvenli varsayılan). Diğer iki seçenek sistemi yok sayar.
+     */
+    fun applyFrom(config: Configuration, mode: ThemeMode = ThemeMode.AUTO) {
+        night = when (mode) {
+            ThemeMode.DAY -> false
+            ThemeMode.NIGHT -> true
+            ThemeMode.AUTO -> (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_NO
+        }
     }
 
     const val CARD_RADIUS_DP = 20f

@@ -59,4 +59,10 @@
     <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">Okunamıyor</string>
     <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
+    <string name="launcher_theme">Tema</string>
+    <string name="launcher_theme_auto">Otomatik (araçla birlikte)</string>
+    <string name="launcher_theme_day">Gündüz</string>
+    <string name="launcher_theme_night">Gece</string>
+    <string name="launcher_vehicle_settings">Araç ayarları</string>
+    <string name="launcher_mapcontrol_settings">MapControl ayarları</string>
 </resources>

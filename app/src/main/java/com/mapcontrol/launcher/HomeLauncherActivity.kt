@@ -23,6 +23,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private val store by lazy { LayoutStore(this) }
     private val metrics by lazy { VehicleMetricsRepository(this) }
+    private val settings by lazy { LauncherSettings(this) }
     private val metricsListener = VehicleMetricsRepository.Listener { }
 
     private lateinit var header: HeaderBar
@@ -35,7 +36,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var started = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        LauncherTheme.applyFrom(resources.configuration)
+        LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
@@ -87,6 +88,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         fixedWidgets.forEach { it.release() }
         gridWidgets.values.forEach { it.release() }
         metrics.release()
+        settings.release()
         super.onDestroy()
     }
 
@@ -221,7 +223,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     // --- Diğer ---
 
     private fun openSettings() {
-        LauncherEdition.openSettings(this)
+        settings.show()
     }
 
     private fun hideSystemBars() {
