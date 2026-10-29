@@ -324,6 +324,9 @@ public class MainActivity extends AppCompatActivity {
      * Yasal uyarı ve onay ekranını gösterir
      */
     private void showLegalDisclaimer() {
+        // Splash animasyonları sonsuz döngüde; uyarı açıkken arkada çalışırsa RenderThread sürekli
+        // çizim yapıp ~%65 CPU harcıyor (showOnboarding'de olduğu gibi burada da durdurulur).
+        DisplayHelper.stopAppLaunchSplashAnimations();
         DialogHelper.showLegalDisclaimer(this, () -> {
             SharedPreferences prefs = getSharedPreferences("MapControlPrefs", MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
