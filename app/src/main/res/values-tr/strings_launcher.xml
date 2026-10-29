@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Yeni launcher (com.mapcontrol.launcher) metinleri -->
+<resources>
+    <string name="launcher_settings">Ayarlar</string>
+    <string name="launcher_degrees" formatted="true">%1$d°</string>
+    <string name="launcher_degrees_decimal" formatted="true">%1$.1f°</string>
+    <string name="launcher_nav_title">Nereye?</string>
+    <string name="launcher_nav_search_hint">Adres veya yer ara</string>
+    <string name="launcher_nav_home">Ev</string>
+    <string name="launcher_nav_work">İş</string>
+    <string name="launcher_nav_not_set">Ayarlamak için basılı tut</string>
+    <string name="launcher_nav_dialog_home">Ev adresi</string>
+    <string name="launcher_nav_dialog_work">İş adresi</string>
+    <string name="launcher_nav_dialog_hint">Sokak, ilçe, şehir</string>
+    <string name="launcher_nav_dialog_save">Kaydet</string>
+    <string name="launcher_nav_dialog_cancel">Vazgeç</string>
+    <string name="launcher_nav_no_app">Navigasyon uygulaması yüklü değil</string>
+    <string name="launcher_media_idle">Şu an çalan yok</string>
+    <string name="launcher_media_idle_hint">Başlatmak için bir müzik uygulaması aç</string>
+    <string name="launcher_media_need_access">Çalanı göstermek için bildirim erişimine izin ver</string>
+    <string name="launcher_media_grant">İzin ver</string>
+    <string name="launcher_media_prev">Önceki</string>
+    <string name="launcher_range" formatted="true">%1$d km menzil</string>
+    <string name="launcher_range_unknown">Menzil okunamıyor</string>
+    <string name="launcher_fuel" formatted="true">Yakıt %%%1$d</string>
+    <string name="launcher_locked">Kilitli</string>
+    <string name="launcher_unlocked">Kilit açık</string>
+    <string name="launcher_lock_unknown">Kilit durumu okunamıyor</string>
+    <string name="launcher_tires_ok">Lastikler normal</string>
+    <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
+    <string name="launcher_car_offline">Araç verisi alınamıyor</string>
+    <string name="launcher_outside_temp" formatted="true">Dışarısı %1$d°</string>
+    <string name="launcher_ac">A/C</string>
+    <string name="launcher_defrost">Buğu çöz</string>
+    <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
+    <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
+    <string name="launcher_app_empty">Uygulama ekle</string>
+    <string name="launcher_app_pick_title">Uygulama seç</string>
+    <string name="launcher_parked_only">Araç park halindeyken kullanılabilir</string>
+    <string name="launcher_widget_media">Medya</string>
+    <string name="launcher_widget_navigation">Navigasyon</string>
+    <string name="launcher_widget_range">Menzil</string>
+    <string name="launcher_widget_lock">Kapı kilidi</string>
+    <string name="launcher_widget_tires">Lastikler</string>
+    <string name="launcher_widget_weather">Hava durumu</string>
+    <string name="launcher_widget_app">Uygulama kısayolu</string>
+    <string name="launcher_edit">Düzenle</string>
+    <string name="launcher_edit_title">Ana ekranı düzenle</string>
+    <string name="launcher_edit_hint">Taşımak için sürükle, boyut seç ya da kaldır</string>
+    <string name="launcher_edit_add">Widget ekle</string>
+    <string name="launcher_edit_reset">Varsayılan</string>
+    <string name="launcher_edit_done">Bitti</string>
+    <string name="launcher_edit_remove">Kaldır</string>
+    <string name="launcher_edit_no_space">Bu widget için boş yer yok</string>
+    <string name="launcher_edit_reset_confirm">Varsayılan düzene dönülsün mü?</string>
+    <string name="launcher_range_value" formatted="true">%1$d km</string>
+    <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
+    <string name="launcher_tires_check">Basıncı kontrol et</string>
+    <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
+    <string name="launcher_unavailable">Okunamıyor</string>
+</resources>

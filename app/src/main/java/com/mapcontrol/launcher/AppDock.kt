@@ -1,0 +1,241 @@
+package com.mapcontrol.launcher
+
+import android.app.AlertDialog
+import android.content.Context
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Outline
+import android.graphics.drawable.Drawable
+import android.view.Display
+import android.view.Gravity
+import android.view.View
+import android.view.ViewOutlineProvider
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import com.mapcontrol.R
+import com.mapcontrol.util.AppIconHelper
+import com.mapcontrol.util.AppLaunchHelper
+import com.mapcontrol.util.ProjectionTargetApps
+import java.util.concurrent.Executors
+
+/**
+ * Ana ekranın uygulama kısayol şeridi: sabit altı yuva.
+ * Dolu yuvaya dokunmak uygulamayı açar; boş yuvaya dokunmak ya da dolu yuvaya uzun basmak seçiciyi açar.
+ * Seçimler "launcher_apps" tercihlerinde "slot_<i>" anahtarıyla tutulur; ikon ve etiketler arka planda yüklenir.
+ */
+class AppDock(private val context: Context) : LauncherWidget {
+
+    /** Bir yuvada gösterilen uygulama: etiket ve ikon. */
+    private class AppEntry(val label: String, val icon: Drawable)
+
+    /** Yuvanın görsel parçaları; yalnızca ana iş parçacığında güncellenir. */
+    private class Slot(val root: LinearLayout, val icon: ImageView, val label: TextView)
+
+    private val iconRadius = context.dpF(ICON_RADIUS_DP)
+    private val iconOutline = object : ViewOutlineProvider() {
+        override fun getOutline(v: View, outline: Outline) {
+            outline.setRoundRect(0, 0, v.width, v.height, iconRadius)
+        }
+    }
+
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val executor = Executors.newSingleThreadExecutor()
+
+    /** Paket adı -> etiket ve ikon. Yalnızca ana iş parçacığında okunur ve yazılır. */
+    private val cache = HashMap<String, AppEntry>()
+
+    /** Yuvada şu an gösterilen dolu uygulamanın paketi; boş ya da bekleyen yuvalarda null. */
+    private val current = arrayOfNulls<String>(SLOT_COUNT)
+
+    private val slots: List<Slot> = List(SLOT_COUNT) { buildSlot(it) }
+
+    override val view: View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        slots.forEachIndexed { i, slot ->
+            if (i > 0) addView(gap(context, SLOT_GAP_DP))
+            addView(slot.root)
+        }
+    }
+
+    /** Ekran görünür olunca yuvaları çizer; ikonlar önbellekten gelir, eksikler arka planda yüklenir. */
+    override fun onVisible() = refresh()
+
+    override fun onHidden() = Unit
+
+    /** Arka plan iş parçacığını kapatır. */
+    override fun release() = executor.shutdown()
+
+    private fun buildSlot(index: Int): Slot {
+        val icon = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            clipToOutline = true
+            outlineProvider = iconOutline
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val label = text(context, LauncherTheme.LABEL_SP).apply {
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                context.dp(SLOT_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT)
+            isClickable = true
+            isFocusable = true
+            addView(icon)
+            addView(gap(context, 6, vertical = true))
+            addView(label)
+            setOnClickListener { onTap(index) }
+            setOnLongClickListener {
+                openPicker(index)
+                true
+            }
+            pressFeedback()
+        }
+        return Slot(root, icon, label)
+    }
+
+    /** Kayıtlı seçimi okuyup yuvaları çizer; önbellekte olmayan paketleri arka planda çözer. */
+    private fun refresh() {
+        val packages = List(SLOT_COUNT) { prefs.getString(slotKey(it), DEFAULT_PACKAGES[it]).orEmpty() }
+        bindSlots(packages, cache)
+
+        val snapshot = HashMap(cache)
+        executor.runSafely {
+            val resolved = packages.associateWith { pkg ->
+                if (pkg.isEmpty()) null else (snapshot[pkg] ?: resolve(pkg))
+            }
+            view.post {
+                resolved.forEach { (pkg, entry) ->
+                    if (entry != null) {
+                        cache[pkg] = entry
+                    }
+                }
+                bindSlots(packages, resolved)
+            }
+        }
+    }
+
+    /**
+     * Yuvaları çizer. Anahtar hiç yoksa yuva bekler (boş görünür, etiket yok);
+     * anahtar varken değer null ise paket kurulu değildir ve yuva boş görünür.
+     */
+    private fun bindSlots(packages: List<String>, entries: Map<String, AppEntry?>) {
+        packages.forEachIndexed { i, pkg ->
+            val entry = entries[pkg]
+            when {
+                pkg.isEmpty() -> bindEmpty(i)
+                !entries.containsKey(pkg) -> bindPending(i)
+                entry != null -> bindFilled(i, pkg, entry)
+                else -> bindEmpty(i)
+            }
+        }
+    }
+
+    private fun bindFilled(i: Int, pkg: String, entry: AppEntry) {
+        val slot = slots[i]
+        current[i] = pkg
+        slot.icon.background = null
+        slot.icon.imageTintList = null
+        slot.icon.setPadding(0, 0, 0, 0)
+        slot.icon.setImageDrawable(entry.icon)
+        slot.label.text = entry.label
+        slot.label.setTextColor(LauncherTheme.TEXT)
+        slot.root.contentDescription = entry.label
+    }
+
+    /** Boş yuva: CONTROL renkli yuvarlak kare içinde artı ikonu. */
+    private fun bindEmpty(i: Int) {
+        val slot = slots[i]
+        current[i] = null
+        val pad = context.dp((ICON_DP - PLUS_DP) / 2)
+        slot.icon.background = rounded(context, LauncherTheme.CONTROL, ICON_RADIUS_DP)
+        slot.icon.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
+        slot.icon.setPadding(pad, pad, pad, pad)
+        slot.icon.setImageResource(R.drawable.ic_mdi_plus)
+        val emptyLabel = context.getString(R.string.launcher_app_empty)
+        slot.label.text = emptyLabel
+        slot.label.setTextColor(LauncherTheme.TEXT_SECONDARY)
+        slot.root.contentDescription = emptyLabel
+    }
+
+    /** Henüz çözülmemiş dolu yuva: ikon ve etiket gelene kadar boş bırakılır. */
+    private fun bindPending(i: Int) {
+        val slot = slots[i]
+        current[i] = null
+        slot.icon.background = null
+        slot.icon.setImageDrawable(null)
+        slot.label.text = ""
+        slot.root.contentDescription = null
+    }
+
+    private fun onTap(index: Int) {
+        val pkg = current[index]
+        if (pkg != null) launch(pkg) else openPicker(index)
+    }
+
+    /** Uygulamayı varsayılan ekranda açar. Java yardımcısı senkron olduğu için arka planda çalışır. */
+    private fun launch(packageName: String) {
+        executor.runSafely {
+            AppLaunchHelper.launchAppOnDisplay(context, packageName, Display.DEFAULT_DISPLAY, 0)
+        }
+    }
+
+    /** Başlatılabilir uygulamaları arka planda listeler; seçim yuvaya yazılır. */
+    private fun openPicker(index: Int) {
+        executor.runSafely {
+            val rows = ProjectionTargetApps.loadAllLaunchableRows(context)
+            view.post {
+                if (rows.isEmpty()) return@post
+                AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(R.string.launcher_app_pick_title)
+                    .setItems(rows.map { it.label }.toTypedArray()) { _, which ->
+                        assignSlot(index, rows[which].packageName)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun assignSlot(index: Int, packageName: String) {
+        prefs.edit().putString(slotKey(index), packageName).apply()
+        refresh()
+    }
+
+    /** Paketin etiketi ve ikonu; kurulu değilse null. Arka planda çağrılır. */
+    private fun resolve(packageName: String): AppEntry? = try {
+        val pm = context.packageManager
+        val info = pm.getApplicationInfo(packageName, 0)
+        val label = pm.getApplicationLabel(info).toString().trim().ifEmpty { packageName }
+        AppEntry(label, AppIconHelper.load(context, packageName))
+    } catch (e: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    private fun slotKey(index: Int) = "slot_$index"
+
+    private companion object {
+        const val PREFS_NAME = "launcher_apps"
+        const val SLOT_COUNT = 6
+        const val SLOT_WIDTH_DP = 120
+        const val SLOT_GAP_DP = 8
+        const val ICON_DP = 56
+        const val PLUS_DP = 28
+        const val ICON_RADIUS_DP = 16f
+
+        /** Yalnızca anahtar hiç yazılmamışken kullanılır; kurulu değilse yuva boş görünür. */
+        val DEFAULT_PACKAGES = listOf(
+            "com.spotify.music",
+            "com.google.android.apps.youtube.music",
+            "com.google.android.apps.maps",
+            "ru.yandex.yandexnavi",
+            "",
+            "",
+        )
+    }
+}
