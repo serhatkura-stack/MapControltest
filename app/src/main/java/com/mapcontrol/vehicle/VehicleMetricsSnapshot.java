@@ -62,7 +62,7 @@ public final class VehicleMetricsSnapshot {
 
     /**
      * Sürüş modu ({@link NewEnergyID#ID_DRIVE_MODE}).
-     * Eco=0, Normal=1, Sport=2, Snow=3, Mud=4, Offroad=5, Sand=7.
+     * Eco=0, Normal=1, Sport=2, Snow=3, Mud=4, Sand=5, Offroad=6 (araçta ölçüldü).
      */
     public final int driveMode;
 

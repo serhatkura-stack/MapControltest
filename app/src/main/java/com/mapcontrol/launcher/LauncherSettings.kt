@@ -13,7 +13,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
 import com.mapcontrol.util.AppLaunchHelper
-import java.util.concurrent.Executors
 
 /** Launcher görünümü: sistemi izle ya da sabit gündüz/gece. */
 enum class ThemeMode(val key: String, @StringRes val label: Int) {
@@ -44,7 +43,7 @@ enum class ThemeMode(val key: String, @StringRes val label: Int) {
  */
 class LauncherSettings(private val activity: Activity, private val onEditHome: () -> Unit) {
 
-    private val launcher = Executors.newSingleThreadExecutor()
+    private val launcher = LauncherIo.serial()
     private var dialog: Dialog? = null
 
     fun show() {
@@ -56,7 +55,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
     fun release() {
         dialog?.dismiss()
-        launcher.shutdown()
     }
 
     private fun LinearLayout.buildPanel(d: Dialog) {
@@ -109,7 +107,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                         d.dismiss()
                         if (mode != current) {
                             ThemeMode.write(activity, mode)
-                            activity.recreate()
+                            ThemeTransition.recreate(activity)
                         }
                     }
                     pressFeedback()

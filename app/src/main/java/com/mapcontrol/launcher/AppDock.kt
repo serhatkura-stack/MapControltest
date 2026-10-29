@@ -18,7 +18,6 @@ import com.mapcontrol.R
 import com.mapcontrol.util.AppIconHelper
 import com.mapcontrol.util.AppLaunchHelper
 import com.mapcontrol.util.ProjectionTargetApps
-import java.util.concurrent.Executors
 
 /**
  * Ana ekranın uygulama kısayol şeridi: sabit altı yuva.
@@ -41,7 +40,7 @@ class AppDock(private val context: Context) : LauncherWidget {
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = LauncherIo.serial()
 
     /** Paket adı -> etiket ve ikon. Yalnızca ana iş parçacığında okunur ve yazılır. */
     private val cache = HashMap<String, AppEntry>()
@@ -71,8 +70,8 @@ class AppDock(private val context: Context) : LauncherWidget {
 
     override fun onHidden() = Unit
 
-    /** Arka plan iş parçacığını kapatır. */
-    override fun release() = executor.shutdown()
+    /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
+    override fun release() = Unit
 
     /** Düzenleme modunda boş yuvalar görünür ve seçilebilir olur; normalde gizlenir. */
     fun setEditMode(editing: Boolean) {

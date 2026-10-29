@@ -21,7 +21,6 @@ import com.mapcontrol.util.ProjectionTargetApps
 import com.mapcontrol.weather.OpenMeteoWeatherClient
 import com.mapcontrol.weather.OpenMeteoWeatherLabels
 import com.mapcontrol.weather.OpenMeteoWeatherSnapshot
-import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
@@ -194,7 +193,7 @@ class AppShortcutTile(
 
     private val context: Context = activity
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = LauncherIo.serial()
     private val iconRadius = context.dpF(ICON_RADIUS_DP)
 
     /** Her yenilemede artar; eski arka plan sonuçları bu değişmişse yok sayılır. */
@@ -253,8 +252,8 @@ class AppShortcutTile(
 
     override fun onHidden() = Unit
 
-    /** Arka plan iş parçacığını kapatır. */
-    override fun release() = executor.shutdown()
+    /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
+    override fun release() = Unit
 
     /** Kayıtlı seçim varsa o, yoksa kurulumdaki paket; paket yoksa ya da kurulu değilse boş kutu. */
     private fun refresh() {

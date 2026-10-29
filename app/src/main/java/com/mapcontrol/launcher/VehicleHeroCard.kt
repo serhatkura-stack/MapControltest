@@ -16,8 +16,7 @@ import com.mapcontrol.R
 import com.mapcontrol.vehicle.VehicleMetricsRepository
 import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 import com.mapcontrol.vehicle.VehicleQuickControls
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.Executor
 
 /**
  * Yakıt, onda birlik yüzde (694 = %69,4). Araç bazen tam yüzde (<=100) bazen onda bir (>100) verir;
@@ -42,12 +41,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
 
     private val appContext = context.applicationContext
     private val metrics = VehicleMetricsRepository(context)
-    private val io: ExecutorService = Executors.newSingleThreadExecutor()
+    private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
 
     private var snapshot: VehicleMetricsSnapshot = metrics.currentSnapshot()
     private var locked: Boolean? = null
     private var tireWarning: Boolean? = null
+    private var startup: List<LauncherStartup.Deferred> = emptyList()
     private var lowFuel = false
     /** Gösterilen tam yüzde; değer 0,1'lik oynadıkça zıplamasın diye histerezisle tutulur. */
     private var shownFuel: Int? = null
@@ -156,7 +156,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             io.runSafely {
                 val flag = readTireFlag()
                 main.post {
-                    tireWarning = flag?.let { it > 0 }
+                    val warning = flag?.let { it > 0 }
+                    if (warning == tireWarning) return@post
+                    tireWarning = warning
                     render()
                 }
             }
@@ -173,20 +175,23 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         metrics.addListener(metricsListener)
         controls().addListener(lockListener)
         main.removeCallbacks(tirePoll)
-        main.post(tirePoll)
-        TripSource.add(context, tripListener)
+        startup.forEach { it.cancel() }
+        startup = listOf(
+            LauncherStartup.later { main.post(tirePoll) },
+            LauncherStartup.later { TripSource.add(context, tripListener) },
+        )
     }
 
     override fun onHidden() {
         metrics.removeListener(metricsListener)
         controls().removeListener(lockListener)
+        startup.forEach { it.cancel() }
         TripSource.remove(tripListener)
         main.removeCallbacksAndMessages(null)
     }
 
     override fun release() {
         metrics.release()
-        io.shutdownNow()
     }
 
     private fun readTireFlag(): Int? = if (LauncherDemo.enabled) (if (LauncherDemo.TIRE_WARNING) 1 else 0) else try {

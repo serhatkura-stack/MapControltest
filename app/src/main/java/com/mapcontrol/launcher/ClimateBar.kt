@@ -14,8 +14,7 @@ import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
 import com.mapcontrol.vehicle.ClimateAutomationStore
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.Executor
 
 /**
  * Alt kart: sürücü koltuk ısıtma · ortada uygulama şeridi · yolcu koltuk ısıtma.
@@ -25,10 +24,11 @@ import java.util.concurrent.Executors
  */
 class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
 
-    private val io: ExecutorService = Executors.newSingleThreadExecutor()
+    private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
 
     private var state = ClimateState()
+    private var startup: LauncherStartup.Deferred? = null
 
     private val driverSeat = ToggleTile(R.drawable.ic_mdi_car_seat_heater, R.string.launcher_seat_heat_driver, levels = true) {
         setSeatLevel(driver = true, level = nextSeatLevel(state.driverSeat))
@@ -56,16 +56,17 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
 
     override fun onVisible() {
         bind()
-        main.post(poll)
+        startup?.cancel()
+        startup = LauncherStartup.later { main.post(poll) }
     }
 
     override fun onHidden() {
+        startup?.cancel()
         main.removeCallbacks(poll)
     }
 
-    override fun release() {
-        io.shutdownNow()
-    }
+    /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
+    override fun release() = Unit
 
     private fun refreshNow() {
         io.runSafely {

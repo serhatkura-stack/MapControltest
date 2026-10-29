@@ -18,8 +18,7 @@ import com.mapcontrol.R
 import com.mapcontrol.vehicle.VehicleMetricsRepository
 import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 import com.mapcontrol.vehicle.VehicleQuickControls
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.Executor
 
 /** VehicleMetricsCache.INVALID ile aynı: değer okunmadı. */
 private const val INVALID = Int.MIN_VALUE
@@ -135,7 +134,7 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
      * saklanan eski örnek kapalı executor'la çökme yaratırdı.
      */
     private fun controls(): VehicleQuickControls = VehicleQuickControls.getInstance(appContext)
-    private val io: ExecutorService = Executors.newSingleThreadExecutor()
+    private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
 
     /** null: bağlı değil ya da durum bilinmiyor. */
@@ -167,9 +166,8 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
         main.removeCallbacksAndMessages(null)
     }
 
-    override fun release() {
-        io.shutdownNow()
-    }
+    /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
+    override fun release() = Unit
 
     override fun bindDetail() = showDetail(null)
 

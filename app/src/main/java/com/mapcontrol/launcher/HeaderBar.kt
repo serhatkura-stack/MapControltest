@@ -41,6 +41,7 @@ class HeaderBar(
     private val dateFormat = SimpleDateFormat("EEEE d MMMM", Locale.getDefault())
     private val weatherIcon = icon(context, R.drawable.ic_mdi_thermometer, 32, LauncherTheme.TEXT)
     private val weatherClient = OpenMeteoWeatherClient(context)
+    private var weatherStart: LauncherStartup.Deferred? = null
     private var tickRegistered = false
 
     private val tickReceiver = object : BroadcastReceiver() {
@@ -136,7 +137,8 @@ class HeaderBar(
             tickRegistered = true
         }
         weatherClient.setListener(weatherListener)
-        weatherClient.start()
+        weatherStart?.cancel()
+        weatherStart = LauncherStartup.later { weatherClient.start() }
     }
 
     override fun onHidden() {
@@ -144,6 +146,7 @@ class HeaderBar(
             context.unregisterReceiver(tickReceiver)
             tickRegistered = false
         }
+        weatherStart?.cancel()
         weatherClient.stop()
         weatherClient.setListener(null)
     }

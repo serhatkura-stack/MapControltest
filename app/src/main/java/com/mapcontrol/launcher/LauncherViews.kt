@@ -183,8 +183,8 @@ fun gap(context: Context, dp: Int, vertical: Boolean = false): View = View(conte
  * Arka plan işini güvenle çalıştırır: executor kapandıysa sessizce atlar, iş içindeki hata
  * (binder, PackageManager, ikon çözme) uygulamayı çökertmez, yalnızca loglanır.
  */
-fun java.util.concurrent.ExecutorService.runSafely(block: () -> Unit) {
-    if (isShutdown) return
+fun java.util.concurrent.Executor.runSafely(block: () -> Unit) {
+    if (this is java.util.concurrent.ExecutorService && isShutdown) return
     try {
         execute {
             try {

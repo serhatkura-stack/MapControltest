@@ -43,7 +43,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = ::recreate, onEditHome = ::enterEditMode)
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode)
         val apps = AppDock(this)
         dock = apps
         val climate = ClimateBar(this, apps.view)
@@ -68,6 +68,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         setContentView(root)
         applyLayout(store.load(), persist = false)
+        LauncherStartup.begin(window.decorView)
+        ThemeTransition.playIn(this)
     }
 
     override fun onStart() {

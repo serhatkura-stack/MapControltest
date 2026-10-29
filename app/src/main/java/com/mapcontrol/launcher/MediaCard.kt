@@ -193,6 +193,7 @@ class MediaCard(private val context: Context) : SizedWidget {
     private var lastSource: String? = null
     private var lastTitle: String? = null
     private var lastArtist: String? = null
+    private val artworkIo = LauncherIo.serial()
     private var shownArtwork: Bitmap? = null
     private var shownGeneration = -1
     private var shownPlaying: Boolean? = null
@@ -454,10 +455,25 @@ class MediaCard(private val context: Context) : SizedWidget {
             placeholderIcon.visibility = View.VISIBLE
         } else {
             shownGeneration = bitmap.generationId
-            artworkImage.setImageBitmap(bitmap)
+            val limit = maxOf(artworkImage.width, artworkImage.height).takeIf { it > 0 } ?: ARTWORK_MAX_PX
+            if (maxOf(bitmap.width, bitmap.height) <= limit) {
+                artworkImage.setImageBitmap(bitmap)
+            } else {
+                // Büyük kapak: görüntü boyutuna arka planda küçült, ana iş parçacığı GPU'ya dev doku yüklemesin.
+                artworkImage.setImageDrawable(null)
+                artworkIo.runSafely {
+                    val scaled = downscale(bitmap, limit)
+                    handler.post { if (shownArtwork === bitmap) artworkImage.setImageBitmap(scaled) }
+                }
+            }
             artworkImage.visibility = View.VISIBLE
             placeholderIcon.visibility = View.GONE
         }
+    }
+
+    private fun downscale(src: Bitmap, limit: Int): Bitmap {
+        val scale = limit.toFloat() / maxOf(src.width, src.height)
+        return Bitmap.createScaledBitmap(src, maxOf(1, (src.width * scale).toInt()), maxOf(1, (src.height * scale).toInt()), true)
     }
 
     /** Oynat/duraklat ikonu yalnızca durum gerçekten değişince çapraz geçişle değişir. */
@@ -528,6 +544,8 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
 
     private companion object {
+        /** Görüntü boyutu henüz bilinmiyorsa kapak kenarı üst sınırı (px). */
+        const val ARTWORK_MAX_PX = 480
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */
         const val SHORT_HEIGHT_DP = 250
         /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
