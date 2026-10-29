@@ -112,7 +112,7 @@ class WeatherTile(private val context: Context) : SizedWidget {
     /** Boyut değişince durum metni sol/sağ sütun arasında taşınır. */
     override fun applySpan(span: Span) {
         this.span = span
-        val wide = span.w >= 2
+        val wide = span.w >= WIDE_MIN_COLS
         (conditionText.parent as? android.view.ViewGroup)?.removeView(conditionText)
         if (wide) {
             rightColumn.addView(conditionText, 0)
@@ -155,7 +155,7 @@ class WeatherTile(private val context: Context) : SizedWidget {
             ageText.visibility = View.GONE
             return
         }
-        val wide = span.w >= 2
+        val wide = span.w >= WIDE_MIN_COLS
         val updatedAt = client.lastUpdatedMs
         val age = if (updatedAt > 0L) System.currentTimeMillis() - updatedAt else 0L
         val stale = age > WEATHER_STALE_MS
@@ -248,7 +248,17 @@ class AppShortcutTile(
     }
 
     // 125dp kartta 64dp ikon + etiket sığsın diye 10dp kenar: etiketin alt çıkıntıları kesilmez.
-    private val root: LinearLayout = JoinedCard(context, paddingDp = 10, gapPx = context.dp(LauncherGrid.GRID_GAP_DP)).apply {
+    private var editing = false
+    private var compact = false
+
+    private val root: LinearLayout = object : JoinedCard(context, paddingDp = 10, gapPx = context.dp(LauncherGrid.GRID_GAP_DP)), EditAware, BlankAware {
+        override val isBlank: Boolean get() = shown is Shown.Empty && !editing
+        override var onBlankChanged: (() -> Unit)? = null
+        override fun setEditing(editing: Boolean) {
+            this@AppShortcutTile.editing = editing
+            applyEmptyVisibility()
+        }
+    }.apply {
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true
@@ -271,9 +281,30 @@ class AppShortcutTile(
 
     override val view: View = root
 
-    /** Kutucuk ortada kalır; başka bir değişiklik gerekmez. */
+    /**
+     * 1 hücre genişliğindeki ince kutucukta (≈143 px) ikon küçülür, etiket küçük puntoyla tek satıra sığar
+     * (taşarsa "…"); 2 hücrede eski tam boy görünüm.
+     */
     override fun applySpan(span: Span) {
         root.gravity = Gravity.CENTER
+        compact = span.w < 2
+        val iconPx = context.dp(if (compact) ICON_COMPACT_DP else ICON_DP)
+        iconView.layoutParams = LinearLayout.LayoutParams(iconPx, iconPx)
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) LABEL_COMPACT_SP else LauncherTheme.LABEL_SP)
+        labelView.maxLines = 1
+        val p = context.dp(if (compact) 4 else 10)
+        root.setPadding(p, p, p, p)
+        if (shown is Shown.Empty) bindEmpty()
+        applyEmptyVisibility()
+    }
+
+    /** Boş kutuda artı ve etiket yalnızca düzenleme modunda görünür; normalde sakin, boş bir yüzey kalır. */
+    private fun applyEmptyVisibility() {
+        val hide = shown is Shown.Empty && !editing
+        (root as JoinedCard).surfaceVisible = !hide
+        (root as BlankAware).onBlankChanged?.invoke()
+        iconView.visibility = if (hide) View.INVISIBLE else View.VISIBLE
+        labelView.visibility = if (hide) View.INVISIBLE else View.VISIBLE
     }
 
     /** Ekran görünür olunca seçimi okur ve ikon/etiketi (gerekirse arka planda) yükler. */
@@ -310,12 +341,13 @@ class AppShortcutTile(
         labelView.text = entry.label
         labelView.setTextColor(LauncherTheme.TEXT)
         root.contentDescription = entry.label
+        applyEmptyVisibility()
     }
 
     /** Boş kutu: CONTROL renkli yuvarlak kare içinde artı ikonu. */
     private fun bindEmpty() {
         shown = Shown.Empty
-        val pad = context.dp((ICON_DP - PLUS_DP) / 2)
+        val pad = context.dp(((if (compact) ICON_COMPACT_DP else ICON_DP) - PLUS_DP) / 2)
         iconView.background = rounded(context, LauncherTheme.CONTROL, ICON_RADIUS_DP)
         iconView.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
         iconView.setPadding(pad, pad, pad, pad)
@@ -324,6 +356,7 @@ class AppShortcutTile(
         labelView.text = emptyLabel
         labelView.setTextColor(LauncherTheme.TEXT_SECONDARY)
         root.contentDescription = emptyLabel
+        applyEmptyVisibility()
     }
 
     /** Uygulamayı varsayılan ekranda açar. Java yardımcısı senkron olduğu için arka planda çalışır. */
@@ -363,6 +396,8 @@ class AppShortcutTile(
     private companion object {
         const val PREFS_NAME = "launcher_tile_apps"
         const val ICON_DP = 64
+        const val ICON_COMPACT_DP = 52
+        const val LABEL_COMPACT_SP = 18f
         const val PLUS_DP = 28
         const val ICON_RADIUS_DP = 16f
     }

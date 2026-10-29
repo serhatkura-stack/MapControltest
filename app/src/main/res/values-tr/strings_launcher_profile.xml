@@ -3,4 +3,8 @@
 <resources>
     <string name="launcher_profile">Profil</string>
     <string name="launcher_profile_default_name">Sürücü %d</string>
+    <string name="launcher_profile_name">Ad</string>
+    <string name="launcher_profile_color">Renk %d</string>
+    <string name="launcher_profile_save">Kaydet</string>
+    <string name="launcher_profile_cancel">Vazgeç</string>
 </resources>

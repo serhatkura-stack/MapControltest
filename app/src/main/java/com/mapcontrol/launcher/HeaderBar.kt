@@ -88,9 +88,18 @@ class HeaderBar(
         background = cardSurface(context)
         val size = context.dp(maxOf(LauncherTheme.TOUCH_MIN_DP, 76))
         layoutParams = LinearLayout.LayoutParams(size, size)
-        val id = Profiles.current(context)
-        addView(profileAvatar(context, id, 44, selected = true))
-        contentDescription = context.getString(R.string.launcher_profile) + ": " + Profiles.displayName(context, id)
+        // Ad/renk kaydedilince avatar yerinde tazelenir (görünürken dinler).
+        val refresh = {
+            val id = Profiles.current(context)
+            removeAllViews()
+            addView(profileAvatar(context, id, 44, selected = true))
+            contentDescription = context.getString(R.string.launcher_profile) + ": " + Profiles.displayName(context, id)
+        }
+        refresh()
+        addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) { Profiles.addAppearanceListener(refresh); refresh() }
+            override fun onViewDetachedFromWindow(v: View) { Profiles.removeAppearanceListener(refresh) }
+        })
         isClickable = true
         isFocusable = true
         setOnClickListener { onProfile() }

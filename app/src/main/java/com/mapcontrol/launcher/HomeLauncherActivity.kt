@@ -344,7 +344,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun openProfiles() {
         // Düzenleme sırasında profil değişmez (başlık zaten gizli); sürüşte serbest, tek dokunuş.
         if (grid.editMode) return
-        showProfileSheet(this) { ThemeTransition.recreate(this) }
+        showProfileSheet(this, isMoving = { LauncherSafeArea.isMoving(metrics.currentSnapshot()) }) { ThemeTransition.recreate(this) }
     }
 
     private fun openSettings() {

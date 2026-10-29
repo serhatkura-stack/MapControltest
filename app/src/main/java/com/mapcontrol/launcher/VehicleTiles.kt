@@ -72,7 +72,7 @@ internal abstract class VehicleTile(
         private set
 
     override fun applySpan(span: Span) {
-        wide = span.w >= 2
+        wide = span.w >= WIDE_MIN_COLS
         valueText.textSize = if (wide) VALUE_WIDE_SP else VALUE_SMALL_SP
         // Geniş: sütunlar ağırlıkla bölüşür (WRAP_CONTENT ile sol sütun 1px'e çöküyordu); detay yoksa sol sütun tüm kartı alır.
         mainColumn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)

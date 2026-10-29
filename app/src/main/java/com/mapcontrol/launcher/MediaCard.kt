@@ -239,7 +239,7 @@ class MediaCard(private val context: Context) : SizedWidget {
      * yerleşime, aksi halde tam yerleşime geçer; yalnızca yerleşim türü değişince çalışır.
      */
     override fun applySpan(span: Span) {
-        val compact = span.h < 2
+        val compact = span.h < 4
         if (compact == layoutCompact) return
         layoutCompact = compact
 

@@ -14,7 +14,7 @@ class LayoutStore(context: Context) {
     private val oemBar = LauncherSafeArea.hasOemBar(context)
 
     /** Varsayılan uygulama kutucukları alt çubuktaki uygulama şeridinin varsayılanlarıyla dolar. */
-    private val appPackages = if (oemBar) AppDock.installedDefaults(context, DEFAULT_APP_TILES) else emptyList()
+    private val appPackages = if (oemBar) AppDock.installedDefaults(context, DEFAULT_APP_SLOTS) else emptyList()
 
     private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
 
@@ -35,7 +35,12 @@ class LayoutStore(context: Context) {
                     extra = if (o.has("extra") && !o.isNull("extra")) o.getString("extra") else null,
                 )
             }
-            if (list.isNotEmpty() && isValid(list)) list else defaultLayout(oemBar, appPackages)
+            // Sürüm anahtarı yoksa kayıt eski 6×3 biçimindedir: bir kez ×2 taşınır ve yeni biçimde yazılır.
+            val migrated = if (prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION) migrateGridV1(list) else list
+            if (migrated.isNotEmpty() && isValid(migrated)) {
+                if (migrated !== list) save(migrated)
+                migrated
+            } else defaultLayout(oemBar, appPackages)
         } catch (e: org.json.JSONException) {
             defaultLayout(oemBar, appPackages)
         }
@@ -54,7 +59,7 @@ class LayoutStore(context: Context) {
                 w.extra?.let { put("extra", it) }
             })
         }
-        prefs.edit().putString(KEY, array.toString()).apply()
+        prefs.edit().putString(KEY, array.toString()).putInt(KEY_GRID_VERSION, GRID_VERSION).apply()
     }
 
     /** Bu cihazın varsayılan düzeni (sıfırlama için). */
@@ -65,7 +70,7 @@ class LayoutStore(context: Context) {
     companion object {
         private const val PREFS = "launcher_layout"
         private const val KEY = "widgets_v1"
-        private const val DEFAULT_APP_TILES = 3
+        private const val KEY_GRID_VERSION = "grid_v"
 
         /** Her widget ızgarada ve hiçbiri diğeriyle çakışmıyor mu? */
         fun isValid(layout: List<PlacedWidget>): Boolean =

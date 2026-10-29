@@ -30,17 +30,17 @@ class LayoutLogicTest {
 
     @Test
     fun overlapsIsTrueForIntersectingWidgets() {
-        val media = widget("media", WidgetType.MEDIA, 0, 0, Span(3, 3))
-        val nav = widget("nav", WidgetType.NAVIGATION, 2, 2, Span(3, 2))
+        val media = widget("media", WidgetType.MEDIA, 0, 0, Span(6, 6))
+        val nav = widget("nav", WidgetType.NAVIGATION, 4, 4, Span(6, 4))
         assertTrue(media.overlaps(nav))
         assertTrue(nav.overlaps(media))
     }
 
     @Test
     fun overlapsIsFalseForTouchingEdges() {
-        val left = widget("left", WidgetType.MEDIA, 0, 0, Span(3, 3))
-        val right = widget("right", WidgetType.NAVIGATION, 3, 0, Span(3, 2))
-        val below = widget("below", WidgetType.CONSUMPTION, 0, 3, Span(1, 1))
+        val left = widget("left", WidgetType.MEDIA, 0, 0, Span(6, 6))
+        val right = widget("right", WidgetType.NAVIGATION, 6, 0, Span(6, 4))
+        val below = widget("below", WidgetType.CONSUMPTION, 0, 6, Span(2, 2))
         assertFalse(left.overlaps(right))
         assertFalse(right.overlaps(left))
         assertFalse(left.overlaps(below))
@@ -49,68 +49,170 @@ class LayoutLogicTest {
 
     @Test
     fun fitsRejectsOutOfBoundsAndAcceptsEdgeFit() {
-        // col + w > GRID_COLS (4 + 3 = 7 > 6)
-        assertFalse(widget("a", WidgetType.MEDIA, 4, 0, Span(3, 3)).fits())
-        // row + h > GRID_ROWS (1 + 3 = 4 > 3)
-        assertFalse(widget("b", WidgetType.MEDIA, 0, 1, Span(3, 3)).fits())
+        // col + w > GRID_COLS (8 + 6 = 14 > 12)
+        assertFalse(widget("a", WidgetType.MEDIA, 8, 0, Span(6, 6)).fits())
+        // row + h > GRID_ROWS (2 + 6 = 8 > 6)
+        assertFalse(widget("b", WidgetType.MEDIA, 0, 2, Span(6, 6)).fits())
         // negative row and negative column
-        assertFalse(widget("c", WidgetType.LOCK, 0, -1, Span(1, 1)).fits())
-        assertFalse(widget("d", WidgetType.LOCK, -1, 0, Span(1, 1)).fits())
+        assertFalse(widget("c", WidgetType.LOCK, 0, -1, Span(2, 2)).fits())
+        assertFalse(widget("d", WidgetType.LOCK, -1, 0, Span(2, 2)).fits())
         // exactly touching the far corner is in bounds
-        assertTrue(widget("e", WidgetType.MEDIA, 3, 0, Span(3, 3)).fits())
+        assertTrue(widget("e", WidgetType.MEDIA, 6, 0, Span(6, 6)).fits())
     }
 
     @Test
     fun isValidRejectsOverlappingWidgets() {
         val layout = listOf(
-            widget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
-            widget("cons", WidgetType.CONSUMPTION, 2, 2, Span(1, 1)),
+            widget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)),
+            widget("cons", WidgetType.CONSUMPTION, 4, 4, Span(2, 2)),
         )
         assertFalse(LayoutStore.isValid(layout))
     }
 
     @Test
     fun isValidRejectsSpanNotAllowedForType() {
-        // LOCK only supports 1x1
-        val layout = listOf(widget("lock", WidgetType.LOCK, 0, 0, Span(2, 2)))
+        // LOCK supports 2x2 and 3x2 only
+        val layout = listOf(widget("lock", WidgetType.LOCK, 0, 0, Span(4, 2)))
         assertFalse(LayoutStore.isValid(layout))
     }
 
     @Test
     fun canPlaceIgnoresWidgetsOwnId() {
-        val existing = widget("health", WidgetType.HEALTH, 1, 1, Span(1, 1))
+        val existing = widget("health", WidgetType.HEALTH, 2, 2, Span(2, 2))
         val layout = listOf(existing)
         // Same id as the one already in the layout: moving it onto its own cell is allowed.
-        val moved = existing.copy(col = 1, row = 1)
+        val moved = existing.copy(col = 2, row = 2)
         assertTrue(LayoutStore.canPlace(layout, moved))
         // A different id on the same cell is not allowed.
-        val other = widget("other", WidgetType.LOCK, 1, 1, Span(1, 1))
+        val other = widget("other", WidgetType.LOCK, 2, 2, Span(2, 2))
         assertFalse(LayoutStore.canPlace(layout, other))
     }
 
     @Test
     fun findSpotReturnsPreferredPositionWhenFree() {
-        val layout = listOf(widget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)))
-        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 1))
-        val spot = LayoutStore.findSpot(layout, base, preferCol = 4, preferRow = 0)
-        assertEquals(4, spot!!.col)
+        val layout = listOf(widget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)))
+        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 2))
+        val spot = LayoutStore.findSpot(layout, base, preferCol = 8, preferRow = 0)
+        assertEquals(8, spot!!.col)
         assertEquals(0, spot.row)
     }
 
     @Test
     fun findSpotReturnsFirstFreeSpotWhenPreferredIsTaken() {
-        val layout = listOf(widget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)))
-        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 1))
-        // (0,0) is occupied; scanning row by row, left to right, the first free cell is (3,0).
+        val layout = listOf(widget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)))
+        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 2))
+        // (0,0) is occupied; scanning row by row, left to right, the first free cell is (6,0).
         val spot = LayoutStore.findSpot(layout, base, preferCol = 0, preferRow = 0)
-        assertEquals(3, spot!!.col)
+        assertEquals(6, spot!!.col)
         assertEquals(0, spot.row)
     }
 
     @Test
     fun findSpotReturnsNullWhenGridIsFull() {
-        // defaultLayout() covers all 18 cells of the 6x3 grid.
-        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 1))
+        // defaultLayout() covers all 72 cells of the 12x6 grid.
+        val base = widget("app", WidgetType.APP, 0, 0, Span(1, 2))
         assertNull(LayoutStore.findSpot(defaultLayout(), base))
+    }
+
+    @Test
+    fun gridIsTwelveBySix() {
+        assertEquals(12, GRID_COLS)
+        assertEquals(6, GRID_ROWS)
+    }
+
+    @Test
+    fun defaultLayoutsCoverTheWholeGridWithoutOverlap() {
+        val area = { l: List<PlacedWidget> -> l.sumOf { it.span.w * it.span.h } }
+        listOf(defaultLayout(false), defaultLayout(true)).forEach {
+            assertTrue(LayoutStore.isValid(it))
+            assertEquals(GRID_COLS * GRID_ROWS, area(it))
+        }
+    }
+
+    @Test
+    fun desayDefaultBottomRowIsNavSixAppsSeatHeat() {
+        val bottom = defaultLayout(true).filter { it.row == 4 }.sortedBy { it.col }
+        assertEquals(
+            listOf(WidgetType.NAVIGATION) + List(6) { WidgetType.APP } + WidgetType.SEAT_HEAT,
+            bottom.map { it.type },
+        )
+        assertEquals(Span(4, 2), bottom.first().span)
+        assertTrue(bottom.filter { it.type == WidgetType.APP }.all { it.span == Span(1, 2) })
+        assertEquals(Span(2, 2), bottom.last().span)
+        // 4 + 6 + 2 = 12, boşluksuz
+        assertEquals(GRID_COLS, bottom.sumOf { it.span.w })
+    }
+
+    @Test
+    fun migrationDoublesEveryValueExactly() {
+        val old = listOf(
+            widget("m", WidgetType.MEDIA, 0, 0, Span(3, 3)),
+            widget("v", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
+            widget("n", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
+        )
+        val migrated = migrateGridV1(old)
+        assertEquals(
+            listOf(
+                widget("m", WidgetType.MEDIA, 0, 0, Span(6, 6)),
+                widget("v", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
+                widget("n", WidgetType.NAVIGATION, 6, 4, Span(6, 2)),
+            ),
+            migrated,
+        )
+        assertTrue(LayoutStore.isValid(migrated))
+    }
+
+    @Test
+    fun migratedDenseOldLayoutStaysValidAndKeepsExtra() {
+        val old = listOf(
+            widget("service", WidgetType.SERVICE, 0, 0, Span(1, 1)),
+            widget("trip", WidgetType.TRIP, 3, 0, Span(2, 1)),
+            widget("lock", WidgetType.LOCK, 1, 1, Span(1, 1)),
+            widget("seat", WidgetType.SEAT_HEAT, 0, 2, Span(2, 1)),
+            PlacedWidget("app", WidgetType.APP, 5, 2, Span(1, 1), "pkg.a"),
+        )
+        val migrated = migrateGridV1(old)
+        assertTrue(LayoutStore.isValid(migrated))
+        assertEquals("pkg.a", migrated.last().extra)
+        assertEquals(Span(2, 2), migrated.last().span)
+    }
+
+    @Test
+    fun everyOldSpanDoubledIsAllowedForItsType() {
+        // Eski 6x3 boyut listeleri: her tür için çift katı yeni listede bulunmalı.
+        val oldSizes = mapOf(
+            WidgetType.MEDIA to listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3)),
+            WidgetType.NAVIGATION to listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1)),
+            WidgetType.VEHICLE to listOf(Span(3, 2), Span(2, 2)),
+            WidgetType.LOCK to listOf(Span(1, 1)),
+            WidgetType.APP to listOf(Span(1, 1)),
+            WidgetType.TRIP to listOf(Span(2, 1), Span(1, 1)),
+            WidgetType.SEAT_HEAT to listOf(Span(1, 1), Span(2, 1)),
+        )
+        oldSizes.forEach { (type, spans) ->
+            spans.forEach { assertTrue("$type $it", Span(it.w * 2, it.h * 2) in type.sizes) }
+        }
+    }
+
+    @Test
+    fun finerSpansExist() {
+        assertEquals(Span(1, 2), WidgetType.APP.sizes.first())
+        assertTrue(Span(2, 2) in WidgetType.APP.sizes)
+        listOf(WidgetType.CONSUMPTION, WidgetType.TRIP, WidgetType.HEALTH, WidgetType.WEATHER, WidgetType.SERVICE,
+            WidgetType.AIR, WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.SEAT_HEAT, WidgetType.SEAT_VENT)
+            .forEach { assertTrue("$it", Span(3, 2) in it.sizes && Span(2, 2) in it.sizes) }
+        // Medya / araç / navigasyon: daha küçük asgari boyut yok (en küçüğü eski 2x1 = 4x2).
+        assertTrue(WidgetType.MEDIA.sizes.all { it.w >= 4 && it.h >= 2 })
+        assertTrue(WidgetType.VEHICLE.sizes.all { it.w >= 4 && it.h >= 4 })
+        assertTrue(WidgetType.NAVIGATION.sizes.all { it.w >= 4 && it.h >= 2 })
+    }
+
+    @Test
+    fun narrowAppTilesPackSixSideBySide() {
+        val apps = List(6) { PlacedWidget("a$it", WidgetType.APP, it * 2, 0, Span(1, 2)) }
+        // aralarında bir hücre boşluk bırakıldığında geçerli; bitişik 1x2 kutucuklar da çakışmaz
+        assertTrue(LayoutStore.isValid(apps))
+        val packed = List(12) { PlacedWidget("a$it", WidgetType.APP, it, 0, Span(1, 2)) }
+        assertTrue(LayoutStore.isValid(packed))
     }
 }

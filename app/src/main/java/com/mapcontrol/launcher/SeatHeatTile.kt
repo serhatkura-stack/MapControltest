@@ -40,7 +40,7 @@ internal class SeatHeatTile(private val context: Context, private val vent: Bool
     override val view: View get() = root
 
     override fun applySpan(span: Span) {
-        val both = span.w >= 2
+        val both = span.w >= WIDE_MIN_COLS
         divider.visibility = if (both) View.VISIBLE else View.GONE
         passenger.root.visibility = if (both) View.VISIBLE else View.GONE
     }

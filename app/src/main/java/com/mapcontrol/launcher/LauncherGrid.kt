@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.MotionEvent
@@ -40,17 +39,18 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
     var editMode = false
         set(value) {
             field = value
-            slots.values.forEach { it.overlay.visibility = if (value) View.VISIBLE else View.GONE }
+            slots.values.forEach {
+                it.overlay.visibility = if (value) View.VISIBLE else View.GONE
+                (it.content as? EditAware)?.setEditing(value)
+            }
             updateJoins()
             invalidate()
         }
 
     private val emptyCellPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = context.dpF(2f)
+        style = Paint.Style.FILL
         color = LauncherTheme.TRACK
     }
-    private val cellRect = RectF()
 
     init {
         clipChildren = false
@@ -73,6 +73,8 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             }
             slot.placed = placed
             slot.bindOverlay()
+            (slot.content as? BlankAware)?.onBlankChanged = { updateJoins() }
+            (slot.content as? EditAware)?.setEditing(editMode)
         }
         updateJoins()
         requestLayout()
@@ -85,20 +87,25 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
      * kapalıdır: kutucuklar ayrı görünür, sürüklenip yeniden boyutlandırılabilir.
      */
     private fun updateJoins() {
-        val apps = layout.filter { it.type == WidgetType.APP }
+        // Düzenleme dışında boş (görünmez) uygulama kutuları birleşmeye katılmaz; komşuları şerit ucu olarak yuvarlanır.
+        val blankIds = if (editMode) emptySet() else slots.values.filter { (it.content as? BlankAware)?.isBlank == true }.map { it.placed.id }.toSet()
+        val apps = layout.filter { it.type == WidgetType.APP && it.id !in blankIds }
         fun appAt(col: Int, row: Int) = apps.any { col in it.col until it.col + it.span.w && row in it.row until it.row + it.span.h }
+        // Komşuluk ortak kenar parçasına bakar (boyutlar eşit olmak zorunda değil): kenar boyunca herhangi bir hücrede APP varsa birleşir.
+        fun appAlongCols(row: Int, p: PlacedWidget) = (p.col until p.col + p.span.w).any { appAt(it, row) }
+        fun appAlongRows(col: Int, p: PlacedWidget) = (p.row until p.row + p.span.h).any { appAt(col, it) }
         slots.values.forEach { slot ->
             val joinable = slot.content as? Joinable ?: return@forEach
             val p = slot.placed
-            if (editMode || p.type != WidgetType.APP) {
+            if (editMode || p.type != WidgetType.APP || p.id in blankIds) {
                 joinable.setJoins(false, false, false, false)
                 return@forEach
             }
             joinable.setJoins(
-                left = appAt(p.col - 1, p.row),
-                top = appAt(p.col, p.row - 1),
-                right = appAt(p.col + p.span.w, p.row),
-                bottom = appAt(p.col, p.row + p.span.h),
+                left = appAlongRows(p.col - 1, p),
+                top = appAlongCols(p.row - 1, p),
+                right = appAlongRows(p.col + p.span.w, p),
+                bottom = appAlongCols(p.row + p.span.h, p),
                 diagonals = booleanArrayOf(
                     appAt(p.col - 1, p.row - 1), appAt(p.col + p.span.w, p.row - 1),
                     appAt(p.col + p.span.w, p.row + p.span.h), appAt(p.col - 1, p.row + p.span.h),
@@ -136,16 +143,16 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         }
     }
 
-    /** Düzenleme modunda boş hücreler ince bir çerçeveyle gösterilir; nereye bırakılabileceği görünür. */
+    /** Düzenleme modunda boş hücrelerin ortasında küçük bir nokta görünür; 72 hücrede sakin kalır, bırakma noktasını gösterir. */
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (!editMode) return
-        val radius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
-        val inset = emptyCellPaint.strokeWidth / 2
+        val r = context.dpF(EMPTY_DOT_DP)
+        val cw = cellWidth()
+        val ch = cellHeight()
         for (row in 0 until GRID_ROWS) for (col in 0 until GRID_COLS) {
             if (layout.any { col in it.col until it.col + it.span.w && row in it.row until it.row + it.span.h }) continue
-            cellRect.set(cellLeft(col) + inset, cellTop(row) + inset, cellLeft(col) + cellWidth() - inset, cellTop(row) + cellHeight() - inset)
-            canvas.drawRoundRect(cellRect, radius, radius, emptyCellPaint)
+            canvas.drawCircle(cellLeft(col) + cw / 2, cellTop(row) + ch / 2, r, emptyCellPaint)
         }
     }
 
@@ -234,10 +241,12 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
 
         fun bindOverlay() {
             labelText.setText(placed.type.label)
+            // Tek hücre genişliğindeki kutucukta ad ile kaldır düğmesi sığmaz; ad gizlenir (ikon kutucuğun kendisinde).
+            label.visibility = if (placed.span.w < 2) View.GONE else View.VISIBLE
             labelIcon.setImageResource(placed.type.icon)
             sizeRow.removeAllViews()
             if (placed.type.sizes.size < 2) return
-            placed.type.sizes.forEachIndexed { i, span ->
+            placed.type.sizes.sortedWith(compareBy({ it.w * it.h }, { it.w })).forEachIndexed { i, span ->
                 if (i > 0) sizeRow.addView(gap(context, 8))
                 val selected = span == placed.span
                 sizeRow.addView(text(context, LauncherTheme.LABEL_SP, if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
@@ -301,7 +310,8 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         /** Izgara hücreleri arası boşluk; birleşen kutucuklar bunu kapatır. */
         const val GRID_GAP_DP = 16
         private const val DRAG_SCALE = 1.03f
-        private const val SIZE_CHIP_W_DP = 72
+        private const val EMPTY_DOT_DP = 3f
+        private const val SIZE_CHIP_W_DP = 56
         private const val SIZE_CHIP_H_DP = 48
     }
 }

@@ -100,7 +100,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
      * Görünümler yeniden kurulmaz; yalnızca görünürlük ve kart iç boşluğu değişir.
      */
     override fun applySpan(span: Span) {
-        val compact = span.h <= 1
+        val compact = span.h <= 2
         fullLayout.visibility = if (compact) View.GONE else View.VISIBLE
         compactLayout.visibility = if (compact) View.VISIBLE else View.GONE
         // 150dp'lik tek hücreye 72dp'lik düğme sığsın diye sıkışık kartta iç boşluk azalır.

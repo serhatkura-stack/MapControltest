@@ -17,13 +17,20 @@ interface Joinable {
     }
 }
 
+/** Ekranda şu an boş (görünmez) olabilen kutucuk: ızgara bunu birleşmeye katmaz, durum değişince haber alır. */
+interface BlankAware {
+    /** Düzenleme dışında boş uygulama kutusu: yüzeysiz, ayraçsız, birleşmeye katılmaz. */
+    val isBlank: Boolean
+    var onBlankChanged: (() -> Unit)?
+}
+
 /**
  * Kart yüzeyini kendisi çizen kutucuk kabuğu. Komşu kenarlarda yüzey, ızgara boşluğunun yarısı kadar
  * dışarı uzanır (komşusuyla ortada buluşur, aralarında boşluk kalmaz); köşeler yalnızca iki kenarı da
  * serbest olan köşelerde yuvarlaktır; komşu kenarın ortasına kısa, ince bir ayraç çizilir.
  * İçerik (ikon + etiket) yerinde kalır; yalnızca arka plan genişler. Üst kapların kırpması kapalı olmalı.
  */
-class JoinedCard(context: Context, paddingDp: Int, private val gapPx: Int) : LinearLayout(context), Joinable {
+open class JoinedCard(context: Context, paddingDp: Int, private val gapPx: Int) : LinearLayout(context), Joinable {
 
     private var joinL = false
     private var joinT = false
@@ -53,6 +60,14 @@ class JoinedCard(context: Context, paddingDp: Int, private val gapPx: Int) : Lin
         setPadding(p, p, p, p)
     }
 
+    /** Kapalıyken kart hiçbir şey çizmez (yüzey, kenarlık, ayraç yok): boş uygulama kutusu arka planla bütünleşir. */
+    var surfaceVisible = true
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
     override fun setJoins(left: Boolean, top: Boolean, right: Boolean, bottom: Boolean, diagonals: BooleanArray) {
         if (left == joinL && top == joinT && right == joinR && bottom == joinB && diagonals.contentEquals(diag)) return
         joinL = left; joinT = top; joinR = right; joinB = bottom
@@ -61,6 +76,7 @@ class JoinedCard(context: Context, paddingDp: Int, private val gapPx: Int) : Lin
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (!surfaceVisible) return
         val half = gapPx / 2f
         // Yüzeyler 1 px üst üste biner: kesirli piksel sınırında ince bir çizgi (dikiş) görünmesin.
         val el = if (joinL) half + 1f else 0f

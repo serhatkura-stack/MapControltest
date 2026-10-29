@@ -11,8 +11,14 @@ import com.mapcontrol.R
  * Orta alan [GRID_COLS] × [GRID_ROWS] hücrelik bir ızgaradır. Üst şerit (saat, Ayarlar) ve
  * alt çubuk (klima, uygulamalar) ızgaranın dışındadır ve sabittir.
  */
-const val GRID_COLS = 6
-const val GRID_ROWS = 3
+const val GRID_COLS = 12
+const val GRID_ROWS = 6
+
+/** Kayıtlı düzenin ızgara sürümü: 1 = eski 6×3, 2 = 12×6 (her değer tam iki katı). */
+const val GRID_VERSION = 2
+
+/** Bir kutucuk bu genişlikten (hücre) itibaren "geniş" yerleşime geçer (eski 2 sütun = 4 hücre). */
+const val WIDE_MIN_COLS = 4
 
 /** Bir widget'ın ızgaradaki boyutu (sütun × satır). */
 data class Span(val w: Int, val h: Int) {
@@ -24,20 +30,20 @@ data class Span(val w: Int, val h: Int) {
  * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
-    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3))),
-    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1))),
-    VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(3, 2), Span(2, 2))),
-    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 1))),
-    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(1, 1), Span(2, 1))),
-    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(1, 1), Span(2, 1))),
-    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 1), Span(1, 1))),
-    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(1, 1), Span(2, 1))),
-    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(1, 1), Span(2, 1))),
-    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(1, 1), Span(2, 1))),
-    AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(1, 1), Span(2, 1))),
-    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1))),
-    SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(1, 1), Span(2, 1))),
-    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(1, 1), Span(2, 1)));
+    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(6, 6), Span(6, 4), Span(4, 2), Span(8, 6))),
+    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(6, 4), Span(6, 6), Span(6, 2), Span(4, 2))),
+    VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(6, 4), Span(4, 4))),
+    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(2, 2), Span(3, 2))),
+    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(4, 2), Span(2, 2), Span(3, 2))),
+    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2), Span(2, 2))),
+    SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(4, 2), Span(3, 2)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -63,30 +69,48 @@ data class PlacedWidget(
     fun fits(): Boolean = col >= 0 && row >= 0 && col + span.w <= GRID_COLS && row + span.h <= GRID_ROWS
 }
 
+/** Düzenleme moduna göre görünümünü değiştiren widget (ör. boş uygulama kutusunun artısı yalnız düzenlemede görünür). */
+interface EditAware {
+    fun setEditing(editing: Boolean)
+}
+
 /** Boyutu değişebilen widget: ızgara yerleşimi değişince kendini yeni boyuta göre düzenler. */
 interface SizedWidget : LauncherWidget {
     fun applySpan(span: Span)
 }
 
 /**
- * Varsayılan yerleşim: büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?".
- * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): ızgara üçe böler; medya ve araç üst iki
- * satırı alır, alt satıra navigasyon · uygulama şeridi · koltuk ısıtma gelir (alt çubuğun işlevleri).
+ * Varsayılan yerleşim (12×6): büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?".
+ * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): üst dört satırı medya ve araç alır, alt iki
+ * satıra navigasyon (4) · altı ince uygulama kutucuğu (6, tek şerit) · koltuk ısıtma (2) gelir: 4+6+2 = 12.
  */
-fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) listOf(
-    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 2)),
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
-    PlacedWidget("navigation", WidgetType.NAVIGATION, 0, 2, Span(2, 1)),
-    // Üç uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Kutu boşsa (paket yok) artı gösterir.
-    PlacedWidget("app_dock_0", WidgetType.APP, 2, 2, Span(1, 1), appPackages.getOrNull(0)),
-    PlacedWidget("app_dock_1", WidgetType.APP, 3, 2, Span(1, 1), appPackages.getOrNull(1)),
-    PlacedWidget("app_dock_2", WidgetType.APP, 4, 2, Span(1, 1), appPackages.getOrNull(2)),
-    PlacedWidget("seat_heat", WidgetType.SEAT_HEAT, 5, 2, Span(1, 1)),
-) else listOf(
-    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
-    PlacedWidget("navigation", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
+fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
+    listOf(
+        PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
+        PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
+        PlacedWidget("navigation", WidgetType.NAVIGATION, 0, 4, Span(4, 2)),
+    ) +
+        // Altı uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
+        (0 until DEFAULT_APP_SLOTS).map { i ->
+            PlacedWidget("app_dock_$i", WidgetType.APP, 4 + i, 4, Span(1, 2), appPackages.getOrNull(i))
+        } +
+        PlacedWidget("seat_heat", WidgetType.SEAT_HEAT, 10, 4, Span(2, 2))
+} else listOf(
+    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)),
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
+    PlacedWidget("navigation", WidgetType.NAVIGATION, 6, 4, Span(6, 2)),
 )
+
+/** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı. */
+const val DEFAULT_APP_SLOTS = 6
+
+/**
+ * Eski 6×3 düzeni (sürüm 1) 12×6'ya taşır: konum ve boyut tam iki katı olur. Görünüm aynı kalır;
+ * iki katı boyutlar yeni ızgarada her tür için geçerlidir.
+ */
+fun migrateGridV1(layout: List<PlacedWidget>): List<PlacedWidget> = layout.map {
+    it.copy(col = it.col * 2, row = it.row * 2, span = Span(it.span.w * 2, it.span.h * 2))
+}
 
 /** Widget örneğini türüne göre üretir. Activity gerekir: bazı widget'lar diyalog açar. */
 object WidgetFactory {
