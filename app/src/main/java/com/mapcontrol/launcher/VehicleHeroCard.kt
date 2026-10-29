@@ -39,9 +39,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
     /**
-     * Araç görseli: upstream'deki 3B modelden ("2023 Chery Tiggo 7 Plus 290T", Ddiaz Design, Sketchfab,
-     * CC BY-NC-SA 4.0) tek kare, şeffaf arka planlı, gri tonlu render. Atıf Ayarlar panelinde gösterilir.
-     * Sabit, 720 px'lik tek PNG: kare başına çizim ya da 3B motor yok.
+     * Araç görseli: proje sahibinin ürettiği Tiggo 7 görseli, arka planı ayrılmış, 720 px'lik tek PNG.
+     * Sabit görsel: kare başına çizim ya da 3B motor yok.
      */
     private val carImage = ImageView(context).apply {
         setImageResource(R.drawable.launcher_car)

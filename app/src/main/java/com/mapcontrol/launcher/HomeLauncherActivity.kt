@@ -1,7 +1,6 @@
 package com.mapcontrol.launcher
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -189,37 +188,94 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         pressFeedback()
     }
 
+    /**
+     * "Widget ekle" paneli: dört sütunlu kutucuklar, her birinde ikon, ad ve boyutlar.
+     * Izgarada yer kalmayan türler soluk ve "Yer yok" der; dokunmak hiçbir şey eklemez.
+     */
     private fun showAddDialog() {
-        val types = WidgetType.values()
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(R.string.launcher_edit_add)
-            .setItems(types.map { getString(it.label) }.toTypedArray()) { _, which -> addWidget(types[which]) }
-            .show()
+        showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
+            WidgetType.values().toList().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
+                if (r > 0) addView(gap(context, 12, vertical = true))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    for (c in 0 until ADD_COLUMNS) {
+                        if (c > 0) addView(gap(context, 12))
+                        val type = rowTypes.getOrNull(c)
+                        val lp = LinearLayout.LayoutParams(0, dp(ADD_TILE_HEIGHT_DP), 1f)
+                        if (type == null) addView(View(context), lp) else addView(addTile(type) { d.dismiss() }, lp)
+                    }
+                }, sheetFullWidth())
+            }
+        }
     }
 
-    private fun addWidget(type: WidgetType) {
-        val base = PlacedWidget("${type.key}_${System.currentTimeMillis()}", type, 0, 0, type.sizes.first())
-        // Önce türün varsayılan (ilk) boyutu denenir; sığmazsa sıradaki boyutlar.
-        val spot = type.sizes.asSequence()
-            .mapNotNull { LayoutStore.findSpot(layout, base.copy(span = it)) }
-            .firstOrNull()
-        if (spot == null) {
-            Toast.makeText(this, R.string.launcher_edit_no_space, Toast.LENGTH_SHORT).show()
-            return
+    private fun addTile(type: WidgetType, dismiss: () -> Unit): View {
+        val spot = spotFor(type)
+        val fits = spot != null
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(context, LauncherTheme.CONTROL, 16f)
+            val p = dp(16)
+            setPadding(dp(20), p, dp(20), p)
+            addView(icon(context, type.icon, 32, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY))
+            addView(gap(context, 8, vertical = true))
+            addView(text(context, LauncherTheme.BODY_SP, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+                setText(type.label)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(gap(context, 4, vertical = true))
+            addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                text = if (fits) type.sizes.joinToString("  ·  ") else getString(R.string.launcher_edit_no_room)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            alpha = if (fits) 1f else NO_ROOM_ALPHA
+            contentDescription = getString(type.label)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                if (spot != null) {
+                    dismiss()
+                    applyLayout(layout + spot)
+                }
+            }
+            pressFeedback()
         }
-        applyLayout(layout + spot)
+    }
+
+    /** Türün ızgarada sığdığı ilk yer; önce varsayılan (ilk) boyut, sığmazsa sıradakiler. */
+    private fun spotFor(type: WidgetType): PlacedWidget? {
+        val base = PlacedWidget("${type.key}_${System.currentTimeMillis()}", type, 0, 0, type.sizes.first())
+        return type.sizes.asSequence().mapNotNull { LayoutStore.findSpot(layout, base.copy(span = it)) }.firstOrNull()
     }
 
     private fun confirmReset() {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setMessage(R.string.launcher_edit_reset_confirm)
-            .setPositiveButton(R.string.launcher_edit_reset) { _, _ ->
-                store.reset()
-                applyLayout(defaultLayout())
-            }
-            .setNegativeButton(R.string.launcher_nav_dialog_cancel, null)
-            .show()
+        showLauncherSheet(this, R.string.launcher_edit_reset, RESET_SHEET_WIDTH_DP) { d ->
+            addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply {
+                setText(R.string.launcher_edit_reset_confirm)
+            }, sheetFullWidth())
+            addView(gap(context, 32, vertical = true))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(sheetButton(R.string.launcher_nav_dialog_cancel, primary = false) { d.dismiss() }, weightLp(1f))
+                addView(gap(context, 12))
+                addView(sheetButton(R.string.launcher_edit_reset, primary = true) {
+                    d.dismiss()
+                    store.reset()
+                    applyLayout(defaultLayout())
+                }, weightLp(1f))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.TOUCH_MIN_DP)))
+        }
     }
+
+    private fun sheetButton(labelRes: Int, primary: Boolean, onClick: () -> Unit): View =
+        text(this, LauncherTheme.BODY_SP, if (primary) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+            setText(labelRes)
+            gravity = Gravity.CENTER
+            background = rounded(context, if (primary) LauncherTheme.ACCENT else LauncherTheme.CONTROL, 16f)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            pressFeedback()
+        }
 
     // --- Diğer ---
 
@@ -241,5 +297,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                 if (LauncherTheme.night) 0 else View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         }
+    }
+
+    private companion object {
+        const val ADD_COLUMNS = 4
+        const val ADD_SHEET_WIDTH_DP = 1040
+        const val ADD_TILE_HEIGHT_DP = 136
+        const val RESET_SHEET_WIDTH_DP = 640
+        const val NO_ROOM_ALPHA = 0.45f
     }
 }

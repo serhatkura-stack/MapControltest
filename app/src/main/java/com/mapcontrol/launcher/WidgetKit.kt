@@ -1,6 +1,7 @@
 package com.mapcontrol.launcher
 
 import android.app.Activity
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
 
@@ -22,18 +23,18 @@ data class Span(val w: Int, val h: Int) {
  * Eklenebilir widget türleri ve her birinin desteklediği boyutlar.
  * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.
  */
-enum class WidgetType(val key: String, @StringRes val label: Int, val sizes: List<Span>) {
-    MEDIA("media", R.string.launcher_widget_media, listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3))),
-    NAVIGATION("navigation", R.string.launcher_widget_navigation, listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1))),
-    VEHICLE("vehicle", R.string.launcher_widget_vehicle, listOf(Span(3, 2), Span(2, 2))),
-    RANGE("range", R.string.launcher_widget_range, listOf(Span(1, 1), Span(2, 1))),
-    LOCK("lock", R.string.launcher_widget_lock, listOf(Span(1, 1))),
-    TIRES("tires", R.string.launcher_widget_tires, listOf(Span(1, 1), Span(2, 1))),
-    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, listOf(Span(1, 1), Span(2, 1))),
-    DOORS("doors", R.string.launcher_widget_doors, listOf(Span(1, 1), Span(2, 1))),
-    SUNROOF("sunroof", R.string.launcher_widget_sunroof, listOf(Span(1, 1), Span(2, 1))),
-    WEATHER("weather", R.string.launcher_widget_weather, listOf(Span(1, 1), Span(2, 1))),
-    APP("app", R.string.launcher_widget_app, listOf(Span(1, 1)));
+enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
+    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3))),
+    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1))),
+    VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(3, 2), Span(2, 2))),
+    RANGE("range", R.string.launcher_widget_range, R.drawable.ic_mdi_gas_station, listOf(Span(1, 1), Span(2, 1))),
+    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 1))),
+    TIRES("tires", R.string.launcher_widget_tires, R.drawable.ic_mdi_tire, listOf(Span(1, 1), Span(2, 1))),
+    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(1, 1), Span(2, 1))),
+    DOORS("doors", R.string.launcher_widget_doors, R.drawable.ic_mdi_car_door, listOf(Span(1, 1), Span(2, 1))),
+    SUNROOF("sunroof", R.string.launcher_widget_sunroof, R.drawable.ic_mdi_car_sunroof, listOf(Span(1, 1), Span(2, 1))),
+    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(1, 1), Span(2, 1))),
+    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }

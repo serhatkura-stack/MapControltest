@@ -161,12 +161,22 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             isClickable = true
         }
         private val sizeRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        private val label = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
-            // İçerik perdenin altında göründüğü için ad kendi zemininde durur.
+        private val labelIcon = icon(context, R.drawable.ic_mdi_view_grid, 24, LauncherTheme.TEXT_SECONDARY)
+        private val labelText = text(context, LauncherTheme.LABEL_SP, medium = true)
+        /**
+         * Widget adı kendi zemininde: içerik perdenin altında göründüğü için. İkon + ad, kutucukların
+         * kendi başlık satırından (ikon + etiket) daha geniş; altındaki başlık taşmaz.
+         */
+        private val label = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             background = rounded(context, LauncherTheme.CONTROL, 12f)
-            val h = context.dp(14)
+            val h = context.dp(12)
             val v = context.dp(8)
-            setPadding(h, v, h, v)
+            setPadding(h, v, context.dp(16), v)
+            addView(labelIcon)
+            addView(gap(context, 10))
+            addView(labelText)
         }
 
         init {
@@ -191,7 +201,8 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         }
 
         fun bindOverlay() {
-            label.setText(placed.type.label)
+            labelText.setText(placed.type.label)
+            labelIcon.setImageResource(placed.type.icon)
             sizeRow.removeAllViews()
             if (placed.type.sizes.size < 2) return
             placed.type.sizes.forEachIndexed { i, span ->

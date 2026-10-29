@@ -98,5 +98,5 @@
     <string name="launcher_doors_open_count" formatted="true">%1$d yer açık</string>
     <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Kapat</string>
-    <string name="launcher_credit_car_image">Araç görseli: Ddiaz Design’ın “2023 Chery Tiggo 7 Plus 290T” modelinden (Sketchfab) render, CC BY-NC-SA 4.0</string>
+    <string name="launcher_edit_no_room">Yer yok</string>
 </resources>

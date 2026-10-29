@@ -4,15 +4,11 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
@@ -53,17 +49,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
     fun show() {
         if (dialog?.isShowing == true) return
-        val d = Dialog(activity)
-        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        d.setContentView(buildPanel(d))
-        d.window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            setLayout(activity.dp(PANEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT)
-            setGravity(Gravity.CENTER)
+        dialog = showLauncherSheet(activity, R.string.launcher_settings) { d -> buildPanel(d) }.apply {
+            setOnDismissListener { dialog = null }
         }
-        d.setOnDismissListener { dialog = null }
-        dialog = d
-        d.show()
     }
 
     fun release() {
@@ -71,16 +59,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         launcher.shutdown()
     }
 
-    private fun buildPanel(d: Dialog): View = card(activity).apply {
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(text(activity, LauncherTheme.SECTION_SP, bold = true).apply { setText(R.string.launcher_settings) },
-                weightLp(1f).apply { height = ViewGroup.LayoutParams.WRAP_CONTENT })
-            addView(iconButton(activity, R.drawable.ic_mdi_close, activity.getString(R.string.launcher_close)) { d.dismiss() })
-        }, fullWidth())
-
-        addView(gap(activity, 24, vertical = true))
+    private fun LinearLayout.buildPanel(d: Dialog) {
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_theme) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(themeSegments(d), fullWidth())
@@ -104,11 +83,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                 LauncherEdition.openSettings(activity)
             }, fullWidth())
         }
-
-        addView(gap(activity, 24, vertical = true))
-        addView(text(activity, CREDIT_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
-            setText(R.string.launcher_credit_car_image)
-        }, fullWidth())
     }
 
     /** Üç eşit parça; seçili olan vurgu renginde. Seçim kaydedilir ve ekran yeni temayla kurulur. */
@@ -162,7 +136,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             pressFeedback()
         }
 
-    private fun fullWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun fullWidth() = sheetFullWidth()
 
     /** Java yardımcısı senkron çalıştığı için arka planda açılır. */
     private fun openApp(packageName: String) {
@@ -181,9 +155,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     private companion object {
         /** Aracın kendi araç ayarları uygulaması (Desay SV). */
         const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
-        const val PANEL_WIDTH_DP = 760
         const val ROW_HEIGHT_DP = 80
         const val SEGMENT_RADIUS_DP = 16f
-        const val CREDIT_SP = 14f
     }
 }

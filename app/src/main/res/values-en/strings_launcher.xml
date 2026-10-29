@@ -98,5 +98,5 @@
     <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
     <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Close</string>
-    <string name="launcher_credit_car_image">Car image: rendered from “2023 Chery Tiggo 7 Plus 290T” by Ddiaz Design (Sketchfab), CC BY-NC-SA 4.0</string>
+    <string name="launcher_edit_no_room">No room</string>
 </resources>
