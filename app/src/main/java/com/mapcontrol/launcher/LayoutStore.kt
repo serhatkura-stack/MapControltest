@@ -11,12 +11,15 @@ import org.json.JSONObject
 class LayoutStore(context: Context) {
 
     /** OEM alt çubuğu olan araçta (Desay) varsayılan düzen farklıdır. */
-    private val oemBar = LauncherSafeArea.oemInsetPx(context) > 0
+    private val oemBar = LauncherSafeArea.hasOemBar(context)
+
+    /** Varsayılan uygulama kutucukları alt çubuktaki uygulama şeridinin varsayılanlarıyla dolar. */
+    private val appPackages = if (oemBar) AppDock.installedDefaults(context, DEFAULT_APP_TILES) else emptyList()
 
     private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
 
     fun load(): List<PlacedWidget> {
-        val raw = prefs.getString(KEY, null) ?: return defaultLayout(oemBar)
+        val raw = prefs.getString(KEY, null) ?: return defaultLayout(oemBar, appPackages)
         return try {
             val array = JSONArray(raw)
             // Kaldırılmış/bilinmeyen türler (eski kayıtlar) sessizce atlanır; kalan düzen geçerliyse korunur.
@@ -32,9 +35,9 @@ class LayoutStore(context: Context) {
                     extra = if (o.has("extra") && !o.isNull("extra")) o.getString("extra") else null,
                 )
             }
-            if (list.isNotEmpty() && isValid(list)) list else defaultLayout(oemBar)
+            if (list.isNotEmpty() && isValid(list)) list else defaultLayout(oemBar, appPackages)
         } catch (e: org.json.JSONException) {
-            defaultLayout(oemBar)
+            defaultLayout(oemBar, appPackages)
         }
     }
 
@@ -55,13 +58,14 @@ class LayoutStore(context: Context) {
     }
 
     /** Bu cihazın varsayılan düzeni (sıfırlama için). */
-    fun defaults(): List<PlacedWidget> = defaultLayout(oemBar)
+    fun defaults(): List<PlacedWidget> = defaultLayout(oemBar, appPackages)
 
     fun reset() = prefs.edit().remove(KEY).apply()
 
     companion object {
         private const val PREFS = "launcher_layout"
         private const val KEY = "widgets_v1"
+        private const val DEFAULT_APP_TILES = 3
 
         /** Her widget ızgarada ve hiçbiri diğeriyle çakışmıyor mu? */
         fun isValid(layout: List<PlacedWidget>): Boolean =

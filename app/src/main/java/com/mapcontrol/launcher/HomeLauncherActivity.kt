@@ -35,7 +35,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private lateinit var grid: LauncherGrid
     /** Alt çubuk (klima + dock) yalnızca OEM çubuğu olmayan cihazda; OEM'li araçta yok. */
     private var dock: AppDock? = null
-    private val oemBar by lazy { LauncherSafeArea.oemInsetPx(this) > 0 }
+    private val oemBar by lazy { LauncherSafeArea.hasOemBar(this) }
     private lateinit var fixedWidgets: List<LauncherWidget>
 
     private var layout: List<PlacedWidget> = emptyList()
@@ -87,7 +87,18 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 insets
             }
         }
-        setContentView(root)
+        if (LauncherSafeArea.isMocked()) {
+            // Hata ayıklama: OEM çubuğunun taklidi ayrılan alt bandın içinde, uygulamaların üstünde durur.
+            val band = LauncherSafeArea.oemInsetPx(this)
+            setContentView(FrameLayout(this).apply {
+                addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                addView(OemBarMock.build(this@HomeLauncherActivity), FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, band - dp(12), Gravity.BOTTOM
+                ).apply { setMargins(dp(24), 0, dp(24), dp(6)) })
+            })
+        } else {
+            setContentView(root)
+        }
         applyLayout(store.load(), persist = false)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
@@ -164,7 +175,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             val widget = gridWidgets[placed.id] ?: WidgetFactory.create(this, placed).also { created ->
                 gridWidgets[placed.id] = created
                 created.applySpan(placed.span)
-                (created as? AppRowWidget)?.setEditMode(grid.editMode)
                 if (started) created.onVisible()
             }
             widget.applySpan(placed.span)
@@ -176,16 +186,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     // --- Düzenleme modu ---
 
-    /** Izgaradaki uygulama şeritleri de boş yuvalarını yalnızca düzenlerken gösterir. */
-    private fun appRows(block: (AppRowWidget) -> Unit) = gridWidgets.values.forEach { (it as? AppRowWidget)?.let(block) }
-
     /** Düzenleme yalnızca araç dururken açılır; sürüş sırasında ekranla uğraşılmasın. */
     private fun enterEditMode() {
         if (grid.editMode) return
         if (editLocked()) return
         grid.editMode = true
         dock?.setEditMode(true)
-        appRows { it.setEditMode(true) }
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
     }
@@ -203,7 +209,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet = null
         grid.editMode = false
         dock?.setEditMode(false)
-        appRows { it.setEditMode(false) }
         editBar.visibility = View.GONE
         header.view.visibility = View.VISIBLE
     }

@@ -10,15 +10,15 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 
 /**
  * Chery Tiggo 7 Desay ünitesinde OEM alt çubuğu (ana ekran/uygulamalar/araç/sıcaklık/fan/ayar/telefon)
- * uygulamaların ÜSTÜNE çizilen bir katmandır; Android bunun için inset bildirmez. Bu yüzden launcher'ın
- * alt çubuğu ve ızgarası bu yüksekliğin üstünde kalmalıdır.
+ * yaklaşık 105 px yüksekliğindedir. Araç fotoğrafı (2026-10-30): launcher penceresi bu çubuğun ÜSTÜNDE
+ * bitiyor; Android pencereyi kendisi kısaltıyor/inset bildiriyor, bizim alt çubuğumuz OEM çubuğunun hemen
+ * üstüne oturuyor. Bu yüzden gerçek cihazda ek bir yedek boşluk UYGULANMAZ (yalnızca sistemin bildirdiği inset).
  *
- * Kesin yükseklik henüz ölçülmedi: araç testi tur 2'de `dumpsys window` ile ölçülüp [OEM_BAR_FALLBACK_PX]
- * güncellenecek. Şimdilik 120 px (gözlenen ~100-120 px aralığının üst ucu).
+ * Emülatörde aynı düzeni denemek için yalnızca debug yapıda `--ei launcher_oem_inset <px>` verilir: bu hem
+ * alt bandı ayırır, alt çubuğumuzu kaldırır hem de OEM çubuğunun görsel taklidini ([OemBarMock]) çizer.
  */
 object LauncherSafeArea {
 
-    const val OEM_BAR_FALLBACK_PX = 120
     private const val DESAY_PACKAGE = "com.desaysv.vehiclesetting"
     private const val EXTRA_OEM_INSET = "launcher_oem_inset"
 
@@ -31,7 +31,10 @@ object LauncherSafeArea {
         debugOverridePx = if (debuggable) intent.getIntExtra(EXTRA_OEM_INSET, 0).coerceAtLeast(0) else null
     }
 
-    /** Desay ünitesi mi: ucuz ve sağlam bir paket varlığı kontrolü. */
+    /** Debug yapıda `launcher_oem_inset` ekstrasıyla taklit edilen çubuk mu (gerçek Desay tespitinde false). */
+    fun isMocked(): Boolean = (debugOverridePx ?: 0) > 0
+
+    /** Desay ünitesi mi: ucuz ve sağlam bir paket varlığı kontrolü (yalnızca bilgi; yerleşimi değiştirmez). */
     fun isDesayUnit(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(DESAY_PACKAGE, 0)
         true
@@ -39,11 +42,17 @@ object LauncherSafeArea {
         false
     }
 
-    /** OEM katmanı için ayrılacak alt boşluk (px); Desay dışında 0. */
-    fun oemInsetPx(context: Context): Int =
-        debugOverridePx ?: if (isDesayUnit(context)) OEM_BAR_FALLBACK_PX else 0
+    /**
+     * OEM alt çubuğu olan cihaz: gerçek Desay ünitesi ya da debug simülasyonu. Bizim alt çubuğumuz kaldırılır
+     * (uygulamalar birleşik 1×1 kutucuk, koltuk ısıtma kutucuk) ve Desay varsayılan düzeni kullanılır.
+     */
+    fun hasOemBar(context: Context): Boolean = (debugOverridePx ?: 0) > 0 || isDesayUnit(context)
 
-    /** Alt güvenli alan = max(sistem gezinme çubuğu inset'i, OEM yedeği). */
+    /** Debug simülasyonunun ayırdığı OEM alt bandı (px); gerçek cihazda her zaman 0. */
+    @Suppress("UNUSED_PARAMETER")
+    fun oemInsetPx(context: Context): Int = debugOverridePx ?: 0
+
+    /** Alt güvenli alan = max(sistem gezinme çubuğu inset'i, debug OEM simülasyonu). */
     fun bottomInsetPx(context: Context, insets: WindowInsets?): Int {
         val system = when {
             insets == null -> 0

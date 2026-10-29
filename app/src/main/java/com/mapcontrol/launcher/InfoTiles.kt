@@ -248,7 +248,7 @@ class AppShortcutTile(
     }
 
     // 125dp kartta 64dp ikon + etiket sığsın diye 10dp kenar: etiketin alt çıkıntıları kesilmez.
-    private val root: LinearLayout = card(context, paddingDp = 10).apply {
+    private val root: LinearLayout = JoinedCard(context, paddingDp = 10, gapPx = context.dp(LauncherGrid.GRID_GAP_DP)).apply {
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true

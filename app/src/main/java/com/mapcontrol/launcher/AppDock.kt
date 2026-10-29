@@ -26,11 +26,9 @@ import com.mapcontrol.util.ProjectionTargetApps
  */
 class AppDock(
     private val context: Context,
-    /** Gösterilen yuva sayısı; kart içine gömülünce (APP_ROW) dört, alt çubukta altı. */
+    /** Gösterilen yuva sayısı; alt çubukta altı. */
     private val slotCount: Int = SLOT_COUNT,
     private val slotWidthDp: Int = SLOT_WIDTH_DP,
-    /** Gömülü kullanımda tüm yuvalar boşsa ilk yuva artıyla görünür kalır; uygulama seçilebilsin. */
-    private val embedded: Boolean = false,
 ) : LauncherWidget {
 
     /** Bir yuvada gösterilen uygulama: etiket ve ikon. */
@@ -62,9 +60,7 @@ class AppDock(
     private val slots: List<Slot> = List(slotCount) { buildSlot(it) }
 
     /** Ayarlanmamış yuvaların paketleri: adaylardan kurulu olanlar, sırayla. */
-    private val defaults: List<String> by lazy {
-        DEFAULT_CANDIDATES.filter { isInstalled(it) }.take(slotCount)
-    }
+    private val defaults: List<String> by lazy { installedDefaults(context, slotCount) }
 
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -97,9 +93,7 @@ class AppDock(
     /** Boş yuvanın artısını ve dokunmasını, düzenleme moduna göre açar ya da kapatır. */
     private fun applyEmptyState(i: Int) {
         val slot = slots[i]
-        // Gömülü şeritte hiç dolu yuva yoksa ilk yuva artıyla kalır (aksi hâlde kart boş görünür, seçilemez).
-        val none = embedded && empty.all { it }
-        val show = !empty[i] || editMode || (none && i == 0)
+        val show = !empty[i] || editMode
         // Düzenleme dışında boş yuva yer kaplamaz (GONE): dolu uygulamalar şeritte ortalanır.
         slot.root.visibility = if (show) View.VISIBLE else View.GONE
         slot.icon.visibility = View.VISIBLE
@@ -180,8 +174,6 @@ class AppDock(
                 else -> bindEmpty(i)
             }
         }
-        // Son yuva bağlanınca "hepsi boş" durumu kesinleşir; ilk yuvanın görünürlüğünü yeniden değerlendir.
-        if (embedded) applyEmptyState(0)
     }
 
     private fun bindFilled(i: Int, pkg: String, entry: AppEntry) {
@@ -278,16 +270,9 @@ class AppDock(
         null
     }
 
-    private fun isInstalled(packageName: String): Boolean = try {
-        context.packageManager.getApplicationInfo(packageName, 0)
-        true
-    } catch (e: PackageManager.NameNotFoundException) {
-        false
-    }
-
     private fun slotKey(index: Int) = "slot_$index"
 
-    private companion object {
+    companion object {
         const val PREFS_NAME = "launcher_apps"
 
         /** Araçta uygulama etiketi olmayan paketler için yedek ad. */
@@ -297,6 +282,16 @@ class AppDock(
         const val SLOT_COUNT = 6
         const val SLOT_WIDTH_DP = 150
         const val DOCK_LABEL_SP = 20f
+        /** Kurulu varsayılan uygulamalar (ilk [count] tanesi); ayarlanmamış yuvalar ve varsayılan düzen bunu kullanır. */
+        fun installedDefaults(context: Context, count: Int): List<String> = DEFAULT_CANDIDATES.filter { pkg ->
+            try {
+                context.packageManager.getApplicationInfo(pkg, 0)
+                true
+            } catch (e: PackageManager.NameNotFoundException) {
+                false
+            }
+        }.take(count)
+
         const val SLOT_GAP_DP = 8
         const val ICON_DP = 56
         const val PLUS_DP = 28

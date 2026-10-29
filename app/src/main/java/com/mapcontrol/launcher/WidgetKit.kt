@@ -37,8 +37,7 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(1, 1), Span(2, 1))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1))),
     SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(1, 1), Span(2, 1))),
-    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(1, 1), Span(2, 1))),
-    APP_ROW("app_row", R.string.launcher_widget_app_row, R.drawable.ic_mdi_view_grid, listOf(Span(3, 1)));
+    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(1, 1), Span(2, 1)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -74,11 +73,14 @@ interface SizedWidget : LauncherWidget {
  * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): ızgara üçe böler; medya ve araç üst iki
  * satırı alır, alt satıra navigasyon · uygulama şeridi · koltuk ısıtma gelir (alt çubuğun işlevleri).
  */
-fun defaultLayout(oemBar: Boolean = false): List<PlacedWidget> = if (oemBar) listOf(
+fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 2)),
     PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
     PlacedWidget("navigation", WidgetType.NAVIGATION, 0, 2, Span(2, 1)),
-    PlacedWidget("app_row", WidgetType.APP_ROW, 2, 2, Span(3, 1)),
+    // Üç uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Kutu boşsa (paket yok) artı gösterir.
+    PlacedWidget("app_dock_0", WidgetType.APP, 2, 2, Span(1, 1), appPackages.getOrNull(0)),
+    PlacedWidget("app_dock_1", WidgetType.APP, 3, 2, Span(1, 1), appPackages.getOrNull(1)),
+    PlacedWidget("app_dock_2", WidgetType.APP, 4, 2, Span(1, 1), appPackages.getOrNull(2)),
     PlacedWidget("seat_heat", WidgetType.SEAT_HEAT, 5, 2, Span(1, 1)),
 ) else listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
@@ -103,6 +105,5 @@ object WidgetFactory {
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
         WidgetType.SEAT_HEAT -> SeatHeatTile(activity)
         WidgetType.SEAT_VENT -> SeatHeatTile(activity, vent = true)
-        WidgetType.APP_ROW -> AppRowWidget(activity)
     }
 }

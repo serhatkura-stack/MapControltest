@@ -119,7 +119,7 @@
     <string name="launcher_air_out_poor" formatted="true">Outside %1$d µg/m³ · Poor</string>
     <string name="launcher_air_recirc_hint">Recirculation advised</string>
     <string name="launcher_widget_seat_heat">Seat heating</string>
-    <string name="launcher_widget_app_row">Apps</string>
     <string name="launcher_seat_driver">Driver seat</string>
     <string name="launcher_seat_passenger">Passenger seat</string>
+    <string name="launcher_oem_mock_label">OEM (mock)</string>
 </resources>

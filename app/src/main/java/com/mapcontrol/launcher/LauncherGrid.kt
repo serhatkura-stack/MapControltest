@@ -33,7 +33,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         fun onLongPressEmpty()
     }
 
-    private val gapPx = context.dp(16)
+    private val gapPx = context.dp(GRID_GAP_DP)
     private var layout: List<PlacedWidget> = emptyList()
     private val slots = LinkedHashMap<String, Slot>()
 
@@ -41,6 +41,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         set(value) {
             field = value
             slots.values.forEach { it.overlay.visibility = if (value) View.VISIBLE else View.GONE }
+            updateJoins()
             invalidate()
         }
 
@@ -52,6 +53,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
     private val cellRect = RectF()
 
     init {
+        clipChildren = false
         setWillNotDraw(false)
         isClickable = true
         setOnLongClickListener {
@@ -72,8 +74,37 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             slot.placed = placed
             slot.bindOverlay()
         }
+        updateJoins()
         requestLayout()
         invalidate()
+    }
+
+    /**
+     * Komşu uygulama kutucuklarını tek şerit gibi gösterir: her APP kutucuğuna hangi kenarlarında APP komşusu
+     * olduğu bildirilir (yatay, dikey, L biçimli kümeler kenar başına birleşir). Düzenleme modunda birleşme
+     * kapalıdır: kutucuklar ayrı görünür, sürüklenip yeniden boyutlandırılabilir.
+     */
+    private fun updateJoins() {
+        val apps = layout.filter { it.type == WidgetType.APP }
+        fun appAt(col: Int, row: Int) = apps.any { col in it.col until it.col + it.span.w && row in it.row until it.row + it.span.h }
+        slots.values.forEach { slot ->
+            val joinable = slot.content as? Joinable ?: return@forEach
+            val p = slot.placed
+            if (editMode || p.type != WidgetType.APP) {
+                joinable.setJoins(false, false, false, false)
+                return@forEach
+            }
+            joinable.setJoins(
+                left = appAt(p.col - 1, p.row),
+                top = appAt(p.col, p.row - 1),
+                right = appAt(p.col + p.span.w, p.row),
+                bottom = appAt(p.col, p.row + p.span.h),
+                diagonals = booleanArrayOf(
+                    appAt(p.col - 1, p.row - 1), appAt(p.col + p.span.w, p.row - 1),
+                    appAt(p.col + p.span.w, p.row + p.span.h), appAt(p.col - 1, p.row + p.span.h),
+                ),
+            )
+        }
     }
 
     // --- Ölçü ve yerleşim ---
@@ -149,8 +180,9 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
     }
 
     /** Bir widget'ı ve onun düzenleme katmanını taşıyan çerçeve. */
-    private inner class Slot(var placed: PlacedWidget, content: View) {
-        val frame = FrameLayout(context)
+    private inner class Slot(var placed: PlacedWidget, val content: View) {
+        // Birleşen kutucukların yüzeyi çerçevenin dışına (boşluğa) taşar; kırpma kapalı.
+        val frame = FrameLayout(context).apply { clipChildren = false }
         val overlay = FrameLayout(context).apply {
             visibility = if (editMode) View.VISIBLE else View.GONE
             background = GradientDrawable().apply {
@@ -265,9 +297,11 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         }
     }
 
-    private companion object {
-        const val DRAG_SCALE = 1.03f
-        const val SIZE_CHIP_W_DP = 72
-        const val SIZE_CHIP_H_DP = 48
+    companion object {
+        /** Izgara hücreleri arası boşluk; birleşen kutucuklar bunu kapatır. */
+        const val GRID_GAP_DP = 16
+        private const val DRAG_SCALE = 1.03f
+        private const val SIZE_CHIP_W_DP = 72
+        private const val SIZE_CHIP_H_DP = 48
     }
 }
