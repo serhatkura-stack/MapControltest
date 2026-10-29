@@ -26,6 +26,18 @@ data class Span(val w: Int, val h: Int) {
 }
 
 /**
+ * Navigasyon kartı henüz hazır değil: true yapılana kadar varsayılan düzenlerde yer almaz ve "Widget ekle"
+ * listesinde görünmez. [WidgetType.NAVIGATION] türü ve [NavigationCard] durur; kayıtlı düzenlerdeki mevcut
+ * navigasyon widget'ları yüklenmeye devam eder. Açmak için yalnızca bu bayrak true yapılır
+ * (varsayılan düzenler de eski yerleşimine döner).
+ */
+const val NAVIGATION_CARD_ENABLED = false
+
+/** "Widget ekle" listesinde gösterilecek türler (hazır olmayanlar elenir). */
+fun addableWidgetTypes(): List<WidgetType> =
+    WidgetType.values().filter { NAVIGATION_CARD_ENABLED || it != WidgetType.NAVIGATION }
+
+/**
  * Eklenebilir widget türleri ve her birinin desteklediği boyutlar.
  * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.
  */
@@ -82,28 +94,39 @@ interface SizedWidget : LauncherWidget {
 }
 
 /**
- * Varsayılan yerleşim (12×6): büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?".
+ * Varsayılan yerleşim (12×6): büyük medya ve yanında araç kartı (menzil + durum).
  * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): üst dört satırı medya ve araç alır, alt iki
- * satıra sürücü koltuk ısıtma (2) · navigasyon (4) · dört ince uygulama kutucuğu (tek şerit) · yolcu koltuk ısıtma (2)
- * gelir: 2+4+4+2 = 12. Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
+ * satıra sürücü koltuk ısıtma (2) · dört geniş uygulama kutucuğu (tek şerit, 4×2 = 8) · yolcu koltuk ısıtma (2)
+ * gelir: 2+8+2 = 12. Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
+ * [NAVIGATION_CARD_ENABLED] açıksa navigasyon eski yerine döner (OEM'de 4 hücre + ince uygulama kutucukları).
  */
 fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
+    val nav = NAVIGATION_CARD_ENABLED
+    // Navigasyon yokken uygulama şeridi boşluğu doldurur: 4 kutucuk, her biri 2 hücre; varken 1 hücre ve col 6'dan başlar.
+    val appW = if (nav) 1 else 2
+    val appStart = if (nav) 6 else 2
     listOf(
         PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
         PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
         PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-        PlacedWidget("navigation", WidgetType.NAVIGATION, 2, 4, Span(4, 2)),
-    ) +
+    ) + (if (nav) listOf(PlacedWidget("navigation", WidgetType.NAVIGATION, 2, 4, Span(4, 2))) else emptyList()) +
         // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
         (0 until DEFAULT_APP_SLOTS).map { i ->
-            PlacedWidget("app_dock_$i", WidgetType.APP, 6 + i, 4, Span(1, 2), appPackages.getOrNull(i))
+            PlacedWidget("app_dock_$i", WidgetType.APP, appStart + i * appW, 4, Span(appW, 2), appPackages.getOrNull(i))
         } +
         PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
 } else listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)),
     PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
-    PlacedWidget("navigation", WidgetType.NAVIGATION, 6, 4, Span(6, 2)),
-)
+) + if (NAVIGATION_CARD_ENABLED) {
+    listOf(PlacedWidget("navigation", WidgetType.NAVIGATION, 6, 4, Span(6, 2)))
+} else {
+    // Navigasyon yokken alt şerit iki hızlı denetimle dolar: kilit ve sürüş modu (3×2 + 3×2).
+    listOf(
+        PlacedWidget("lock", WidgetType.LOCK, 6, 4, Span(3, 2)),
+        PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 9, 4, Span(3, 2)),
+    )
+}
 
 /** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı. */
 const val DEFAULT_APP_SLOTS = 4

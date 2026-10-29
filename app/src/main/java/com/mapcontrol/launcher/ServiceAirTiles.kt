@@ -71,8 +71,11 @@ internal class AirQualityTile(context: Context) :
             },
             if (outPoor) context.getString(R.string.launcher_air_recirc_hint) else null,
         )
-        // Detay en çok 2 satır: dış hava kötüyse içeri satırı ipucuna yer açar.
-        showDetail((if (outPoor) lines.drop(1) else lines).joinToString("\n"))
+        // Detay en çok 2 satır: dış hava kötüyse içeri satırı ipucuna yer açar. Orta boyutta yalnızca ilk satır.
+        val shown = if (outPoor) lines.drop(1) else lines
+        showDetail((if (tier >= 2) shown else shown.take(1)).joinToString("\n"))
+        // Geniş boyutta kelimenin yanına üç dilimli ölçek: iyi / orta / kötü; dolu dilim sayısı derece + 1.
+        showSegments(grade(inside) + 1, GRADES, if (poor) LauncherTheme.ALERT else LauncherTheme.ACCENT)
     }
 
     private fun grade(pm: Int) = when {
@@ -90,6 +93,7 @@ internal class AirQualityTile(context: Context) :
     private companion object {
         const val GOOD_MAX = 35
         const val MODERATE_MAX = 75
+        const val GRADES = 3
         const val GOOD = 0
         const val MODERATE = 1
         const val POOR = 2

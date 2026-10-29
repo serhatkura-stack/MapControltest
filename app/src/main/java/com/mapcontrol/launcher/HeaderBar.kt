@@ -66,6 +66,8 @@ class HeaderBar(
         addView(date)
         addView(View(context), weightLp(1f))
 
+        driveBadge()?.let { addView(it) }
+
         weatherBox.addView(weatherIcon)
         weatherBox.addView(gap(context, 12))
         weatherBox.addView(weatherTemp)
@@ -80,6 +82,26 @@ class HeaderBar(
         addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
         addView(gap(context, 16))
         addView(settingsButton())
+    }
+
+    /**
+     * Sürüş modu rozeti: küçük mod ikonu (vurgu renginde) ve ad; yalnızca mod Normal değilse ve seçenek açıksa.
+     * Mod değişince etkinlik yeniden kurulduğu için kurulumda okunur.
+     */
+    private fun driveBadge(): View? {
+        val mode = LauncherTheme.driveMode
+        if (!DriveAccent.hasBadge(mode) || !DriveAccent.enabled(context)) return null
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon(context, DriveAccent.icon(mode), LauncherTheme.ICON_S_DP, LauncherTheme.ACCENT))
+            addView(gap(context, 8))
+            addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+                setText(DriveAccent.label(mode))
+            })
+            addView(gap(context, 32))
+            contentDescription = context.getString(DriveAccent.label(mode))
+        }
     }
 
     /** Profil düğmesi: geçerli sürücü numarası yuvarlak simgede; dokununca profil seçici açılır. */

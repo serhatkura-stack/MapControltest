@@ -112,7 +112,7 @@ class WeatherTile(private val context: Context) : SizedWidget {
     /** Boyut değişince durum metni sol/sağ sütun arasında taşınır. */
     override fun applySpan(span: Span) {
         this.span = span
-        val wide = span.w >= WIDE_MIN_COLS
+        val wide = span.w >= WEATHER_WIDE_MIN_COLS
         (conditionText.parent as? android.view.ViewGroup)?.removeView(conditionText)
         if (wide) {
             rightColumn.addView(conditionText, 0)
@@ -155,13 +155,13 @@ class WeatherTile(private val context: Context) : SizedWidget {
             ageText.visibility = View.GONE
             return
         }
-        val wide = span.w >= WIDE_MIN_COLS
+        val wide = span.w >= WEATHER_WIDE_MIN_COLS
         val updatedAt = client.lastUpdatedMs
         val age = if (updatedAt > 0L) System.currentTimeMillis() - updatedAt else 0L
         val stale = age > WEATHER_STALE_MS
         tempText.text = context.getString(R.string.launcher_degrees, current.temperatureC.roundToInt())
         // 1x1'de sıcaklığın altına durum metni de sığmalı; 2x1'de metin sağda olduğu için büyüyebilir.
-        styleTemp(if (wide) TEMP_WIDE_SP else TEMP_COMPACT_SP, if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+        styleTemp(if (span.w >= WIDE_MIN_COLS) TEMP_WIDE_SP else TEMP_COMPACT_SP, if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         conditionText.text = OpenMeteoWeatherLabels.labelFor(context, current.weatherCode, current.day)
         weatherIcon.setImageResource(iconFor(current.weatherCode, current.day))
         windText.text = context.getString(R.string.launcher_weather_wind, current.windSpeedKmh.roundToInt())
@@ -191,6 +191,8 @@ class WeatherTile(private val context: Context) : SizedWidget {
     }
 
     private companion object {
+        /** Durum metni ve rüzgâr 3 sütundan itibaren sağ sütuna geçer; büyük sıcaklık 4 sütundan. */
+        const val WEATHER_WIDE_MIN_COLS = 3
         const val TEMP_COMPACT_SP = 36f
         const val TEMP_WIDE_SP = 44f
         const val ICON_DP = 36

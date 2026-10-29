@@ -121,6 +121,14 @@ class LayoutLogicTest {
     }
 
     @Test
+    fun addPickerHidesNavigationWhileDisabled() {
+        assertTrue(WidgetType.NAVIGATION !in addableWidgetTypes())
+        assertTrue(WidgetType.VEHICLE in addableWidgetTypes())
+        // Tür ve kayıtlı navigasyon widget'ları yine de yüklenir.
+        assertEquals(WidgetType.NAVIGATION, WidgetType.fromKey("navigation"))
+    }
+
+    @Test
     fun defaultLayoutsCoverTheWholeGridWithoutOverlap() {
         val area = { l: List<PlacedWidget> -> l.sumOf { it.span.w * it.span.h } }
         listOf(defaultLayout(false), defaultLayout(true)).forEach {
@@ -130,17 +138,22 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun desayDefaultBottomRowIsDriverSeatNavFourAppsPassengerSeat() {
-        val bottom = defaultLayout(true).filter { it.row == 4 }.sortedBy { it.col }
+    fun desayDefaultBottomRowIsDriverSeatFourAppsPassengerSeat() {
+        // Navigasyon kartı gizliyken (NAVIGATION_CARD_ENABLED = false) uygulama şeridi boşluğu doldurur.
+        assertTrue(!NAVIGATION_CARD_ENABLED)
+        val layout = defaultLayout(true)
+        assertTrue(layout.none { it.type == WidgetType.NAVIGATION })
+        val bottom = layout.filter { it.row == 4 }.sortedBy { it.col }
         assertEquals(
-            listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.NAVIGATION) + List(4) { WidgetType.APP } + WidgetType.SEAT_HEAT_PASSENGER,
+            listOf(WidgetType.SEAT_HEAT_DRIVER) + List(4) { WidgetType.APP } + WidgetType.SEAT_HEAT_PASSENGER,
             bottom.map { it.type },
         )
         assertEquals(Span(2, 2), bottom.first().span)
-        assertEquals(Span(4, 2), bottom[1].span)
-        assertTrue(bottom.filter { it.type == WidgetType.APP }.all { it.span == Span(1, 2) })
+        assertEquals(0, bottom.first().col)
+        assertTrue(bottom.filter { it.type == WidgetType.APP }.all { it.span == Span(2, 2) })
         assertEquals(Span(2, 2), bottom.last().span)
-        // 2 + 4 + 4 + 2 = 12, boşluksuz
+        assertEquals(10, bottom.last().col)
+        // 2 + 8 + 2 = 12, boşluksuz
         assertEquals(GRID_COLS, bottom.sumOf { it.span.w })
     }
 

@@ -21,6 +21,7 @@
     <string name="launcher_range" formatted="true">%1$d km menzil</string>
     <string name="launcher_range_unknown">Menzil okunamıyor</string>
     <string name="launcher_fuel" formatted="true">Yakıt %%%1$d</string>
+    <string name="launcher_percent" formatted="true">%%%1$d</string>
     <string name="launcher_locked">Kilitli</string>
     <string name="launcher_unlocked">Kilit açık</string>
     <string name="launcher_lock_unknown">Kilit durumu okunamıyor</string>
@@ -70,6 +71,8 @@
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
     <string name="launcher_theme">Tema</string>
+    <string name="launcher_drive_theme_on">Sürüş moduna göre renk: Açık (kapatmak için dokun)</string>
+    <string name="launcher_drive_theme_off">Sürüş moduna göre renk: Kapalı (açmak için dokun)</string>
     <string name="launcher_theme_auto">Otomatik</string>
     <string name="launcher_theme_day">Gündüz</string>
     <string name="launcher_theme_night">Gece</string>
@@ -94,6 +97,7 @@
     <string name="launcher_consumption_idle">Araç duruyor</string>
     <string name="launcher_app_vehicle_settings">Araç ayarları</string>
     <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s L/100</string>
+    <string name="launcher_trip_avg" formatted="true">Yolculuk ort. %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
     <string name="launcher_volt_value" formatted="true">%1$s V</string>

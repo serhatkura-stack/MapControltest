@@ -25,8 +25,9 @@ private const val INVALID = Int.MIN_VALUE
 
 /**
  * Araç kutucuklarının ortak iskeleti. 125dp yüksekliğe dikey dizilim sığmadığı için:
- * 1 sütunluk boyutta solda ikon + etiket, altında değer (detay yok);
- * geniş boyutta aynı sütun solda kalır, detay sağda dikey ortalı 24sp olarak görünür.
+ * Üç kademe ([tier]): dar (< 3 sütun) solda ikon + etiket, altında değer, detay yok;
+ * orta (3 sütun) aynı sütun solda, kısa detay sağda; geniş (>= 4 sütun) değer daha büyük, tam detay ve
+ * (varsa) segmentli bir gösterge. Yalnızca eldeki veriyi daha ayrıntılı gösterir, yeni veri uydurmaz.
  */
 internal abstract class VehicleTile(
     protected val context: Context,
@@ -40,6 +41,24 @@ internal abstract class VehicleTile(
         visibility = View.GONE
         gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
         textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+    }
+
+    /** Geniş kademede detayın altında segmentli durum göstergesi (ör. hava kalitesi); yoksa gizli. */
+    private val segmentRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        visibility = View.GONE
+    }
+    private var segmentCount = 0
+
+    /** Sağ sütun: detay + (geniş kademede) segmentli gösterge. */
+    private val detailColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        visibility = View.GONE
+        addView(detailText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(segmentRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(SEGMENT_H_DP)).apply {
+            topMargin = context.dp(8)
+        })
     }
 
     /** Sol sütun: başlık + değer. */
@@ -61,32 +80,75 @@ internal abstract class VehicleTile(
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
         gravity = android.view.Gravity.CENTER_VERTICAL
         addView(mainColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        addView(detailText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply {
+        addView(detailColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply {
             marginStart = context.dp(16)
         })
     }
 
     override val view: View get() = root
 
-    protected var wide = false
+    /** 0 = dar (< 3 sütun), 1 = orta (3), 2 = geniş (>= 4). */
+    protected var tier = 0
         private set
 
+    /** Detay gösterilen boyut (orta ve geniş). */
+    protected val wide: Boolean get() = tier >= 1
+
     override fun applySpan(span: Span) {
-        wide = span.w >= WIDE_MIN_COLS
-        valueText.textSize = if (wide) VALUE_WIDE_SP else VALUE_SMALL_SP
+        tier = when {
+            span.w >= WIDE_MIN_COLS -> 2
+            span.w >= MEDIUM_MIN_COLS -> 1
+            else -> 0
+        }
+        valueText.textSize = when (tier) {
+            2 -> VALUE_WIDE_SP
+            1 -> VALUE_MEDIUM_SP
+            else -> VALUE_SMALL_SP
+        }
         // Geniş: sütunlar ağırlıkla bölüşür (WRAP_CONTENT ile sol sütun 1px'e çöküyordu); detay yoksa sol sütun tüm kartı alır.
         mainColumn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        detailText.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, if (wide) 1.3f else 0f).apply {
+        detailColumn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, if (wide) 1.3f else 0f).apply {
             marginStart = context.dp(16)
         }
         bindDetail()
     }
 
-    /** İkinci satırı günceller; boşsa satır gizlenir, yalnızca geniş boyutta gösterilir. */
+    /** İkinci satırı günceller; boşsa satır gizlenir, yalnızca orta ve geniş boyutta gösterilir. */
     protected fun showDetail(detail: CharSequence?, color: Int = LauncherTheme.TEXT_SECONDARY) {
         detailText.setTextColor(color)
         detailText.text = detail
         detailText.visibility = if (wide && !detail.isNullOrEmpty()) View.VISIBLE else View.GONE
+        updateDetailColumn()
+    }
+
+    /**
+     * Geniş kademede detayın altına [total] dilimli gösterge çizer; ilk [filled] dilim [color], gerisi iz rengi.
+     * Dar/orta kademede ya da [total] 0 ise gizlenir. Dilimler yalnızca sayı değişince yeniden kurulur.
+     */
+    protected fun showSegments(filled: Int, total: Int, color: Int) {
+        if (tier < 2 || total <= 0) {
+            segmentRow.visibility = View.GONE
+            updateDetailColumn()
+            return
+        }
+        if (segmentCount != total) {
+            segmentCount = total
+            segmentRow.removeAllViews()
+            repeat(total) { i ->
+                segmentRow.addView(View(context), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
+                    if (i > 0) marginStart = context.dp(SEGMENT_GAP_DP)
+                })
+            }
+        }
+        for (i in 0 until total) {
+            segmentRow.getChildAt(i).background = rounded(context, if (i < filled) color else LauncherTheme.TRACK, SEGMENT_H_DP / 2f)
+        }
+        segmentRow.visibility = View.VISIBLE
+        updateDetailColumn()
+    }
+
+    private fun updateDetailColumn() {
+        detailColumn.visibility = if (detailText.visibility == View.VISIBLE || segmentRow.visibility == View.VISIBLE) View.VISIBLE else View.GONE
     }
 
     /** Boyut değişince ikinci satırı mevcut duruma göre yeniden kurar. */
@@ -106,6 +168,7 @@ internal abstract class VehicleTile(
     protected fun showMissing(@StringRes reason: Int = R.string.launcher_waiting_data) {
         setValue(R.string.launcher_unavailable, LauncherTheme.TEXT_SECONDARY)
         showDetail(context.getString(reason))
+        showSegments(0, 0, 0)
         root.contentDescription = context.getString(reason)
     }
 
@@ -117,6 +180,11 @@ internal abstract class VehicleTile(
 
     private companion object {
         const val VALUE_SMALL_SP = 32f
+        const val VALUE_MEDIUM_SP = 36f
+        /** Orta kademe (3 sütun) bu genişlikten başlar. */
+        const val MEDIUM_MIN_COLS = 3
+        const val SEGMENT_H_DP = 8
+        const val SEGMENT_GAP_DP = 6
         /** Başlık ile birlikte 125dp kartın iç yüksekliğine sığan en büyük değer. */
         const val VALUE_WIDE_SP = 40f
         /** 125dp kartta 20dp kenar boşluğu: 85dp iç yükseklik. */

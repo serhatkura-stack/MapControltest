@@ -22,11 +22,25 @@ internal object LauncherDemo {
     var enabled = false
         private set
 
+    /** Demo sürüş modu (ham değer 0..6); `--ei launcher_demo_drive_mode N` ile verilir, yoksa Normal. */
+    const val EXTRA_DRIVE_MODE = "launcher_demo_drive_mode"
+
+    @Volatile
+    var driveMode = 1
+        private set
+
     /** Etkinlik her açıldığında çağrılır; istek demo içermiyorsa önceki durum korunur (tema değişimi). */
     fun applyFrom(activity: Activity, intent: Intent?) {
         if (intent?.hasExtra(EXTRA) != true) return
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
+    }
+
+    /** İstek sürüş modu içeriyorsa (yalnızca demo açıkken) alır; uygulanacak mod döner, yoksa null. */
+    fun applyDriveMode(intent: Intent?): Int? {
+        if (!enabled || intent?.hasExtra(EXTRA_DRIVE_MODE) != true) return null
+        driveMode = intent.getIntExtra(EXTRA_DRIVE_MODE, 1).coerceIn(0, 6)
+        return driveMode
     }
 
     /** Park halinde, kapılar kapalı, Normal mod, tavan kapalı bir Tiggo 7. */
@@ -40,7 +54,7 @@ internal object LauncherDemo {
         0, 0, 0, 0, 0, // kapılar ve bagaj kapalı
         2, 1, 1,       // tavan: kapalı
         0, 0, 0,
-        1,             // sürüş modu: Normal
+        driveMode,     // sürüş modu (varsayılan Normal)
     )
 
     const val LOCKED = true

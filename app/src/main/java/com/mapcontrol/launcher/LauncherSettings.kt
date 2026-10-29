@@ -70,6 +70,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(themeSegments(d), fullWidth())
 
+        addView(gap(activity, 12, vertical = true))
+        addView(driveModeToggle(d), fullWidth())
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
@@ -121,6 +124,18 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                     pressFeedback()
                 }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
             }
+        }
+    }
+
+    /** "Sürüş moduna göre renk": açık/kapalı satırı; değişince ekran yeni vurguyla kurulur. */
+    private fun driveModeToggle(d: Dialog): View {
+        val on = DriveAccent.enabled(activity)
+        return row(R.drawable.ic_mdi_car_sports, if (on) R.string.launcher_drive_theme_on else R.string.launcher_drive_theme_off) {
+            d.dismiss()
+            DriveAccent.setEnabled(activity, !on)
+            if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
+            // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
+            if (on) ThemeTransition.recreate(activity)
         }
     }
 

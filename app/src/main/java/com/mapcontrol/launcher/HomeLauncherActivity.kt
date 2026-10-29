@@ -26,8 +26,20 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val settings by lazy { LauncherSettings(this, onEditHome = ::enterEditMode) }
     private val metricsListener = VehicleMetricsRepository.Listener { snap ->
         // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
+        if (snap.connected && snap.hasDriveMode()) observedDriveMode = snap.driveMode
         window.decorView.post {
             if (grid.editMode && LauncherSafeArea.isMoving(snap, EDIT_EXIT_KMH)) exitEditMode()
+        }
+    }
+
+    /** Aracın bildirdiği son sürüş modu (veri yoksa null); tema vurgusu bundan [DRIVE_STABLE_MS] sonra uyarlanır. */
+    @Volatile private var observedDriveMode: Int? = null
+    private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
+    private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val driveTick = object : Runnable {
+        override fun run() {
+            if (started) driveModeTick()
+            driveHandler.postDelayed(this, DRIVE_TICK_MS)
         }
     }
 
@@ -50,6 +62,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
+        // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
+        if (!DriveAccent.enabled(this)) LauncherTheme.driveMode = DriveAccent.NORMAL
+        else LauncherDemo.applyDriveMode(intent)?.let { LauncherTheme.driveMode = it }
+        driveModePolicy.reset(LauncherTheme.driveMode)
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
@@ -105,9 +121,32 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         ThemeTransition.playIn(this)
     }
 
+    /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        LauncherDemo.applyDriveMode(intent)
+    }
+
+    /**
+     * Sürüş modu değişimini uygular: gözlenen mod ~2 sn kararlı kalınca vurgu güncellenir ve etkinlik
+     * ThemeTransition ile yeniden kurulur (renkler kurulumda okunur). Düzenleme/sayfa açıkken ertelenir.
+     */
+    private fun driveModeTick() {
+        if (!DriveAccent.enabled(this)) return
+        val observed = if (LauncherDemo.enabled) LauncherDemo.driveMode else observedDriveMode
+        val to = driveModePolicy.update(System.currentTimeMillis(), observed, !grid.editMode && sheet == null)
+        if (to != null && to != LauncherTheme.driveMode) {
+            LauncherTheme.driveMode = to
+            ThemeTransition.recreate(this)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         started = true
+        driveHandler.removeCallbacks(driveTick)
+        driveHandler.postDelayed(driveTick, DRIVE_TICK_MS)
         metrics.addListener(metricsListener)
         fixedWidgets.forEach { it.onVisible() }
         gridWidgets.values.forEach { it.onVisible() }
@@ -126,6 +165,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     override fun onStop() {
         started = false
+        driveHandler.removeCallbacks(driveTick)
         sheet?.dismiss()
         sheet = null
         exitEditMode()
@@ -257,7 +297,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet = showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
             // Türler tek ekrana sığmayabilir: ızgara sabit yükseklikte kaydırılır, alt satır hafifçe görünür.
             val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            WidgetType.values().toList().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
+            addableWidgetTypes().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
                 if (r > 0) grid.addView(gap(context, 12, vertical = true))
                 grid.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -379,6 +419,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private companion object {
         const val EDIT_EXIT_KMH = 5
+        const val DRIVE_STABLE_MS = 2_000L
+        const val DRIVE_TICK_MS = 500L
         const val ADD_COLUMNS = 5
         const val ADD_SHEET_WIDTH_DP = 1280
         const val ADD_TILE_HEIGHT_DP = 136

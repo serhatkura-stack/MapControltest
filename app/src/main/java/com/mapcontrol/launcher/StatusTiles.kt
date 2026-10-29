@@ -61,10 +61,31 @@ internal class DriveModeTile(context: Context) :
             showMissing()
             return
         }
-        val tint = if (DriveModeStyle.isThemed(mode)) DriveModeStyle.accentColor(context, mode) else LauncherTheme.TEXT_SECONDARY
+        // Normal modda ikon ikincil renkte kalır; diğer modlarda tema açıksa vurgu, kapalıysa modun kendi rengi.
+        val tint = when {
+            mode == DriveAccent.NORMAL -> LauncherTheme.TEXT_SECONDARY
+            DriveAccent.enabled(context) -> LauncherTheme.ACCENT
+            else -> DriveAccent.accentFor(mode, LauncherTheme.night) ?: LauncherTheme.TEXT_SECONDARY
+        }
         setIcon(R.drawable.ic_mdi_car_sports, tint)
         setValue(label, LauncherTheme.TEXT)
-        showDetail(null)
+        showDetail(modeStrip(mode))
+    }
+
+    /** Geniş boyutta üç ana modun yan yana listesi; etkin olan vurgulu. Arazi modlarında (listede yok) gösterilmez. */
+    private fun modeStrip(mode: Int): CharSequence? {
+        if (tier < 2 || mode !in STRIP_MODES) return null
+        val sb = android.text.SpannableStringBuilder()
+        for (m in STRIP_MODES) {
+            if (sb.isNotEmpty()) sb.append("   ")
+            val start = sb.length
+            sb.append(modeLabel(m).orEmpty())
+            sb.setSpan(
+                android.text.style.ForegroundColorSpan(if (m == mode) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY),
+                start, sb.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        return sb
     }
 
     private fun modeLabel(mode: Int): String? = when (mode) {
@@ -79,6 +100,7 @@ internal class DriveModeTile(context: Context) :
     }?.let(context::getString)
 
     private companion object {
+        val STRIP_MODES = intArrayOf(DriveModeStyle.ECO, DriveModeStyle.NORMAL, DriveModeStyle.SPORT)
         // DriveModeStyle.shortLabel ile aynı araç değerleri.
         const val MODE_SNOW = 3
         const val MODE_MUD = 4

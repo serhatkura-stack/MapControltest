@@ -36,7 +36,8 @@ internal class SeatHeatTile(
 
     override val view: View get() = root
 
-    override fun applySpan(span: Span) = Unit
+    /** 3 sütun ve üstünde seviye yazısı ve dilimler büyür; yalnızca boyut değişince çalışır. */
+    override fun applySpan(span: Span) = seat.applySize(span.w >= BIG_MIN_COLS)
 
     override fun onVisible() = model.onVisible()
 
@@ -81,17 +82,43 @@ internal class SeatHeatTile(
             pressFeedback()
         }
 
+        private var big: Boolean? = null
+
+        fun applySize(big: Boolean) {
+            if (big == this.big) return
+            this.big = big
+            val iconDp = if (big) ICON_BIG_DP else ICON_DP
+            iconView.layoutParams = LinearLayout.LayoutParams(context.dp(iconDp), context.dp(iconDp))
+            value.textSize = if (big) VALUE_BIG_SP else VALUE_SP
+            val w = if (big) SEGMENT_W_BIG_DP else SEGMENT_W_DP
+            val h = if (big) SEGMENT_H_BIG_DP else SEGMENT_H_DP
+            val gapDp = if (big) SEGMENT_GAP_BIG_DP else SEGMENT_GAP_DP
+            segments.forEachIndexed { i, v ->
+                v.layoutParams = LinearLayout.LayoutParams(context.dp(w), context.dp(h)).apply {
+                    if (i > 0) marginStart = context.dp(gapDp)
+                }
+                v.background = rounded(context, segmentColor(i), if (big) SEGMENT_RADIUS_BIG_DP else SEGMENT_RADIUS_DP)
+            }
+        }
+
+        private var lastLevel = 0
+        private var lastKnown = false
+
+        private fun segmentColor(i: Int) = if (lastKnown && i < lastLevel) activeColor() else LauncherTheme.TRACK
+
         fun bind(connected: Boolean, level: Int?) {
             // Soğutma sinyali desteklenmese de sakin "Kapalı" göster (okunamayan değer 0 sayılır).
             val known = connected && (level != null || vent)
             val lv = if (known) level ?: 0 else 0
             val active = lv > 0
+            lastKnown = known
+            lastLevel = lv
             iconView.imageTintList = ColorStateList.valueOf(if (active) activeColor() else LauncherTheme.TEXT_SECONDARY)
             value.setTextColor(if (!known) LauncherTheme.TEXT_SECONDARY else if (active) activeColor() else LauncherTheme.TEXT)
             val levelText = if (known) context.getString(SeatHeatModel.levelLabel(lv)) else context.getString(R.string.launcher_unavailable)
             value.setTextSmooth(levelText)
             segments.forEachIndexed { i, v ->
-                v.background = rounded(context, if (known && i < lv) activeColor() else LauncherTheme.TRACK, SEGMENT_RADIUS_DP)
+                v.background = rounded(context, segmentColor(i), if (big == true) SEGMENT_RADIUS_BIG_DP else SEGMENT_RADIUS_DP)
             }
             root.isEnabled = known
             root.contentDescription = context.getString(labelRes) + ", " + levelText
@@ -107,6 +134,14 @@ internal class SeatHeatTile(
         const val SEGMENT_H_DP = 22
         const val SEGMENT_GAP_DP = 6
         const val SEGMENT_RADIUS_DP = 5f
+        /** Geniş kutucukta (3+ sütun): iç yükseklik 85dp'ye sığan büyük dilimler ve yazı. */
+        const val BIG_MIN_COLS = 3
+        const val ICON_BIG_DP = 32
+        const val VALUE_BIG_SP = 36f
+        const val SEGMENT_W_BIG_DP = 40
+        const val SEGMENT_H_BIG_DP = 36
+        const val SEGMENT_GAP_BIG_DP = 8
+        const val SEGMENT_RADIUS_BIG_DP = 8f
     }
 }
 

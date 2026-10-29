@@ -4,8 +4,14 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.os.Handler
 import android.os.Looper
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,8 +38,9 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
     if (!connected) null else VehicleMetricsSnapshot.fuelPercentRounded(fuelPercent).takeIf { it >= 0 }
 
 /**
- * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Solda büyük menzil ve yakıt, sağda araç silüeti,
- * altta kilit · kapılar · lastikler. Her şey yolundaysa sakin; bir sorun varsa yalnızca o parça uyarı renginde.
+ * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Sağda büyük araç görseli (kahraman), solda büyük menzil,
+ * ince yakıt çubuğu ve altta tek sakin durum satırı (kilit). Bir sorun varsa (açık kapı/bagaj/cam tavan, lastik uyarısı)
+ * kilit satırının yerini tek bir uyarı rengi satırı alır ve görselin köşesinde küçük kırmızı nokta belirir.
  *
  * Yalnızca okur: kilit durumu dinleyiciden, kapılar ve menzil anlık görüntüden, lastik bayrağı 10 sn'de bir.
  */
@@ -57,56 +64,80 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     }
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
-    private val rangeLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
+    private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
+    private val fuelBar = FuelBar(context)
     /**
      * Araç görseli: proje sahibinin ürettiği Tiggo 7 görseli, arka planı ayrılmış, 720 px'lik tek PNG.
      * Sabit görsel: kare başına çizim ya da 3B motor yok.
      */
     private val carImage = ImageView(context).apply {
         setImageResource(R.drawable.launcher_car)
-        // Satırın yüksekliğine sığar, sağ alta yaslanır; tekerler kesilmez.
         scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
+    /** Uyarı varsa görselin sağ üst köşesinde duran küçük kırmızı nokta; animasyonsuz. */
+    private val alertDot = View(context).apply {
+        background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        visibility = View.GONE
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    private val carBox = FrameLayout(context).apply {
+        addView(carImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        val d = context.dp(ALERT_DOT_DP)
+        addView(alertDot, FrameLayout.LayoutParams(d, d, Gravity.TOP or Gravity.END).apply {
+            topMargin = context.dp(8); marginEnd = context.dp(8)
+        })
+    }
 
-    private val lockChip = StatusChip()
-    private val doorsChip = StatusChip()
-    private val tiresChip = StatusChip()
+    private val statusIcon = icon(context, R.drawable.ic_mdi_lock, LauncherTheme.ICON_S_DP, LauncherTheme.TEXT_SECONDARY)
+    private val statusText = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+    /** Sakin durum: kilit satırı. Sorun varsa gizlenir, yerini [alertRow] alır. */
+    private val calmRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(statusIcon)
+        addView(gap(context, LauncherTheme.GAP_S_DP))
+        addView(statusText, wrapLp())
+    }
+    private val doorsPill = AlertPill()
+    private val tiresPill = AlertPill()
+    private val alertRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        visibility = View.GONE
+        addView(doorsPill.root, wrapLp())
+        addView(gap(context, LauncherTheme.GAP_S_DP))
+        addView(tiresPill.root, wrapLp())
+    }
 
     override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_DP).apply {
-        // Sol: menzil üstte, durumlar altta. Sağ: araç kartın tüm yüksekliğinde.
+        // Sol: menzil + yakıt çubuğu üstte, durum altta. Sağ: araç görseli kartın tüm yüksekliğinde.
         // İçerikle boyutlanan satırlar açıkça WRAP_CONTENT, yoksa 1px'lik boşluğa göre daralırlar.
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
+            addView(rangeText, wrapLp())
+            addView(gap(context, LauncherTheme.GAP_SM_DP, vertical = true))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(icon(context, R.drawable.ic_mdi_gas_station, LauncherTheme.ICON_M_DP, LauncherTheme.TEXT_SECONDARY))
+                addView(fuelBar, LinearLayout.LayoutParams(0, context.dp(FUEL_BAR_DP), 1f))
                 addView(gap(context, LauncherTheme.GAP_SM_DP))
-                addView(rangeLabel.apply { setText(R.string.launcher_widget_range) })
-            }, wrapLp())
-            addView(gap(context, 4, vertical = true))
-            addView(rangeText, wrapLp())
-            addView(gap(context, 4, vertical = true))
-            addView(fuelText, wrapLp())
+                addView(fuelText, wrapLp())
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                addView(lockChip.root, wrapLp())
-                addView(gap(context, 8))
-                addView(doorsChip.root, wrapLp())
-                addView(gap(context, 8))
-                addView(tiresChip.root, wrapLp())
-            }, wrapLp())
+            addView(calmRow, wrapLp())
+            addView(alertRow, wrapLp())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        addView(gap(context, LauncherTheme.GAP_M_DP))
-        addView(carImage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CAR_WEIGHT))
+        addView(gap(context, LauncherTheme.GAP_S_DP))
+        addView(carBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CAR_WEIGHT))
         addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
             fitRange(v)
             if (r - l != or_ - ol) {
-                // Dar kartta (2×2) silüet sığmaz; menzil ve durum yeter.
-                carImage.visibility = if (r - l >= v.context.dp(MIN_WIDTH_FOR_CAR_DP)) View.VISIBLE else View.GONE
+                // Çok dar kartta (2×2) görsel sığmaz; menzil ve durum yeter. Eşik kartın genişliğine göredir.
+                carBox.visibility = if (r - l >= v.context.dp(MIN_WIDTH_FOR_CAR_DP)) View.VISIBLE else View.GONE
             }
         }
     }
@@ -118,9 +149,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private fun fitRange(card: View) {
         val avail = card.height - card.paddingTop - card.paddingBottom
         if (avail <= 0) return
-        // Başlık satırı ikon (32) ya da 22sp etiketten hangisi uzunsa o kadar; etiket büyüdü diye bütçe şaşmasın.
-        val header = maxOf(context.dp(LauncherTheme.ICON_M_DP), rangeLabel.lineHeight)
-        val fixed = header + context.dp(4 + 4 + CHIP_HEIGHT_DP + LauncherTheme.GAP_S_DP) + fuelText.lineHeight
+        // Menzil dışındaki sabit parçalar: boşluk, yakıt satırı ve alttaki durum satırı.
+        val fixed = context.dp(LauncherTheme.GAP_SM_DP + STATUS_HEIGHT_DP + LauncherTheme.GAP_S_DP) +
+            maxOf(fuelText.lineHeight, context.dp(FUEL_BAR_DP))
         // Boyutlar yazıya dokunmadan ölçülür; yalnızca değişince uygulanır, yoksa her yerleşim yenisini tetikler.
         val paint = android.text.TextPaint(rangeText.paint)
         val size = RANGE_SIZES_SP.firstOrNull { sp ->
@@ -220,90 +251,137 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             if (shown == null || lowFuel || Math.abs(tenths - shown * 10) >= FUEL_HYSTERESIS_TENTHS) (tenths + 5) / 10 else shown
         }
         shownFuel = fuel
-        fuelText.text = when {
+        fuelText.text = if (fuel != null) context.getString(R.string.launcher_percent, fuel) else context.getString(R.string.launcher_unavailable)
+        fuelText.setTextColor(if (hasFuel && lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+        fuelText.contentDescription = when {
             fuel != null && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
             fuel != null -> context.getString(R.string.launcher_fuel_short, fuel)
             else -> context.getString(R.string.launcher_waiting_data)
         }
-        fuelText.setTextColor(if (hasFuel && lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+        fuelBar.set(fuel, lowFuel)
 
-        when (locked) {
-            true -> lockChip.bind(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_locked))
-            false -> lockChip.bind(R.drawable.ic_mdi_lock_open_variant, context.getString(R.string.launcher_unlocked))
-            null -> lockChip.bindMissing(R.drawable.ic_mdi_lock)
-        }
-
-        // Gövde durumu istisna bazlı: açık kapı/bagaj/cam tavan listelenir, hepsi kapalıysa sakin "Kapalı".
+        // Gövde durumu istisna bazlı: açık kapı/bagaj/cam tavan listelenir, hepsi kapalıysa sakin.
         val knowsSunroof = s.connected && s.hasSunroof()
         val knowsDoors = s.connected && (s.hasDoorLf() || s.hasDoorRf() || s.hasDoorLr() || s.hasDoorRr() || s.hasTrunk() || knowsSunroof)
-        if (!knowsDoors) {
-            doorsChip.bindMissing(R.drawable.ic_mdi_car_door)
-        } else {
-            val open = buildList {
-                if (s.isDoorLfOpen()) add(R.string.launcher_door_lf)
-                if (s.isDoorRfOpen()) add(R.string.launcher_door_rf)
-                if (s.isDoorLrOpen()) add(R.string.launcher_door_lr)
-                if (s.isDoorRrOpen()) add(R.string.launcher_door_rr)
-                if (s.isTrunkOpen()) add(R.string.launcher_trunk)
-                if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
-            }
-            when {
-                open.isEmpty() -> doorsChip.bind(R.drawable.ic_mdi_car_door, context.getString(R.string.launcher_closed),
-                    context.getString(R.string.launcher_doors_closed))
-                open.size == 1 -> doorsChip.bind(R.drawable.ic_mdi_car_door,
-                    context.getString(R.string.launcher_part_open, context.getString(open[0])), alert = true)
-                else -> doorsChip.bind(R.drawable.ic_mdi_car_door,
-                    context.getString(R.string.launcher_doors_open_count, open.size), alert = true)
-            }
+        val open = if (!knowsDoors) emptyList() else buildList {
+            if (s.isDoorLfOpen()) add(R.string.launcher_door_lf)
+            if (s.isDoorRfOpen()) add(R.string.launcher_door_rf)
+            if (s.isDoorLrOpen()) add(R.string.launcher_door_lr)
+            if (s.isDoorRrOpen()) add(R.string.launcher_door_rr)
+            if (s.isTrunkOpen()) add(R.string.launcher_trunk)
+            if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
         }
+        val tireAlert = tireWarning == true
 
-        when (tireWarning) {
-            true -> tiresChip.bind(R.drawable.ic_mdi_alert, context.getString(R.string.launcher_tires_check), alert = true)
-            false -> tiresChip.bind(R.drawable.ic_mdi_tire, context.getString(R.string.launcher_normal),
-                context.getString(R.string.launcher_tires_ok))
-            null -> tiresChip.bindMissing(R.drawable.ic_mdi_tire)
+        if (open.isEmpty()) doorsPill.hide() else doorsPill.show(
+            R.drawable.ic_mdi_car_door,
+            if (open.size == 1) context.getString(R.string.launcher_part_open, context.getString(open[0]))
+            else context.getString(R.string.launcher_doors_open_count, open.size),
+        )
+        if (!tireAlert) tiresPill.hide() else tiresPill.show(R.drawable.ic_mdi_alert, context.getString(R.string.launcher_tires_warning))
+
+        val hasAlert = open.isNotEmpty() || tireAlert
+        alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
+        calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
+        alertDot.visibility = if (hasAlert) View.VISIBLE else View.GONE
+        (alertDot.background as GradientDrawable).setColor(LauncherTheme.ALERT)
+
+        // Sakin satır: kilit durumu; kilit açıksa da sessiz kalır (uyarı rengi yok).
+        when (locked) {
+            true -> bindCalm(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_locked))
+            false -> bindCalm(R.drawable.ic_mdi_lock_open_variant, context.getString(R.string.launcher_unlocked))
+            null -> bindCalm(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_unavailable))
         }
+        // Ekran okuyucu için tek cümlelik özet: kilit, biliniyorsa kapılar ve lastikler.
+        val spoken = buildList {
+            add(if (locked == null) context.getString(R.string.launcher_waiting_data) else statusText.text.toString())
+            if (knowsDoors && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
+            if (tireWarning == false) add(context.getString(R.string.launcher_tires_ok))
+        }.joinToString(", ")
+        calmRow.contentDescription = spoken
     }
 
-    /** Alt satırdaki tek durum: ikon + kısa metin. Uyarıda ikon ve metin ALERT, zemin ALERT_SURFACE. */
-    private inner class StatusChip {
-        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_lock, LauncherTheme.ICON_S_DP, LauncherTheme.TEXT_SECONDARY)
-        private val label: TextView = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
-            gravity = Gravity.CENTER_VERTICAL
+    private fun bindCalm(iconRes: Int, label: String) {
+        statusIcon.setImageResource(iconRes)
+        statusIcon.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
+        statusText.text = label
+        statusText.setTextColor(LauncherTheme.TEXT_SECONDARY)
+    }
+
+    /** Uyarı satırı: ALERT_SURFACE zeminli, ALERT renkli ikon + kısa metin. */
+    private inner class AlertPill {
+        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_alert, LauncherTheme.ICON_S_DP, LauncherTheme.ALERT)
+        private val label: TextView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.ALERT, medium = true).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
         }
         val root: LinearLayout = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = context.dp(CHIP_HEIGHT_DP)
+            minimumHeight = context.dp(STATUS_HEIGHT_DP)
             val p = context.dp(LauncherTheme.GAP_SM_DP)
             setPadding(p, 0, p, 0)
+            visibility = View.GONE
             addView(iconView)
-            addView(gap(context, 10))
+            addView(gap(context, LauncherTheme.GAP_S_DP))
             addView(label, wrapLp())
         }
 
-        /** [spoken]: ikonsuz okunduğunda anlamlı uzun metin (ekran okuyucu); yoksa [value]. */
-        fun bind(iconRes: Int, value: String, spoken: String = value, alert: Boolean = false) {
+        fun show(iconRes: Int, value: String) {
             iconView.setImageResource(iconRes)
-            iconView.imageTintList = ColorStateList.valueOf(if (alert) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+            iconView.imageTintList = ColorStateList.valueOf(LauncherTheme.ALERT)
             label.text = value
-            label.setTextColor(if (alert) LauncherTheme.ALERT else LauncherTheme.TEXT)
-            root.background = rounded(context, if (alert) LauncherTheme.ALERT_SURFACE else LauncherTheme.CONTROL, 16f)
-            root.contentDescription = spoken
+            label.setTextColor(LauncherTheme.ALERT)
+            root.background = rounded(context, LauncherTheme.ALERT_SURFACE, 16f)
+            root.contentDescription = value
+            root.visibility = View.VISIBLE
         }
 
-        fun bindMissing(iconRes: Int) {
-            bind(iconRes, context.getString(R.string.launcher_unavailable))
-            label.setTextColor(LauncherTheme.TEXT_SECONDARY)
-            root.contentDescription = context.getString(R.string.launcher_waiting_data)
+        fun hide() {
+            root.visibility = View.GONE
+        }
+    }
+
+    /**
+     * İnce yuvarlak yakıt çubuğu: iz CONTROL, dolgu ACCENT (düşük yakıtta ALERT). Yalnızca veri değişince
+     * yeniden çizilir; animasyon yok.
+     */
+    private class FuelBar(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+        private var percent: Int? = null
+        private var low = false
+
+        fun set(percent: Int?, low: Boolean) {
+            if (this.percent == percent && this.low == low) return
+            this.percent = percent
+            this.low = low
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val h = height.toFloat()
+            val r = h / 2f
+            paint.color = LauncherTheme.CONTROL
+            rect.set(0f, 0f, width.toFloat(), h)
+            canvas.drawRoundRect(rect, r, r, paint)
+            val p = percent ?: return
+            // Çok düşük değerde bile yuvarlak uç görünsün diye en az çubuk yüksekliği kadar dolgu.
+            val w = maxOf(h, width * p.coerceIn(0, 100) / 100f)
+            paint.color = if (low) LauncherTheme.ALERT else LauncherTheme.ACCENT
+            rect.set(0f, 0f, w, h)
+            canvas.drawRoundRect(rect, r, r, paint)
         }
     }
 
     private companion object {
-        const val MIN_WIDTH_FOR_CAR_DP = 760
-        const val CHIP_HEIGHT_DP = 48
-        /** Sol sütuna göre araç görselinin payı; 3×2'de görsel kartın yüksekliğini doldurur. */
-        const val CAR_WEIGHT = 0.8f
+        /** Kart bu genişliğin (dp) altına inerse görsel gizlenir (2×2 gibi dar boyutlar). */
+        const val MIN_WIDTH_FOR_CAR_DP = 360
+        const val STATUS_HEIGHT_DP = 44
+        const val FUEL_BAR_DP = 12
+        const val ALERT_DOT_DP = 16
+        /** Sol sütuna göre araç görselinin payı; görsel kartın büyük sağ kısmını alır. */
+        const val CAR_WEIGHT = 1.25f
         const val FUEL_HYSTERESIS_TENTHS = 6
         /** Menzil yazısı boyutları, büyükten küçüğe; kart alçaldıkça ilk sığan seçilir. */
         val RANGE_SIZES_SP = listOf(LauncherTheme.TIME_SP, 44f, 36f)

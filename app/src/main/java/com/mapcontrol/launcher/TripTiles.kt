@@ -178,7 +178,7 @@ internal class ConsumptionTile(context: Context) :
         val now = data.instantL100
         if (data.connected && now == null && data.moving == false) {
             setValue(context.getString(R.string.launcher_consumption_idle), LauncherTheme.TEXT_SECONDARY)
-            showDetail(data.driveAvgL100?.let { context.getString(R.string.launcher_drive_avg, one(it)) })
+            showDetail(averages())
             return
         }
         if (!data.connected || now == null) {
@@ -186,8 +186,14 @@ internal class ConsumptionTile(context: Context) :
             return
         }
         setValue(context.getString(R.string.launcher_l100_value, one(now)), LauncherTheme.TEXT)
-        showDetail(data.driveAvgL100?.let { context.getString(R.string.launcher_drive_avg, one(it)) })
+        showDetail(averages())
     }
+
+    /** Orta boyutta bu sürüşün ortalaması; geniş boyutta yolculuk ortalaması da alt satırda. */
+    private fun averages(): CharSequence? = listOfNotNull(
+        data.driveAvgL100?.let { context.getString(R.string.launcher_drive_avg, one(it)) },
+        if (tier >= 2) data.avgL100?.let { context.getString(R.string.launcher_trip_avg, one(it)) } else null,
+    ).joinToString("\n").ifEmpty { null }
 }
 
 /** Yolculuk: yolculuk km; geniş boyutta ortalama tüketim ve ortalama hız. */
@@ -205,7 +211,8 @@ internal class TripComputerTile(context: Context) :
             data.avgL100?.let { context.getString(R.string.launcher_l100_value, one(it)) },
             data.avgSpeedKmh?.let { context.getString(R.string.launcher_kmh_value, it) },
         )
-        showDetail(parts.joinToString("  ·  ").ifEmpty { null })
+        // Orta boyutta tek satır (ilk ölçü); geniş boyutta ortalama tüketim ve ortalama hız alt alta.
+        showDetail((if (tier >= 2) parts else parts.take(1)).joinToString("\n").ifEmpty { null })
     }
 }
 
@@ -242,7 +249,9 @@ internal class HealthTile(context: Context) :
             else -> null
         }
         val why = reasons.joinToString(", ") { context.getString(it) }
-        showDetail(listOfNotNull(why.ifEmpty { null }, numbers).joinToString("\n").ifEmpty { null })
+        // Orta boyutta tek satır: sorun varsa sebebi, yoksa sayıları; geniş boyutta ikisi de.
+        val lines = listOfNotNull(why.ifEmpty { null }, numbers)
+        showDetail((if (tier >= 2) lines else lines.take(1)).joinToString("\n").ifEmpty { null })
     }
 
     private companion object {

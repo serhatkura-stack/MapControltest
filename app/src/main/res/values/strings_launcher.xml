@@ -21,6 +21,7 @@
     <string name="launcher_range" formatted="true">%1$d km range</string>
     <string name="launcher_range_unknown">Range unavailable</string>
     <string name="launcher_fuel" formatted="true">Fuel %1$d%%</string>
+    <string name="launcher_percent" formatted="true">%1$d%%</string>
     <string name="launcher_locked">Locked</string>
     <string name="launcher_unlocked">Unlocked</string>
     <string name="launcher_lock_unknown">Lock status unavailable</string>
@@ -70,6 +71,8 @@
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test version: read only</string>
     <string name="launcher_theme">Theme</string>
+    <string name="launcher_drive_theme_on">Drive mode colors: On (tap to turn off)</string>
+    <string name="launcher_drive_theme_off">Drive mode colors: Off (tap to turn on)</string>
     <string name="launcher_theme_auto">Automatic</string>
     <string name="launcher_theme_day">Day</string>
     <string name="launcher_theme_night">Night</string>
@@ -94,6 +97,7 @@
     <string name="launcher_consumption_idle">Stationary</string>
     <string name="launcher_app_vehicle_settings">Vehicle settings</string>
     <string name="launcher_drive_avg" formatted="true">This drive %1$s L/100</string>
+    <string name="launcher_trip_avg" formatted="true">Trip avg %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>
     <string name="launcher_volt_value" formatted="true">%1$s V</string>

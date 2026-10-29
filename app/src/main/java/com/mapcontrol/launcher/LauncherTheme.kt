@@ -15,6 +15,14 @@ object LauncherTheme {
     @JvmStatic
     var night: Boolean = true
 
+    /**
+     * Uygulanan sürüş modu ([DriveAccent]); yalnızca vurgu rengini etkiler. Etkinlik yeniden kurulsa da
+     * korunur (süreç boyunca); kullanıcı seçeneği kapalıysa etkinlik başında Normal'e çekilir.
+     */
+    @JvmStatic
+    @Volatile
+    var driveMode: Int = DriveAccent.NORMAL
+
     private const val NIGHT_GROUND = 0xFF0F1115.toInt()
     private const val DAY_GROUND = 0xFFE6E9EE.toInt()
     private const val NIGHT_CARD = 0xFF1A1D23.toInt()
@@ -45,7 +53,7 @@ object LauncherTheme {
     /** Kart kenar çizgisi rengi; gecede 0 (çizgi yok). */
     val CARD_BORDER: Int get() = if (night) 0 else DAY_BORDER
     val TRACK: Int get() = if (night) NIGHT_TRACK else DAY_TRACK
-    val ACCENT: Int get() = if (night) NIGHT_ACCENT else DAY_ACCENT
+    val ACCENT: Int get() = DriveAccent.accentFor(driveMode, night) ?: if (night) NIGHT_ACCENT else DAY_ACCENT
     val ALERT: Int get() = if (night) NIGHT_ALERT else DAY_ALERT
     val TEXT: Int get() = if (night) NIGHT_TEXT else DAY_TEXT
     val TEXT_SECONDARY: Int get() = if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
