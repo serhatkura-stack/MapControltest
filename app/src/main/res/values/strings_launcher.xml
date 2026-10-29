@@ -17,8 +17,6 @@
     <string name="launcher_nav_no_app">No navigation app installed</string>
     <string name="launcher_media_idle">Nothing playing</string>
     <string name="launcher_media_idle_hint">Open a music app to start</string>
-    <string name="launcher_media_need_access">Allow notification access to show what is playing</string>
-    <string name="launcher_media_grant">Allow</string>
     <string name="launcher_media_prev">Previous</string>
     <string name="launcher_range" formatted="true">%1$d km range</string>
     <string name="launcher_range_unknown">Range unavailable</string>

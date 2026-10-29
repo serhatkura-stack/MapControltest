@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_weather_offline">Bağlantı yok</string>
+    <string name="launcher_weather_age_min" formatted="true">%1$d dk önce</string>
+    <string name="launcher_weather_age_hour" formatted="true">%1$d sa önce</string>
+    <string name="launcher_weather_age_day" formatted="true">%1$d g önce</string>
+</resources>

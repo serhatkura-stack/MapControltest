@@ -88,8 +88,8 @@ class HeaderBar(
         }
         val label = context.getString(R.string.launcher_theme) + ": " + context.getString(mode.label)
         return squareButton(res, label) {
-            val next = ThemeMode.values()[(mode.ordinal + 1) % ThemeMode.values().size]
-            ThemeMode.write(context, next)
+            // Kayıtlı modu tıklama anında okur; hızlı ikinci dokunuş da bir sonrakine geçer.
+            ThemeMode.next(context)
             onThemeChanged()
         }
     }
@@ -167,6 +167,12 @@ class HeaderBar(
         // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.
         weatherIcon.setImageResource(
             if (snapshot.weatherCode in 1..3) R.drawable.ic_mdi_weather_partly_cloudy else R.drawable.ic_mdi_thermometer)
+        // Eski veri ikincil tonda; veri hiç yoksa grup gizli kalır.
+        val updatedAt = weatherClient.lastUpdatedMs
+        val stale = updatedAt > 0L && System.currentTimeMillis() - updatedAt > WEATHER_STALE_MS
+        weatherTemp.setTextColor(if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+        weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(
+            if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherBox.visibility = View.VISIBLE
     }
 }

@@ -23,6 +23,19 @@ import com.mapcontrol.weather.OpenMeteoWeatherLabels
 import com.mapcontrol.weather.OpenMeteoWeatherSnapshot
 import kotlin.math.roundToInt
 
+/** Bu süreden eski hava verisi ikincil tonda gösterilir (hata değil). */
+internal const val WEATHER_STALE_MS = 3L * 60L * 60L * 1000L
+
+/** "5 dk önce" / "2 sa önce" / "3 g önce". */
+internal fun weatherAgeText(context: Context, ageMs: Long): String {
+    val min = (ageMs / 60_000L).coerceAtLeast(1L).toInt()
+    return when {
+        min < 60 -> context.getString(R.string.launcher_weather_age_min, min)
+        min < 60 * 24 -> context.getString(R.string.launcher_weather_age_hour, min / 60)
+        else -> context.getString(R.string.launcher_weather_age_day, min / (60 * 24))
+    }
+}
+
 /**
  * Hava durumu kutucuğu: hava ikonu + sıcaklık; durum metni 1x1'de altta, 2x1'de sağda (rüzgârla birlikte).
  * Başlık yok: üst şeritte de hava var, ikon kutucuğu zaten anlatır. 125dp'ye sığması için iç boşluk 20dp.
@@ -33,6 +46,8 @@ class WeatherTile(private val context: Context) : SizedWidget {
     private val client = OpenMeteoWeatherClient(context)
     private var snapshot: OpenMeteoWeatherSnapshot? = null
     private var span: Span = Span(1, 1)
+    /** Çekim hiç başarısız olduysa ve veri yoksa "Bağlantı yok" gösterilir. */
+    private var failed = false
 
     private val weatherIcon = icon(context, R.drawable.ic_mdi_weather_partly_cloudy, ICON_DP, LauncherTheme.TEXT_SECONDARY)
     private val tempText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
@@ -42,15 +57,21 @@ class WeatherTile(private val context: Context) : SizedWidget {
     private val windText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
         visibility = View.GONE
     }
+    private val ageText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
+        visibility = View.GONE
+    }
 
     private val listener = object : OpenMeteoWeatherClient.Listener {
         override fun onWeatherUpdated(snapshot: OpenMeteoWeatherSnapshot) {
             this@WeatherTile.snapshot = snapshot
+            failed = false
             render()
         }
 
         override fun onWeatherFailed() {
-            // Son bilinen hava durumu kalır; hiç yoksa "Kullanılamıyor" görünür.
+            // Son bilinen veri kalır; hiç yoksa sakin bir "Bağlantı yok" görünür.
+            failed = true
+            render()
         }
     }
 
@@ -73,6 +94,7 @@ class WeatherTile(private val context: Context) : SizedWidget {
         gravity = Gravity.END or Gravity.CENTER_VERTICAL
         visibility = View.GONE
         addView(windText)
+        addView(ageText)
     }
 
     override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
@@ -128,18 +150,25 @@ class WeatherTile(private val context: Context) : SizedWidget {
         if (current == null) {
             tempText.setText(R.string.launcher_unavailable)
             styleTemp(LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
-            conditionText.text = ""
+            conditionText.text = if (failed) context.getString(R.string.launcher_weather_offline) else ""
             windText.visibility = View.GONE
+            ageText.visibility = View.GONE
             return
         }
         val wide = span.w >= 2
+        val updatedAt = client.lastUpdatedMs
+        val age = if (updatedAt > 0L) System.currentTimeMillis() - updatedAt else 0L
+        val stale = age > WEATHER_STALE_MS
         tempText.text = context.getString(R.string.launcher_degrees, current.temperatureC.roundToInt())
         // 1x1'de sıcaklığın altına durum metni de sığmalı; 2x1'de metin sağda olduğu için büyüyebilir.
-        styleTemp(if (wide) TEMP_WIDE_SP else TEMP_COMPACT_SP, LauncherTheme.TEXT)
+        styleTemp(if (wide) TEMP_WIDE_SP else TEMP_COMPACT_SP, if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         conditionText.text = OpenMeteoWeatherLabels.labelFor(context, current.weatherCode, current.day)
         weatherIcon.setImageResource(iconFor(current.weatherCode, current.day))
         windText.text = context.getString(R.string.launcher_weather_wind, current.windSpeedKmh.roundToInt())
         windText.visibility = if (wide) View.VISIBLE else View.GONE
+        // Eski veri: yalnızca geniş boyutta küçük yaş ipucu.
+        ageText.visibility = if (wide && stale) View.VISIBLE else View.GONE
+        if (stale) ageText.text = weatherAgeText(context, age)
         view.contentDescription = "${tempText.text}, ${conditionText.text}"
     }
 

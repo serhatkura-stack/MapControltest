@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cluster_card_media">ÇALIYOR</string>
+    <string name="cluster_card_vehicle">ARAÇ</string>
+    <string name="cluster_card_empty">Veri yok</string>
+    <string name="cluster_card_range">Menzil %1$d km</string>
+    <string name="cluster_card_fuel">Yakıt %1$d%%</string>
+    <string name="cluster_card_range_fuel">Menzil %1$d km · Yakıt %2$d%%</string>
+</resources>

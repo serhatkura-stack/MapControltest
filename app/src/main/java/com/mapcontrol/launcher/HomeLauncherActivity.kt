@@ -23,7 +23,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val store by lazy { LayoutStore(this) }
     private val metrics by lazy { VehicleMetricsRepository(this) }
     private val settings by lazy { LauncherSettings(this, onEditHome = ::enterEditMode) }
-    private val metricsListener = VehicleMetricsRepository.Listener { }
+    private val metricsListener = VehicleMetricsRepository.Listener { snap ->
+        // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
+        window.decorView.post {
+            if (grid.editMode && LauncherSafeArea.isMoving(snap, EDIT_EXIT_KMH)) exitEditMode()
+        }
+    }
 
     private lateinit var header: HeaderBar
     private lateinit var editBar: View
@@ -34,10 +39,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var layout: List<PlacedWidget> = emptyList()
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
+    private var sheet: android.app.Dialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         LauncherDemo.applyFrom(this, intent)
         LauncherProbe.applyFrom(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
+        LauncherSafeArea.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
@@ -65,6 +73,15 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             addView(gap(context, 16, vertical = true))
             addView(climate.view, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
+
+            // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın.
+            val baseBottom = dp(20)
+            setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom, LauncherSafeArea.oemInsetPx(context)))
+            setOnApplyWindowInsetsListener { v, insets ->
+                val bottom = maxOf(baseBottom, LauncherSafeArea.bottomInsetPx(context, insets))
+                if (v.paddingBottom != bottom) v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottom)
+                insets
+            }
         }
         setContentView(root)
         applyLayout(store.load(), persist = false)
@@ -80,8 +97,21 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         gridWidgets.values.forEach { it.onVisible() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Otomatik temada araç lambası/ışık sensörü izlenir; düzenlerken ya da bir sayfa açıkken geçiş beklenir.
+        LauncherTheme.startAutoNight(this, { !grid.editMode && sheet == null }) { ThemeTransition.recreate(this) }
+    }
+
+    override fun onPause() {
+        LauncherTheme.stopAutoNight()
+        super.onPause()
+    }
+
     override fun onStop() {
         started = false
+        sheet?.dismiss()
+        sheet = null
         exitEditMode()
         metrics.removeListener(metricsListener)
         fixedWidgets.forEach { it.onHidden() }
@@ -90,7 +120,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     override fun onDestroy() {
-        fixedWidgets.forEach { it.release() }
+        if (::fixedWidgets.isInitialized) fixedWidgets.forEach { it.release() }
         gridWidgets.values.forEach { it.release() }
         metrics.release()
         settings.release()
@@ -144,18 +174,24 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Düzenleme yalnızca araç dururken açılır; sürüş sırasında ekranla uğraşılmasın. */
     private fun enterEditMode() {
         if (grid.editMode) return
-        if (metrics.currentSnapshot().preferredSpeed() > 0) {
-            Toast.makeText(this, R.string.launcher_parked_only, Toast.LENGTH_SHORT).show()
-            return
-        }
+        if (editLocked()) return
         grid.editMode = true
         dock.setEditMode(true)
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
     }
 
+    /** Araç hareket halindeyse (veya hız henüz okunmadıysa) kısa bir mesaj gösterip true döner. */
+    private fun editLocked(): Boolean {
+        if (!LauncherSafeArea.isMoving(metrics.currentSnapshot())) return false
+        Toast.makeText(this, R.string.launcher_edit_locked_driving, Toast.LENGTH_SHORT).show()
+        return true
+    }
+
     private fun exitEditMode() {
         if (!grid.editMode) return
+        sheet?.dismiss()
+        sheet = null
         grid.editMode = false
         dock.setEditMode(false)
         editBar.visibility = View.GONE
@@ -200,7 +236,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      * Izgarada yer kalmayan türler soluk ve "Yer yok" der; dokunmak hiçbir şey eklemez.
      */
     private fun showAddDialog() {
-        showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
+        if (editLocked() || isFinishing || isDestroyed) return
+        sheet?.dismiss()
+        sheet = showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
             WidgetType.values().toList().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
                 if (r > 0) addView(gap(context, 12, vertical = true))
                 addView(LinearLayout(context).apply {
@@ -255,7 +293,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private fun confirmReset() {
-        showLauncherSheet(this, R.string.launcher_edit_reset, RESET_SHEET_WIDTH_DP) { d ->
+        if (isFinishing || isDestroyed) return
+        sheet?.dismiss()
+        sheet = showLauncherSheet(this, R.string.launcher_edit_reset, RESET_SHEET_WIDTH_DP) { d ->
             addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply {
                 setText(R.string.launcher_edit_reset_confirm)
             }, sheetFullWidth())
@@ -308,6 +348,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private companion object {
+        const val EDIT_EXIT_KMH = 5
         const val ADD_COLUMNS = 5
         const val ADD_SHEET_WIDTH_DP = 1280
         const val ADD_TILE_HEIGHT_DP = 136

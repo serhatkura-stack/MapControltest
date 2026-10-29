@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_weather_offline">No connection</string>
+    <string name="launcher_weather_age_min" formatted="true">%1$d min ago</string>
+    <string name="launcher_weather_age_hour" formatted="true">%1$d h ago</string>
+    <string name="launcher_weather_age_day" formatted="true">%1$d d ago</string>
+</resources>

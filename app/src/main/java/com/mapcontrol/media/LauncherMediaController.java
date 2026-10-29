@@ -83,6 +83,11 @@ public final class LauncherMediaController {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
 
+    private static final String PREFS = "launcher_media";
+    private static final String KEY_LAST_SOURCE = "last_source";
+
+    @Nullable
+    private String lastSource;
     private MediaSessionManager sessionManager;
     private MediaController activeController;
     private boolean started;
@@ -221,13 +226,65 @@ public final class LauncherMediaController {
         return isNotificationAccessEnabled(appContext);
     }
 
-    /** Sistem bildirim erişimi ayar ekranını açar. */
+    /** Son oturumu olan medya uygulamasının paket adı (yoksa null); yeniden açılışta da korunur. */
+    @Nullable
+    public String lastSourcePackage() {
+        if (lastSource == null) {
+            lastSource = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_LAST_SOURCE, null);
+        }
+        return lastSource;
+    }
+
+    /** Son kaynak uygulamayı başlatır; açılamazsa false döner. */
+    public boolean launchLastSource() {
+        String pkg = lastSourcePackage();
+        if (pkg == null) {
+            return false;
+        }
+        try {
+            Intent launch = appContext.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (launch == null) {
+                return false;
+            }
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            appContext.startActivity(launch);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void rememberSource(@Nullable String pkg) {
+        if (pkg == null || pkg.equals(lastSource)) {
+            return;
+        }
+        lastSource = pkg;
+        appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_LAST_SOURCE, pkg).apply();
+    }
+
+    /** Sistem bildirim erişimi ayar ekranını açar (API 30+ bu uygulamanın ayrıntı sayfası). */
     public void openNotificationAccessSettings() {
         Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS);
+            intent.putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    new ComponentName(appContext, LauncherMediaNotificationListener.class)
+                            .flattenToString());
+        }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             appContext.startActivity(intent);
         } catch (Exception ignored) {
+            try {
+                Intent general = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+                general.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                appContext.startActivity(general);
+                return;
+            } catch (Exception ignoredToo) {
+                // son çare genel ayarlar
+            }
             Intent fallback = new Intent(Settings.ACTION_SETTINGS);
             fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             appContext.startActivity(fallback);
@@ -429,6 +486,9 @@ public final class LauncherMediaController {
         }
 
         boolean hasContent = title != null && !title.isEmpty();
+        if (hasContent || playing) {
+            rememberSource(source);
+        }
         return new MediaState(
                 hasContent || playing,
                 access,

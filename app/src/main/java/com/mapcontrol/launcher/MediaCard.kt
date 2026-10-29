@@ -96,7 +96,7 @@ class MediaCard(private val context: Context) : SizedWidget {
     private val playButton = iconButton(
         context, R.drawable.ic_mdi_play, context.getString(R.string.launcher_media_play),
         sizeDp = LauncherTheme.PLAY_BUTTON_DP, background = LauncherTheme.ACCENT, tint = LauncherTheme.ON_ACCENT, circle = true,
-    ) { controller.playPause() }
+    ) { if (mode == Mode.IDLE) controller.launchLastSource() else controller.playPause() }
     private val nextButton = iconButton(
         context, R.drawable.ic_mdi_skip_next, context.getString(R.string.launcher_media_next),
         sizeDp = LauncherTheme.MEDIA_BUTTON_DP, circle = true,
@@ -112,34 +112,24 @@ class MediaCard(private val context: Context) : SizedWidget {
         addView(playButton)
         addView(controlsGap2)
         addView(nextButton)
+        addView(grantButton)
     }
 
     // --- İzin yok durumu ---
-    // Tek seferlik kurulum adımı: ana ekranın en baskın öğesi olmasın diye vurgu değil, tonal düğme.
-    private val needAccessText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 4).apply {
-        setText(R.string.launcher_media_need_access)
-    }
+    // Kart iskeleti korunur; kontrol satırının yerine tek, net bir tonal düğme gelir (vurgu rengi değil, sakin).
     private val grantButton = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
-        setText(R.string.launcher_media_grant)
+        setText(R.string.launcher_media_grant_access)
         gravity = Gravity.CENTER
-        background = rounded(context, LauncherTheme.CONTROL, 16f)
+        background = rounded(context, LauncherTheme.CONTROL, 20f)
         val h = context.dp(40)
         setPadding(h, 0, h, 0)
-        minWidth = context.dp(160)
+        minWidth = context.dp(180)
         isClickable = true
         isFocusable = true
+        visibility = View.GONE
         setOnClickListener { controller.openNotificationAccessSettings() }
         pressFeedback()
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP))
-    }
-    private val accessGap = gap(context, 24, vertical = true)
-    private val accessBox = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_VERTICAL
-        visibility = View.GONE
-        addView(needAccessText)
-        addView(accessGap)
-        addView(grantButton)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(GRANT_BUTTON_DP))
     }
 
     // --- Kompakt (2×1) yerleşim: solda başlık + sanatçı, sağda kontroller ---
@@ -180,7 +170,6 @@ class MediaCard(private val context: Context) : SizedWidget {
         addView(FrameLayout(context).apply {
             addView(mainBox, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             addView(compactBox, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            addView(accessBox, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }, weightLp(1f))
         addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
             applySizes(r - l, b - t - v.paddingTop - v.paddingBottom)
@@ -202,6 +191,8 @@ class MediaCard(private val context: Context) : SizedWidget {
     private var lastPlayDp = -1
     private var lastTiny: Boolean? = null
     private var lastShort: Boolean? = null
+    private var lastSession: Boolean? = null
+    private var lastContentHeight = 0
     private var layoutCompact = false
 
     // --- İlerleme durumu ---
@@ -263,19 +254,6 @@ class MediaCard(private val context: Context) : SizedWidget {
         val pad = context.dp(if (compact) COMPACT_PADDING_DP else LauncherTheme.PADDING_DP)
         view.setPadding(pad, pad, pad, pad)
 
-        // İzin yok durumu: kompaktta metin ve düğme yan yana, metin en çok 2 satır.
-        accessBox.orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        needAccessText.maxLines = if (compact) 2 else 4
-        needAccessText.layoutParams = if (compact) {
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        } else {
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        }
-        accessGap.layoutParams = if (compact) {
-            LinearLayout.LayoutParams(context.dp(24), 1)
-        } else {
-            LinearLayout.LayoutParams(1, context.dp(24))
-        }
         updateContainers()
 
         lastFillPermille = -1
@@ -306,16 +284,15 @@ class MediaCard(private val context: Context) : SizedWidget {
         gap.layoutParams = lp
     }
 
-    /** Hangi kapsayıcının görüneceğini belirler: izin yok, tam ya da kompakt. */
+    /** Hangi kapsayıcının görüneceğini belirler: tam ya da kompakt. */
     private fun updateContainers() {
-        val noAccess = mode == Mode.NO_ACCESS
-        accessBox.visibility = if (noAccess) View.VISIBLE else View.GONE
-        mainBox.visibility = if (noAccess || layoutCompact) View.GONE else View.VISIBLE
-        compactBox.visibility = if (noAccess || !layoutCompact) View.GONE else View.VISIBLE
+        mainBox.visibility = if (layoutCompact) View.GONE else View.VISIBLE
+        compactBox.visibility = if (layoutCompact) View.VISIBLE else View.GONE
     }
 
     /** Kart yüksekliğine göre kapak boyutu, genişliğe göre başlık boyutu. Yalnızca değişince dokunur. */
     private fun applySizes(width: Int, contentHeight: Int) {
+        lastContentHeight = contentHeight
         if (layoutCompact) return
         val density = context.resources.displayMetrics.density
         val showArtwork = contentHeight >= context.dp(180)
@@ -341,16 +318,20 @@ class MediaCard(private val context: Context) : SizedWidget {
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 40f else LauncherTheme.TITLE_SP)
         }
         // Çok kısa kartta (ör. 3×2) kaynak ve sanatçı satırları, daha kısada süre satırı gizlenir.
+        // İzin yok / boşta durumunda ikincil satır asıl mesajdır; çok kısa değilse kalır.
         val short = contentHeight < context.dp(SHORT_HEIGHT_DP)
         val tiny = contentHeight < context.dp(TINY_HEIGHT_DP)
-        if (short != lastShort || tiny != lastTiny) {
+        val session = mode == Mode.SESSION
+        val showSource = !short && (session || sourceLabel.text.isNotEmpty())
+        val showArtist = if (session) !short else !tiny
+        if (short != lastShort || tiny != lastTiny || session != lastSession) {
             lastShort = short
             lastTiny = tiny
-            val vis = if (short) View.GONE else View.VISIBLE
-            sourceLabel.visibility = vis
-            sourceGap.visibility = vis
-            artistView.visibility = vis
-            artistGap.visibility = vis
+            lastSession = session
+            sourceLabel.visibility = if (showSource) View.VISIBLE else View.GONE
+            sourceGap.visibility = if (showSource) View.VISIBLE else View.GONE
+            artistView.visibility = if (showArtist) View.VISIBLE else View.GONE
+            artistGap.visibility = if (showArtist) View.VISIBLE else View.GONE
             val timesVis = if (tiny) View.GONE else View.VISIBLE
             timesRow.visibility = timesVis
             timesGap.visibility = timesVis
@@ -358,7 +339,8 @@ class MediaCard(private val context: Context) : SizedWidget {
         // Düğmeler kalan yüksekliğe sığacak kadar küçülür (en çok tam boy, en az 56dp); kontroller kesilmez.
         var reserved = titleView.lineHeight + context.dp(16) + context.dp(8)
         if (!tiny) reserved += context.dp(8) + elapsedView.lineHeight
-        if (!short) reserved += sourceLabel.lineHeight + artistView.lineHeight + context.dp(8)
+        if (showSource) reserved += sourceLabel.lineHeight + context.dp(4)
+        if (showArtist) reserved += artistView.lineHeight + context.dp(4)
         val playPx = (contentHeight - reserved).coerceIn(context.dp(MIN_PLAY_DP), context.dp(LauncherTheme.PLAY_BUTTON_DP))
         val playDp = (playPx / density).toInt()
         val sideDp = minOf((playDp * 0.85f).toInt(), LauncherTheme.MEDIA_BUTTON_DP)
@@ -385,21 +367,42 @@ class MediaCard(private val context: Context) : SizedWidget {
             else -> Mode.SESSION
         }
         val modeChanged = newMode != mode
+        // Boştayken son kaynak uygulama (varsa) oynat düğmesiyle açılır.
+        val resumePkg = if (newMode == Mode.IDLE) controller.lastSourcePackage() else null
         if (modeChanged) {
             mode = newMode
             updateContainers()
             progressBox.visibility = if (newMode == Mode.SESSION) View.VISIBLE else View.INVISIBLE
-            setControlsEnabled(newMode == Mode.SESSION)
+            // Mod değişince ikincil satırların görünürlüğü yeniden hesaplanır.
+            lastSession = null
         }
-        if (newMode == Mode.NO_ACCESS) {
-            bindArtwork(null)
-            handler.removeCallbacks(tick)
-            return
-        }
+        val noAccess = newMode == Mode.NO_ACCESS
+        val showPlayOnly = newMode == Mode.IDLE && resumePkg != null
+        prevButton.visibility = if (newMode == Mode.SESSION) View.VISIBLE else View.GONE
+        nextButton.visibility = prevButton.visibility
+        controlsGap1.visibility = prevButton.visibility
+        controlsGap2.visibility = prevButton.visibility
+        playButton.visibility = if (newMode == Mode.SESSION || showPlayOnly) View.VISIBLE else View.GONE
+        grantButton.visibility = if (noAccess) View.VISIBLE else View.GONE
+        setControlsEnabled(newMode == Mode.SESSION || showPlayOnly)
 
-        val source = if (newMode == Mode.SESSION) state.source else null
-        val title = if (newMode == Mode.SESSION) state.title else context.getString(R.string.launcher_media_idle)
-        val artist = if (newMode == Mode.SESSION) state.artist else context.getString(R.string.launcher_media_idle_hint)
+        val source = when (newMode) {
+            Mode.SESSION -> state.source
+            Mode.IDLE -> resumePkg
+            Mode.NO_ACCESS -> null
+        }
+        val title = when (newMode) {
+            Mode.SESSION -> state.title
+            Mode.IDLE -> context.getString(R.string.launcher_media_idle_title)
+            Mode.NO_ACCESS -> context.getString(R.string.launcher_media_title_neutral)
+        }
+        val artist = when (newMode) {
+            Mode.SESSION -> state.artist
+            Mode.IDLE -> context.getString(
+                if (resumePkg != null) R.string.launcher_media_idle_resume else R.string.launcher_media_idle_hint,
+            )
+            Mode.NO_ACCESS -> context.getString(R.string.launcher_media_access_hint)
+        }
         val textChanged = modeChanged || source != lastSource || title != lastTitle || artist != lastArtist
         if (textChanged) {
             lastSource = source
@@ -410,6 +413,11 @@ class MediaCard(private val context: Context) : SizedWidget {
             artistView.text = artist ?: ""
             compactTitle.text = title ?: ""
             compactArtist.text = artist ?: ""
+        }
+        if (modeChanged) {
+            // Görünürlük ve düğme boyutu yeni moda göre yeniden hesaplanır.
+            lastPlayDp = -1
+            if (!layoutCompact && lastContentHeight > 0) applySizes(view.width, lastContentHeight)
         }
         bindArtwork(if (newMode == Mode.SESSION) state.artwork else null)
 
@@ -551,6 +559,8 @@ class MediaCard(private val context: Context) : SizedWidget {
         /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
         const val TINY_HEIGHT_DP = 190
         const val MIN_PLAY_DP = 56
+        /** "Erişim ver" düğmesi yüksekliği (en az 76dp). */
+        const val GRANT_BUTTON_DP = 76
 
         /** Kompakt (2×1) yerleşimde başlık boyutu ve kart iç boşluğu. */
         const val COMPACT_TITLE_SP = 28f

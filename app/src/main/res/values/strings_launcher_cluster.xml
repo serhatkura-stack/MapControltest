@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cluster_card_media">NOW PLAYING</string>
+    <string name="cluster_card_vehicle">VEHICLE</string>
+    <string name="cluster_card_empty">No data</string>
+    <string name="cluster_card_range">Range %1$d km</string>
+    <string name="cluster_card_fuel">Fuel %1$d%%</string>
+    <string name="cluster_card_range_fuel">Range %1$d km · Fuel %2$d%%</string>
+</resources>

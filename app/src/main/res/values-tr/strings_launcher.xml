@@ -17,8 +17,6 @@
     <string name="launcher_nav_no_app">Navigasyon uygulaması yüklü değil</string>
     <string name="launcher_media_idle">Şu an çalan yok</string>
     <string name="launcher_media_idle_hint">Başlatmak için bir müzik uygulaması aç</string>
-    <string name="launcher_media_need_access">Çalan şarkıyı göstermek için bildirim erişimi gerekiyor</string>
-    <string name="launcher_media_grant">İzin ver</string>
     <string name="launcher_media_prev">Önceki</string>
     <string name="launcher_range" formatted="true">%1$d km menzil</string>
     <string name="launcher_range_unknown">Menzil okunamıyor</string>
