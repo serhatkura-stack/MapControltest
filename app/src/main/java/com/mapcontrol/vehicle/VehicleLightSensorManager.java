@@ -56,6 +56,7 @@ public final class VehicleLightSensorManager implements SensorEventListener {
     private volatile boolean parkingLampActive = false;
     private volatile boolean headLampActive = false;
     private volatile int lastRawLightValue = 1;
+    private volatile boolean vehicleDataSeen = false;
 
     // Simülasyon modu
     private volatile boolean simulationEnabled = false;
@@ -239,6 +240,7 @@ public final class VehicleLightSensorManager implements SensorEventListener {
                 // 1. Far / Park Lambası Durumunu Sorgula
                 int[] lampVals = proxy.getItemValues(VDEventCarInfo.MODULE_READONLY_INFO, ReadOnlyID.ID_PARKING_LAMP_STATE);
                 if (lampVals != null && lampVals.length > 0) {
+                    this.vehicleDataSeen = true;
                     this.parkingLampActive = (lampVals[0] == 1);
                 }
                 int[] headVals = proxy.getItemValues(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_HEAD_LAMP);
@@ -329,6 +331,21 @@ public final class VehicleLightSensorManager implements SensorEventListener {
         if (!simulationEnabled && (sourceChanged || luxChangedSignificantly)) {
             notifyListeners(currentLux, currentSource, false);
         }
+    }
+
+    /** Salt okunur: park lambası açık mı (VDBus). */
+    public boolean isParkingLampActive() {
+        return parkingLampActive;
+    }
+
+    /** Salt okunur: kısa far açık mı (VDBus). */
+    public boolean isHeadLampActive() {
+        return headLampActive;
+    }
+
+    /** Araçtan en az bir kez gerçek far/park lambası değeri okunduysa true (emülatörde false). */
+    public boolean hasVehicleLampData() {
+        return vehicleDataSeen;
     }
 
     public boolean isHardwareSensorAvailable() {

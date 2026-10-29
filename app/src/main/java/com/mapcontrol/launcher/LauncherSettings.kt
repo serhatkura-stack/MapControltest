@@ -29,6 +29,14 @@ enum class ThemeMode(val key: String, @StringRes val label: Int) {
             return values().firstOrNull { it.key == key } ?: AUTO
         }
 
+        /** Kayıtlı moddan sonraki mod (tıklama anında okunur, hızlı ikinci dokunuş da ilerletir); yazar ve döndürür. */
+        fun next(context: Context): ThemeMode {
+            val all = values()
+            val n = all[(read(context).ordinal + 1) % all.size]
+            write(context, n)
+            return n
+        }
+
         fun write(context: Context, mode: ThemeMode) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY, mode.key).apply()
         }

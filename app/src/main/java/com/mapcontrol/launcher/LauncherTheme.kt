@@ -1,6 +1,10 @@
 package com.mapcontrol.launcher
 
+import android.content.Context
 import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
+import com.mapcontrol.vehicle.VehicleLightSensorManager
 
 /**
  * Yeni launcher'ın tasarım değerleri (gündüz ve gece görünümü).
@@ -63,8 +67,68 @@ object LauncherTheme {
         night = when (mode) {
             ThemeMode.DAY -> false
             ThemeMode.NIGHT -> true
-            ThemeMode.AUTO -> (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_NO
+            // Araç verisinden son uygulanan otomatik durum varsa o; yoksa (emülatör, ilk açılış) sistem.
+            ThemeMode.AUTO -> lastAutoNight
+                ?: ((config.uiMode and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_NO)
         }
+    }
+
+    /** Otomatik modda son uygulanan gündüz/gece (araç verisi); yeniden kurulumda korunur. */
+    @Volatile
+    private var lastAutoNight: Boolean? = null
+
+    private const val AUTO_STABLE_MS = 10_000L
+    private const val AUTO_TICK_MS = 2_000L
+    /** Gerçek bir ışık sensörü bu değerin altını okuduysa karanlık (kestirim en az 800 lx verir). */
+    private const val DARK_LUX = 200f
+
+    private var autoRunner: Runnable? = null
+    private var autoListener: VehicleLightSensorManager.Listener? = null
+    private var autoManager: VehicleLightSensorManager? = null
+    private val autoHandler = Handler(Looper.getMainLooper())
+    private val autoPolicy = AutoNightPolicy(AUTO_STABLE_MS)
+
+    /**
+     * Otomatik temayı aracın farlarına/ışık sensörüne bağlar. onResume'da çağrılır, onPause'da [stopAutoNight].
+     * [canSwitch] false iken (ör. düzenleme modu, ayarlar açık) geçiş ertelenir; [onSwitch] tema değişince
+     * çağrılır (etkinlik `ThemeTransition.recreate` yapmalı). Yalnızca ThemeMode.AUTO iken etkindir.
+     */
+    @JvmStatic
+    fun startAutoNight(context: Context, canSwitch: () -> Boolean, onSwitch: () -> Unit) {
+        stopAutoNight()
+        val app = context.applicationContext
+        val manager = try { VehicleLightSensorManager.getInstance(app) } catch (t: Throwable) { null }
+        val listener = VehicleLightSensorManager.Listener { _, _, _ -> }
+        manager?.addListener(listener)
+        autoManager = manager
+        autoListener = listener
+        autoPolicy.reset(night)
+        val runner = object : Runnable {
+            override fun run() {
+                if (ThemeMode.read(app) == ThemeMode.AUTO && manager != null && manager.hasVehicleLampData()) {
+                    val dark = manager.isParkingLampActive || manager.isHeadLampActive ||
+                        manager.effectiveLux < DARK_LUX
+                    val switchTo = autoPolicy.update(System.currentTimeMillis(), dark, canSwitch())
+                    if (switchTo != null) {
+                        night = switchTo
+                        lastAutoNight = switchTo
+                        onSwitch()
+                    }
+                }
+                autoHandler.postDelayed(this, AUTO_TICK_MS)
+            }
+        }
+        autoRunner = runner
+        autoHandler.postDelayed(runner, AUTO_TICK_MS)
+    }
+
+    @JvmStatic
+    fun stopAutoNight() {
+        autoRunner?.let { autoHandler.removeCallbacks(it) }
+        autoRunner = null
+        autoListener?.let { autoManager?.removeListener(it) }
+        autoListener = null
+        autoManager = null
     }
 
     const val CARD_RADIUS_DP = 20f
@@ -106,4 +170,34 @@ object LauncherTheme {
     const val PRESS_SCALE = 0.98f
     const val PRESS_DURATION_MS = 120L
     const val CROSSFADE_MS = 150L
+}
+
+/**
+ * Otomatik gece/gündüz için saf histerezis: aday durum [stableMs] boyunca değişmeden kalırsa ve geçişe izin
+ * varsa yeni değeri döndürür (yoksa null). Aday değişirse ya da geçerli duruma dönerse sayaç sıfırlanır.
+ */
+class AutoNightPolicy(private val stableMs: Long) {
+    private var applied = true
+    private var candidate: Boolean? = null
+    private var since = 0L
+
+    fun reset(current: Boolean) {
+        applied = current
+        candidate = null
+    }
+
+    fun update(now: Long, desired: Boolean, canSwitch: Boolean): Boolean? {
+        if (desired == applied) {
+            candidate = null
+            return null
+        }
+        if (candidate != desired) {
+            candidate = desired
+            since = now
+        }
+        if (now - since < stableMs || !canSwitch) return null
+        applied = desired
+        candidate = null
+        return desired
+    }
 }

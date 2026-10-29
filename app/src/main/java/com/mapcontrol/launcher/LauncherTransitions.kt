@@ -60,9 +60,11 @@ object LauncherStartup {
 object ThemeTransition {
     private const val FADE_MS = 200L
     private var snapshot: Bitmap? = null
+    private var pending = false
 
     /** Pencerenin görüntüsünü alıp [Activity.recreate] eder; yakalama başarısızsa doğrudan recreate. */
     fun recreate(activity: Activity) {
+        if (pending || activity.isFinishing || activity.isDestroyed) return
         val decor = activity.window.decorView
         val w = decor.width
         val h = decor.height
@@ -76,12 +78,25 @@ object ThemeTransition {
             activity.recreate()
             return
         }
+        pending = true
         try {
             PixelCopy.request(activity.window, bmp, { result ->
-                if (result == PixelCopy.SUCCESS) snapshot = bmp
+                pending = false
+                if (activity.isFinishing || activity.isDestroyed) {
+                    bmp.recycle()
+                    return@request
+                }
+                if (result == PixelCopy.SUCCESS) {
+                    snapshot?.recycle()
+                    snapshot = bmp
+                } else {
+                    bmp.recycle()
+                }
                 activity.recreate()
             }, Handler(Looper.getMainLooper()))
         } catch (e: IllegalArgumentException) {
+            pending = false
+            bmp.recycle()
             activity.recreate()
         }
     }
