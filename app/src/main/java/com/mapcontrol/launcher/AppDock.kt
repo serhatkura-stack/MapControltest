@@ -24,7 +24,14 @@ import com.mapcontrol.util.ProjectionTargetApps
  * Dolu yuvaya dokunmak uygulamayı açar; boş yuvaya dokunmak ya da dolu yuvaya uzun basmak seçiciyi açar.
  * Seçimler "launcher_apps" tercihlerinde "slot_<i>" anahtarıyla tutulur; ikon ve etiketler arka planda yüklenir.
  */
-class AppDock(private val context: Context) : LauncherWidget {
+class AppDock(
+    private val context: Context,
+    /** Gösterilen yuva sayısı; kart içine gömülünce (APP_ROW) dört, alt çubukta altı. */
+    private val slotCount: Int = SLOT_COUNT,
+    private val slotWidthDp: Int = SLOT_WIDTH_DP,
+    /** Gömülü kullanımda tüm yuvalar boşsa ilk yuva artıyla görünür kalır; uygulama seçilebilsin. */
+    private val embedded: Boolean = false,
+) : LauncherWidget {
 
     /** Bir yuvada gösterilen uygulama: etiket ve ikon. */
     private class AppEntry(val label: String, val icon: Drawable)
@@ -46,17 +53,17 @@ class AppDock(private val context: Context) : LauncherWidget {
     private val cache = HashMap<String, AppEntry>()
 
     /** Yuvada şu an gösterilen dolu uygulamanın paketi; boş ya da bekleyen yuvalarda null. */
-    private val current = arrayOfNulls<String>(SLOT_COUNT)
+    private val current = arrayOfNulls<String>(slotCount)
 
     /** Boş yuvalar: artı yalnızca düzenleme modunda görünür, değilse yuva yerinde boş durur. */
-    private val empty = BooleanArray(SLOT_COUNT)
+    private val empty = BooleanArray(slotCount)
     private var editMode = false
 
-    private val slots: List<Slot> = List(SLOT_COUNT) { buildSlot(it) }
+    private val slots: List<Slot> = List(slotCount) { buildSlot(it) }
 
     /** Ayarlanmamış yuvaların paketleri: adaylardan kurulu olanlar, sırayla. */
     private val defaults: List<String> by lazy {
-        DEFAULT_CANDIDATES.filter { isInstalled(it) }.take(SLOT_COUNT)
+        DEFAULT_CANDIDATES.filter { isInstalled(it) }.take(slotCount)
     }
 
     override val view: View = LinearLayout(context).apply {
@@ -84,13 +91,15 @@ class AppDock(private val context: Context) : LauncherWidget {
     fun setEditMode(editing: Boolean) {
         if (editMode == editing) return
         editMode = editing
-        for (i in 0 until SLOT_COUNT) applyEmptyState(i)
+        for (i in 0 until slotCount) applyEmptyState(i)
     }
 
     /** Boş yuvanın artısını ve dokunmasını, düzenleme moduna göre açar ya da kapatır. */
     private fun applyEmptyState(i: Int) {
         val slot = slots[i]
-        val show = !empty[i] || editMode
+        // Gömülü şeritte hiç dolu yuva yoksa ilk yuva artıyla kalır (aksi hâlde kart boş görünür, seçilemez).
+        val none = embedded && empty.all { it }
+        val show = !empty[i] || editMode || (none && i == 0)
         // Düzenleme dışında boş yuva yer kaplamaz (GONE): dolu uygulamalar şeritte ortalanır.
         slot.root.visibility = if (show) View.VISIBLE else View.GONE
         slot.icon.visibility = View.VISIBLE
@@ -116,7 +125,7 @@ class AppDock(private val context: Context) : LauncherWidget {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
-                context.dp(SLOT_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                context.dp(slotWidthDp), LinearLayout.LayoutParams.MATCH_PARENT).apply {
                 // Aralık kenar boşluğu olarak: gizlenen yuvayla birlikte o da kaybolur.
                 marginStart = context.dp(SLOT_GAP_DP / 2)
                 marginEnd = context.dp(SLOT_GAP_DP / 2)
@@ -138,7 +147,7 @@ class AppDock(private val context: Context) : LauncherWidget {
 
     /** Kayıtlı seçimi okuyup yuvaları çizer; önbellekte olmayan paketleri arka planda çözer. */
     private fun refresh() {
-        val packages = List(SLOT_COUNT) { prefs.getString(slotKey(it), null) ?: defaults.getOrElse(it) { "" } }
+        val packages = List(slotCount) { prefs.getString(slotKey(it), null) ?: defaults.getOrElse(it) { "" } }
         bindSlots(packages, cache)
 
         val snapshot = HashMap(cache)
@@ -171,6 +180,8 @@ class AppDock(private val context: Context) : LauncherWidget {
                 else -> bindEmpty(i)
             }
         }
+        // Son yuva bağlanınca "hepsi boş" durumu kesinleşir; ilk yuvanın görünürlüğünü yeniden değerlendir.
+        if (embedded) applyEmptyState(0)
     }
 
     private fun bindFilled(i: Int, pkg: String, entry: AppEntry) {

@@ -16,7 +16,7 @@ import com.mapcontrol.vehicle.VehicleMetricsRepository
  * Yeni ana ekran (HOME). MapControl'ün geri kalanına "Ayarlar" düğmesinden girilir.
  *
  * Yerleşim (yukarıdan aşağı): üst şerit 72dp (düzenleme modunda düzenleme çubuğu) · düzenlenebilir
- * widget ızgarası · klima ve uygulama kartı 120dp. Tüm widget'lar yalnızca ekran görünürken çalışır.
+ * widget ızgarası · klima ve uygulama kartı 120dp (OEM alt çubuğu olan araçta kart yok, ızgara büyür). Tüm widget'lar yalnızca ekran görünürken çalışır.
  */
 class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
@@ -33,7 +33,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private lateinit var header: HeaderBar
     private lateinit var editBar: View
     private lateinit var grid: LauncherGrid
-    private lateinit var dock: AppDock
+    /** Alt çubuk (klima + dock) yalnızca OEM çubuğu olmayan cihazda; OEM'li araçta yok. */
+    private var dock: AppDock? = null
+    private val oemBar by lazy { LauncherSafeArea.oemInsetPx(this) > 0 }
     private lateinit var fixedWidgets: List<LauncherWidget>
 
     private var layout: List<PlacedWidget> = emptyList()
@@ -52,10 +54,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         hideSystemBars()
 
         header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode)
-        val apps = AppDock(this)
-        dock = apps
-        val climate = ClimateBar(this, apps.view)
-        fixedWidgets = listOf(header, apps, climate)
+        // OEM alt çubuğu varsa (Desay) bizimki kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
+        val bottomBar: Pair<AppDock, ClimateBar>? = if (oemBar) null else AppDock(this).let { it to ClimateBar(this, it.view) }
+        dock = bottomBar?.first
+        fixedWidgets = listOfNotNull(header, bottomBar?.first, bottomBar?.second)
         editBar = buildEditBar()
         grid = LauncherGrid(this, this)
 
@@ -70,9 +72,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.HEADER_HEIGHT_DP)))
             addView(gap(context, 16, vertical = true))
             addView(grid, weightLp(1f, vertical = true))
-            addView(gap(context, 16, vertical = true))
-            addView(climate.view, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
+            if (bottomBar != null) {
+                addView(gap(context, 16, vertical = true))
+                addView(bottomBar.second.view, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
+            }
 
             // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın.
             val baseBottom = dp(20)
@@ -160,6 +164,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             val widget = gridWidgets[placed.id] ?: WidgetFactory.create(this, placed).also { created ->
                 gridWidgets[placed.id] = created
                 created.applySpan(placed.span)
+                (created as? AppRowWidget)?.setEditMode(grid.editMode)
                 if (started) created.onVisible()
             }
             widget.applySpan(placed.span)
@@ -171,12 +176,16 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     // --- Düzenleme modu ---
 
+    /** Izgaradaki uygulama şeritleri de boş yuvalarını yalnızca düzenlerken gösterir. */
+    private fun appRows(block: (AppRowWidget) -> Unit) = gridWidgets.values.forEach { (it as? AppRowWidget)?.let(block) }
+
     /** Düzenleme yalnızca araç dururken açılır; sürüş sırasında ekranla uğraşılmasın. */
     private fun enterEditMode() {
         if (grid.editMode) return
         if (editLocked()) return
         grid.editMode = true
-        dock.setEditMode(true)
+        dock?.setEditMode(true)
+        appRows { it.setEditMode(true) }
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
     }
@@ -193,7 +202,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet?.dismiss()
         sheet = null
         grid.editMode = false
-        dock.setEditMode(false)
+        dock?.setEditMode(false)
+        appRows { it.setEditMode(false) }
         editBar.visibility = View.GONE
         header.view.visibility = View.VISIBLE
     }
@@ -307,7 +317,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 addView(sheetButton(R.string.launcher_edit_reset, primary = true) {
                     d.dismiss()
                     store.reset()
-                    applyLayout(defaultLayout())
+                    applyLayout(store.defaults())
                 }, weightLp(1f))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.TOUCH_MIN_DP)))
         }

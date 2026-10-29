@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import com.mapcontrol.R
 import com.mapcontrol.weather.OpenMeteoWeatherClient
@@ -80,22 +81,29 @@ class HeaderBar(
 
     /** Tema düğmesi: Otomatik → Gündüz → Gece → Otomatik; ikon geçerli modu gösterir. */
     private fun themeButton(): View {
-        val mode = ThemeMode.read(context)
-        val res = when (mode) {
-            ThemeMode.AUTO -> R.drawable.ic_mdi_theme_light_dark
-            ThemeMode.DAY -> R.drawable.ic_mdi_weather_sunny
-            ThemeMode.NIGHT -> R.drawable.ic_mdi_weather_night
-        }
-        val label = context.getString(R.string.launcher_theme) + ": " + context.getString(mode.label)
-        return squareButton(res, label) {
+        lateinit var button: LinearLayout
+        button = squareButton(themeIcon(ThemeMode.read(context)), themeLabel(ThemeMode.read(context))) {
             // Kayıtlı modu tıklama anında okur; hızlı ikinci dokunuş da bir sonrakine geçer.
-            ThemeMode.next(context)
+            val mode = ThemeMode.next(context)
+            // Yeniden kurulum gelene kadar (ya da gecikirse) açıklama kayıtlı modla tutarlı kalır.
+            button.contentDescription = themeLabel(mode)
+            (button.getChildAt(0) as? ImageView)?.setImageResource(themeIcon(mode))
             onThemeChanged()
         }
+        return button
     }
 
+    private fun themeIcon(mode: ThemeMode): Int = when (mode) {
+        ThemeMode.AUTO -> R.drawable.ic_mdi_theme_light_dark
+        ThemeMode.DAY -> R.drawable.ic_mdi_weather_sunny
+        ThemeMode.NIGHT -> R.drawable.ic_mdi_weather_night
+    }
+
+    private fun themeLabel(mode: ThemeMode): String =
+        context.getString(R.string.launcher_theme) + ": " + context.getString(mode.label)
+
     /** Yalnızca ikonlu kare düğme; ayarlar düğmesiyle aynı yükseklik, zemin ve basma geri bildirimi. */
-    private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): View =
+    private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): LinearLayout =
         LinearLayout(context).apply {
             gravity = Gravity.CENTER
             background = cardSurface(context)

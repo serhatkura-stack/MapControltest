@@ -10,10 +10,13 @@ import org.json.JSONObject
  */
 class LayoutStore(context: Context) {
 
+    /** OEM alt çubuğu olan araçta (Desay) varsayılan düzen farklıdır. */
+    private val oemBar = LauncherSafeArea.oemInsetPx(context) > 0
+
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun load(): List<PlacedWidget> {
-        val raw = prefs.getString(KEY, null) ?: return defaultLayout()
+        val raw = prefs.getString(KEY, null) ?: return defaultLayout(oemBar)
         return try {
             val array = JSONArray(raw)
             // Kaldırılmış/bilinmeyen türler (eski kayıtlar) sessizce atlanır; kalan düzen geçerliyse korunur.
@@ -29,9 +32,9 @@ class LayoutStore(context: Context) {
                     extra = if (o.has("extra") && !o.isNull("extra")) o.getString("extra") else null,
                 )
             }
-            if (list.isNotEmpty() && isValid(list)) list else defaultLayout()
+            if (list.isNotEmpty() && isValid(list)) list else defaultLayout(oemBar)
         } catch (e: org.json.JSONException) {
-            defaultLayout()
+            defaultLayout(oemBar)
         }
     }
 
@@ -50,6 +53,9 @@ class LayoutStore(context: Context) {
         }
         prefs.edit().putString(KEY, array.toString()).apply()
     }
+
+    /** Bu cihazın varsayılan düzeni (sıfırlama için). */
+    fun defaults(): List<PlacedWidget> = defaultLayout(oemBar)
 
     fun reset() = prefs.edit().remove(KEY).apply()
 

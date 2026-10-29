@@ -35,7 +35,9 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(1, 1), Span(2, 1))),
     SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(1, 1), Span(2, 1))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(1, 1), Span(2, 1))),
-    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1)));
+    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1))),
+    SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(1, 1), Span(2, 1))),
+    APP_ROW("app_row", R.string.launcher_widget_app_row, R.drawable.ic_mdi_view_grid, listOf(Span(3, 1)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -66,8 +68,18 @@ interface SizedWidget : LauncherWidget {
     fun applySpan(span: Span)
 }
 
-/** Varsayılan yerleşim: büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?". */
-fun defaultLayout(): List<PlacedWidget> = listOf(
+/**
+ * Varsayılan yerleşim: büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?".
+ * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): ızgara üçe böler; medya ve araç üst iki
+ * satırı alır, alt satıra navigasyon · uygulama şeridi · koltuk ısıtma gelir (alt çubuğun işlevleri).
+ */
+fun defaultLayout(oemBar: Boolean = false): List<PlacedWidget> = if (oemBar) listOf(
+    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 2)),
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
+    PlacedWidget("navigation", WidgetType.NAVIGATION, 0, 2, Span(2, 1)),
+    PlacedWidget("app_row", WidgetType.APP_ROW, 2, 2, Span(3, 1)),
+    PlacedWidget("seat_heat", WidgetType.SEAT_HEAT, 5, 2, Span(1, 1)),
+) else listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
     PlacedWidget("vehicle", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
     PlacedWidget("navigation", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
@@ -88,5 +100,7 @@ object WidgetFactory {
         WidgetType.SERVICE -> ServiceTile(activity)
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
+        WidgetType.SEAT_HEAT -> SeatHeatTile(activity)
+        WidgetType.APP_ROW -> AppRowWidget(activity)
     }
 }

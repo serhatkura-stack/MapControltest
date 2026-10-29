@@ -20,8 +20,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
-import com.mapcontrol.launcher.LauncherIo;
 
 /**
  * Open-Meteo hava durumu istemcisi — arka planda çeker, kısa süre önbelleğe alır.
@@ -56,7 +58,23 @@ public final class OpenMeteoWeatherClient {
     private final Context appContext;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     // Ortak G/Ç havuzu; widget başına sıralı kuyruk.
-    private final Executor executor = LauncherIo.INSTANCE.serial();
+    /**
+     * Ağ çağrısı (DNS/bağlantı 10 sn'ye kadar bloklar) paylaşılan launcher havuzunu tutmasın diye kendi tek
+     * iş parçacığında koşar; tema değişimiyle üst üste yeni istemciler kurulunca da sıraya girer.
+     */
+    private static final Executor NETWORK = newNetworkExecutor();
+    private final Executor executor = NETWORK;
+
+    private static Executor newNetworkExecutor() {
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 20, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+                r -> {
+                    Thread t = new Thread(r, "weather-net");
+                    t.setDaemon(true);
+                    return t;
+                });
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
     private final Runnable refreshRunnable = this::fetchIfNeeded;
 
     @Nullable
