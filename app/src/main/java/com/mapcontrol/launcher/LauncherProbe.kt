@@ -4,8 +4,13 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Display
 import com.desaysv.ivi.extra.project.carinfo.AmbientLightID
 import com.desaysv.ivi.extra.project.carinfo.AvmID
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
@@ -37,6 +42,8 @@ import java.lang.reflect.Modifier
  *    değişenleri yazar. Sürücü kapıyı açar, klimayı değiştirir; hangi sinyalin karşılık geldiği görülür.
  * 3) Navigasyon: aynı süre boyunca CAR_LAN navigasyon olaylarını (yön, şerit, mesafe, gösterge/HUD alanı)
  *    yalnızca DİNLER ve içeriklerini yazar; HUD'a yön oklarının nasıl gittiğini anlamak için.
+ * 4) Ekranlar: Android'in gördüğü ekranları (gösterge dahil) numara, boyut ve yoğunlukla yazar; izleme
+ *    boyunca eklenen/değişen/kalkan ekranları da. Gösterge kartlarının ölçüsü buradan çıkacak.
  */
 internal object LauncherProbe {
 
@@ -96,6 +103,18 @@ internal object LauncherProbe {
     }
 
     private fun run(context: Context, token: Long) {
+        val displays = context.getSystemService(DisplayManager::class.java)
+        displays.displays.forEach { Log.i(TAG, "DISPLAY ${describe(it)}") }
+        val displayListener = displayListener(displays)
+        displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+        try {
+            scanAndWatch(context, token)
+        } finally {
+            displays.unregisterDisplayListener(displayListener)
+        }
+    }
+
+    private fun scanAndWatch(context: Context, token: Long) {
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) proxy.init(context)
         val deadline = SystemClock.elapsedRealtime() + CONNECT_WAIT_MS
@@ -141,6 +160,27 @@ internal object LauncherProbe {
         }
         listenNavigation(subscribe = false)
         Log.i(TAG, "WATCH-DONE")
+    }
+
+    /** Ekran eklenince, değişince (ör. gösterge navigasyon alanı açılınca) ya da kalkınca yazar. */
+    private fun displayListener(displays: DisplayManager) = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = log("DISPLAY-ADD", displays.getDisplay(id))
+
+        override fun onDisplayChanged(id: Int) = log("DISPLAY-CHANGE", displays.getDisplay(id))
+
+        override fun onDisplayRemoved(id: Int) {
+            Log.i(TAG, "DISPLAY-REMOVE id=$id")
+        }
+
+        private fun log(tag: String, d: Display?) {
+            if (d != null) Log.i(TAG, "$tag ${describe(d)}")
+        }
+    }
+
+    private fun describe(d: Display): String {
+        val m = DisplayMetrics().also { @Suppress("DEPRECATION") d.getRealMetrics(it) }
+        return "id=${d.displayId} ad=\"${d.name}\" ${m.widthPixels}x${m.heightPixels} dpi=${m.densityDpi} " +
+            "durum=${d.state} bayrak=${d.flags} yenileme=${d.refreshRate}"
     }
 
     private fun read(s: Signal): String? = CarSignals.read(s.moduleId, s.id)?.joinToString(",", "[", "]")
