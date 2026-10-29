@@ -36,6 +36,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         LauncherDemo.applyFrom(this, intent)
+        LauncherProbe.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
