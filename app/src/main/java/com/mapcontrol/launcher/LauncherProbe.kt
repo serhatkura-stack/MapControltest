@@ -23,7 +23,6 @@ import com.desaysv.ivi.extra.project.carinfo.RadarID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.RvcID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
-import com.desaysv.ivi.vdb.IVDBusNotify
 import com.desaysv.ivi.vdb.client.VDBus
 import com.desaysv.ivi.vdb.client.bind.VDServiceDef
 import com.desaysv.ivi.vdb.event.VDEvent
@@ -41,7 +40,7 @@ import java.lang.reflect.Modifier
  * 2) İzleme: cevap veren sinyalleri [WATCH_MS] boyunca [POLL_MS]'de bir yeniden okur, yalnızca
  *    değişenleri yazar. Sürücü kapıyı açar, klimayı değiştirir; hangi sinyalin karşılık geldiği görülür.
  * 3) Navigasyon: aynı süre boyunca CAR_LAN navigasyon olaylarını (yön, şerit, mesafe, gösterge/HUD alanı)
- *    yalnızca DİNLER ve içeriklerini yazar; HUD'a yön oklarının nasıl gittiğini anlamak için.
+ *    2 sn'de bir OKUR, değişenleri yazar; HUD'a yön oklarının nasıl gittiğini anlamak için.
  * 4) Ekranlar: Android'in gördüğü ekranları (gösterge dahil) numara, boyut ve yoğunlukla yazar; izleme
  *    boyunca eklenen/değişen/kalkan ekranları da. Gösterge kartlarının ölçüsü buradan çıkacak.
  */
@@ -76,11 +75,6 @@ internal object LauncherProbe {
         VDEventCarLan.NAVIGATION_COMPASS_FUCTION, VDEventCarLan.NAVIGATION_AREA_DISPLAY_REQUEST,
     )
 
-    private val naviListener = object : IVDBusNotify.Stub() {
-        override fun onVDBusNotify(event: VDEvent?) {
-            if (event != null) Log.i(TAG, "NAVI-EVENT ${event.id} ${describe(event)}")
-        }
-    }
 
     private class Signal(val module: String, val name: String, val moduleId: Int, val id: Int) {
         var last: String? = null
@@ -131,7 +125,15 @@ internal object LauncherProbe {
             var answered = 0
             for (f in cls.declaredFields) {
                 if (f.type != Int::class.javaPrimitiveType || !Modifier.isStatic(f.modifiers)) continue
-                val signal = Signal(module, f.name, moduleId, f.getInt(null))
+                // SDK'da bazı sabitler private; yalnızca değerini okumak için erişim açılır.
+                val id = try {
+                    f.isAccessible = true
+                    f.getInt(null)
+                } catch (e: ReflectiveOperationException) {
+                    Log.w(TAG, "SCAN-SKIP $module.${f.name}: ${e.javaClass.simpleName}")
+                    continue
+                }
+                val signal = Signal(module, f.name, moduleId, id)
                 val value = read(signal)
                 if (value == null) {
                     silent++
@@ -146,7 +148,7 @@ internal object LauncherProbe {
         }
         Log.i(TAG, "SCAN-DONE cevap=${live.size} sessiz=$silent; izleme ${WATCH_MS / 60_000} dk")
 
-        listenNavigation(subscribe = true)
+        val navi = readNavigation()
         val end = SystemClock.elapsedRealtime() + WATCH_MS
         while (runToken == token && SystemClock.elapsedRealtime() < end) {
             SystemClock.sleep(POLL_MS)
@@ -157,8 +159,8 @@ internal object LauncherProbe {
                     s.last = value
                 }
             }
+            pollNavigation(navi)
         }
-        listenNavigation(subscribe = false)
         Log.i(TAG, "WATCH-DONE")
     }
 
@@ -185,24 +187,40 @@ internal object LauncherProbe {
 
     private fun read(s: Signal): String? = CarSignals.read(s.moduleId, s.id)?.joinToString(",", "[", "]")
 
-    /** Navigasyon olaylarına abone olur ya da aboneliği bırakır; önce son durumları bir kez okur. Göndermez. */
-    private fun listenNavigation(subscribe: Boolean) {
-        val bus = VDBus.getDefault()
+    /**
+     * Navigasyon olaylarının son durumunu bir kez okur. Abonelik kullanılmaz: SDK'daki
+     * VDConnector.subscribeCommit derlenmemiş (araçta UnsupportedOperationException), o yüzden
+     * izleme boyunca [pollNavigation] ile 2 sn'de bir yeniden okunur. Göndermez.
+     */
+    private fun readNavigation(): MutableMap<Int, String> {
+        val last = HashMap<Int, String>()
         try {
-            if (subscribe) {
-                bus.bindService(VDServiceDef.ServiceType.CAR_LAN)
-                for (id in NAVI_EVENTS) {
-                    bus.getOnce(VDEvent(id))?.let { Log.i(TAG, "NAVI-NOW $id ${describe(it)}") }
-                    bus.subscribe(VDEvent(id), naviListener)
-                }
-                bus.subscribeCommit()
-                Log.i(TAG, "NAVI-LISTEN ${NAVI_EVENTS.size} olay")
-            } else {
-                for (id in NAVI_EVENTS) bus.unsubscribe(VDEvent(id), naviListener)
-            }
+            VDBus.getDefault().bindService(VDServiceDef.ServiceType.CAR_LAN)
         } catch (e: RuntimeException) {
             Log.w(TAG, "NAVI-FAIL ${e.javaClass.simpleName}: ${e.message}")
         }
+        for (id in NAVI_EVENTS) {
+            val now = readNavi(id) ?: continue
+            last[id] = now
+            Log.i(TAG, "NAVI-NOW $id $now")
+        }
+        return last
+    }
+
+    private fun pollNavigation(last: MutableMap<Int, String>) {
+        for (id in NAVI_EVENTS) {
+            val now = readNavi(id) ?: continue
+            if (now != last[id]) {
+                Log.i(TAG, "NAVI-CHANGE $id $now")
+                last[id] = now
+            }
+        }
+    }
+
+    private fun readNavi(id: Int): String? = try {
+        VDBus.getDefault().getOnce(VDEvent(id))?.let { describe(it) }
+    } catch (e: RuntimeException) {
+        null
     }
 
     /** Olay içeriğinin kısa özeti: anahtarlar ve değerler (Parcelable'lar toString ile), 400 karakter. */
