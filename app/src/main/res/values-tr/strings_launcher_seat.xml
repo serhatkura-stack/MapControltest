@@ -2,4 +2,8 @@
 <resources>
     <string name="launcher_widget_seat_vent">Koltuk soğutma</string>
     <string name="launcher_seat_vent_later">Araç testinden sonra açılacak</string>
+    <string name="launcher_widget_seat_heat_driver">Sürücü ısıtma</string>
+    <string name="launcher_widget_seat_heat_passenger">Yolcu ısıtma</string>
+    <string name="launcher_widget_seat_vent_driver">Sürücü soğutma</string>
+    <string name="launcher_widget_seat_vent_passenger">Yolcu soğutma</string>
 </resources>

@@ -42,8 +42,10 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2), Span(2, 2))),
-    SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(4, 2), Span(3, 2)));
+    SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(3, 2))),
+    SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(3, 2))),
+    SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(3, 2))),
+    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(3, 2)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -82,19 +84,21 @@ interface SizedWidget : LauncherWidget {
 /**
  * Varsayılan yerleşim (12×6): büyük medya, yanında araç kartı (menzil + durum) ve altında tek satırlık "Nereye?".
  * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): üst dört satırı medya ve araç alır, alt iki
- * satıra navigasyon (4) · altı ince uygulama kutucuğu (6, tek şerit) · koltuk ısıtma (2) gelir: 4+6+2 = 12.
+ * satıra sürücü koltuk ısıtma (2) · navigasyon (4) · dört ince uygulama kutucuğu (tek şerit) · yolcu koltuk ısıtma (2)
+ * gelir: 2+4+4+2 = 12. Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
  */
 fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
     listOf(
         PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
         PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
-        PlacedWidget("navigation", WidgetType.NAVIGATION, 0, 4, Span(4, 2)),
+        PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
+        PlacedWidget("navigation", WidgetType.NAVIGATION, 2, 4, Span(4, 2)),
     ) +
-        // Altı uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
+        // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
         (0 until DEFAULT_APP_SLOTS).map { i ->
-            PlacedWidget("app_dock_$i", WidgetType.APP, 4 + i, 4, Span(1, 2), appPackages.getOrNull(i))
+            PlacedWidget("app_dock_$i", WidgetType.APP, 6 + i, 4, Span(1, 2), appPackages.getOrNull(i))
         } +
-        PlacedWidget("seat_heat", WidgetType.SEAT_HEAT, 10, 4, Span(2, 2))
+        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
 } else listOf(
     PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)),
     PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
@@ -102,7 +106,7 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
 )
 
 /** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı. */
-const val DEFAULT_APP_SLOTS = 6
+const val DEFAULT_APP_SLOTS = 4
 
 /**
  * Eski 6×3 düzeni (sürüm 1) 12×6'ya taşır: konum ve boyut tam iki katı olur. Görünüm aynı kalır;
@@ -127,7 +131,9 @@ object WidgetFactory {
         WidgetType.SERVICE -> ServiceTile(activity)
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
-        WidgetType.SEAT_HEAT -> SeatHeatTile(activity)
-        WidgetType.SEAT_VENT -> SeatHeatTile(activity, vent = true)
+        WidgetType.SEAT_HEAT_DRIVER -> SeatHeatTile(activity, vent = false, driverSeat = true)
+        WidgetType.SEAT_HEAT_PASSENGER -> SeatHeatTile(activity, vent = false, driverSeat = false)
+        WidgetType.SEAT_VENT_DRIVER -> SeatHeatTile(activity, vent = true, driverSeat = true)
+        WidgetType.SEAT_VENT_PASSENGER -> SeatHeatTile(activity, vent = true, driverSeat = false)
     }
 }

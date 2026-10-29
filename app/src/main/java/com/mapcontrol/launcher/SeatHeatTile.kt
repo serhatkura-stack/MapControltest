@@ -11,39 +11,32 @@ import androidx.annotation.StringRes
 import com.mapcontrol.R
 
 /**
- * Koltuk ısıtma kutucuğu. 1×1: sürücü koltuğu; 2×1: sürücü | yolcu. Dokunmak o koltuğun seviyesini
- * bir artırır (Kapalı → Düşük → Orta → Yüksek). Etkin seviye vurgu renginde; yazı seviyeyi söyler.
+ * Tek koltuk kutucuğu: yalnızca sürücü ya da yalnızca yolcu koltuğu, ısıtma veya soğutma. Yolcu kendi tarafına
+ * koyup doğrudan dokunabilsin diye her koltuk ayrı widget'tır. Dokunmak seviyeyi bir artırır
+ * (Kapalı → Düşük → Orta → Yüksek). Etkin seviye vurgu renginde; yazı seviyeyi söyler.
  * Okuma/yazma [SeatHeatModel] ile (alt çubukla aynı kod yolu; test sürümünde yalnızca okur).
  */
-internal class SeatHeatTile(private val context: Context, private val vent: Boolean = false) : SizedWidget {
+internal class SeatHeatTile(
+    private val context: Context,
+    private val vent: Boolean = false,
+    private val driverSeat: Boolean = true,
+) : SizedWidget {
 
     private val model = SeatHeatModel(context, vent) { bind(it) }
 
     /** Etkin seviye rengi: ısıtmada vurgu, soğutmada sakin bir turkuaz. */
     private fun activeColor(): Int = if (vent) SeatClimateColors.cool() else LauncherTheme.ACCENT
 
-    private val driver = Seat(R.string.launcher_seat_driver, driver = true)
-    private val passenger = Seat(R.string.launcher_seat_passenger, driver = false)
+    private val seat = Seat(if (driverSeat) R.string.launcher_seat_driver else R.string.launcher_seat_passenger, driver = driverSeat)
 
     private val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
-        addView(driver.root, weightLp(1f))
-        addView(View(context).apply { setBackgroundColor(LauncherTheme.TRACK) },
-            LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
-                marginStart = context.dp(DIVIDER_GAP_DP)
-                marginEnd = context.dp(DIVIDER_GAP_DP)
-            })
-        addView(passenger.root, weightLp(1f))
+        addView(seat.root, weightLp(1f))
     }
-    private val divider: View get() = root.getChildAt(1)
 
     override val view: View get() = root
 
-    override fun applySpan(span: Span) {
-        val both = span.w >= WIDE_MIN_COLS
-        divider.visibility = if (both) View.VISIBLE else View.GONE
-        passenger.root.visibility = if (both) View.VISIBLE else View.GONE
-    }
+    override fun applySpan(span: Span) = Unit
 
     override fun onVisible() = model.onVisible()
 
@@ -52,8 +45,7 @@ internal class SeatHeatTile(private val context: Context, private val vent: Bool
     override fun release() = Unit
 
     private fun bind(s: SeatHeatState) {
-        driver.bind(s.connected, s.driver)
-        passenger.bind(s.connected, s.passenger)
+        seat.bind(s.connected, if (driverSeat) s.driver else s.passenger)
     }
 
     /** Tek koltuk: üstte ikon + ad, altta seviye yazısı ve üç dilimli seviye göstergesi. */
@@ -115,7 +107,6 @@ internal class SeatHeatTile(private val context: Context, private val vent: Bool
         const val SEGMENT_H_DP = 22
         const val SEGMENT_GAP_DP = 6
         const val SEGMENT_RADIUS_DP = 5f
-        const val DIVIDER_GAP_DP = 20
     }
 }
 

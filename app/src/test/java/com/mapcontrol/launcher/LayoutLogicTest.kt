@@ -130,16 +130,17 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun desayDefaultBottomRowIsNavSixAppsSeatHeat() {
+    fun desayDefaultBottomRowIsDriverSeatNavFourAppsPassengerSeat() {
         val bottom = defaultLayout(true).filter { it.row == 4 }.sortedBy { it.col }
         assertEquals(
-            listOf(WidgetType.NAVIGATION) + List(6) { WidgetType.APP } + WidgetType.SEAT_HEAT,
+            listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.NAVIGATION) + List(4) { WidgetType.APP } + WidgetType.SEAT_HEAT_PASSENGER,
             bottom.map { it.type },
         )
-        assertEquals(Span(4, 2), bottom.first().span)
+        assertEquals(Span(2, 2), bottom.first().span)
+        assertEquals(Span(4, 2), bottom[1].span)
         assertTrue(bottom.filter { it.type == WidgetType.APP }.all { it.span == Span(1, 2) })
         assertEquals(Span(2, 2), bottom.last().span)
-        // 4 + 6 + 2 = 12, boşluksuz
+        // 2 + 4 + 4 + 2 = 12, boşluksuz
         assertEquals(GRID_COLS, bottom.sumOf { it.span.w })
     }
 
@@ -168,7 +169,7 @@ class LayoutLogicTest {
             widget("service", WidgetType.SERVICE, 0, 0, Span(1, 1)),
             widget("trip", WidgetType.TRIP, 3, 0, Span(2, 1)),
             widget("lock", WidgetType.LOCK, 1, 1, Span(1, 1)),
-            widget("seat", WidgetType.SEAT_HEAT, 0, 2, Span(2, 1)),
+            widget("seat", WidgetType.SEAT_HEAT_DRIVER, 0, 2, Span(1, 1)),
             PlacedWidget("app", WidgetType.APP, 5, 2, Span(1, 1), "pkg.a"),
         )
         val migrated = migrateGridV1(old)
@@ -187,8 +188,7 @@ class LayoutLogicTest {
             WidgetType.LOCK to listOf(Span(1, 1)),
             WidgetType.APP to listOf(Span(1, 1)),
             WidgetType.TRIP to listOf(Span(2, 1), Span(1, 1)),
-            WidgetType.SEAT_HEAT to listOf(Span(1, 1), Span(2, 1)),
-        )
+                    )
         oldSizes.forEach { (type, spans) ->
             spans.forEach { assertTrue("$type $it", Span(it.w * 2, it.h * 2) in type.sizes) }
         }
@@ -199,7 +199,7 @@ class LayoutLogicTest {
         assertEquals(Span(1, 2), WidgetType.APP.sizes.first())
         assertTrue(Span(2, 2) in WidgetType.APP.sizes)
         listOf(WidgetType.CONSUMPTION, WidgetType.TRIP, WidgetType.HEALTH, WidgetType.WEATHER, WidgetType.SERVICE,
-            WidgetType.AIR, WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.SEAT_HEAT, WidgetType.SEAT_VENT)
+            WidgetType.AIR, WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER, WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
             .forEach { assertTrue("$it", Span(3, 2) in it.sizes && Span(2, 2) in it.sizes) }
         // Medya / araç / navigasyon: daha küçük asgari boyut yok (en küçüğü eski 2x1 = 4x2).
         assertTrue(WidgetType.MEDIA.sizes.all { it.w >= 4 && it.h >= 2 })
@@ -214,5 +214,44 @@ class LayoutLogicTest {
         assertTrue(LayoutStore.isValid(apps))
         val packed = List(12) { PlacedWidget("a$it", WidgetType.APP, it, 0, Span(1, 2)) }
         assertTrue(LayoutStore.isValid(packed))
+    }
+
+    private fun raw(id: String, key: String, col: Int, row: Int, w: Int, h: Int) = RawWidget(id, key, col, row, w, h, null)
+
+    @Test
+    fun legacySeatSingleBecomesDriver() {
+        val out = LayoutStore.resolveRaw(listOf(raw("v", "seat_vent", 0, 0, 2, 2)))
+        assertEquals(listOf(widget("v", WidgetType.SEAT_VENT_DRIVER, 0, 0, Span(2, 2))), out)
+    }
+
+    @Test
+    fun legacySeatBothSeatsSplitsIntoDriverAndPassenger() {
+        val out = LayoutStore.resolveRaw(listOf(raw("seat_heat", "seat_heat", 4, 4, 4, 2)))
+        assertEquals(
+            listOf(
+                widget("seat_heat", WidgetType.SEAT_HEAT_DRIVER, 4, 4, Span(2, 2)),
+                widget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 6, 4, Span(2, 2)),
+            ),
+            out,
+        )
+        assertTrue(LayoutStore.isValid(out))
+    }
+
+    @Test
+    fun legacySeatBothSeatsKeepsOnlyDriverWhenNeighbourIsTaken() {
+        // Sağdaki hücreleri sonradan gelen bir widget tutuyor: yolcu eklenmez.
+        val out = LayoutStore.resolveRaw(listOf(
+            raw("s", "seat_heat", 0, 4, 4, 2),
+            raw("n", "navigation", 2, 4, 4, 2),
+        ))
+        assertEquals(listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.NAVIGATION), out.map { it.type })
+        assertTrue(LayoutStore.isValid(out))
+    }
+
+    @Test
+    fun legacySeatMigrationIsIdempotent() {
+        val once = LayoutStore.resolveRaw(listOf(raw("s", "seat_vent", 0, 0, 4, 2)))
+        val again = LayoutStore.resolveRaw(once.map { raw(it.id, it.type.key, it.col, it.row, it.span.w, it.span.h) })
+        assertEquals(once, again)
     }
 }

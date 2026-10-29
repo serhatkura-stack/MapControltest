@@ -2,4 +2,8 @@
 <resources>
     <string name="launcher_widget_seat_vent">Seat cooling</string>
     <string name="launcher_seat_vent_later">Available after car test</string>
+    <string name="launcher_widget_seat_heat_driver">Driver heat</string>
+    <string name="launcher_widget_seat_heat_passenger">Passenger heat</string>
+    <string name="launcher_widget_seat_vent_driver">Driver cooling</string>
+    <string name="launcher_widget_seat_vent_passenger">Passenger cooling</string>
 </resources>

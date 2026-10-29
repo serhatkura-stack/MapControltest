@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
@@ -254,9 +255,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (editLocked() || isFinishing || isDestroyed) return
         sheet?.dismiss()
         sheet = showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
+            // Türler tek ekrana sığmayabilir: ızgara sabit yükseklikte kaydırılır, alt satır hafifçe görünür.
+            val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             WidgetType.values().toList().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
-                if (r > 0) addView(gap(context, 12, vertical = true))
-                addView(LinearLayout(context).apply {
+                if (r > 0) grid.addView(gap(context, 12, vertical = true))
+                grid.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     for (c in 0 until ADD_COLUMNS) {
                         if (c > 0) addView(gap(context, 12))
@@ -266,6 +269,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                     }
                 }, sheetFullWidth())
             }
+            addView(android.widget.ScrollView(context).apply {
+                isVerticalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(grid, sheetFullWidth())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(ADD_LIST_HEIGHT_DP)))
         }
     }
 
@@ -374,6 +382,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         const val ADD_COLUMNS = 5
         const val ADD_SHEET_WIDTH_DP = 1280
         const val ADD_TILE_HEIGHT_DP = 136
+        const val ADD_LIST_HEIGHT_DP = 400
         const val RESET_SHEET_WIDTH_DP = 640
         const val NO_ROOM_ALPHA = 0.45f
     }
