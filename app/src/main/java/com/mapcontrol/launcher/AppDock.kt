@@ -49,6 +49,10 @@ class AppDock(private val context: Context) : LauncherWidget {
     /** Yuvada şu an gösterilen dolu uygulamanın paketi; boş ya da bekleyen yuvalarda null. */
     private val current = arrayOfNulls<String>(SLOT_COUNT)
 
+    /** Boş yuvalar: artı yalnızca düzenleme modunda görünür, değilse yuva yerinde boş durur. */
+    private val empty = BooleanArray(SLOT_COUNT)
+    private var editMode = false
+
     private val slots: List<Slot> = List(SLOT_COUNT) { buildSlot(it) }
 
     /** Ayarlanmamış yuvaların paketleri: adaylardan kurulu olanlar, sırayla. */
@@ -73,6 +77,22 @@ class AppDock(private val context: Context) : LauncherWidget {
     /** Arka plan iş parçacığını kapatır. */
     override fun release() = executor.shutdown()
 
+    /** Düzenleme modunda boş yuvalar görünür ve seçilebilir olur; normalde gizlenir. */
+    fun setEditMode(editing: Boolean) {
+        if (editMode == editing) return
+        editMode = editing
+        for (i in 0 until SLOT_COUNT) applyEmptyState(i)
+    }
+
+    /** Boş yuvanın artısını ve dokunmasını, düzenleme moduna göre açar ya da kapatır. */
+    private fun applyEmptyState(i: Int) {
+        val slot = slots[i]
+        val show = !empty[i] || editMode
+        slot.icon.visibility = if (show) View.VISIBLE else View.INVISIBLE
+        slot.root.isClickable = show
+        slot.root.isLongClickable = show
+    }
+
     private fun buildSlot(index: Int): Slot {
         val icon = ImageView(context).apply {
             layoutParams = LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP))
@@ -81,13 +101,11 @@ class AppDock(private val context: Context) : LauncherWidget {
             outlineProvider = iconOutline
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        val label = text(context, LauncherTheme.LABEL_SP).apply {
+        val label = text(context, DOCK_LABEL_SP).apply {
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            // Uzun adlar ("YouTube Music") kesilmek yerine yuvaya sığana kadar küçülür.
-            setAutoSizeTextTypeUniformWithConfiguration(
-                LABEL_MIN_SP, LauncherTheme.LABEL_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
+            // Tüm adlar aynı boyutta; çok uzun olanlar küçülmek yerine "…" ile kısalır.
         }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -156,12 +174,15 @@ class AppDock(private val context: Context) : LauncherWidget {
         slot.label.text = entry.label
         slot.label.setTextColor(LauncherTheme.TEXT)
         slot.root.contentDescription = entry.label
+        empty[i] = false
+        applyEmptyState(i)
     }
 
     /** Boş yuva: CONTROL renkli yuvarlak kare içinde artı ikonu; etiket yok, şerit tekrar eden yazıyla dolmasın. */
     private fun bindEmpty(i: Int) {
         val slot = slots[i]
         current[i] = null
+        empty[i] = true
         val pad = context.dp((ICON_DP - PLUS_DP) / 2)
         slot.icon.background = rounded(context, LauncherTheme.CONTROL, ICON_RADIUS_DP)
         slot.icon.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
@@ -169,16 +190,19 @@ class AppDock(private val context: Context) : LauncherWidget {
         slot.icon.setImageResource(R.drawable.ic_mdi_plus)
         slot.label.text = ""
         slot.root.contentDescription = context.getString(R.string.launcher_app_empty)
+        applyEmptyState(i)
     }
 
     /** Henüz çözülmemiş dolu yuva: ikon ve etiket gelene kadar boş bırakılır. */
     private fun bindPending(i: Int) {
         val slot = slots[i]
         current[i] = null
+        empty[i] = false
         slot.icon.background = null
         slot.icon.setImageDrawable(null)
         slot.label.text = ""
         slot.root.contentDescription = null
+        applyEmptyState(i)
     }
 
     private fun onTap(index: Int) {
@@ -246,12 +270,12 @@ class AppDock(private val context: Context) : LauncherWidget {
             "com.desaysv.vehiclesetting" to R.string.launcher_app_vehicle_settings,
         )
         const val SLOT_COUNT = 6
-        const val SLOT_WIDTH_DP = 120
+        const val SLOT_WIDTH_DP = 150
+        const val DOCK_LABEL_SP = 20f
         const val SLOT_GAP_DP = 8
         const val ICON_DP = 56
         const val PLUS_DP = 28
         const val ICON_RADIUS_DP = 16f
-        const val LABEL_MIN_SP = 13
 
         /**
          * Yuvalar hiç ayarlanmamışken, bu sıradan kurulu olan ilk [SLOT_COUNT] uygulama kullanılır.

@@ -46,19 +46,19 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     }
     private val outside = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
 
-    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = 16).apply {
+    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_COMPACT_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
         addView(driverSeat.root)
-        addView(gap(context, 12))
+        addView(gap(context, LauncherTheme.GAP_SM_DP))
         addView(ac.root)
-        addView(gap(context, 24))
+        addView(gap(context, LauncherTheme.GAP_L_DP))
         addView(outside)
         addView(appDock, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-            marginStart = context.dp(24)
-            marginEnd = context.dp(24)
+            marginStart = context.dp(LauncherTheme.GAP_L_DP)
+            marginEnd = context.dp(LauncherTheme.GAP_L_DP)
         })
         addView(defrost.root)
-        addView(gap(context, 12))
+        addView(gap(context, LauncherTheme.GAP_SM_DP))
         addView(passengerSeat.root)
     }
 
@@ -206,7 +206,7 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
      * seviyeyi yazıyla söyler (Kapalı / Düşük / Orta / Yüksek): renk ya da nokta saymaya gerek kalmaz.
      */
     private inner class ToggleTile(iconRes: Int, private val labelRes: Int, private val levels: Boolean = false, onTap: () -> Unit) {
-        private val iconView: ImageView = icon(context, iconRes, 32)
+        private val iconView: ImageView = icon(context, iconRes, LauncherTheme.ICON_M_DP)
         private val labelView = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
             gravity = Gravity.CENTER
             setText(if (levels) R.string.launcher_seat_off else labelRes)
@@ -219,7 +219,7 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
             contentDescription = context.getString(labelRes)
             isClickable = true
             addView(iconView)
-            addView(gap(context, 8, vertical = true))
+            addView(gap(context, LauncherTheme.GAP_S_DP / 2, vertical = true))
             addView(labelView)
             setOnClickListener { onTap() }
             pressFeedback()
@@ -247,7 +247,7 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
         const val TILE_DP = 88
         const val POLL_MS = 3_000L
         const val CONFIRM_DELAY_MS = 800L
-        const val DISABLED_ALPHA = 0.4f
+        const val DISABLED_ALPHA = 0.55f
         /** Seviye 0..3 → etiket; ClimateAutomationStore.LEVEL_MAX = 3. */
         val SEAT_LEVEL_LABELS = intArrayOf(
             R.string.launcher_seat_off, R.string.launcher_seat_low, R.string.launcher_seat_mid, R.string.launcher_seat_high,

@@ -26,7 +26,7 @@
     <string name="launcher_locked">Locked</string>
     <string name="launcher_unlocked">Unlocked</string>
     <string name="launcher_lock_unknown">Lock status unavailable</string>
-    <string name="launcher_tires_ok">Tires OK</string>
+    <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Check tire pressure</string>
     <string name="launcher_car_offline">Vehicle data unavailable</string>
     <string name="launcher_outside_temp" formatted="true">Outside %1$d°</string>
@@ -76,7 +76,7 @@
     <string name="launcher_edit_reset_confirm">Restore the default layout?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
-    <string name="launcher_tires_check">Check pressure</string>
+    <string name="launcher_tires_check">Warning</string>
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test version: read only</string>
@@ -105,10 +105,19 @@
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
     <string name="launcher_consumption_idle">Stationary</string>
     <string name="launcher_app_vehicle_settings">Vehicle settings</string>
-    <string name="launcher_drive_avg" formatted="true">This drive %1$s</string>
+    <string name="launcher_drive_avg" formatted="true">This drive %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>
     <string name="launcher_volt_value" formatted="true">%1$s V</string>
     <string name="launcher_coolant_value" formatted="true">Coolant %1$d°</string>
     <string name="launcher_fuel_low" formatted="true">Low fuel · %1$d%%</string>
+    <string name="launcher_tires_none">No pressure warning</string>
+    <string name="launcher_health_good">Good</string>
+    <string name="launcher_health_check">Check</string>
+    <string name="launcher_health_low_fuel">Low fuel</string>
+    <string name="launcher_health_battery">Battery voltage</string>
+    <string name="launcher_health_hot">Engine hot</string>
+    <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
+    <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
+    <string name="launcher_temp_c" formatted="true">%1$d°C</string>
 </resources>

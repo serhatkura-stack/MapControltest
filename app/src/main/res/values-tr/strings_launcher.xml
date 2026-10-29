@@ -26,12 +26,12 @@
     <string name="launcher_locked">Kilitli</string>
     <string name="launcher_unlocked">Kilit açık</string>
     <string name="launcher_lock_unknown">Kilit durumu okunamıyor</string>
-    <string name="launcher_tires_ok">Lastikler normal</string>
+    <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
     <string name="launcher_car_offline">Araç verisi alınamıyor</string>
     <string name="launcher_outside_temp" formatted="true">Dışarısı %1$d°</string>
     <string name="launcher_ac">A/C</string>
-    <string name="launcher_defrost">Buğu çöz</string>
+    <string name="launcher_defrost">Buğu</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
     <string name="launcher_app_empty">Uygulama ekle</string>
@@ -54,7 +54,7 @@
     <string name="launcher_drive_sand">Kum</string>
     <string name="launcher_open">Açık</string>
     <string name="launcher_closed">Kapalı</string>
-    <string name="launcher_moving">Hareket ediyor</string>
+    <string name="launcher_moving">Hareket</string>
     <string name="launcher_none">Yok</string>
     <string name="launcher_door_lf">Sol ön</string>
     <string name="launcher_door_rf">Sağ ön</string>
@@ -76,7 +76,7 @@
     <string name="launcher_edit_reset_confirm">Varsayılan düzene dönülsün mü?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
-    <string name="launcher_tires_check">Basıncı kontrol et</string>
+    <string name="launcher_tires_check">Uyarı</string>
     <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
@@ -105,10 +105,19 @@
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
     <string name="launcher_consumption_idle">Araç duruyor</string>
     <string name="launcher_app_vehicle_settings">Araç ayarları</string>
-    <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s</string>
+    <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
     <string name="launcher_volt_value" formatted="true">%1$s V</string>
     <string name="launcher_coolant_value" formatted="true">Motor suyu %1$d°</string>
     <string name="launcher_fuel_low" formatted="true">Yakıt az · %%%1$d</string>
+    <string name="launcher_tires_none">Basınç uyarısı yok</string>
+    <string name="launcher_health_good">İyi</string>
+    <string name="launcher_health_check">Kontrol et</string>
+    <string name="launcher_health_low_fuel">Yakıt az</string>
+    <string name="launcher_health_battery">Akü voltajı</string>
+    <string name="launcher_health_hot">Motor sıcak</string>
+    <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
+    <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
+    <string name="launcher_temp_c" formatted="true">%1$d°C</string>
 </resources>

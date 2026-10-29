@@ -33,22 +33,32 @@ fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density + 0.
 
 fun Context.dpF(value: Float): Float = value * resources.displayMetrics.density
 
-fun rounded(context: Context, color: Int, radiusDp: Float = LauncherTheme.CARD_RADIUS_DP): GradientDrawable =
+fun rounded(
+    context: Context,
+    color: Int,
+    radiusDp: Float = LauncherTheme.CARD_RADIUS_DP,
+    strokeColor: Int = 0,
+): GradientDrawable =
     GradientDrawable().apply {
         setColor(color)
         cornerRadius = context.dpF(radiusDp)
+        if (strokeColor != 0) setStroke(context.dp(LauncherTheme.BORDER_DP), strokeColor)
     }
+
+/** Kart/şerit yüzeyi: gündüz 1dp kenarlı (açık zeminde ayrışsın), gece kenarsız. */
+fun cardSurface(context: Context, color: Int = LauncherTheme.CARD, radiusDp: Float = LauncherTheme.CARD_RADIUS_DP) =
+    rounded(context, color, radiusDp, LauncherTheme.CARD_BORDER)
 
 fun oval(color: Int): GradientDrawable = GradientDrawable().apply {
     shape = GradientDrawable.OVAL
     setColor(color)
 }
 
-/** Kart kabuğu: koyu yüzey, 20dp köşe, iç boşluk. Gölge yok; ayrım tondan gelir. */
+/** Kart kabuğu: koyu yüzey, 20dp köşe, iç boşluk. Gölge yok; ayrım gecede tondan, gündüz ince kenardan gelir. */
 fun card(context: Context, orientation: Int = LinearLayout.VERTICAL, paddingDp: Int = LauncherTheme.PADDING_DP): LinearLayout =
     LinearLayout(context).apply {
         this.orientation = orientation
-        background = rounded(context, LauncherTheme.CARD)
+        background = cardSurface(context)
         val p = context.dp(paddingDp)
         setPadding(p, p, p, p)
     }

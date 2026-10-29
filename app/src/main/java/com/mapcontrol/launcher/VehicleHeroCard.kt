@@ -57,6 +57,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     }
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
+    private val rangeLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
     /**
      * Araç görseli: proje sahibinin ürettiği Tiggo 7 görseli, arka planı ayrılmış, 720 px'lik tek PNG.
@@ -73,7 +74,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private val doorsChip = StatusChip()
     private val tiresChip = StatusChip()
 
-    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = 24).apply {
+    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_DP).apply {
         // Sol: menzil üstte, durumlar altta. Sağ: araç kartın tüm yüksekliğinde.
         // İçerikle boyutlanan satırlar açıkça WRAP_CONTENT, yoksa 1px'lik boşluğa göre daralırlar.
         addView(LinearLayout(context).apply {
@@ -81,11 +82,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(icon(context, R.drawable.ic_mdi_gas_station, 28, LauncherTheme.TEXT_SECONDARY))
-                addView(gap(context, 12))
-                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                    setText(R.string.launcher_widget_range)
-                })
+                addView(icon(context, R.drawable.ic_mdi_gas_station, LauncherTheme.ICON_M_DP, LauncherTheme.TEXT_SECONDARY))
+                addView(gap(context, LauncherTheme.GAP_SM_DP))
+                addView(rangeLabel.apply { setText(R.string.launcher_widget_range) })
             }, wrapLp())
             addView(gap(context, 4, vertical = true))
             addView(rangeText, wrapLp())
@@ -101,7 +100,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
                 addView(tiresChip.root, wrapLp())
             }, wrapLp())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        addView(gap(context, 16))
+        addView(gap(context, LauncherTheme.GAP_M_DP))
         addView(carImage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CAR_WEIGHT))
         addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
             fitRange(v)
@@ -119,7 +118,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private fun fitRange(card: View) {
         val avail = card.height - card.paddingTop - card.paddingBottom
         if (avail <= 0) return
-        val fixed = context.dp(28 + 4 + 4 + CHIP_HEIGHT_DP) + fuelText.lineHeight + context.dp(8)
+        // Başlık satırı ikon (32) ya da 22sp etiketten hangisi uzunsa o kadar; etiket büyüdü diye bütçe şaşmasın.
+        val header = maxOf(context.dp(LauncherTheme.ICON_M_DP), rangeLabel.lineHeight)
+        val fixed = header + context.dp(4 + 4 + CHIP_HEIGHT_DP + LauncherTheme.GAP_S_DP) + fuelText.lineHeight
         // Boyutlar yazıya dokunmadan ölçülür; yalnızca değişince uygulanır, yoksa her yerleşim yenisini tetikler.
         val paint = android.text.TextPaint(rangeText.paint)
         val size = RANGE_SIZES_SP.firstOrNull { sp ->
@@ -258,7 +259,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
 
     /** Alt satırdaki tek durum: ikon + kısa metin. Uyarıda ikon ve metin ALERT, zemin ALERT_SURFACE. */
     private inner class StatusChip {
-        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_lock, 24, LauncherTheme.TEXT_SECONDARY)
+        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_lock, LauncherTheme.ICON_S_DP, LauncherTheme.TEXT_SECONDARY)
         private val label: TextView = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -266,7 +267,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = context.dp(CHIP_HEIGHT_DP)
-            val p = context.dp(12)
+            val p = context.dp(LauncherTheme.GAP_SM_DP)
             setPadding(p, 0, p, 0)
             addView(iconView)
             addView(gap(context, 10))

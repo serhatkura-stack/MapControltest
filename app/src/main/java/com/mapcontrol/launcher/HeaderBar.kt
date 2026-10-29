@@ -97,10 +97,10 @@ class HeaderBar(
     private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): View =
         LinearLayout(context).apply {
             gravity = Gravity.CENTER
-            background = rounded(context, LauncherTheme.CARD)
+            background = cardSurface(context)
             val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
             layoutParams = LinearLayout.LayoutParams(size, size)
-            addView(icon(context, res, 32))
+            addView(icon(context, res, LauncherTheme.ICON_M_DP))
             contentDescription = label
             isClickable = true
             isFocusable = true
@@ -111,13 +111,13 @@ class HeaderBar(
     private fun settingsButton(): View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        background = rounded(context, LauncherTheme.CARD)
-        val h = context.dp(24)
+        background = cardSurface(context)
+        val h = context.dp(LauncherTheme.GAP_L_DP)
         setPadding(h, 0, h, 0)
         minimumWidth = context.dp(LauncherTheme.TOUCH_MIN_DP)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP))
-        addView(icon(context, R.drawable.ic_mdi_cog, 32))
-        addView(gap(context, 12))
+        addView(icon(context, R.drawable.ic_mdi_cog, LauncherTheme.ICON_M_DP))
+        addView(gap(context, LauncherTheme.GAP_SM_DP))
         addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { setText(R.string.launcher_settings) })
         contentDescription = context.getString(R.string.launcher_settings)
         isClickable = true

@@ -24,11 +24,10 @@ import java.util.concurrent.Executors
 /** VehicleMetricsCache.INVALID ile aynı: değer okunmadı. */
 private const val INVALID = Int.MIN_VALUE
 
-/** Lastik uyarısı olan kutucuğun koyu kırmızı zemini. */
-
 /**
- * Araç kutucuklarının ortak iskeleti: üstte ikon + etiket, ortada esnek boşluk, altta büyük değer.
- * 1 sütunluk boyutta değer 32sp, daha genişte 44sp ve (varsa) ikinci bir satır gösterilir.
+ * Araç kutucuklarının ortak iskeleti. 125dp yüksekliğe dikey dizilim sığmadığı için:
+ * 1 sütunluk boyutta solda ikon + etiket, altında değer (detay yok);
+ * geniş boyutta aynı sütun solda kalır, detay sağda dikey ortalı 24sp olarak görünür.
  */
 internal abstract class VehicleTile(
     protected val context: Context,
@@ -38,23 +37,34 @@ internal abstract class VehicleTile(
 
     protected val headerIcon: ImageView = icon(context, iconRes, 28, LauncherTheme.TEXT_SECONDARY)
     protected val valueText: TextView = text(context, VALUE_SMALL_SP, medium = true)
-    protected val detailText: TextView = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
+    protected val detailText: TextView = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
         visibility = View.GONE
+        gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        textAlignment = View.TEXT_ALIGNMENT_VIEW_END
     }
 
-    protected val root: LinearLayout = card(context, paddingDp = 24).apply {
-        minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        val header = LinearLayout(context).apply {
+    /** Sol sütun: başlık + değer. */
+    private val mainColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             addView(headerIcon)
             addView(gap(context, 12))
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) })
-        }
-        addView(header)
-        addView(View(context), weightLp(1f, vertical = true))
+        })
+        addView(gap(context, 4, vertical = true))
         addView(valueText)
-        addView(detailText)
+    }
+
+    protected val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
+        minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        addView(mainColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(detailText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply {
+            marginStart = context.dp(16)
+        })
     }
 
     override val view: View get() = root
@@ -64,7 +74,12 @@ internal abstract class VehicleTile(
 
     override fun applySpan(span: Span) {
         wide = span.w >= 2
-        valueText.textSize = if (wide) VALUE_LARGE_SP else VALUE_SMALL_SP
+        valueText.textSize = if (wide) VALUE_WIDE_SP else VALUE_SMALL_SP
+        // Geniş: sütunlar ağırlıkla bölüşür (WRAP_CONTENT ile sol sütun 1px'e çöküyordu); detay yoksa sol sütun tüm kartı alır.
+        mainColumn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        detailText.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, if (wide) 1.3f else 0f).apply {
+            marginStart = context.dp(16)
+        }
         bindDetail()
     }
 
@@ -103,7 +118,10 @@ internal abstract class VehicleTile(
 
     private companion object {
         const val VALUE_SMALL_SP = 32f
-        const val VALUE_LARGE_SP = 44f
+        /** Başlık ile birlikte 125dp kartın iç yüksekliğine sığan en büyük değer. */
+        const val VALUE_WIDE_SP = 40f
+        /** 125dp kartta 20dp kenar boşluğu: 85dp iç yükseklik. */
+        const val PADDING_DP = 20
     }
 }
 
@@ -319,7 +337,7 @@ internal class TireTile(context: Context) : VehicleTile(context, R.drawable.ic_m
             warning == false -> {
                 setIcon(R.drawable.ic_mdi_tire, LauncherTheme.TEXT_SECONDARY)
                 setValue(R.string.launcher_tires_ok, LauncherTheme.TEXT)
-                showDetail(context.getString(R.string.launcher_tires_ok))
+                showDetail(context.getString(R.string.launcher_tires_none))
             }
             else -> {
                 setIcon(R.drawable.ic_mdi_tire, LauncherTheme.TEXT_SECONDARY)

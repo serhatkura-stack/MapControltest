@@ -190,24 +190,45 @@ internal class TripComputerTile(context: Context) :
     }
 }
 
-/** Araç sağlığı: akü voltajı; geniş boyutta motor suyu sıcaklığı. Akü 11.8 V altındaysa uyarı rengi. */
+/**
+ * Araç sağlığı: tek bir durum ("İyi" / "Kontrol et"). Yalnızca eldeki veriden türetilir, araca bir şey göndermez:
+ * akü 12,0-15,0 V dışı, motor suyu > 110 °C ya da yakıt azaldı uyarısı "Kontrol et" yapar.
+ * Geniş boyutta sayılar (ve varsa sebep) detayda görünür.
+ */
 internal class HealthTile(context: Context) :
     TripTile(context, R.drawable.ic_mdi_lightning_bolt, R.string.launcher_widget_health) {
 
     override fun bind() {
         val v = data.batteryV
-        if (!data.connected || v == null) {
+        val coolant = data.coolantC
+        val lowFuel = data.lowFuel
+        if (!data.connected || (v == null && coolant == null && lowFuel == null)) {
             showMissing()
             return
         }
-        val low = v < LOW_BATTERY_V
-        setIcon(if (low) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
-            if (low) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
-        setValue(context.getString(R.string.launcher_volt_value, one(v)), if (low) LauncherTheme.ALERT else LauncherTheme.TEXT)
-        showDetail(data.coolantC?.let { context.getString(R.string.launcher_coolant_value, it) })
+        val reasons = buildList {
+            if (lowFuel == true) add(R.string.launcher_health_low_fuel)
+            if (v != null && (v < BATTERY_MIN_V || v > BATTERY_MAX_V)) add(R.string.launcher_health_battery)
+            if (coolant != null && coolant > COOLANT_MAX_C) add(R.string.launcher_health_hot)
+        }
+        val bad = reasons.isNotEmpty()
+        setIcon(if (bad) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
+            if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+        setValue(context.getString(if (bad) R.string.launcher_health_check else R.string.launcher_health_good),
+            if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT)
+        val numbers = when {
+            v != null && coolant != null -> context.getString(R.string.launcher_health_numbers, one(v), coolant)
+            v != null -> context.getString(R.string.launcher_health_volt_only, one(v))
+            coolant != null -> context.getString(R.string.launcher_temp_c, coolant)
+            else -> null
+        }
+        val why = reasons.joinToString(", ") { context.getString(it) }
+        showDetail(listOfNotNull(why.ifEmpty { null }, numbers).joinToString("\n").ifEmpty { null })
     }
 
     private companion object {
-        const val LOW_BATTERY_V = 11.8
+        const val BATTERY_MIN_V = 12.0
+        const val BATTERY_MAX_V = 15.0
+        const val COOLANT_MAX_C = 110
     }
 }

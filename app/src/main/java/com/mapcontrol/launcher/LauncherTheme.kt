@@ -12,11 +12,13 @@ object LauncherTheme {
     var night: Boolean = true
 
     private const val NIGHT_GROUND = 0xFF0F1115.toInt()
-    private const val DAY_GROUND = 0xFFECEEF2.toInt()
+    private const val DAY_GROUND = 0xFFE6E9EE.toInt()
     private const val NIGHT_CARD = 0xFF1A1D23.toInt()
     private const val DAY_CARD = 0xFFFFFFFF.toInt()
     private const val NIGHT_CONTROL = 0xFF22262E.toInt()
-    private const val DAY_CONTROL = 0xFFE3E6EB.toInt()
+    private const val DAY_CONTROL = 0xFFDADEE5.toInt()
+    // Gündüz kart kenarı: beyaz kartı açık zeminden ayırır; gecede ton farkı yeter.
+    private const val DAY_BORDER = 0xFFCDD2DA.toInt()
     private const val NIGHT_TRACK = 0xFF2A2F38.toInt()
     private const val DAY_TRACK = 0xFFCDD2DA.toInt()
     private const val NIGHT_ACCENT = 0xFF3B82F6.toInt()
@@ -36,6 +38,8 @@ object LauncherTheme {
     val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD
     val CONTROL: Int get() = if (night) NIGHT_CONTROL else DAY_CONTROL
+    /** Kart kenar çizgisi rengi; gecede 0 (çizgi yok). */
+    val CARD_BORDER: Int get() = if (night) 0 else DAY_BORDER
     val TRACK: Int get() = if (night) NIGHT_TRACK else DAY_TRACK
     val ACCENT: Int get() = if (night) NIGHT_ACCENT else DAY_ACCENT
     val ALERT: Int get() = if (night) NIGHT_ALERT else DAY_ALERT
@@ -64,8 +68,22 @@ object LauncherTheme {
     }
 
     const val CARD_RADIUS_DP = 20f
-    const val GAP_DP = 24
+    /** Boşluk ölçeği: bitişik öğeler S, grup arası M, bölüm arası L. */
+    const val GAP_S_DP = 8
+    const val GAP_SM_DP = 12
+    const val GAP_M_DP = 16
+    const val GAP_L_DP = 24
+
+    /** İkon ölçeği: satır içi / başlık / büyük. */
+    const val ICON_S_DP = 24
+    const val ICON_M_DP = 32
+    const val ICON_L_DP = 56
+
+    /** Kart iç boşluğu: büyük kartlar 32, kutucuklar 24, sıkışık/şerit 16. */
     const val PADDING_DP = 32
+    const val CARD_PAD_DP = 24
+    const val CARD_PAD_COMPACT_DP = 16
+    const val BORDER_DP = 1
 
     /** Sürüşte kullanılan dokunma hedefleri en az bu boyutta. */
     const val TOUCH_MIN_DP = 72
@@ -82,7 +100,8 @@ object LauncherTheme {
     const val TEMP_SP = 44f
     const val SECTION_SP = 36f
     const val BODY_SP = 24f
-    const val LABEL_SP = 18f
+    /** Sürüşte okunur alt sınır; etiketler bunun altına inmez. */
+    const val LABEL_SP = 22f
 
     const val PRESS_SCALE = 0.98f
     const val PRESS_DURATION_MS = 120L

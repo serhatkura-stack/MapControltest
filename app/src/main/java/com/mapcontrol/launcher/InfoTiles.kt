@@ -25,8 +25,8 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
- * Hava durumu kutucuğu: ikon ve başlık üstte, sıcaklık ve durum altta.
- * Geniş boyutta (genişlik >= 2) sıcaklık büyür ve rüzgar satırı görünür.
+ * Hava durumu kutucuğu: hava ikonu + sıcaklık; durum metni 1x1'de altta, 2x1'de sağda (rüzgârla birlikte).
+ * Başlık yok: üst şeritte de hava var, ikon kutucuğu zaten anlatır. 125dp'ye sığması için iç boşluk 20dp.
  * Veri [OpenMeteoWeatherClient] üzerinden gelir; ekran gizlenince dinleme durur.
  */
 class WeatherTile(private val context: Context) : SizedWidget {
@@ -35,14 +35,11 @@ class WeatherTile(private val context: Context) : SizedWidget {
     private var snapshot: OpenMeteoWeatherSnapshot? = null
     private var span: Span = Span(1, 1)
 
-    private val weatherIcon = icon(context, R.drawable.ic_mdi_thermometer, 28)
-    private val title = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-        setText(R.string.launcher_widget_weather)
-    }
+    private val weatherIcon = icon(context, R.drawable.ic_mdi_weather_partly_cloudy, ICON_DP, LauncherTheme.TEXT_SECONDARY)
     private val tempText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
         setText(R.string.launcher_unavailable)
     }
-    private val conditionText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
+    private val conditionText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2)
     private val windText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
         visibility = View.GONE
     }
@@ -58,24 +55,60 @@ class WeatherTile(private val context: Context) : SizedWidget {
         }
     }
 
-    override val view: View = card(context, paddingDp = 24).apply {
+    /** Sol sütun: ikon + sıcaklık satırı; dar boyutta altında durum metni. */
+    private val leftColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(weatherIcon)
             addView(gap(context, 12))
-            addView(title)
+            addView(tempText)
         })
-        addView(View(context), weightLp(1f, vertical = true))
-        addView(tempText)
-        addView(gap(context, 8, vertical = true))
-        addView(conditionText)
+    }
+
+    /** Sağ sütun (yalnızca geniş boyutta): durum metni + rüzgâr, sağa yaslı, dikey ortalı. */
+    private val rightColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        visibility = View.GONE
         addView(windText)
     }
 
-    /** Boyut değişince sıcaklık ve rüzgar satırı yeniden çizilir. */
+    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        addView(leftColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(rightColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply {
+            marginStart = context.dp(16)
+        })
+    }
+
+    init {
+        leftColumn.addView(conditionText)
+    }
+
+    /** Boyut değişince durum metni sol/sağ sütun arasında taşınır. */
     override fun applySpan(span: Span) {
         this.span = span
+        val wide = span.w >= 2
+        (conditionText.parent as? android.view.ViewGroup)?.removeView(conditionText)
+        if (wide) {
+            rightColumn.addView(conditionText, 0)
+            conditionText.gravity = Gravity.END
+            conditionText.textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+        } else {
+            leftColumn.addView(conditionText)
+            conditionText.gravity = Gravity.START
+            conditionText.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+        }
+        rightColumn.visibility = if (wide) View.VISIBLE else View.GONE
+        (leftColumn.layoutParams as LinearLayout.LayoutParams).apply {
+            width = if (wide) LinearLayout.LayoutParams.WRAP_CONTENT else 0
+            weight = if (wide) 0f else 1f
+        }
+        (rightColumn.layoutParams as LinearLayout.LayoutParams).apply { width = 0; weight = if (wide) 1f else 0f }
+        view.requestLayout()
         render()
     }
 
@@ -102,13 +135,26 @@ class WeatherTile(private val context: Context) : SizedWidget {
         }
         val wide = span.w >= 2
         tempText.text = context.getString(R.string.launcher_degrees, current.temperatureC.roundToInt())
-        styleTemp(if (wide) LauncherTheme.TEMP_SP else TEMP_COMPACT_SP, LauncherTheme.TEXT)
+        // 1x1'de sıcaklığın altına durum metni de sığmalı; 2x1'de metin sağda olduğu için büyüyebilir.
+        styleTemp(if (wide) TEMP_WIDE_SP else TEMP_COMPACT_SP, LauncherTheme.TEXT)
         conditionText.text = OpenMeteoWeatherLabels.labelFor(context, current.weatherCode, current.day)
-        // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.
-        weatherIcon.setImageResource(
-            if (current.weatherCode in 1..3) R.drawable.ic_mdi_weather_partly_cloudy else R.drawable.ic_mdi_thermometer)
+        weatherIcon.setImageResource(iconFor(current.weatherCode, current.day))
         windText.text = context.getString(R.string.launcher_weather_wind, current.windSpeedKmh.roundToInt())
         windText.visibility = if (wide) View.VISIBLE else View.GONE
+        view.contentDescription = "${tempText.text}, ${conditionText.text}"
+    }
+
+    /** WMO hava kodu → ikon. */
+    private fun iconFor(code: Int, day: Boolean): Int = when (code) {
+        0 -> if (day) R.drawable.ic_mdi_weather_sunny else R.drawable.ic_mdi_weather_night
+        1, 2 -> R.drawable.ic_mdi_weather_partly_cloudy
+        3 -> R.drawable.ic_mdi_weather_cloudy
+        45, 48 -> R.drawable.ic_mdi_weather_fog
+        in 51..57, in 61..63, in 66..67, 80 -> R.drawable.ic_mdi_weather_rainy
+        65, 81, 82 -> R.drawable.ic_mdi_weather_pouring
+        in 71..77, 85, 86 -> R.drawable.ic_mdi_weather_snowy
+        in 95..99 -> R.drawable.ic_mdi_weather_lightning
+        else -> R.drawable.ic_mdi_weather_cloudy
     }
 
     private fun styleTemp(sizeSp: Float, color: Int) {
@@ -117,7 +163,10 @@ class WeatherTile(private val context: Context) : SizedWidget {
     }
 
     private companion object {
-        const val TEMP_COMPACT_SP = 32f
+        const val TEMP_COMPACT_SP = 36f
+        const val TEMP_WIDE_SP = 44f
+        const val ICON_DP = 36
+        const val PADDING_DP = 20
     }
 }
 
@@ -170,7 +219,8 @@ class AppShortcutTile(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
     }
 
-    private val root: LinearLayout = card(context, paddingDp = 16).apply {
+    // 125dp kartta 64dp ikon + etiket sığsın diye 10dp kenar: etiketin alt çıkıntıları kesilmez.
+    private val root: LinearLayout = card(context, paddingDp = 10).apply {
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true

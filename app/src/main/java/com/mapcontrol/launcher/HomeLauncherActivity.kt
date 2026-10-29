@@ -28,6 +28,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private lateinit var header: HeaderBar
     private lateinit var editBar: View
     private lateinit var grid: LauncherGrid
+    private lateinit var dock: AppDock
     private lateinit var fixedWidgets: List<LauncherWidget>
 
     private var layout: List<PlacedWidget> = emptyList()
@@ -44,6 +45,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
         header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = ::recreate, onEditHome = ::enterEditMode)
         val apps = AppDock(this)
+        dock = apps
         val climate = ClimateBar(this, apps.view)
         fixedWidgets = listOf(header, apps, climate)
         editBar = buildEditBar()
@@ -145,6 +147,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             return
         }
         grid.editMode = true
+        dock.setEditMode(true)
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
     }
@@ -152,6 +155,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun exitEditMode() {
         if (!grid.editMode) return
         grid.editMode = false
+        dock.setEditMode(false)
         editBar.visibility = View.GONE
         header.view.visibility = View.VISIBLE
     }
