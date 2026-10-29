@@ -104,17 +104,6 @@ class MediaCard(private val context: Context) : SizedWidget {
     private val playIcon = playButton.getChildAt(0) as ImageView
     private val controlsGap1 = gap(context, 24)
     private val controlsGap2 = gap(context, 24)
-    private val controlsRow = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        addView(prevButton)
-        addView(controlsGap1)
-        addView(playButton)
-        addView(controlsGap2)
-        addView(nextButton)
-        addView(grantButton)
-    }
-
     // --- İzin yok durumu ---
     // Kart iskeleti korunur; kontrol satırının yerine tek, net bir tonal düğme gelir (vurgu rengi değil, sakin).
     private val grantButton = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
@@ -131,6 +120,18 @@ class MediaCard(private val context: Context) : SizedWidget {
         pressFeedback()
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(GRANT_BUTTON_DP))
     }
+
+    private val controlsRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(prevButton)
+        addView(controlsGap1)
+        addView(playButton)
+        addView(controlsGap2)
+        addView(nextButton)
+        addView(grantButton)
+    }
+
 
     // --- Kompakt (2×1) yerleşim: solda başlık + sanatçı, sağda kontroller ---
     private val compactTitle = text(context, COMPACT_TITLE_SP, bold = true)

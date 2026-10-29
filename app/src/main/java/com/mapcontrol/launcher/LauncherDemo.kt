@@ -34,7 +34,7 @@ internal object LauncherDemo {
         true,   // connected
         0, 0,   // hız
         18_420, // km
-        62,     // yakıt %
+        620,    // yakıt, onda bir (%62,0) — araçtaki gibi
         540,    // menzil km
         0, 2, 0,
         0, 0, 0, 0, 0, // kapılar ve bagaj kapalı
