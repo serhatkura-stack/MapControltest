@@ -63,10 +63,7 @@ class AppDock(private val context: Context) : LauncherWidget {
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        slots.forEachIndexed { i, slot ->
-            if (i > 0) addView(gap(context, SLOT_GAP_DP))
-            addView(slot.root)
-        }
+        slots.forEach { addView(it.root) }
     }
 
     /** Ekran görünür olunca yuvaları çizer; ikonlar önbellekten gelir, eksikler arka planda yüklenir. */
@@ -88,7 +85,9 @@ class AppDock(private val context: Context) : LauncherWidget {
     private fun applyEmptyState(i: Int) {
         val slot = slots[i]
         val show = !empty[i] || editMode
-        slot.icon.visibility = if (show) View.VISIBLE else View.INVISIBLE
+        // Düzenleme dışında boş yuva yer kaplamaz (GONE): dolu uygulamalar şeritte ortalanır.
+        slot.root.visibility = if (show) View.VISIBLE else View.GONE
+        slot.icon.visibility = View.VISIBLE
         slot.root.isClickable = show
         slot.root.isLongClickable = show
     }
@@ -111,7 +110,11 @@ class AppDock(private val context: Context) : LauncherWidget {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
-                context.dp(SLOT_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT)
+                context.dp(SLOT_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                // Aralık kenar boşluğu olarak: gizlenen yuvayla birlikte o da kaybolur.
+                marginStart = context.dp(SLOT_GAP_DP / 2)
+                marginEnd = context.dp(SLOT_GAP_DP / 2)
+            }
             isClickable = true
             isFocusable = true
             addView(icon)
@@ -248,7 +251,9 @@ class AppDock(private val context: Context) : LauncherWidget {
         } else {
             raw
         }
-        AppEntry(label, AppIconHelper.load(context, packageName))
+        // Ikon dock boyutunda çözülür (gece: açık arka planlı adaptif ikonlar plakaya oturur).
+        val plate = if (LauncherTheme.night) LauncherTheme.CONTROL else 0
+        AppEntry(label, AppIconHelper.loadSized(context, packageName, context.dp(ICON_DP), plate))
     } catch (e: PackageManager.NameNotFoundException) {
         null
     }

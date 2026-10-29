@@ -29,9 +29,6 @@
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
     <string name="launcher_car_offline">Araç verisi alınamıyor</string>
-    <string name="launcher_outside_temp" formatted="true">Dışarısı %1$d°</string>
-    <string name="launcher_ac">A/C</string>
-    <string name="launcher_defrost">Buğu</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
     <string name="launcher_app_empty">Uygulama ekle</string>
@@ -113,4 +110,14 @@
     <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
+    <string name="launcher_widget_service">Bakım</string>
+    <string name="launcher_widget_air">Hava kalitesi</string>
+    <string name="launcher_days_value" formatted="true">%1$d gün</string>
+    <string name="launcher_air_good">İyi</string>
+    <string name="launcher_air_moderate">Orta</string>
+    <string name="launcher_air_poor">Kötü</string>
+    <string name="launcher_air_in" formatted="true">İç %1$d µg/m³</string>
+    <string name="launcher_air_out" formatted="true">Dışarı %1$d µg/m³</string>
+    <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³ · Kötü</string>
+    <string name="launcher_air_recirc_hint">İç sirkülasyon önerilir</string>
 </resources>

@@ -10,20 +10,18 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
-import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
 import com.mapcontrol.vehicle.ClimateAutomationStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
 /**
- * Alt kart: sürücü tarafı (koltuk ısıtma, klima) · ortada uygulama şeridi · yolcu tarafı (buğu çözme, koltuk ısıtma).
+ * Alt kart: sürücü koltuk ısıtma · ortada uygulama şeridi · yolcu koltuk ısıtma.
+ * A/C, buğu ve sıcaklık/fan araç sistem çubuğunda ve fiziksel tuşlarda var; burada tekrarlanmaz.
  *
  * Yalnızca mevcut kodda (ClimateAutomationEngine) kullanılan ve değer anlamı bilinen komutlar gönderilir.
- * Sıcaklık/fan ayarı bilerek yok: komut değerleri araçta doğrulanmadan klimaya yazılmaz.
  */
 class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
 
@@ -35,30 +33,16 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     private val driverSeat = ToggleTile(R.drawable.ic_mdi_car_seat_heater, R.string.launcher_seat_heat_driver, levels = true) {
         setSeatLevel(driver = true, level = nextSeatLevel(state.driverSeat))
     }
-    private val ac = ToggleTile(R.drawable.ic_mdi_air_conditioner, R.string.launcher_ac) {
-        setAc(!(state.acOn ?: false))
-    }
-    private val defrost = ToggleTile(R.drawable.ic_mdi_car_defrost, R.string.launcher_defrost) {
-        setDefrost(!(state.defrostOn ?: false))
-    }
     private val passengerSeat = ToggleTile(R.drawable.ic_mdi_car_seat_heater, R.string.launcher_seat_heat_passenger, levels = true) {
         setSeatLevel(driver = false, level = nextSeatLevel(state.passengerSeat))
     }
-    private val outside = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
-
     override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_COMPACT_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
         addView(driverSeat.root)
-        addView(gap(context, LauncherTheme.GAP_SM_DP))
-        addView(ac.root)
-        addView(gap(context, LauncherTheme.GAP_L_DP))
-        addView(outside)
         addView(appDock, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
             marginStart = context.dp(LauncherTheme.GAP_L_DP)
             marginEnd = context.dp(LauncherTheme.GAP_L_DP)
         })
-        addView(defrost.root)
-        addView(gap(context, LauncherTheme.GAP_SM_DP))
         addView(passengerSeat.root)
     }
 
@@ -87,6 +71,8 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
         io.runSafely {
             val read = readState()
             main.post {
+                // Okunan durum değişmediyse yeniden çizme (3 sn'lik yoklamada boşuna bind yok).
+                if (read == state) return@post
                 state = read
                 bind()
             }
@@ -96,22 +82,16 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     private fun readState(): ClimateState {
         if (LauncherDemo.enabled) return ClimateState(
             connected = true,
-            acOn = LauncherDemo.AC_ON,
-            defrostOn = LauncherDemo.DEFROST_ON,
             driverSeat = LauncherDemo.DRIVER_SEAT_LEVEL,
             passengerSeat = LauncherDemo.PASSENGER_SEAT_LEVEL,
-            outsideC = LauncherDemo.OUTSIDE_C,
         )
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return ClimateState()
         return try {
             ClimateState(
                 connected = true,
-                acOn = proxy.first(HVAC, HvacID.ID_AC_STATE)?.let { it == 1 },
-                defrostOn = proxy.first(HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT)?.let { it == 1 },
                 driverSeat = proxy.first(SETTING, CarSettingID.ID_CAR_DRIVER_SEAT_HEAT)?.let(::decodeSeat),
                 passengerSeat = proxy.first(SETTING, CarSettingID.ID_CAR_COPILOT_SEAT_HEAT)?.let(::decodeSeat),
-                outsideC = proxy.first(HVAC, HvacID.ID_AC_TEMPERATURE_CELSIUS_OUTSIDE)?.let(::decodeOutside),
             )
         } catch (e: RuntimeException) {
             ClimateState()
@@ -124,31 +104,9 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
         val s = state
         driverSeat.bind(s.connected && s.driverSeat != null, (s.driverSeat ?: 0) > 0, s.driverSeat ?: 0)
         passengerSeat.bind(s.connected && s.passengerSeat != null, (s.passengerSeat ?: 0) > 0, s.passengerSeat ?: 0)
-        ac.bind(s.connected && s.acOn != null, s.acOn == true)
-        defrost.bind(s.connected && s.defrostOn != null, s.defrostOn == true)
-        val temp = s.outsideC
-        outside.visibility = if (temp == null) View.GONE else View.VISIBLE
-        if (temp != null) outside.text = context.getString(R.string.launcher_outside_temp, temp.roundToInt())
     }
 
     // --- Komutlar: değerler ClimateAutomationEngine.applyRule / deactivateRule ile birebir aynı. ---
-
-    private fun setAc(on: Boolean) {
-        val v = if (on) 1 else 0
-        send(state.copy(acOn = on)) {
-            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_STATE, v)
-            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_WORKING, v)
-            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_AUTO_STATE, v)
-        }
-    }
-
-    private fun setDefrost(on: Boolean) {
-        val v = if (on) 1 else 0
-        send(state.copy(defrostOn = on)) {
-            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v)
-            LauncherEdition.sendItemValue(it, HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, v)
-        }
-    }
 
     private fun setSeatLevel(driver: Boolean, level: Int) {
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_HEAT else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
@@ -189,16 +147,10 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     private fun encodeSeat(level: Int): Int = if (level <= 0) 1 else level.coerceIn(
         ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX) + 1
 
-    /** ClimateAutomationEngine.decodeOutsideCelsius ile aynı: (ham - 110) / 2, geçerli aralık -40..80. */
-    private fun decodeOutside(raw: Int): Double? = ((raw - 110) / 2.0).takeIf { it in -40.0..80.0 }
-
     private data class ClimateState(
         val connected: Boolean = false,
-        val acOn: Boolean? = null,
-        val defrostOn: Boolean? = null,
         val driverSeat: Int? = null,
         val passengerSeat: Int? = null,
-        val outsideC: Double? = null,
     )
 
     /**
@@ -215,7 +167,7 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(context.dp(TILE_DP), context.dp(TILE_DP))
-            background = rounded(context, LauncherTheme.CONTROL)
+            background = rounded(context, LauncherTheme.CONTROL, TILE_RADIUS_DP)
             contentDescription = context.getString(labelRes)
             isClickable = true
             addView(iconView)
@@ -242,9 +194,10 @@ class ClimateBar(private val context: Context, appDock: View) : LauncherWidget {
     }
 
     private companion object {
-        val HVAC = VDEventCarInfo.MODULE_HVAC
         val SETTING = VDEventCarInfo.MODULE_CAR_SETTING
         const val TILE_DP = 88
+        /** Tüm alt çubuk düğmeleri (sol ve sağ) tek biçim: 88dp kare, 16dp köşe. */
+        const val TILE_RADIUS_DP = 16f
         const val POLL_MS = 3_000L
         const val CONFIRM_DELAY_MS = 800L
         const val DISABLED_ALPHA = 0.55f

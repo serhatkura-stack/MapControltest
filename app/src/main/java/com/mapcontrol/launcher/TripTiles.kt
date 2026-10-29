@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.extra.project.carinfo.proxy.Constants
@@ -48,6 +49,12 @@ internal data class TripData(
     val batteryV: Double? = null,
     val coolantC: Int? = null,
     val lowFuel: Boolean? = null,
+    /** Servise kalan km / gün (ICMT). Araçta 2026-10-29'da okundu, gösterge menüsüyle henüz karşılaştırılmadı. */
+    val serviceKm: Int? = null,
+    val serviceDays: Int? = null,
+    /** Kabin içi / dışı PM2.5 (µg/m³). */
+    val pm25In: Int? = null,
+    val pm25Out: Int? = null,
 )
 
 /**
@@ -62,6 +69,7 @@ internal object TripSource {
 
     private const val POLL_MS = 2_000L
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
+    private val HVAC = VDEventCarInfo.MODULE_HVAC
 
     private val listeners = CopyOnWriteArraySet<Listener>()
     private val main = Handler(Looper.getMainLooper())
@@ -106,6 +114,7 @@ internal object TripSource {
             return TripData()
         }
         fun ro(id: Int) = CarSignals.readInt(RO, id)
+        fun hvac(id: Int) = CarSignals.readInt(HVAC, id)
         // Anlık tüketim duruyorken 0xFFFF döner; yalnızca hızı > 0 iken geçerli.
         val speed = ro(ReadOnlyID.ID_CAR_SPEED)
         val moving = speed?.let { it in 1..300 }
@@ -120,6 +129,10 @@ internal object TripSource {
             batteryV = ro(ReadOnlyID.ID_IBS_VOLTAGE)?.takeIf { it in 5_000..20_000 }?.let { it / 1000.0 },
             coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
             lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
+            serviceKm = ro(ReadOnlyID.ID_ICMT_DISTANCE)?.takeIf { it in 0..99_999 },
+            serviceDays = ro(ReadOnlyID.ID_ICMT_DAY)?.takeIf { it in 0..9_999 },
+            pm25In = hvac(HvacID.ID_AC_PM25_INCAR)?.takeIf { it in 0..999 },
+            pm25Out = hvac(HvacID.ID_AC_PM25_OUTCAR)?.takeIf { it in 0..999 },
         )
     }
 }

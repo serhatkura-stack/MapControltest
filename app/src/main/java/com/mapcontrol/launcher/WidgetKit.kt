@@ -33,6 +33,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 1), Span(1, 1))),
     HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(1, 1), Span(2, 1))),
     WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(1, 1), Span(2, 1))),
+    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(1, 1), Span(2, 1))),
+    AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(1, 1), Span(2, 1))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1)));
 
     companion object {
@@ -83,6 +85,8 @@ object WidgetFactory {
         WidgetType.TRIP -> TripComputerTile(activity)
         WidgetType.HEALTH -> HealthTile(activity)
         WidgetType.WEATHER -> WeatherTile(activity)
+        WidgetType.SERVICE -> ServiceTile(activity)
+        WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
     }
 }

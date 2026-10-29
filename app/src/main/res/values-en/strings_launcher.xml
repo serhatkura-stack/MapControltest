@@ -29,9 +29,6 @@
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Check tire pressure</string>
     <string name="launcher_car_offline">Vehicle data unavailable</string>
-    <string name="launcher_outside_temp" formatted="true">Outside %1$d°</string>
-    <string name="launcher_ac">A/C</string>
-    <string name="launcher_defrost">Defrost</string>
     <string name="launcher_seat_heat_driver">Driver seat heat</string>
     <string name="launcher_seat_heat_passenger">Passenger seat heat</string>
     <string name="launcher_app_empty">Add app</string>
@@ -113,4 +110,14 @@
     <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
+    <string name="launcher_widget_service">Service</string>
+    <string name="launcher_widget_air">Air quality</string>
+    <string name="launcher_days_value" formatted="true">%1$d days</string>
+    <string name="launcher_air_good">Good</string>
+    <string name="launcher_air_moderate">Moderate</string>
+    <string name="launcher_air_poor">Poor</string>
+    <string name="launcher_air_in" formatted="true">Inside %1$d µg/m³</string>
+    <string name="launcher_air_out" formatted="true">Outside %1$d µg/m³</string>
+    <string name="launcher_air_out_poor" formatted="true">Outside %1$d µg/m³ · Poor</string>
+    <string name="launcher_air_recirc_hint">Recirculation advised</string>
 </resources>
