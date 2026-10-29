@@ -25,7 +25,12 @@ internal data class SeatHeatState(
  * komut arka planda yalnızca [LauncherEdition] üzerinden gider, kısa süre sonra gerçek durum okunur.
  * Yalnızca ClimateAutomationEngine'de kullanılan, değer anlamı bilinen komutlar gönderilir.
  */
-internal class SeatHeatModel(private val context: Context, private val onChange: (SeatHeatState) -> Unit) {
+internal class SeatHeatModel(
+    private val context: Context,
+    /** true: koltuk soğutma (havalandırma) sinyalleri; false: ısıtma (davranış değişmez). */
+    private val vent: Boolean = false,
+    private val onChange: (SeatHeatState) -> Unit,
+) {
 
     private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
@@ -58,6 +63,11 @@ internal class SeatHeatModel(private val context: Context, private val onChange:
         val current = if (driver) state.driver else state.passenger
         val level = nextLevel(current)
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_HEAT else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
+        // Soğutma yazması araçta doğrulanana kadar kapalı: yalnızca sakin bir bilgi mesajı.
+        if (vent && !(LauncherEdition.SEAT_VENT_WRITE_VERIFIED && !LauncherEdition.READ_ONLY)) {
+            Toast.makeText(context, R.string.launcher_seat_vent_later, Toast.LENGTH_SHORT).show()
+            return
+        }
         if (LauncherEdition.READ_ONLY) {
             Toast.makeText(context, R.string.launcher_read_only, Toast.LENGTH_SHORT).show()
             return
@@ -68,7 +78,8 @@ internal class SeatHeatModel(private val context: Context, private val onChange:
         onChange(state)
         io.runSafely {
             try {
-                LauncherEdition.sendItemValue(proxy, SETTING, id, encode(level))
+                if (vent) LauncherEdition.sendSeatVentLevel(proxy, driver, level)
+                else LauncherEdition.sendItemValue(proxy, SETTING, id, encode(level))
             } catch (e: RuntimeException) {
                 // Okuma turu gerçek durumu geri getirir.
             }
@@ -92,12 +103,17 @@ internal class SeatHeatModel(private val context: Context, private val onChange:
     private fun read(): SeatHeatState {
         if (LauncherDemo.enabled) return SeatHeatState(
             connected = true,
-            driver = LauncherDemo.DRIVER_SEAT_LEVEL,
-            passenger = LauncherDemo.PASSENGER_SEAT_LEVEL,
+            driver = if (vent) LauncherDemo.DRIVER_VENT_LEVEL else LauncherDemo.DRIVER_SEAT_LEVEL,
+            passenger = if (vent) LauncherDemo.PASSENGER_VENT_LEVEL else LauncherDemo.PASSENGER_SEAT_LEVEL,
         )
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return SeatHeatState()
         return try {
+            if (vent) return SeatHeatState(
+                connected = true,
+                driver = proxy.first(CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION)?.let(::decodeVent),
+                passenger = proxy.first(CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION)?.let(::decodeVent),
+            )
             SeatHeatState(
                 connected = true,
                 driver = proxy.first(CarSettingID.ID_CAR_DRIVER_SEAT_HEAT)?.let(::decode),
@@ -130,6 +146,12 @@ internal class SeatHeatModel(private val context: Context, private val onChange:
         /** Araç değeri: 1 = kapalı, 2..4 = seviye 1..3 (ClimateAutomationEngine.wireSeatLevel). */
         fun decode(wire: Int): Int =
             if (wire <= 1) 0 else (wire - 1).coerceIn(ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX)
+
+        /**
+         * Soğutma değeri: 0 = kapalı, 1..3 = seviye. DOĞRULANMADI: araçta sinyal (93/94) şimdilik hep [0] okunuyor;
+         * kodlama ısıtmayla aynı varsayılıyor ama gerçek araç testiyle teyit edilmeli.
+         */
+        fun decodeVent(wire: Int): Int = wire.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
 
         fun encode(level: Int): Int = if (level <= 0) 1 else level.coerceIn(
             ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX) + 1

@@ -53,7 +53,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode)
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles)
         // OEM alt çubuğu varsa (Desay) bizimki kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         val bottomBar: Pair<AppDock, ClimateBar>? = if (oemBar) null else AppDock(this).let { it to ClimateBar(this, it.view) }
         dock = bottomBar?.first
@@ -335,6 +335,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
 
     // --- Diğer ---
+
+    private fun openProfiles() {
+        // Düzenleme sırasında profil değişmez (başlık zaten gizli); sürüşte serbest, tek dokunuş.
+        if (grid.editMode) return
+        showProfileSheet(this) { ThemeTransition.recreate(this) }
+    }
 
     private fun openSettings() {
         // Tam sürümde doğrudan MapControl ayarları; salt-okur test sürümünde launcher paneli.

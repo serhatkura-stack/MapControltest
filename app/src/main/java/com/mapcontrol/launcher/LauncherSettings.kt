@@ -25,7 +25,7 @@ enum class ThemeMode(val key: String, @StringRes val label: Int) {
         private const val KEY = "theme_mode"
 
         fun read(context: Context): ThemeMode {
-            val key = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY, null)
+            val key = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(Profiles.key(context, KEY), null)
             return values().firstOrNull { it.key == key } ?: AUTO
         }
 
@@ -38,7 +38,7 @@ enum class ThemeMode(val key: String, @StringRes val label: Int) {
         }
 
         fun write(context: Context, mode: ThemeMode) {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY, mode.key).apply()
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(Profiles.key(context, KEY), mode.key).apply()
         }
     }
 }

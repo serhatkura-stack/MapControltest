@@ -14,6 +14,12 @@ internal object LauncherEdition {
 
     const val HAS_SETTINGS = false
 
+    /** Test sürümünde koltuk soğutma yazması her zaman kapalı. */
+    const val SEAT_VENT_WRITE_VERIFIED = false
+
+    @Suppress("UNUSED_PARAMETER")
+    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) = Unit
+
     @Suppress("UNUSED_PARAMETER")
     fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) = Unit
 

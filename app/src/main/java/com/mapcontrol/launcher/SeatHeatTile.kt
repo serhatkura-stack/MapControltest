@@ -15,9 +15,12 @@ import com.mapcontrol.R
  * bir artırır (Kapalı → Düşük → Orta → Yüksek). Etkin seviye vurgu renginde; yazı seviyeyi söyler.
  * Okuma/yazma [SeatHeatModel] ile (alt çubukla aynı kod yolu; test sürümünde yalnızca okur).
  */
-internal class SeatHeatTile(private val context: Context) : SizedWidget {
+internal class SeatHeatTile(private val context: Context, private val vent: Boolean = false) : SizedWidget {
 
-    private val model = SeatHeatModel(context) { bind(it) }
+    private val model = SeatHeatModel(context, vent) { bind(it) }
+
+    /** Etkin seviye rengi: ısıtmada vurgu, soğutmada sakin bir turkuaz. */
+    private fun activeColor(): Int = if (vent) SeatClimateColors.cool() else LauncherTheme.ACCENT
 
     private val driver = Seat(R.string.launcher_seat_driver, driver = true)
     private val passenger = Seat(R.string.launcher_seat_passenger, driver = false)
@@ -55,7 +58,7 @@ internal class SeatHeatTile(private val context: Context) : SizedWidget {
 
     /** Tek koltuk: üstte ikon + ad, altta seviye yazısı ve üç dilimli seviye göstergesi. */
     private inner class Seat(@StringRes private val labelRes: Int, private val driver: Boolean) {
-        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_car_seat_heater, ICON_DP, LauncherTheme.TEXT_SECONDARY)
+        private val iconView: ImageView = icon(context, if (vent) R.drawable.ic_mdi_car_seat_vent else R.drawable.ic_mdi_car_seat_heater, ICON_DP, LauncherTheme.TEXT_SECONDARY)
         private val value: TextView = text(context, VALUE_SP, medium = true)
         private val segments = List(SEGMENTS) { View(context) }
 
@@ -87,15 +90,16 @@ internal class SeatHeatTile(private val context: Context) : SizedWidget {
         }
 
         fun bind(connected: Boolean, level: Int?) {
-            val known = connected && level != null
+            // Soğutma sinyali desteklenmese de sakin "Kapalı" göster (okunamayan değer 0 sayılır).
+            val known = connected && (level != null || vent)
             val lv = if (known) level ?: 0 else 0
             val active = lv > 0
-            iconView.imageTintList = ColorStateList.valueOf(if (active) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
-            value.setTextColor(if (!known) LauncherTheme.TEXT_SECONDARY else if (active) LauncherTheme.ACCENT else LauncherTheme.TEXT)
+            iconView.imageTintList = ColorStateList.valueOf(if (active) activeColor() else LauncherTheme.TEXT_SECONDARY)
+            value.setTextColor(if (!known) LauncherTheme.TEXT_SECONDARY else if (active) activeColor() else LauncherTheme.TEXT)
             val levelText = if (known) context.getString(SeatHeatModel.levelLabel(lv)) else context.getString(R.string.launcher_unavailable)
             value.setTextSmooth(levelText)
             segments.forEachIndexed { i, v ->
-                v.background = rounded(context, if (known && i < lv) LauncherTheme.ACCENT else LauncherTheme.TRACK, SEGMENT_RADIUS_DP)
+                v.background = rounded(context, if (known && i < lv) activeColor() else LauncherTheme.TRACK, SEGMENT_RADIUS_DP)
             }
             root.isEnabled = known
             root.contentDescription = context.getString(labelRes) + ", " + levelText
@@ -113,4 +117,9 @@ internal class SeatHeatTile(private val context: Context) : SizedWidget {
         const val SEGMENT_RADIUS_DP = 5f
         const val DIVIDER_GAP_DP = 20
     }
+}
+
+/** Soğutma vurgusu: [LauncherTheme] tek vurgusunu (mavi) bozmadan ısıtmadan ayrışan turkuaz. */
+internal object SeatClimateColors {
+    fun cool(): Int = if (LauncherTheme.night) 0xFF22D3EE.toInt() else 0xFF0E7490.toInt()
 }

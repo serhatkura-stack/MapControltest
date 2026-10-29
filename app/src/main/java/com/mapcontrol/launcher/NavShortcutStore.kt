@@ -16,7 +16,7 @@ data class NavRecent(val label: String, val uri: String, val pkg: String)
  */
 class NavShortcutStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
 
     /** Kayıtlı adres; yoksa boş metin. */
     fun get(kind: NavPlace): String = prefs.getString(keyOf(kind), "").orEmpty()

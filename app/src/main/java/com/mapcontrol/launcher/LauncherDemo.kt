@@ -48,6 +48,8 @@ internal object LauncherDemo {
 
     const val DRIVER_SEAT_LEVEL = 2
     const val PASSENGER_SEAT_LEVEL = 0
+    const val DRIVER_VENT_LEVEL = 1
+    const val PASSENGER_VENT_LEVEL = 0
 
     fun trip(): TripData = TripData(
         connected = true, moving = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 42.6,

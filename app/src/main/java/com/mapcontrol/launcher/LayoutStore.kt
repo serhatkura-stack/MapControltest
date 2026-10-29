@@ -13,7 +13,7 @@ class LayoutStore(context: Context) {
     /** OEM alt çubuğu olan araçta (Desay) varsayılan düzen farklıdır. */
     private val oemBar = LauncherSafeArea.oemInsetPx(context) > 0
 
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
 
     fun load(): List<PlacedWidget> {
         val raw = prefs.getString(KEY, null) ?: return defaultLayout(oemBar)

@@ -3,7 +3,9 @@ package com.mapcontrol.launcher
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
+import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.ui.activity.MainActivity
 import com.mapcontrol.vehicle.VehicleQuickControls
 
@@ -20,6 +22,19 @@ internal object LauncherEdition {
 
     /** Ayarlar (MapControl ana ekranı) bu derlemede var mı. */
     const val HAS_SETTINGS = true
+
+    /**
+     * Koltuk soğutma yazması araçta doğrulanana kadar kapalı (kodlama bilinmiyor; sinyal 93/94 hep [0] okunuyor).
+     * Araç testinden sonra true yapılır.
+     */
+    const val SEAT_VENT_WRITE_VERIFIED = false
+
+    /** Koltuk soğutma seviyesi (0..3). Doğrulanmadığı sürece hiçbir şey göndermez. Kodlama ısıtmayla aynı varsayılır (doğrulanmadı). */
+    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
+        if (!SEAT_VENT_WRITE_VERIFIED) return
+        val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION
+        proxy.sendItemValue(VDEventCarInfo.MODULE_CAR_SETTING, id, level.coerceIn(0, 3))
+    }
 
     fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
         proxy.sendItemValue(module, id, value)

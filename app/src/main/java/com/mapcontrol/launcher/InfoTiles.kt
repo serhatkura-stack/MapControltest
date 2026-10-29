@@ -221,7 +221,7 @@ class AppShortcutTile(
     private class AppEntry(val label: String, val icon: Drawable)
 
     private val context: Context = activity
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(Profiles.key(PREFS_NAME, Profiles.current(context)), Context.MODE_PRIVATE)
     private val executor = LauncherIo.serial()
     private val iconRadius = context.dpF(ICON_RADIUS_DP)
 

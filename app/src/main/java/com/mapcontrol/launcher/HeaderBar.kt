@@ -26,6 +26,7 @@ class HeaderBar(
     private val onSettings: () -> Unit,
     private val onThemeChanged: () -> Unit,
     private val onEditHome: () -> Unit,
+    private val onProfile: () -> Unit = {},
 ) : LauncherWidget {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -72,11 +73,28 @@ class HeaderBar(
         weatherBox.addView(weatherLabel)
         addView(weatherBox)
         addView(gap(context, 32))
+        addView(profileButton())
+        addView(gap(context, 16))
         addView(themeButton())
         addView(gap(context, 16))
         addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
         addView(gap(context, 16))
         addView(settingsButton())
+    }
+
+    /** Profil düğmesi: geçerli sürücü numarası yuvarlak simgede; dokununca profil seçici açılır. */
+    private fun profileButton(): View = LinearLayout(context).apply {
+        gravity = Gravity.CENTER
+        background = cardSurface(context)
+        val size = context.dp(maxOf(LauncherTheme.TOUCH_MIN_DP, 76))
+        layoutParams = LinearLayout.LayoutParams(size, size)
+        val id = Profiles.current(context)
+        addView(profileAvatar(context, id, 44, selected = true))
+        contentDescription = context.getString(R.string.launcher_profile) + ": " + Profiles.displayName(context, id)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onProfile() }
+        pressFeedback()
     }
 
     /** Tema düğmesi: Otomatik → Gündüz → Gece → Otomatik; ikon geçerli modu gösterir. */

@@ -46,7 +46,7 @@ class AppDock(
         }
     }
 
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(Profiles.key(PREFS_NAME, Profiles.current(context)), Context.MODE_PRIVATE)
     private val executor = LauncherIo.serial()
 
     /** Paket adı -> etiket ve ikon. Yalnızca ana iş parçacığında okunur ve yazılır. */

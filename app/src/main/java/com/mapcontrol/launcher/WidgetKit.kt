@@ -37,6 +37,7 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(1, 1), Span(2, 1))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 1))),
     SEAT_HEAT("seat_heat", R.string.launcher_widget_seat_heat, R.drawable.ic_mdi_car_seat_heater, listOf(Span(1, 1), Span(2, 1))),
+    SEAT_VENT("seat_vent", R.string.launcher_widget_seat_vent, R.drawable.ic_mdi_car_seat_vent, listOf(Span(1, 1), Span(2, 1))),
     APP_ROW("app_row", R.string.launcher_widget_app_row, R.drawable.ic_mdi_view_grid, listOf(Span(3, 1)));
 
     companion object {
@@ -101,6 +102,7 @@ object WidgetFactory {
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
         WidgetType.SEAT_HEAT -> SeatHeatTile(activity)
+        WidgetType.SEAT_VENT -> SeatHeatTile(activity, vent = true)
         WidgetType.APP_ROW -> AppRowWidget(activity)
     }
 }
