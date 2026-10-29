@@ -29,8 +29,11 @@ import java.util.concurrent.CopyOnWriteArraySet;
  */
 public final class LauncherMediaController {
 
-    /** Progress bar yumuşak ilerlesin diye sık tick. */
-    private static final long PROGRESS_TICK_MS = 50L;
+    /**
+     * Saniyede bir tick yeterli (süre metni saniye çözünürlüğünde). 50 ms'lik tick her seferinde
+     * metadata ve kapak resmini binder'dan yeniden okuyup GC baskısı yaratıyor, ses takılmasına katkı veriyordu.
+     */
+    private static final long PROGRESS_TICK_MS = 1000L;
 
     public interface Listener {
         void onMediaStateChanged(MediaState state);

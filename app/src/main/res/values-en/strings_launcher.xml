@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Yeni launcher (com.mapcontrol.launcher) metinleri -->
+<resources>
+    <string name="launcher_settings">Settings</string>
+    <string name="launcher_degrees" formatted="true">%1$d°</string>
+    <string name="launcher_degrees_decimal" formatted="true">%1$.1f°</string>
+    <string name="launcher_nav_title">Where to?</string>
+    <string name="launcher_nav_search_hint">Search address or place</string>
+    <string name="launcher_nav_home">Home</string>
+    <string name="launcher_nav_work">Work</string>
+    <string name="launcher_nav_not_set">Hold to set</string>
+    <string name="launcher_nav_dialog_home">Home address</string>
+    <string name="launcher_nav_dialog_work">Work address</string>
+    <string name="launcher_nav_dialog_hint">Street, district, city</string>
+    <string name="launcher_nav_dialog_save">Save</string>
+    <string name="launcher_nav_dialog_cancel">Cancel</string>
+    <string name="launcher_nav_no_app">No navigation app installed</string>
+    <string name="launcher_media_idle">Nothing playing</string>
+    <string name="launcher_media_idle_hint">Open a music app to start</string>
+    <string name="launcher_media_need_access">Allow notification access to show what is playing</string>
+    <string name="launcher_media_grant">Allow</string>
+    <string name="launcher_media_prev">Previous</string>
+    <string name="launcher_range" formatted="true">%1$d km range</string>
+    <string name="launcher_range_unknown">Range unavailable</string>
+    <string name="launcher_fuel" formatted="true">Fuel %1$d%%</string>
+    <string name="launcher_locked">Locked</string>
+    <string name="launcher_unlocked">Unlocked</string>
+    <string name="launcher_lock_unknown">Lock status unavailable</string>
+    <string name="launcher_tires_ok">Tires OK</string>
+    <string name="launcher_tires_warning">Check tire pressure</string>
+    <string name="launcher_car_offline">Vehicle data unavailable</string>
+    <string name="launcher_outside_temp" formatted="true">Outside %1$d°</string>
+    <string name="launcher_ac">A/C</string>
+    <string name="launcher_defrost">Defrost</string>
+    <string name="launcher_seat_heat_driver">Driver seat heat</string>
+    <string name="launcher_seat_heat_passenger">Passenger seat heat</string>
+    <string name="launcher_app_empty">Add app</string>
+    <string name="launcher_app_pick_title">Choose an app</string>
+    <string name="launcher_parked_only">Available when parked</string>
+    <string name="launcher_widget_media">Media</string>
+    <string name="launcher_widget_navigation">Navigation</string>
+    <string name="launcher_widget_range">Range</string>
+    <string name="launcher_widget_lock">Door lock</string>
+    <string name="launcher_widget_tires">Tires</string>
+    <string name="launcher_widget_weather">Weather</string>
+    <string name="launcher_widget_app">App shortcut</string>
+    <string name="launcher_edit">Edit</string>
+    <string name="launcher_edit_title">Edit home screen</string>
+    <string name="launcher_edit_hint">Drag to move, choose a size, or remove</string>
+    <string name="launcher_edit_add">Add widget</string>
+    <string name="launcher_edit_reset">Default</string>
+    <string name="launcher_edit_done">Done</string>
+    <string name="launcher_edit_remove">Remove</string>
+    <string name="launcher_edit_no_space">No free space for this widget</string>
+    <string name="launcher_edit_reset_confirm">Restore the default layout?</string>
+    <string name="launcher_range_value" formatted="true">%1$d km</string>
+    <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
+    <string name="launcher_tires_check">Check pressure</string>
+    <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
+    <string name="launcher_unavailable">Unavailable</string>
+</resources>
