@@ -81,7 +81,7 @@
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
     <string name="launcher_theme">Tema</string>
-    <string name="launcher_theme_auto">Otomatik (araçla birlikte)</string>
+    <string name="launcher_theme_auto">Otomatik</string>
     <string name="launcher_theme_day">Gündüz</string>
     <string name="launcher_theme_night">Gece</string>
     <string name="launcher_vehicle_settings">Araç ayarları</string>
@@ -97,4 +97,6 @@
     <string name="launcher_part_open" formatted="true">%1$s açık</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d yer açık</string>
     <string name="launcher_normal">Normal</string>
+    <string name="launcher_close">Kapat</string>
+    <string name="launcher_credit_car_image">Araç görseli: Ddiaz Design’ın “2023 Chery Tiggo 7 Plus 290T” modelinden (Sketchfab) render, CC BY-NC-SA 4.0</string>
 </resources>

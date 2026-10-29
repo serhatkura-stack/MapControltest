@@ -29,9 +29,9 @@ object LauncherTheme {
     private const val DAY_TEXT_SECONDARY = 0xFF4B5563.toInt()
     private const val NIGHT_ALERT_SURFACE = 0xFF3A1F22.toInt()
     private const val DAY_ALERT_SURFACE = 0xFFFDE8E8.toInt()
-    // Düzenleme örtüsü opak (kart rengi): düzenlerken yalnızca widget adı, boyutlar ve kaldır düğmesi görünür.
-    private const val NIGHT_EDIT_SCRIM = NIGHT_CARD
-    private const val DAY_EDIT_SCRIM = DAY_CARD
+    // Düzenlemede kartın üstündeki perde yarı saydam: widget'ın o boyuttaki gerçek hâli altında görünür.
+    private const val NIGHT_EDIT_SCRIM = 0x8C1A1D23.toInt()
+    private const val DAY_EDIT_SCRIM = 0x8CFFFFFF.toInt()
 
     val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD

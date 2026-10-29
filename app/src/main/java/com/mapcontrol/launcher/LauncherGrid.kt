@@ -161,7 +161,13 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             isClickable = true
         }
         private val sizeRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        private val label = text(context, LauncherTheme.LABEL_SP, medium = true)
+        private val label = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
+            // İçerik perdenin altında göründüğü için ad kendi zemininde durur.
+            background = rounded(context, LauncherTheme.CONTROL, 12f)
+            val h = context.dp(14)
+            val v = context.dp(8)
+            setPadding(h, v, h, v)
+        }
 
         init {
             (content.parent as? ViewGroup)?.removeView(content)
@@ -171,7 +177,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             val pad = context.dp(12)
             overlay.addView(label, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START
-            ).apply { setMargins(pad + context.dp(4), pad + context.dp(8), 0, 0) })
+            ).apply { setMargins(pad, pad, 0, 0) })
             overlay.addView(iconButton(
                 context, R.drawable.ic_mdi_close, context.getString(R.string.launcher_edit_remove),
                 sizeDp = LauncherTheme.TOUCH_MIN_DP, background = LauncherTheme.CONTROL, circle = true,

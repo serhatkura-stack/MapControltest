@@ -23,7 +23,6 @@ import kotlin.math.roundToInt
 class HeaderBar(
     private val context: Context,
     private val onSettings: () -> Unit,
-    private val onEdit: () -> Unit,
 ) : LauncherWidget {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -69,9 +68,6 @@ class HeaderBar(
         weatherBox.addView(weatherLabel)
         addView(weatherBox)
         addView(gap(context, 32))
-        addView(iconButton(context, R.drawable.ic_mdi_view_grid, context.getString(R.string.launcher_edit),
-            background = LauncherTheme.CARD) { onEdit() })
-        addView(gap(context, 16))
         addView(settingsButton())
     }
 

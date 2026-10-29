@@ -81,7 +81,7 @@
     <string name="launcher_unavailable">—</string>
     <string name="launcher_read_only">Test version: read only</string>
     <string name="launcher_theme">Theme</string>
-    <string name="launcher_theme_auto">Automatic (follow the car)</string>
+    <string name="launcher_theme_auto">Automatic</string>
     <string name="launcher_theme_day">Day</string>
     <string name="launcher_theme_night">Night</string>
     <string name="launcher_vehicle_settings">Vehicle settings</string>
@@ -97,4 +97,6 @@
     <string name="launcher_part_open" formatted="true">%1$s open</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
     <string name="launcher_normal">Normal</string>
+    <string name="launcher_close">Close</string>
+    <string name="launcher_credit_car_image">Car image: rendered from “2023 Chery Tiggo 7 Plus 290T” by Ddiaz Design (Sketchfab), CC BY-NC-SA 4.0</string>
 </resources>

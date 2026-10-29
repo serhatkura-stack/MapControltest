@@ -23,7 +23,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private val store by lazy { LayoutStore(this) }
     private val metrics by lazy { VehicleMetricsRepository(this) }
-    private val settings by lazy { LauncherSettings(this) }
+    private val settings by lazy { LauncherSettings(this, onEditHome = ::enterEditMode) }
     private val metricsListener = VehicleMetricsRepository.Listener { }
 
     private lateinit var header: HeaderBar
@@ -41,7 +41,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onEdit = ::enterEditMode)
+        header = HeaderBar(this, onSettings = ::openSettings)
         val apps = AppDock(this)
         val climate = ClimateBar(this, apps.view)
         fixedWidgets = listOf(header, apps, climate)
