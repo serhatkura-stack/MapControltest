@@ -6,7 +6,7 @@ import org.json.JSONObject
 
 /**
  * Ana ekran düzenini SharedPreferences'ta JSON olarak saklar.
- * Okunan düzen geçersizse (ızgara dışı, çakışan, bilinmeyen tür) varsayılan düzene dönülür.
+ * Okunan düzen geçersizse (ızgara dışı, çakışan) varsayılan düzene dönülür.
  */
 class LayoutStore(context: Context) {
 
@@ -16,18 +16,20 @@ class LayoutStore(context: Context) {
         val raw = prefs.getString(KEY, null) ?: return defaultLayout()
         return try {
             val array = JSONArray(raw)
-            val list = (0 until array.length()).map { i ->
+            // Kaldırılmış/bilinmeyen türler (eski kayıtlar) sessizce atlanır; kalan düzen geçerliyse korunur.
+            val list = (0 until array.length()).mapNotNull { i ->
                 val o = array.getJSONObject(i)
+                val type = WidgetType.fromKey(o.getString("type")) ?: return@mapNotNull null
                 PlacedWidget(
                     id = o.getString("id"),
-                    type = WidgetType.fromKey(o.getString("type")) ?: return defaultLayout(),
+                    type = type,
                     col = o.getInt("col"),
                     row = o.getInt("row"),
                     span = Span(o.getInt("w"), o.getInt("h")),
                     extra = if (o.has("extra") && !o.isNull("extra")) o.getString("extra") else null,
                 )
             }
-            if (isValid(list)) list else defaultLayout()
+            if (list.isNotEmpty() && isValid(list)) list else defaultLayout()
         } catch (e: org.json.JSONException) {
             defaultLayout()
         }

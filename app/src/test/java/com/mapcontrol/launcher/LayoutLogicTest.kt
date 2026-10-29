@@ -17,6 +17,13 @@ class LayoutLogicTest {
     ) = PlacedWidget(id, type, col, row, span)
 
     @Test
+    fun removedWidgetKeysResolveToNull() {
+        // LayoutStore.load bu anahtarları atlar (kaldırılan kutucuklar).
+        listOf("range", "tires", "doors", "sunroof", "nope").forEach { assertNull(WidgetType.fromKey(it)) }
+        assertEquals(WidgetType.LOCK, WidgetType.fromKey("lock"))
+    }
+
+    @Test
     fun defaultLayoutIsValid() {
         assertTrue(LayoutStore.isValid(defaultLayout()))
     }
@@ -33,7 +40,7 @@ class LayoutLogicTest {
     fun overlapsIsFalseForTouchingEdges() {
         val left = widget("left", WidgetType.MEDIA, 0, 0, Span(3, 3))
         val right = widget("right", WidgetType.NAVIGATION, 3, 0, Span(3, 2))
-        val below = widget("below", WidgetType.RANGE, 0, 3, Span(1, 1))
+        val below = widget("below", WidgetType.CONSUMPTION, 0, 3, Span(1, 1))
         assertFalse(left.overlaps(right))
         assertFalse(right.overlaps(left))
         assertFalse(left.overlaps(below))
@@ -57,7 +64,7 @@ class LayoutLogicTest {
     fun isValidRejectsOverlappingWidgets() {
         val layout = listOf(
             widget("media", WidgetType.MEDIA, 0, 0, Span(3, 3)),
-            widget("range", WidgetType.RANGE, 2, 2, Span(1, 1)),
+            widget("cons", WidgetType.CONSUMPTION, 2, 2, Span(1, 1)),
         )
         assertFalse(LayoutStore.isValid(layout))
     }
@@ -71,7 +78,7 @@ class LayoutLogicTest {
 
     @Test
     fun canPlaceIgnoresWidgetsOwnId() {
-        val existing = widget("tires", WidgetType.TIRES, 1, 1, Span(1, 1))
+        val existing = widget("health", WidgetType.HEALTH, 1, 1, Span(1, 1))
         val layout = listOf(existing)
         // Same id as the one already in the layout: moving it onto its own cell is allowed.
         val moved = existing.copy(col = 1, row = 1)

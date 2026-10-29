@@ -27,12 +27,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3))),
     NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(3, 2), Span(2, 2))),
-    RANGE("range", R.string.launcher_widget_range, R.drawable.ic_mdi_gas_station, listOf(Span(1, 1), Span(2, 1))),
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 1))),
-    TIRES("tires", R.string.launcher_widget_tires, R.drawable.ic_mdi_tire, listOf(Span(1, 1), Span(2, 1))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(1, 1), Span(2, 1))),
-    DOORS("doors", R.string.launcher_widget_doors, R.drawable.ic_mdi_car_door, listOf(Span(1, 1), Span(2, 1))),
-    SUNROOF("sunroof", R.string.launcher_widget_sunroof, R.drawable.ic_mdi_car_sunroof, listOf(Span(1, 1), Span(2, 1))),
     CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(1, 1), Span(2, 1))),
     TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 1), Span(1, 1))),
     HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(1, 1), Span(2, 1))),
@@ -81,12 +77,8 @@ object WidgetFactory {
         WidgetType.MEDIA -> MediaCard(activity)
         WidgetType.NAVIGATION -> NavigationCard(activity)
         WidgetType.VEHICLE -> VehicleHeroCard(activity)
-        WidgetType.RANGE -> RangeTile(activity)
         WidgetType.LOCK -> LockTile(activity)
-        WidgetType.TIRES -> TireTile(activity)
         WidgetType.DRIVE_MODE -> DriveModeTile(activity)
-        WidgetType.DOORS -> DoorsTile(activity)
-        WidgetType.SUNROOF -> SunroofTile(activity)
         WidgetType.CONSUMPTION -> ConsumptionTile(activity)
         WidgetType.TRIP -> TripComputerTile(activity)
         WidgetType.HEALTH -> HealthTile(activity)

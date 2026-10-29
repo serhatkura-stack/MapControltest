@@ -228,7 +228,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             null -> lockChip.bindMissing(R.drawable.ic_mdi_lock)
         }
 
-        val knowsDoors = s.connected && (s.hasDoorLf() || s.hasDoorRf() || s.hasDoorLr() || s.hasDoorRr() || s.hasTrunk())
+        // Gövde durumu istisna bazlı: açık kapı/bagaj/cam tavan listelenir, hepsi kapalıysa sakin "Kapalı".
+        val knowsSunroof = s.connected && s.hasSunroof()
+        val knowsDoors = s.connected && (s.hasDoorLf() || s.hasDoorRf() || s.hasDoorLr() || s.hasDoorRr() || s.hasTrunk() || knowsSunroof)
         if (!knowsDoors) {
             doorsChip.bindMissing(R.drawable.ic_mdi_car_door)
         } else {
@@ -238,6 +240,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
                 if (s.isDoorLrOpen()) add(R.string.launcher_door_lr)
                 if (s.isDoorRrOpen()) add(R.string.launcher_door_rr)
                 if (s.isTrunkOpen()) add(R.string.launcher_trunk)
+                if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
             }
             when {
                 open.isEmpty() -> doorsChip.bind(R.drawable.ic_mdi_car_door, context.getString(R.string.launcher_closed),
