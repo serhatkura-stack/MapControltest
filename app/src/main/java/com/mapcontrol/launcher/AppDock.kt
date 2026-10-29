@@ -68,10 +68,17 @@ class AppDock(private val context: Context) : LauncherWidget {
     /** Ekran görünür olunca yuvaları çizer; ikonlar önbellekten gelir, eksikler arka planda yüklenir. */
     override fun onVisible() = refresh()
 
-    override fun onHidden() = Unit
+    override fun onHidden() = dismissPicker()
 
     /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
-    override fun release() = Unit
+    override fun release() = dismissPicker()
+
+    private var pickerDialog: AlertDialog? = null
+
+    private fun dismissPicker() {
+        pickerDialog?.dismiss()
+        pickerDialog = null
+    }
 
     /** Düzenleme modunda boş yuvalar görünür ve seçilebilir olur; normalde gizlenir. */
     fun setEditMode(editing: Boolean) {
@@ -225,7 +232,10 @@ class AppDock(private val context: Context) : LauncherWidget {
             val rows = ProjectionTargetApps.loadAllLaunchableRows(context)
             view.post {
                 if (rows.isEmpty()) return@post
-                AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                val host = context as? android.app.Activity
+                if (host != null && (host.isFinishing || host.isDestroyed)) return@post
+                dismissPicker()
+                pickerDialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle(R.string.launcher_app_pick_title)
                     .setItems(rows.map { it.label }.toTypedArray()) { _, which ->
                         assignSlot(index, rows[which].packageName)

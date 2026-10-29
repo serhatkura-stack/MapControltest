@@ -2293,6 +2293,7 @@ public class MainActivity extends AppCompatActivity {
             systemTts = null;
         }
         pendingTtsText = null;
+        // Kilit dinleyicileri launcher'a ait; burada yalnızca dinleyen kalmadıysa takip durdurulur.
         VehicleQuickControls.getInstance(getApplicationContext()).release();
         super.onDestroy();
         // WebServerManager'ı durdur

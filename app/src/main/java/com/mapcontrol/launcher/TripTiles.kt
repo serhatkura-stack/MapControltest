@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
@@ -101,10 +102,15 @@ internal object TripSource {
     }
 
     private fun poll() {
-        val data = if (LauncherDemo.enabled) LauncherDemo.trip() else readAll()
-        if (data == last && !LauncherDemo.enabled) return
-        last = data
-        main.post { listeners.forEach { it.onTrip(data) } }
+        // Yakalanmayan hata scheduleWithFixedDelay'i sessizce iptal eder; döngü sürsün.
+        try {
+            val data = if (LauncherDemo.enabled) LauncherDemo.trip() else readAll()
+            if (data == last && !LauncherDemo.enabled) return
+            last = data
+            main.post { listeners.forEach { it.onTrip(data) } }
+        } catch (t: Throwable) {
+            Log.w("TripSource", "poll başarısız", t)
+        }
     }
 
     private fun readAll(): TripData {

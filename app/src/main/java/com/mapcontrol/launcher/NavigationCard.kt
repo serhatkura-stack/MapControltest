@@ -290,7 +290,10 @@ class NavigationCard(private val context: Context) : SizedWidget {
             setSingleLine()
         }
         val titleRes = if (kind == NavPlace.HOME) R.string.launcher_nav_dialog_home else R.string.launcher_nav_dialog_work
-        AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val host = context as? android.app.Activity
+        if (host != null && (host.isFinishing || host.isDestroyed)) return
+        editDialog?.dismiss()
+        editDialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(titleRes)
             .setView(input)
             .setPositiveButton(R.string.launcher_nav_dialog_save) { _, _ ->
@@ -347,8 +350,11 @@ class NavigationCard(private val context: Context) : SizedWidget {
         bindRecents()
     }
 
+    private var editDialog: AlertDialog? = null
+
     override fun onHidden() {
-        // Çalışan bir şey yok.
+        editDialog?.dismiss()
+        editDialog = null
     }
 
     private companion object {
