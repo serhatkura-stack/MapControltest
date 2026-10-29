@@ -28,6 +28,9 @@ enum class WidgetType(val key: String, @StringRes val label: Int, val sizes: Lis
     RANGE("range", R.string.launcher_widget_range, listOf(Span(1, 1), Span(2, 1))),
     LOCK("lock", R.string.launcher_widget_lock, listOf(Span(1, 1))),
     TIRES("tires", R.string.launcher_widget_tires, listOf(Span(1, 1), Span(2, 1))),
+    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, listOf(Span(1, 1), Span(2, 1))),
+    DOORS("doors", R.string.launcher_widget_doors, listOf(Span(1, 1), Span(2, 1))),
+    SUNROOF("sunroof", R.string.launcher_widget_sunroof, listOf(Span(1, 1), Span(2, 1))),
     WEATHER("weather", R.string.launcher_widget_weather, listOf(Span(1, 1), Span(2, 1))),
     APP("app", R.string.launcher_widget_app, listOf(Span(1, 1)));
 
@@ -77,6 +80,9 @@ object WidgetFactory {
         WidgetType.RANGE -> RangeTile(activity)
         WidgetType.LOCK -> LockTile(activity)
         WidgetType.TIRES -> TireTile(activity)
+        WidgetType.DRIVE_MODE -> DriveModeTile(activity)
+        WidgetType.DOORS -> DoorsTile(activity)
+        WidgetType.SUNROOF -> SunroofTile(activity)
         WidgetType.WEATHER -> WeatherTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
     }
