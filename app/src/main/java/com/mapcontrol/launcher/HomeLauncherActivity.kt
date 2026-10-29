@@ -295,6 +295,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 if (spot != null) {
                     dismiss()
                     applyLayout(layout + spot)
+                    grid.select(spot.id)
                 }
             }
             pressFeedback()
