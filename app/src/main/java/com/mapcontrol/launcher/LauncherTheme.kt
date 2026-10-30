@@ -7,6 +7,15 @@ import android.os.Looper
 import com.mapcontrol.vehicle.VehicleLightSensorManager
 
 /**
+ * Etkinlik yeniden kurulmadan tema değişimini (gündüz/gece, sürüş vurgusu) uygulayabilen widget/görünüm.
+ * [applyTheme] LauncherTheme değerleri güncellendikten sonra çağrılır; renkleri ve arka planları yeniden atar.
+ * Bunu uygulamayan widget'lar tema değişince tek tek yeniden kurulur (bkz. HomeLauncherActivity.applyThemeInPlace).
+ */
+interface Themeable {
+    fun applyTheme()
+}
+
+/**
  * Yeni launcher'ın tasarım değerleri (gündüz ve gece görünümü).
  * Tek vurgu rengi var: [ACCENT] yalnızca birincil/aktif öğede, [ALERT] yalnızca uyarıda (her zaman ikonla).
  */

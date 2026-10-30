@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_hud_bridge">Yandex → HUD</string>
+    <string name="launcher_hud_bridge_off">Kapalı</string>
+    <string name="launcher_hud_bridge_on">Açık</string>
+    <string name="launcher_hud_bridge_need_a11y">Erişilebilirlik izni gerekli</string>
+    <string name="launcher_hud_bridge_need_a11y_hint">Ayarlar › Erişilebilirlik › Launcher Test</string>
+    <string name="launcher_hud_bridge_straight">Hata ayıklama: düz ok %1$s</string>
+</resources>

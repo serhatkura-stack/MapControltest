@@ -25,7 +25,7 @@ class ClimateMathTest {
     }
 
     @Test fun fanTargets() {
-        assertEquals(7, ClimateMath.targetFan(6, 4))
+        assertEquals(10, ClimateMath.targetFan(6, 6))
         assertEquals(1, ClimateMath.targetFan(2, -5))
         assertEquals(0, ClimateMath.targetFan(0, -2))
         assertEquals(1, ClimateMath.targetFan(0, 1))
@@ -38,7 +38,7 @@ class ClimateMathTest {
         assertEquals(33, ClimateMath.encodeTemp(32.0))
         assertEquals(33, ClimateMath.encodeTemp(40.0))
         for (raw in 1..33) assertEquals(raw, ClimateMath.encodeTemp(OurBottomBar.decodeTemp(raw)!!))
-        assertEquals(7, ClimateMath.encodeFan(12))
+        assertEquals(10, ClimateMath.encodeFan(12))
     }
 
     @Test fun neverWritesUnlessVerifiedAndNotReadOnly() {

@@ -23,6 +23,14 @@ internal object LauncherEdition {
     /** Ayarlar (MapControl ana ekranı) bu derlemede var mı. */
     const val HAS_SETTINGS = true
 
+    /** "Yandex -> HUD" köprüsü yalnızca launchertest derlemesindedir. */
+    const val HAS_HUD_BRIDGE = false
+    @Suppress("UNUSED_PARAMETER") fun hudBridgeEnabled(context: Context) = false
+    @Suppress("UNUSED_PARAMETER") fun setHudBridgeEnabled(context: Context, on: Boolean) = Unit
+    @Suppress("UNUSED_PARAMETER") fun hudBridgeServiceGranted(context: Context) = false
+    @Suppress("UNUSED_PARAMETER") fun hudBridgeForceStraight(context: Context) = false
+    @Suppress("UNUSED_PARAMETER") fun toggleHudBridgeForceStraight(context: Context) = false
+
     /**
      * Koltuk soğutma yazması araçta doğrulanana kadar kapalı (kodlama bilinmiyor; sinyal 93/94 hep [0] okunuyor).
      * Araç testinden sonra true yapılır.

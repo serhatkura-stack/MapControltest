@@ -85,7 +85,28 @@ internal object LauncherDemo {
         connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true, steerHeat = false,
     )
 
-    fun trip(): TripData = TripData(
+    /**
+     * Anlık tüketim için 60 sn'lik döngü: duruş, kalkış (düşük hızda absürt değerler), seyir (gürültülü ~7), kısa
+     * ani yükseliş (eşik üstü 30+ sınırı) ve tekrar duruş. `launcher_demo_moving false` hep duruyor gösterir.
+     */
+    private fun tripLive(): Triple<Boolean, Int, Double?> {
+        if (moving == false) return Triple(false, 0, null)
+        val t = (System.currentTimeMillis() / 1000 % 60).toInt()
+        return when {
+            t < 6 -> Triple(false, 0, null)
+            t < 18 -> Triple(true, 8 + (t - 6), listOf(95.4, 45.0, 30.8, 21.0, 17.5)[t % 5])
+            t < 48 -> Triple(true, 52 + t % 7, 6.5 + (t % 4) * 0.4 + if (t in 36..37) 25.0 else 0.0)
+            t < 54 -> Triple(true, 25, 12.0)
+            else -> Triple(false, 0, null)
+        }
+    }
+
+    fun trip(): TripData {
+        val (isMoving, speed, instant) = tripLive()
+        return tripBase().copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
+    }
+
+    private fun tripBase(): TripData = TripData(
         connected = true, moving = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 53.8,
         avgL100 = 7.9, avgSpeedKmh = 45, batteryV = 14.1, coolantC = 89, lowFuel = false,
         serviceKm = 3978, serviceDays = 155, pm25In = 1, pm25Out = 4,

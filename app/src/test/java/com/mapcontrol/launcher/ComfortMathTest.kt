@@ -14,7 +14,7 @@ class ComfortMathTest {
         assertEquals(SunshadeState.CLOSING, ComfortMath.decodeSunshade(4))
         assertEquals(SunshadeState.PARTIAL, ComfortMath.decodeSunshade(3))
         assertEquals(SunshadeState.OPEN, ComfortMath.decodeSunshade(5))
-        assertEquals(SunshadeState.PARTIAL, ComfortMath.decodeSunshade(6))
+        assertEquals(SunshadeState.OPEN, ComfortMath.decodeSunshade(6))
         assertEquals(SunshadeState.UNKNOWN, ComfortMath.decodeSunshade(0))
         assertEquals(SunshadeState.UNKNOWN, ComfortMath.decodeSunshade(null))
         assertEquals(0f, SunshadeState.CLOSED.openFraction)
@@ -37,8 +37,11 @@ class ComfortMathTest {
     }
 
     @Test fun gateNeverWritesWhenUnverified() {
-        // Bayraklar bu derlemede kapalı: gerçek kapı da kapalı olmalı.
-        assertFalse(ComfortWriter.COMFORT_WRITE_VERIFIED)
+        // Ana anahtar açık, ama yalnızca perde özelliği doğrulandı (buğu kapatma/direksiyon ısıtma kapalı).
+        assertTrue(ComfortWriter.COMFORT_WRITE_VERIFIED)
+        assertTrue(ComfortWriter.SUNSHADE_WRITE_VERIFIED)
+        assertFalse(ComfortWriter.DEFROST_WRITE_VERIFIED)
+        assertFalse(ComfortWriter.STEER_HEAT_WRITE_VERIFIED)
         assertFalse(ComfortWriter.canWrite(false, true, false))
         assertFalse(ComfortWriter.canWrite(true, false, false))
         assertFalse(ComfortWriter.canWrite(true, true, true))
@@ -48,19 +51,23 @@ class ComfortMathTest {
         assertFalse(ComfortWriter.writeAll(ComfortWriter.canWrite(false, true, false), cmds) { sent++ })
         assertEquals(0, sent)
         assertTrue(ComfortWriter.writeAll(true, cmds) { sent++ })
-        assertEquals(2, sent)
+        assertEquals(1, sent)
     }
 
     @Test fun commandsCarryFrostNavValues() {
         val on = ComfortMath.defrostCommands(front = true, on = true)
-        assertEquals(listOf(24, 65), on.map { it.id })
+        assertEquals(listOf(24), on.map { it.id })
         assertTrue(on.all { it.value == 1 })
         val rearOff = ComfortMath.defrostCommands(front = false, on = false)
-        assertEquals(listOf(80, 159), rearOff.map { it.id })
-        assertTrue(rearOff.all { it.value == 0 })
+        assertEquals(listOf(80), rearOff.map { it.id })
+        assertTrue(rearOff.all { it.value == 2 })
         assertEquals(listOf(160), ComfortMath.steerCommands(true).map { it.id })
         assertEquals(1, ComfortMath.steerCommands(true).single().value)
-        assertEquals(10, ComfortMath.sunshadeCommand(2).id)
+        val shade = ComfortMath.sunshadeCommand(1)
+        assertEquals(327696, shade.module)
+        assertEquals(124, shade.id)
+        assertEquals(1, ComfortWriter.SUNSHADE_OPEN_VALUE)
+        assertEquals(2, ComfortWriter.SUNSHADE_CLOSE_VALUE)
     }
 
     @Test fun stopDelayIsFractionOfTravel() {
@@ -68,23 +75,24 @@ class ComfortMathTest {
         assertEquals(2000L, ComfortMath.stopDelayMs(1f, 0.75f, 8000L))
         assertEquals(0L, ComfortMath.stopDelayMs(0.3f, 0.3f, 8000L))
         assertEquals(8000L, ComfortMath.stopDelayMs(-1f, 2f, 8000L))
-        assertNull(ComfortWriter.SUNSHADE_TRAVEL_MS)
+        assertEquals(6800L, ComfortWriter.SUNSHADE_OPEN_MS)
+        assertEquals(8100L, ComfortWriter.SUNSHADE_CLOSE_MS)
     }
 
     @Test fun planWithoutStopValueOnlyFullOpenClose() {
         assertNull(ComfortWriter.SUNSHADE_STOP_VALUE)
-        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.planSunshade(0f, 1f))
-        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.planSunshade(1f, 0f))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.planSunshade(0f, 1f))
+        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.planSunshade(1f, 0f))
         // Ara hedef durdurma değeri olmadan en yakın uca yuvarlanır.
-        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.planSunshade(0f, 0.6f, stopValue = null))
-        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.planSunshade(1f, 0.4f, stopValue = null))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.planSunshade(0f, 0.6f, stopValue = null))
+        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.planSunshade(1f, 0.4f, stopValue = null))
     }
 
     @Test fun planWithStopValueStopsAfterFraction() {
-        assertEquals(listOf(SunshadeStep(2, 0), SunshadeStep(9, 4000)), ComfortMath.planSunshade(0f, 0.5f, 9, 8000L))
-        assertEquals(listOf(SunshadeStep(1, 0), SunshadeStep(9, 2000)), ComfortMath.planSunshade(1f, 0.75f, 9, 8000L))
+        assertEquals(listOf(SunshadeStep(1, 0), SunshadeStep(9, 4000)), ComfortMath.planSunshade(0f, 0.5f, 9, 8000L))
+        assertEquals(listOf(SunshadeStep(2, 0), SunshadeStep(9, 2000)), ComfortMath.planSunshade(1f, 0.75f, 9, 8000L))
         // Başlangıç bilinmiyorsa ara konum planlanamaz: uca yuvarlanır.
-        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.planSunshade(null, 0.7f, 9, 8000L))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.planSunshade(null, 0.7f, 9, 8000L))
     }
 
     @Test fun dragMapsToCoverageAndTarget() {
@@ -104,15 +112,20 @@ class ComfortMathTest {
     }
 
     @Test fun tapStepsLikeTheCar() {
-        assertEquals(0.5f, ComfortMath.tapStep(SunshadeState.CLOSED, null))
+        // Dokunma aç/kapat; hareket halindeyse ters yön; ara konum yok.
+        assertEquals(1f, ComfortMath.tapStep(SunshadeState.CLOSED, null))
         assertEquals(1f, ComfortMath.tapStep(SunshadeState.PARTIAL, null))
-        assertEquals(1f, ComfortMath.tapStep(SunshadeState.PARTIAL, true))
-        assertEquals(0f, ComfortMath.tapStep(SunshadeState.PARTIAL, false))
-        assertEquals(0.5f, ComfortMath.tapStep(SunshadeState.OPEN, null))
+        assertEquals(0f, ComfortMath.tapStep(SunshadeState.PARTIAL, true))
+        assertEquals(1f, ComfortMath.tapStep(SunshadeState.PARTIAL, false))
+        assertEquals(0f, ComfortMath.tapStep(SunshadeState.OPEN, null))
+        assertEquals(0f, ComfortMath.tapStep(SunshadeState.OPENING, null))
+        assertEquals(1f, ComfortMath.tapStep(SunshadeState.CLOSING, null))
         assertNull(ComfortMath.tapStep(SunshadeState.UNKNOWN, null))
-        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.stepPlan(0f, 0.5f))
-        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(1f, 0.5f))
-        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(0.5f, 0f))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(0f, 1f))
+        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.stepPlan(1f, 0f))
+        // Hareket halinde mevcut açıklık bilinmez: kapat hedefi kapat (2), aç hedefi aç (1).
+        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.stepPlan(null, 0f))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(null, 1f))
     }
 
     @Test fun tapToggles() {

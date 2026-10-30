@@ -152,7 +152,7 @@ internal object DataCheckTable {
     }
 
     /** Tavan perdesi (araçta ölçüldü): 1 kapalı, 2 açılıyor, 3 yarı açık / durdu, 4 kapanıyor; 5/6 diğer araçlar. */
-    val sunshade = labels(1 to "Kapalı", 2 to "Açılıyor", 3 to "Yarı açık / Durdu", 4 to "Kapanıyor", 5 to "Açık", 6 to "Yarı açık / Durdu")
+    val sunshade = labels(1 to "Kapalı", 2 to "Açılıyor", 3 to "Yarı açık / Durdu", 4 to "Kapanıyor", 5 to "Açık", 6 to "Açık (düğmeyle)")
 
     /** Kilit (IVI_LOCK 169): 1 açık, 0 kilitli. */
     val lock = labels(0 to "Kilitli", 1 to "Açık")
@@ -222,7 +222,7 @@ internal object DataCheckTable {
         val climate = "Klima"
         s(climate, "Sıcaklık sürücü", HVAC, HvacID.ID_AC_TEMPERATURE_DRIVER, climateTemp)
         s(climate, "Sıcaklık yolcu", HVAC, HvacID.ID_AC_TEMPERATURE_COPILOT, climateTemp)
-        s(climate, "Fan kademesi", HVAC, HvacID.ID_AC_BLOW_SPEED_LEVEL, num(0..9)) // TODO: fan en çok 10 olabilir (max ön buğu çözmede 10 okundu)
+        s(climate, "Fan kademesi", HVAC, HvacID.ID_AC_BLOW_SPEED_LEVEL, num(0..10, "/10?")) // araçta 10 okundu (maks. ön buğu); ölçek doğrulanmadı
         s(climate, "A/C durumu", HVAC, HvacID.ID_AC_STATE, unverified)
 
         s("Tavan perdesi", "Perde", SET, CarSettingID.ID_CAR_SUNSHADE, sunshade)

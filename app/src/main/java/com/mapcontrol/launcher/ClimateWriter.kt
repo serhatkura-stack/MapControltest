@@ -18,14 +18,15 @@ internal object ClimateMath {
     const val TEMP_STEP = 0.5
 
     const val FAN_MIN = 1
-    // TODO: araçta fan kademesi en çok 10 okundu (max ön buğu çözmede); ölçek henüz değiştirilmedi.
-    const val FAN_MAX = 7
+    // Araçta ölçüldü: A/C açıkken 4, maks. ön buğu çözmede 10, buğu kapanınca 1 okundu; en az 10'a kadar çıkıyor.
+    // Gösterim için 10; yazma kapılı (ölçek doğrulanana kadar araca gitmez).
+    const val FAN_MAX = 10
 
     /** Sıcaklık: dikey her 40dp yol = 1 adım (0,5 °C). */
     const val TEMP_DRAG_DP_PER_STEP = 40f
 
-    /** Fan: yatay her 20dp yol = 1 kademe (hücre 120dp; tüm aralık tek harekette). */
-    const val FAN_DRAG_DP_PER_STEP = 20f
+    /** Fan: yatay her 12dp yol = 1 kademe (hücre 120dp; tüm 1..10 aralığı tek harekette). */
+    const val FAN_DRAG_DP_PER_STEP = 12f
 
     /**
      * Sürükleme mesafesinden (px) tam adım sayısı; sıfıra doğru yuvarlanır, yani yarım adım sayılmaz.
@@ -42,7 +43,7 @@ internal object ClimateMath {
     fun targetTemp(start: Double, steps: Int): Double = clampTemp(start + steps * TEMP_STEP)
 
     /**
-     * Fan hedefi. 0 (kapalı) yalnızca dokunarak ya da sola kaydırmadan gelir: sürüklemede 1..7'ye sıkışır,
+     * Fan hedefi. 0 (kapalı) yalnızca dokunarak ya da sola kaydırmadan gelir: sürüklemede 1..10'a sıkışır,
      * kapalıyken sola sürükleme kapalı kalır.
      */
     fun targetFan(start: Int, steps: Int): Int = when {
@@ -54,7 +55,7 @@ internal object ClimateMath {
     /** Ham değer: °C = 15,5 + ham/2 ([OurBottomBar.decodeTemp]'in tersi). */
     fun encodeTemp(c: Double): Int = ((clampTemp(c) - 15.5) * 2).roundToInt()
 
-    /** Fan ham değeri doğrudan kademedir (okuma da öyle); 0..7. */
+    /** Fan ham değeri doğrudan kademedir (okuma da öyle); 0..10. */
     fun encodeFan(level: Int): Int = level.coerceIn(0, FAN_MAX)
 }
 
@@ -81,7 +82,7 @@ internal object ClimateWriter {
         return send(id, ClimateMath.encodeTemp(celsius))
     }
 
-    /** Fan kademesini (0 = kapalı, 1..7) yazar. Kapalıyken false döner ve araca dokunmaz. */
+    /** Fan kademesini (0 = kapalı, 1..10) yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setFan(level: Int): Boolean {
         if (!enabled) return false
         return send(HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(level))

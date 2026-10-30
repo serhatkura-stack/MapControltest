@@ -35,8 +35,14 @@ object ComfortPlan {
     /** HvacID.ID_AC_REAR_DEFROST. */
     const val ID_REAR_DEFROST = 80
 
-    /** VrID.ID_VR_SUN_SHADE (1 aç, 2 kapat). Öntanımlı yol DEĞİL. */
+    /** VrID.ID_VR_SUN_SHADE (1 aç, 2 kapat; araçta ölçüldü). Hareket sırasında komut yönü ters çevirir, durdurmaz. */
     const val ID_VR_SUN_SHADE = 124
+
+    /** VR 124 durdurma ADAYI (araçta denenecek); yalnızca `shade_stop_vr` ile. */
+    val VR_SHADE_STOP_CANDIDATES: Set<Int> = setOf(3)
+
+    /** Buğu KAPATMA adayı: 0 ve tekrar 1 kapatmadı (araçta ölçüldü); 2 denenecek. Yalnızca Hvac 24 ve 80. */
+    const val DEFROST_OFF_CANDIDATE = 2
 
     const val SHADE_OPEN = 2
     const val SHADE_CLOSE = 1
@@ -61,6 +67,9 @@ object ComfortPlan {
         for (s in SHADE_STOP_CANDIDATES) add(Write(MODULE_CAR_SETTING, ID_SUNSHADE, s))
         add(Write(MODULE_VR, ID_VR_SUN_SHADE, 1))
         add(Write(MODULE_VR, ID_VR_SUN_SHADE, 2))
+        for (s in VR_SHADE_STOP_CANDIDATES) add(Write(MODULE_VR, ID_VR_SUN_SHADE, s))
+        add(Write(MODULE_HVAC, ID_MAX_FRONT_DEFOREST, DEFROST_OFF_CANDIDATE))
+        add(Write(MODULE_HVAC, ID_REAR_DEFROST, DEFROST_OFF_CANDIDATE))
         for (v in 0..1) {
             add(Write(MODULE_HVAC, ID_FRONT_GLASS_HEAT, v))
             add(Write(MODULE_HVAC, ID_MAX_FRONT_DEFOREST, v))
@@ -116,14 +125,14 @@ object ComfortPlan {
 
     val COMMANDS: Set<String> = setOf(
         "info", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
-        "shade_open_stop", "shade_stop", "defrost_front", "defrost_front_max", "defrost_rear",
+        "shade_open_stop", "shade_stop", "shade_stop_vr", "defrost_front", "defrost_front_max", "defrost_rear",
         "defrost_rear_both", "wheel_heat",
     )
 
     private fun send(module: Int, id: Int, value: Int) = Step.Send(validate(Write(module, id, value)))
 
     /**
-     * `--es c <ad> [--ei v 0|1] [--ei after_ms N] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
+     * `--es c <ad> [--ei v 0|1 (defrost_front_max/defrost_rear: 0|1|2)] [--ei after_ms N] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
      * Bilinmeyen ad, eksik/geçersiz v, geçersiz stop veya after_ms için [IllegalArgumentException].
      */
     fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null): Command {
@@ -137,6 +146,16 @@ object ComfortPlan {
             require(s in SHADE_STOP_CANDIDATES) { "--ei stop yalnızca 3, 6 veya 0 olabilir (geldi: $s)" }
             return s
         }
+        // Yalnızca Hvac 24 ve 80 için: 0/1 ya da kapatma adayı 2.
+        fun onOffOrTwo(): Int {
+            require(v == 0 || v == 1 || v == DEFROST_OFF_CANDIDATE) { "--ei v 0|1|2 gerekli (geldi: $v)" }
+            return v!!
+        }
+        fun vrStopValue(): Int {
+            val s = stop ?: 3
+            require(s in VR_SHADE_STOP_CANDIDATES) { "--ei stop yalnızca 3 olabilir (geldi: $s)" }
+            return s
+        }
         val cs = MODULE_CAR_SETTING
         val hv = MODULE_HVAC
         return when (c) {
@@ -147,6 +166,7 @@ object ComfortPlan {
             "shade_open_vr" -> writeCmd(c, listOf(send(MODULE_VR, ID_VR_SUN_SHADE, 1)), listOf(SUNSHADE))
             "shade_close_vr" -> writeCmd(c, listOf(send(MODULE_VR, ID_VR_SUN_SHADE, 2)), listOf(SUNSHADE))
             "shade_stop" -> writeCmd(c, listOf(send(cs, ID_SUNSHADE, stopValue())), listOf(SUNSHADE), STOP_WATCH_MS)
+            "shade_stop_vr" -> writeCmd(c, listOf(send(MODULE_VR, ID_VR_SUN_SHADE, vrStopValue())), listOf(SUNSHADE), STOP_WATCH_MS)
             "shade_open_stop" -> {
                 val after = afterMs ?: DEFAULT_AFTER_MS
                 require(after in 0..MAX_AFTER_MS) { "--ei after_ms 0..$MAX_AFTER_MS olmalı (geldi: $after)" }
@@ -157,8 +177,8 @@ object ComfortPlan {
                 )
             }
             "defrost_front" -> writeCmd(c, listOf(send(hv, ID_FRONT_GLASS_HEAT, onOff())), listOf(FRONT_GLASS_HEAT))
-            "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, onOff())), listOf(MAX_FRONT_DEFOREST))
-            "defrost_rear" -> writeCmd(c, listOf(send(hv, ID_REAR_DEFROST, onOff())), listOf(REAR_DEFROST))
+            "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, onOffOrTwo())), listOf(MAX_FRONT_DEFOREST))
+            "defrost_rear" -> writeCmd(c, listOf(send(hv, ID_REAR_DEFROST, onOffOrTwo())), listOf(REAR_DEFROST))
             "defrost_rear_both" -> {
                 val on = onOff()
                 writeCmd(

@@ -16,7 +16,8 @@ class ComfortPlanTest {
         val expected = setOf(
             ComfortPlan.Write(cs, 10, 2), ComfortPlan.Write(cs, 10, 1),
             ComfortPlan.Write(cs, 10, 3), ComfortPlan.Write(cs, 10, 6), ComfortPlan.Write(cs, 10, 0),
-            ComfortPlan.Write(vr, 124, 1), ComfortPlan.Write(vr, 124, 2),
+            ComfortPlan.Write(vr, 124, 1), ComfortPlan.Write(vr, 124, 2), ComfortPlan.Write(vr, 124, 3),
+            ComfortPlan.Write(hv, 24, 2), ComfortPlan.Write(hv, 80, 2),
             ComfortPlan.Write(hv, 65, 0), ComfortPlan.Write(hv, 65, 1),
             ComfortPlan.Write(hv, 24, 0), ComfortPlan.Write(hv, 24, 1),
             ComfortPlan.Write(hv, 80, 0), ComfortPlan.Write(hv, 80, 1),
@@ -54,7 +55,7 @@ class ComfortPlanTest {
     @Test fun hudCommandIdAndOtherHvacIdsAreRejected() {
         for (w in listOf(
             ComfortPlan.Write(327683, 200, 1), ComfortPlan.Write(cs, 10, 4), ComfortPlan.Write(cs, 10, 5),
-            ComfortPlan.Write(cs, 160, 2), ComfortPlan.Write(hv, 65, 2), ComfortPlan.Write(vr, 124, 0),
+            ComfortPlan.Write(cs, 160, 2), ComfortPlan.Write(hv, 65, 2), ComfortPlan.Write(vr, 124, 0), ComfortPlan.Write(vr, 124, 4), ComfortPlan.Write(hv, 65, 3), ComfortPlan.Write(cs, 159, 2),
             ComfortPlan.Write(hv, 10, 2), ComfortPlan.Write(vr, 10, 2), ComfortPlan.Write(cs, 124, 1),
         )) {
             try {
@@ -67,9 +68,11 @@ class ComfortPlanTest {
     }
 
     @Test fun everyParsedWriteIsWhitelisted() {
-        val cmds = listOf("shade_open", "shade_close", "shade_open_vr", "shade_close_vr", "shade_stop", "shade_open_stop",
+        val cmds = listOf("shade_open", "shade_close", "shade_open_vr", "shade_close_vr", "shade_stop", "shade_stop_vr", "shade_open_stop",
             "defrost_front", "defrost_front_max", "defrost_rear", "defrost_rear_both", "wheel_heat")
         for (c in cmds) for (v in 0..1) for (stop in listOf(null, 3, 6, 0)) {
+            // shade_stop_vr yalnızca stop=3 kabul eder; diğer stop değerleri reddedilir (ayrı testte).
+            if (c == "shade_stop_vr" && stop != null && stop != 3) continue
             val cmd = ComfortPlan.parse(c, v, null, stop)
             for (s in cmd.steps) if (s is ComfortPlan.Step.Send) assertTrue(s.write in ComfortPlan.ALLOWED)
         }
@@ -119,10 +122,22 @@ class ComfortPlanTest {
         assertEquals(listOf(ComfortPlan.Write(cs, 160, 1)), sends(ComfortPlan.parse("wheel_heat", 1)))
     }
 
+    @Test fun defrostOffCandidateTwo() {
+        assertEquals(listOf(ComfortPlan.Write(hv, 24, 2)), sends(ComfortPlan.parse("defrost_front_max", 2)))
+        assertEquals(listOf(ComfortPlan.Write(hv, 80, 2)), sends(ComfortPlan.parse("defrost_rear", 2)))
+        for (c in listOf("defrost_front", "defrost_rear_both", "wheel_heat")) rejects { ComfortPlan.parse(c, 2) }
+    }
+
+    @Test fun vrStopCandidate() {
+        assertEquals(listOf(ComfortPlan.Write(vr, 124, 3)), sends(ComfortPlan.parse("shade_stop_vr")))
+        assertEquals(listOf(ComfortPlan.Write(vr, 124, 3)), sends(ComfortPlan.parse("shade_stop_vr", stop = 3)))
+        for (stop in listOf(0, 1, 2, 6)) rejects { ComfortPlan.parse("shade_stop_vr", stop = stop) }
+    }
+
     @Test fun onOffNeedsValidV() {
         for (c in listOf("defrost_front", "defrost_front_max", "defrost_rear", "defrost_rear_both", "wheel_heat")) {
             rejects { ComfortPlan.parse(c) }
-            rejects { ComfortPlan.parse(c, 2) }
+            rejects { ComfortPlan.parse(c, 3) }
             rejects { ComfortPlan.parse(c, -1) }
         }
     }

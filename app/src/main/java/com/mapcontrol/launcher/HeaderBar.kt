@@ -28,7 +28,7 @@ class HeaderBar(
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
     private val onLayoutPill: () -> Unit = {},
-) : LauncherWidget {
+) : LauncherWidget, Themeable {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
     private val date = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
@@ -71,6 +71,7 @@ class HeaderBar(
 
     /** Etkin düzene göre hap yazısı; yeniden kurulmadan güncellenir. */
     fun setLayoutMode(mode: LayoutMode) {
+        lastMode = mode
         val label = if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive else R.string.launcher_layout_park
         layoutPill.setText(label)
         layoutPill.contentDescription = context.getString(R.string.launcher_layout_drive_edit)
@@ -80,7 +81,11 @@ class HeaderBar(
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        fill()
+    }
 
+    /** Başlığın çocuklarını kurar; saat/hava metin görünümleri korunur, düğmeler ve rozet o anki temayla yeniden kurulur. */
+    private fun LinearLayout.fill() {
         addView(time)
         addView(gap(context, 24))
         addView(date)
@@ -104,6 +109,26 @@ class HeaderBar(
         addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
         addView(gap(context, 16))
         addView(settingsButton())
+    }
+
+    private var lastMode = LayoutMode.PARK
+    private var lastWeather: OpenMeteoWeatherSnapshot? = null
+
+    /** Tema değişti: metin renkleri, hap, hava ikonu ve düğmeler yeni renkle; etkinlik yeniden kurulmaz. */
+    override fun applyTheme() {
+        time.setTextColor(LauncherTheme.TEXT)
+        date.setTextColor(LauncherTheme.TEXT_SECONDARY)
+        weatherLabel.setTextColor(LauncherTheme.TEXT_SECONDARY)
+        weatherTemp.setTextColor(LauncherTheme.TEXT)
+        weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(LauncherTheme.TEXT)
+        layoutPill.background = rounded(context, LauncherTheme.CONTROL, 999f)
+        setLayoutMode(lastMode)
+        lastWeather?.let { bindWeather(it) }
+        val row = view as LinearLayout
+        weatherBox.removeAllViews()
+        row.removeAllViews()
+        row.fill()
+        row.invalidate()
     }
 
     /**
@@ -241,6 +266,7 @@ class HeaderBar(
     }
 
     private fun bindWeather(snapshot: OpenMeteoWeatherSnapshot) {
+        lastWeather = snapshot
         weatherTemp.text = context.getString(R.string.launcher_degrees, snapshot.temperatureC.roundToInt())
         weatherLabel.text = OpenMeteoWeatherLabels.labelFor(context, snapshot.weatherCode, snapshot.day)
         // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.

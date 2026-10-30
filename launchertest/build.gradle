@@ -28,6 +28,10 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         include 'com/mapcontrol/util/AppIconHelper.java'
         // HUD testi: saf kodlayıcı (HudPayload) ve salt-okur yapılandırma okuyucu.
         include 'com/mapcontrol/hud/**'
+        // Yandex -> HUD köprüsü: erişilebilirlik okuyucusu (isteğe bağlı, varsayılan kapalı).
+        include 'com/mapcontrol/nav/YandexNavScraper.java'
+        include 'com/mapcontrol/nav/YandexNavSnapshot.java'
+        include 'com/mapcontrol/nav/YandexNavStability.java'
         // Konfor yazma testi: saf beyaz liste ve komut çözümleyici (ComfortPlan).
         include 'com/mapcontrol/comfort/**'
         include 'com/mapcontrol/vehicle/material/OemEolConfigReader.java'
@@ -52,7 +56,7 @@ android {
     sourceSets {
         main {
             java.srcDirs = ['src/main/java', syncedJava.get().asFile]
-            res.srcDirs = ['../app/src/main/res']
+            res.srcDirs = ['../app/src/main/res', 'src/main/res']
         }
     }
 

@@ -62,6 +62,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var dock: AppDock? = null
     private val oemBar by lazy { LauncherSafeArea.hasOemBar(this) }
     private lateinit var fixedWidgets: List<LauncherWidget>
+    /** Tema değişiminde yerinde yenilenen sabit parçalar (bkz. [applyThemeInPlace]). */
+    private var climateBar: ClimateBar? = null
+    private var ourBar: OurBottomBar? = null
+    private var rootLayout: View? = null
+    private var mockBar: View? = null
 
     private var layout: List<PlacedWidget> = emptyList()
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
@@ -90,18 +95,21 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout)
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.retheme(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
-        val ourBar: OurBottomBar? = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
+        ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
+        val ourBar = this.ourBar
         val bottomBar: Pair<AppDock, ClimateBar>? =
             if (oemBar || ourBar != null) null else AppDock(this).let { it to ClimateBar(this, it.view) }
         dock = bottomBar?.first
+        climateBar = bottomBar?.second
         fixedWidgets = listOfNotNull(header, bottomBar?.first, bottomBar?.second, ourBar)
         editBar = buildEditBar()
         grid = LauncherGrid(this, this)
 
         val root = LinearLayout(this).apply {
+            rootLayout = this
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(LauncherTheme.GROUND)
             setPadding(dp(24), dp(20), dp(24), dp(20))
@@ -138,7 +146,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             val band = LauncherSafeArea.oemInsetPx(this)
             setContentView(FrameLayout(this).apply {
                 addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                addView(OemBarMock.build(this@HomeLauncherActivity), FrameLayout.LayoutParams(
+                addView(OemBarMock.build(this@HomeLauncherActivity).also { mockBar = it }, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, band - dp(12), Gravity.BOTTOM
                 ).apply { setMargins(dp(24), 0, dp(24), dp(6)) })
             })
@@ -161,6 +169,75 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     /**
+     * Tema değişimini etkinliği yeniden yaratmadan uygular ([ThemeTransition.retheme] üstteki anlık görüntü örtüsünün
+     * altında çağırır). Jetonlar güncellenir; [Themeable] olanlar yerinde yenilenir, olmayan widget'lar tek tek yeniden
+     * kurulur (çalışan işleri durdurulup yenisi başlatılır). Açık sayfa kapanır, düzenleme modundan çıkılır.
+     */
+    internal fun applyThemeInPlace() {
+        if (isFinishing || isDestroyed || !::grid.isInitialized) return
+        sheet?.dismiss()
+        sheet = null
+        exitEditMode()
+        if (!DriveAccent.enabled(this)) LauncherTheme.driveMode = DriveAccent.NORMAL
+        LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
+        window.decorView.setBackgroundColor(LauncherTheme.GROUND)
+        rootLayout?.setBackgroundColor(LauncherTheme.GROUND)
+
+        // Sabit parçalar: başlık yerinde, diğerleri tek tek yeniden kurulur.
+        header.applyTheme()
+        val newEditBar = buildEditBar().also { it.visibility = editBar.visibility }
+        swapView(editBar, newEditBar)
+        editBar = newEditBar
+        val oldFixed = ArrayList<LauncherWidget>()
+        dock?.let { oldDock ->
+            val oldClimate = climateBar
+            val newDock = AppDock(this)
+            val newClimate = ClimateBar(this, newDock.view)
+            swapView(oldDock.view, newDock.view)
+            oldClimate?.let { swapView(it.view, newClimate.view) }
+            oldFixed += oldDock; oldClimate?.let { oldFixed += it }
+            dock = newDock; climateBar = newClimate
+        }
+        ourBar?.let { old ->
+            val fresh = OurBottomBar(this)
+            swapView(old.view, fresh.view)
+            oldFixed += old
+            ourBar = fresh
+        }
+        mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
+        fixedWidgets = listOfNotNull(header, dock, climateBar, ourBar)
+        oldFixed.forEach { if (started) it.onHidden(); it.release() }
+        if (started) fixedWidgets.filter { it !== header }.forEach { it.onVisible() }
+
+        // Izgara: Themeable widget yerinde, diğerleri yeniden kurulur; düzen aynı kalır.
+        val fresh = LinkedHashMap<String, View>()
+        layout.forEach { placed ->
+            val old = gridWidgets[placed.id] ?: return@forEach
+            if (old is Themeable) { old.applyTheme(); return@forEach }
+            if (started) old.onHidden()
+            old.release()
+            val created = WidgetFactory.create(this, placed)
+            created.applySpan(placed.span)
+            gridWidgets[placed.id] = created
+            if (started) created.onVisible()
+            fresh[placed.id] = created.view
+        }
+        grid.swapContents(fresh)
+        grid.applyTheme()
+        header.setLayoutMode(activeMode)
+        window.decorView.invalidate()
+    }
+
+    /** [old]'u ana kadar bulunduğu yerde (sıra ve ölçüleriyle) [new] ile değiştirir. */
+    private fun swapView(old: View, new: View) {
+        val parent = old.parent as? ViewGroup ?: return
+        val i = parent.indexOfChild(old)
+        val lp = old.layoutParams
+        parent.removeViewAt(i)
+        parent.addView(new, i, lp)
+    }
+
+    /**
      * Sürüş modu değişimini uygular: gözlenen mod ~2 sn kararlı kalınca vurgu güncellenir ve etkinlik
      * ThemeTransition ile yeniden kurulur (renkler kurulumda okunur). Düzenleme/sayfa açıkken ertelenir.
      */
@@ -170,7 +247,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val to = driveModePolicy.update(System.currentTimeMillis(), observed, !grid.editMode && sheet == null)
         if (to != null && to != LauncherTheme.driveMode) {
             LauncherTheme.driveMode = to
-            ThemeTransition.recreate(this)
+            ThemeTransition.retheme(this)
         }
     }
 
@@ -229,7 +306,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         super.onResume()
         hideSystemBars()
         // Otomatik temada araç lambası/ışık sensörü izlenir; düzenlerken ya da bir sayfa açıkken geçiş beklenir.
-        LauncherTheme.startAutoNight(this, { !grid.editMode && sheet == null }) { ThemeTransition.recreate(this) }
+        LauncherTheme.startAutoNight(this, { !grid.editMode && sheet == null }) { ThemeTransition.retheme(this) }
     }
 
     override fun onPause() {

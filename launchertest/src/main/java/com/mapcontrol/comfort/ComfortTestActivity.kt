@@ -92,8 +92,9 @@ class ComfortTestActivity : Activity() {
                 show("HATA: ${t.javaClass.simpleName}: ${t.message}")
             } finally {
                 RUNNING.set(false)
+                // Her yolda kapan: yığılan örnekler siyah ekran bırakıyordu (araçta görüldü).
+                finishSoon(4000)
             }
-            finishSoon(4000)
         }, "ComfortTest").start()
     }
 
@@ -193,6 +194,7 @@ class ComfortTestActivity : Activity() {
 
     private fun finishSoon(ms: Long) {
         status.postDelayed({ if (!isFinishing && !RUNNING.get()) finish() }, ms)
+        // Yeniden giriş sürerken (RUNNING) kapanma ertelenir; test bitince finally yeniden çağırır.
     }
 
     companion object {

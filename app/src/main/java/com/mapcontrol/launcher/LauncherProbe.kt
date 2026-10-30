@@ -52,6 +52,15 @@ internal object LauncherProbe {
     private const val POLL_MS = 2_000L
     private const val WATCH_MS = 15 * 60_000L
 
+    /** Açıkken ([EXTRA]=true) aktivite her oluşturulduğunda tarama yeniden başlar; süre bu kadar sürer. */
+    private const val ACTIVE_MS = 3 * 60 * 60_000L
+    private const val PREFS = "launcher_probe"
+    private const val KEY_UNTIL = "active_until"
+
+    /** Bir tarama çalışıyor mu (aktivite yeniden oluşunca çift başlatmamak için). */
+    @Volatile
+    private var running = false
+
     /** Okunacak ID sınıfları ve modülleri. Teşhis/OTA/hesap modülleri bilerek yok. */
     private val SOURCES: List<Pair<Class<*>, Int>> = listOf(
         ReadOnlyID::class.java to VDEventCarInfo.MODULE_READONLY_INFO,
@@ -84,16 +93,39 @@ internal object LauncherProbe {
     @Volatile
     private var runToken = 0L
 
+    /**
+     * Her onCreate'te çağrılır. `--ez launcher_probe true` gelirse "aktif" süresini (şimdi + 3 sa)
+     * SharedPreferences'a yazar; süre dolmadıkça aktivite yeniden oluşunca tarama kendiliğinden başlar.
+     * `--ez launcher_probe false` süreyi siler ve çalışan taramayı durdurur.
+     */
     fun applyFrom(activity: Activity, intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA, false) != true) return
         if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
-        start(activity.applicationContext)
+        val context = activity.applicationContext
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (intent != null && intent.hasExtra(EXTRA)) {
+            if (intent.getBooleanExtra(EXTRA, false)) {
+                prefs.edit().putLong(KEY_UNTIL, System.currentTimeMillis() + ACTIVE_MS).apply()
+            } else {
+                prefs.edit().remove(KEY_UNTIL).apply()
+                runToken = 0L
+                running = false
+                return
+            }
+        }
+        if (prefs.getLong(KEY_UNTIL, 0L) > System.currentTimeMillis() && !running) start(context)
     }
 
     private fun start(context: Context) {
         val token = SystemClock.elapsedRealtime()
         runToken = token
-        Thread({ run(context, token) }, TAG).apply { isDaemon = true }.start()
+        running = true
+        Thread({
+            try {
+                run(context, token)
+            } finally {
+                if (runToken == token) running = false
+            }
+        }, TAG).apply { isDaemon = true }.start()
     }
 
     private fun run(context: Context, token: Long) {

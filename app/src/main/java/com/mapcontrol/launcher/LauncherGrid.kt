@@ -31,7 +31,7 @@ import kotlin.math.roundToInt
  * Izgara düzeni kendisi saklamaz; her değişikliği [Listener.onLayoutChanged] ile bildirir.
  */
 @SuppressLint("ViewConstructor")
-class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup(context) {
+class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup(context), Themeable {
 
     interface Listener {
         fun onLayoutChanged(layout: List<PlacedWidget>)
@@ -99,6 +99,29 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
         cellStroke.color = LauncherTheme.TRACK
         outlinePaint.color = LauncherTheme.ACCENT
         panel.background = rounded(context, LauncherTheme.CARD, 20f, LauncherTheme.TRACK)
+    }
+
+    /** Tema değişti: hücre/anahat boyaları ve "×" düğmeleri yeni renklerle yenilenir (görünümler korunur). */
+    override fun applyTheme() {
+        refreshPaints()
+        slots.values.forEach { it.restyle() }
+        invalidate()
+    }
+
+    /**
+     * Tema değişiminde yeniden kurulan widget görünümlerini yerlerine takar (kayıtlı düzen aynı kalır).
+     * [views] yalnızca değişenleri içerir; olmayanlar olduğu gibi kalır.
+     */
+    fun swapContents(views: Map<String, View>) {
+        views.forEach { (id, v) -> slots[id]?.replaceContent(v) }
+        slots.values.forEach { slot ->
+            (slot.content as? BlankAware)?.onBlankChanged = { updateJoins() }
+            (slot.content as? EditAware)?.setEditing(editMode)
+        }
+        updateJoins()
+        syncChrome()
+        requestLayout()
+        invalidate()
     }
 
     /** Dışarıdan (ör. "Widget ekle") bir widget'ı seçer. */
@@ -450,7 +473,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
     }
 
     /** Bir widget'ı ve köşe "×" düğmesini taşıyan çerçeve. */
-    private inner class Slot(var placed: PlacedWidget, val content: View) {
+    private inner class Slot(var placed: PlacedWidget, var content: View) {
         // Birleşen kutucukların yüzeyi çerçevenin dışına (boşluğa) taşar; kırpma kapalı.
         val frame = FrameLayout(context).apply { clipChildren = false }
 
@@ -460,15 +483,34 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
             translationZ = context.dpF(3f)
             contentDescription = context.getString(R.string.launcher_edit_remove)
             isClickable = true
-            addView(FrameLayout(context).apply {
-                background = oval(LauncherTheme.CARD).also { (it as GradientDrawable).setStroke(context.dp(1), LauncherTheme.TRACK) }
-                elevation = context.dpF(3f)
-                addView(icon(context, R.drawable.ic_mdi_close, 20, LauncherTheme.TEXT).apply {
-                    layoutParams = FrameLayout.LayoutParams(context.dp(20), context.dp(20), Gravity.CENTER)
-                })
-            }, FrameLayout.LayoutParams(context.dp(REMOVE_VISUAL_DP), context.dp(REMOVE_VISUAL_DP), Gravity.CENTER))
+            addView(removeVisual(), FrameLayout.LayoutParams(context.dp(REMOVE_VISUAL_DP), context.dp(REMOVE_VISUAL_DP), Gravity.CENTER))
             setOnClickListener { remove(placed.id) }
             pressFeedback()
+        }
+
+        private fun removeVisual() = FrameLayout(context).apply {
+            background = oval(LauncherTheme.CARD).also { (it as GradientDrawable).setStroke(context.dp(1), LauncherTheme.TRACK) }
+            elevation = context.dpF(3f)
+            addView(icon(context, R.drawable.ic_mdi_close, 20, LauncherTheme.TEXT).apply {
+                layoutParams = FrameLayout.LayoutParams(context.dp(20), context.dp(20), Gravity.CENTER)
+            })
+        }
+
+        /** Tema değişince "×" düğmesinin daire ve ikonu yeni renkle yeniden kurulur. */
+        fun restyle() {
+            remove.removeAllViews()
+            remove.addView(removeVisual(), FrameLayout.LayoutParams(context.dp(REMOVE_VISUAL_DP), context.dp(REMOVE_VISUAL_DP), Gravity.CENTER))
+        }
+
+        /** İçerik görünümünü (aynı çerçevede) yenisiyle değiştirir; solukluk durumu korunur. */
+        fun replaceContent(v: View) {
+            if (v === content) return
+            val a = content.alpha
+            frame.removeView(content)
+            (v.parent as? ViewGroup)?.removeView(v)
+            content = v
+            v.alpha = a
+            frame.addView(v, 0, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
 
         init {

@@ -29,7 +29,7 @@ import kotlin.math.abs
  * (çubuk üçünü ayrı yerleştirir) ve etkileşimlidir:
  *  - sıcaklık: dikey sürükleme (her 40dp = 0,5 °C, yukarı = sıcak), dokunuşta sağ yarı +0,5 / sol yarı −0,5,
  *    uzun basış diğer tarafı bu değere eşitler;
- *  - fan: yatay sürükleme 1..7, dokunuş kapat/aç, altında ince 7 noktalı kademe göstergesi.
+ *  - fan: yatay sürükleme 1..10, dokunuş kapat/aç, altında ince 10 noktalı kademe göstergesi.
  *
  * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
  * aracın gerçek değerine döner ve sakin bir bilgi mesajı çıkar; araca hiçbir şey gitmez. Sürekli animasyon yok;
@@ -534,9 +534,9 @@ internal class ClimateControl(
         private const val FAN_SP = 44f
         private const val FAN_ICON_DP = 40
         private const val FAN_NUMBER_DP = 48
-        private const val SEGMENT_W_DP = 28
+        private const val SEGMENT_W_DP = 17
         private const val SEGMENT_H_DP = 10
-        private const val SEGMENT_GAP_DP = 7
+        private const val SEGMENT_GAP_DP = 5
         private const val SEGMENT_RADIUS_DP = 5f
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140

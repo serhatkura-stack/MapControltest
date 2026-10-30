@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import android.view.Choreographer
 import android.view.PixelCopy
 import android.view.View
@@ -61,10 +63,12 @@ object ThemeTransition {
     private const val FADE_MS = 200L
     private var snapshot: Bitmap? = null
     private var pending = false
+    internal var tapAt = 0L
 
     /** Pencerenin görüntüsünü alıp [Activity.recreate] eder; yakalama başarısızsa doğrudan recreate. */
     fun recreate(activity: Activity) {
         if (pending || activity.isFinishing || activity.isDestroyed) return
+        tapAt = SystemClock.uptimeMillis()
         val decor = activity.window.decorView
         val w = decor.width
         val h = decor.height
@@ -101,8 +105,107 @@ object ThemeTransition {
         }
     }
 
+    // --- Yerinde tema geçişi (etkinlik yeniden yaratılmaz) ---
+
+    private var live: ImageView? = null
+    private var inPlaceBusy = false
+    private var inPlaceAgain = false
+
+    /**
+     * Tema değişimini etkinliği yeniden yaratmadan uygular: pencerenin (yarı çözünürlükte, ucuz) görüntüsü örtü olur,
+     * altında [HomeLauncherActivity.applyThemeInPlace] widget'ları yeniler, ilk kare çizilince örtü söner.
+     * Hızlı ardışık çağrılar birleşir (sonuncunun tema seçimi uygulanır). Etkinlik bu türden değilse recreate.
+     */
+    fun retheme(activity: Activity) {
+        val home = activity as? HomeLauncherActivity
+        if (home == null) { recreate(activity); return }
+        if (activity.isFinishing || activity.isDestroyed) return
+        if (inPlaceBusy) { inPlaceAgain = true; return }
+        val t0 = SystemClock.uptimeMillis()
+        val decor = activity.window.decorView
+        val w = decor.width
+        val h = decor.height
+        val finish = {
+            inPlaceBusy = false
+            if (inPlaceAgain) { inPlaceAgain = false; decor.post { retheme(activity) } }
+        }
+        if (w <= 0 || h <= 0 || !decor.isAttachedToWindow) {
+            home.applyThemeInPlace(); return
+        }
+        val bmp = try {
+            Bitmap.createBitmap(w / SNAP_DIV, h / SNAP_DIV, Bitmap.Config.ARGB_8888)
+        } catch (e: OutOfMemoryError) {
+            home.applyThemeInPlace(); return
+        }
+        inPlaceBusy = true
+        fun go(ok: Boolean) {
+            if (activity.isFinishing || activity.isDestroyed) {
+                bmp.recycle(); inPlaceBusy = false
+            } else {
+                val overlay = if (ok) addOverlay(decor as ViewGroup, activity, bmp) else { bmp.recycle(); null }
+                val t1 = SystemClock.uptimeMillis()
+                try { home.applyThemeInPlace() } catch (e: Throwable) {
+                    Log.e("ThemeTiming", "yerinde tema hatası, yeniden kuruluyor", e)
+                    overlay?.let { removeOverlay(decor, it) }
+                    inPlaceBusy = false
+                    activity.recreate(); return
+                }
+                Log.i("ThemeTiming", "yerinde: anlık görüntü ${t1 - t0} ms, yenileme ${SystemClock.uptimeMillis() - t1} ms")
+                decor.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+                    override fun onPreDraw(): Boolean {
+                        if (decor.viewTreeObserver.isAlive) decor.viewTreeObserver.removeOnPreDrawListener(this)
+                        Log.i("ThemeTiming", "yerinde: ilk kare (onPreDraw) ${SystemClock.uptimeMillis() - t0} ms")
+                        Choreographer.getInstance().postFrameCallback {
+                            Log.i("ThemeTiming", "yerinde: ilk kare çizildi ${SystemClock.uptimeMillis() - t0} ms")
+                            if (overlay == null) finish() else overlay.animate().alpha(0f).setDuration(FADE_MS)
+                                .withEndAction { removeOverlay(decor, overlay); finish() }.start()
+                        }
+                        return true
+                    }
+                })
+            }
+        }
+        try {
+            PixelCopy.request(activity.window, bmp, { go(it == PixelCopy.SUCCESS) }, Handler(Looper.getMainLooper()))
+        } catch (e: IllegalArgumentException) {
+            bmp.recycle(); inPlaceBusy = false; home.applyThemeInPlace()
+        }
+    }
+
+    private const val SNAP_DIV = 2
+
+    private fun addOverlay(decor: ViewGroup, activity: Activity, bmp: Bitmap): ImageView {
+        live?.let { removeOverlay(decor, it) } // yeni görüntü eskisini zaten içeriyor
+        val overlay = object : ImageView(activity) {
+            override fun hasOverlappingRendering() = false
+        }.apply {
+            setImageBitmap(bmp)
+            scaleType = ImageView.ScaleType.FIT_XY
+            isClickable = true
+        }
+        decor.addView(overlay, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        live = overlay
+        return overlay
+    }
+
+    private fun removeOverlay(decor: View, overlay: ImageView) {
+        overlay.animate().cancel()
+        (decor as ViewGroup).removeView(overlay)
+        (overlay.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let { overlay.setImageDrawable(null); it.recycle() }
+        if (live === overlay) live = null
+    }
+
     /** Yeni etkinlikte: varsa eski görüntüyü kaplama yapar, ilk kare çizilince söndürür. */
     fun playIn(activity: Activity) {
+        val t0 = tapAt
+        if (t0 != 0L) activity.window.decorView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                activity.window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                Log.i("ThemeTiming", "ilk kare (onPreDraw) ${SystemClock.uptimeMillis() - t0} ms")
+                Choreographer.getInstance().postFrameCallback { Log.i("ThemeTiming", "ilk kare cizildi ${SystemClock.uptimeMillis() - t0} ms") }
+                return true
+            }
+        })
         val bmp = snapshot ?: return
         snapshot = null
         val decor = activity.window.decorView as ViewGroup

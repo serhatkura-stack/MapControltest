@@ -90,6 +90,8 @@ internal object TripDecode {
 internal data class TripData(
     val connected: Boolean = false,
     val moving: Boolean? = null,
+    /** Gösterge hızı (km/sa); anlık tüketimin düşük hızda gösterilmemesi için. */
+    val speedKmh: Int? = null,
     val instantL100: Double? = null,
     val driveAvgL100: Double? = null,
     val tripKm: Double? = null,
@@ -107,8 +109,10 @@ internal data class TripData(
 )
 
 /**
- * Yolculuk sinyallerini 2 sn'de bir, yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur).
+ * Yolculuk sinyallerini 1 sn'de bir, yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur).
  * Tek okuyucu: birden çok widget aynı turu paylaşır. Yalnızca okur.
+ * Maliyet: anlık tüketim yaklaşık 2,2 sn'de bir güncellendiği için her saniye yalnızca iki sinyal (anlık tüketim + hız)
+ * okunur; tam tur (~15 sinyal) her ikinci turda yapılır.
  */
 internal object TripSource {
 
@@ -116,7 +120,7 @@ internal object TripSource {
         fun onTrip(data: TripData)
     }
 
-    private const val POLL_MS = 2_000L
+    private const val POLL_MS = 1_000L
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
     private val HVAC = VDEventCarInfo.MODULE_HVAC
 
@@ -125,6 +129,7 @@ internal object TripSource {
     private val io = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "TripSource").apply { isDaemon = true } }
     private var task: ScheduledFuture<*>? = null
     private var appContext: Context? = null
+    private var tick = 0
 
     @Volatile
     var last: TripData = TripData()
@@ -152,13 +157,31 @@ internal object TripSource {
     private fun poll() {
         // Yakalanmayan hata scheduleWithFixedDelay'i sessizce iptal eder; döngü sürsün.
         try {
-            val data = if (LauncherDemo.enabled) LauncherDemo.trip() else readAll()
+            val data = if (LauncherDemo.enabled) LauncherDemo.trip() else if (tick++ % 2 == 0) readAll() else readLight() ?: return
             if (data == last && !LauncherDemo.enabled) return
             last = data
             main.post { listeners.forEach { it.onTrip(data) } }
         } catch (t: Throwable) {
             Log.w("TripSource", "poll başarısız", t)
         }
+    }
+
+    /** Hafif tur: yalnızca hız ve anlık tüketim yenilenir, gerisi son tam turdan kalır. Bağlı değilse null (tam tur beklenir). */
+    private fun readLight(): TripData? {
+        val prev = last
+        if (!prev.connected) return null
+        val (instant, speed) = readLive()
+        return prev.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant)
+    }
+
+    private fun readLive(): Pair<Double?, Int?> {
+        // Anlık tüketim duruyorken 0xFFFF döner; geçerli geldiğinde araç hareket ediyordur.
+        val instant = TripDecode.instantL100(CarSignals.readInt(RO, ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
+        // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
+        val speed = TripDecode.speed(
+            CarSignals.readInt(RO, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), CarSignals.readInt(RO, ReadOnlyID.ID_CAR_SPEED),
+        )
+        return instant to speed
     }
 
     private fun readAll(): TripData {
@@ -169,13 +192,11 @@ internal object TripSource {
         }
         fun ro(id: Int) = CarSignals.readInt(RO, id)
         fun hvac(id: Int) = CarSignals.readInt(HVAC, id)
-        // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
-        // Anlık tüketim duruyorken 0xFFFF döner; geçerli geldiğinde araç hareket ediyordur.
-        val instant = TripDecode.instantL100(ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
-        val speed = TripDecode.speed(ro(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), ro(ReadOnlyID.ID_CAR_SPEED))
+        val (instant, speed) = readLive()
         return TripData(
             connected = true,
             moving = TripDecode.moving(speed, instant),
+            speedKmh = speed,
             instantL100 = instant,
             driveAvgL100 = ro(ReadOnlyID.ID_AVERAGE_FUEL_CONS_AFTER_RUNNING)?.takeIf { it in 1..999 }?.let { it / 10.0 },
             tripKm = TripDecode.tripKm(ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)),
@@ -375,28 +396,114 @@ internal abstract class TripCard(
 }
 
 /**
+ * Anlık tüketimi gösterime çevirir (saf mantık, JVM'de sınanır). Sinyal 70 yaklaşık 2,2 sn'de bir güncellenir ve
+ * kalkışta/düşük hızda anlamsız büyük değerler verir (13 km/sa'te 95 L/100 km); bu yüzden:
+ * - 20 km/sa altında L/100 km gösterilmez ("Kalkış"); 22'ye çıkana dek geri dönülmez (eşikte titremesin).
+ *   L/h türetilmez: tüketim ve hız farklı zamanlarda örneklendiği için ivmelenirken çarpım güvenilmez.
+ * - Üstünde son [WINDOW] geçerli örneğin ortalaması 0,1'e yuvarlanır; yeni değer gösterilenden en fazla
+ *   [DEADBAND] farklıysa metin değişmez. 30,0 üstü "30+".
+ * - Araç durunca (hareket yok ya da hız 0 ve sinyal geçersiz) ortalama sıfırlanır.
+ */
+internal class ConsumptionSmoother {
+    enum class Mode { NONE, IDLE, TAKEOFF, VALUE, CAP }
+
+    data class Display(val mode: Mode, val l100: Double? = null)
+
+    private val samples = ArrayDeque<Double>()
+    private var shown: Double? = null
+    private var takeoff = false
+
+    fun update(instantL100: Double?, speedKmh: Int?, moving: Boolean?): Display {
+        val stopped = moving == false || (speedKmh == 0 && instantL100 == null)
+        if (stopped) {
+            reset()
+            return Display(Mode.IDLE)
+        }
+        val low = speedKmh != null && speedKmh < (if (takeoff) EXIT_KMH else ENTER_KMH)
+        if (low) {
+            reset()
+            takeoff = true
+            return Display(Mode.TAKEOFF)
+        }
+        takeoff = false
+        if (instantL100 != null) {
+            samples.addLast(instantL100)
+            while (samples.size > WINDOW) samples.removeFirst()
+            val candidate = Math.round(samples.average() * 10) / 10.0
+            val cur = shown
+            if (cur == null || Math.abs(candidate - cur) > DEADBAND + 1e-9) shown = candidate
+        }
+        val v = shown ?: return Display(Mode.NONE)
+        return if (v > CAP) Display(Mode.CAP, CAP) else Display(Mode.VALUE, v)
+    }
+
+    private fun reset() {
+        samples.clear()
+        shown = null
+        takeoff = false
+    }
+
+    companion object {
+        const val WINDOW = 5
+        const val DEADBAND = 0.3
+        const val CAP = 30.0
+        const val ENTER_KMH = 20
+        const val EXIT_KMH = 22
+    }
+}
+
+/**
  * Anlık tüketim: yalnızca büyük, okunur bir rakam. Araç duruyorsa "Araç duruyor". Renk değişmez:
  * sürücüyü uyarmaz, bilgi verir.
  */
 internal class ConsumptionTile(context: Context) :
     TripCard(context, R.drawable.ic_mdi_leaf, R.string.launcher_widget_consumption) {
 
+    private val smoother = ConsumptionSmoother()
+    private var display = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
+    private var fed: TripData? = null
+
     override fun bind() {
-        val now = data.instantL100
-        when {
-            data.connected && now == null && data.moving == false -> {
+        val d = data
+        if (!d.connected) {
+            fed = null
+            showMissing()
+            return
+        }
+        // bind boyut değişince de çağrılır; aynı veri iki kez ortalamaya girmesin.
+        if (d !== fed) {
+            fed = d
+            display = smoother.update(d.instantL100, d.speedKmh, d.moving)
+        }
+        val title = context.getString(R.string.launcher_widget_consumption)
+        when (display.mode) {
+            ConsumptionSmoother.Mode.IDLE -> {
                 val idle = context.getString(R.string.launcher_consumption_idle)
                 setValue(idle, LauncherTheme.TEXT_SECONDARY, IDLE_SP)
                 setSubtitle(null)
-                describe(context.getString(R.string.launcher_widget_consumption), idle)
+                describe(title, idle)
             }
-            !data.connected || now == null -> showMissing()
-            else -> {
-                val value = context.getString(R.string.launcher_l100_value, one(now))
+            ConsumptionSmoother.Mode.TAKEOFF -> {
+                val takeoff = context.getString(R.string.launcher_consumption_takeoff)
+                val low = context.getString(R.string.launcher_consumption_low_speed)
+                setValue(takeoff, LauncherTheme.TEXT, IDLE_SP)
+                setSubtitle(low)
+                describe(title, takeoff, low)
+            }
+            ConsumptionSmoother.Mode.CAP -> {
+                val cap = context.getString(R.string.launcher_consumption_over_cap)
+                val unit = context.getString(R.string.launcher_l100_unit)
+                setValue(cap, LauncherTheme.TEXT)
+                setSubtitle(unit)
+                describe(title, cap, unit)
+            }
+            ConsumptionSmoother.Mode.VALUE -> {
+                val value = context.getString(R.string.launcher_l100_value, one(display.l100!!))
                 setValue(value, LauncherTheme.TEXT)
                 setSubtitle(null)
-                describe(context.getString(R.string.launcher_widget_consumption), value)
+                describe(title, value)
             }
+            ConsumptionSmoother.Mode.NONE -> showMissing()
         }
         showRows(emptyList())
     }

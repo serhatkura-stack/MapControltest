@@ -10,8 +10,8 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /**
- * Tavan perdesi durumu (CarSetting 10, araçta ölçüldü): 1 kapalı, 2 açılıyor, 3 yarıda durdu (tek çekişte yarıya
- * gelir, durur), 4 kapanıyor. 5 (açık) ve 6 (yarıda) bu araçta görülmedi; diğer araçlar için hoşgörülür.
+ * Tavan perdesi durumu (CarSetting 10, araçta ölçüldü): 1 kapalı, 2 açılıyor, 3 yarıda/durdu, 4 kapanıyor,
+ * 5 tam açık (komuttan sonra), 6 tam açık (düğmeden sonra).
  */
 internal enum class SunshadeState(val raw: Int) {
     CLOSED(1), OPENING(2), PARTIAL(3), CLOSING(4), OPEN(5), UNKNOWN(-1);
@@ -31,7 +31,7 @@ internal enum class SunshadeState(val raw: Int) {
 /** Araca gidecek tek bir yazma: modül, sinyal, değer. */
 internal data class ComfortCmd(val module: Int, val id: Int, val value: Int)
 
-/** Perde komut adımı: [delayMs] sonra [value] yazılır (2 aç, 1 kapat, [ComfortWriter.SUNSHADE_STOP_VALUE] durdur). */
+/** Perde komut adımı: [delayMs] sonra [value] yazılır (VR 124: 1 aç, 2 kapat, [ComfortWriter.SUNSHADE_STOP_VALUE] durdur). */
 internal data class SunshadeStep(val value: Int, val delayMs: Long)
 
 /**
@@ -44,7 +44,7 @@ internal object ComfortMath {
     const val SNAP_DRAG_FRACTION = 0.25f
 
     fun decodeSunshade(raw: Int?): SunshadeState = when (raw) {
-        6 -> SunshadeState.PARTIAL
+        6 -> SunshadeState.OPEN
         else -> SunshadeState.values().firstOrNull { it.raw == raw && it != SunshadeState.UNKNOWN } ?: SunshadeState.UNKNOWN
     }
 
@@ -90,14 +90,14 @@ internal object ComfortMath {
     }
 
     /**
-     * Araçtaki düğme gibi adım adım dokunma: kapalı → yarı → tam açık, açıkken ters yön. Tek çekiş perdeyi yarıda
-     * durdurur. Yarıdayken yön [lastOpening] (son adım açma yönündeyse true) ile belirlenir; bilinmiyorsa aç.
-     * Hareket halindeyse ters yöne; durum bilinmiyorsa null.
+     * Dokunma = aç/kapat (durdurma değeri bilinmiyor, ara konum yok): kapalı → tam aç, açık → kapat.
+     * Hareket halindeyse ters yöne (araçta hareket sırasındaki komut yönü ters çevirir, durdurmaz). Yarıda duran
+     * perdede yön son adımın tersidir ([lastOpening] true ise kapat); bilinmiyorsa aç. Durum bilinmiyorsa null.
      */
     fun tapStep(state: SunshadeState, lastOpening: Boolean?): Float? = when (state) {
-        SunshadeState.CLOSED -> 0.5f
-        SunshadeState.OPEN -> 0.5f
-        SunshadeState.PARTIAL -> if (lastOpening == false) 0f else 1f
+        SunshadeState.CLOSED -> 1f
+        SunshadeState.OPEN -> 0f
+        SunshadeState.PARTIAL -> if (lastOpening == true) 0f else 1f
         SunshadeState.OPENING -> 0f
         SunshadeState.CLOSING -> 1f
         SunshadeState.UNKNOWN -> null
@@ -135,47 +135,59 @@ internal object ComfortMath {
 
     // --- Komutlar ---
 
-    /** Buğu/ısıtma yazması: ön cam HV 24 (ölçülen) + HV 65, arka cam HV 80 + CS 159. */
+    /**
+     * Buğu yazması: ön cam HV 24, arka cam HV 80 (ikisi de araçta doğrulandı: 1 = açık). Kapatma değeri
+     * [ComfortWriter.DEFROST_OFF_VALUE]. HV 65 ve CS 159 araçta etkisiz/ölçülmedi, yazılmaz.
+     */
     fun defrostCommands(front: Boolean, on: Boolean): List<ComfortCmd> {
-        val v = if (on) 1 else 0
-        return if (front) listOf(
-            ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, v),
-            ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v),
-        ) else listOf(
-            ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_REAR_DEFROST, v),
-            ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_WINDOW_HEAT, v),
-        )
+        val v = if (on) 1 else ComfortWriter.DEFROST_OFF_VALUE
+        val id = if (front) HvacID.ID_AC_MAX_FRONT_DEFOREST else HvacID.ID_AC_REAR_DEFROST
+        return listOf(ComfortCmd(VDEventCarInfo.MODULE_HVAC, id, v))
     }
 
     fun steerCommands(on: Boolean): List<ComfortCmd> =
         listOf(ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, if (on) 1 else 0))
 
+    /** Perde yazması VR modülünden (327696) kimlik 124 (araçta doğrulandı); CarSetting 10 yazmaları yok sayılıyor. */
     fun sunshadeCommand(value: Int): ComfortCmd =
-        ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_SUNSHADE, value)
+        ComfortCmd(ComfortWriter.MODULE_VR, ComfortWriter.ID_VR_SUN_SHADE, value)
 }
 
 /**
- * Konfor widget'larının (tavan perdesi, buğu, direksiyon ısıtma) yazma noktası. Kodlamalar araçta DOĞRULANMADI:
- * [COMFORT_WRITE_VERIFIED] ve ilgili özellik bayrağı true olana kadar (ve test sürümünde hiçbir zaman) araca
- * HİÇBİR ŞEY gitmez. Araca ulaşan tek yol `LauncherEdition.sendItemValue` (test sürümünde boş).
+ * Konfor widget'larının (tavan perdesi, buğu, direksiyon ısıtma) yazma noktası. Yalnızca perde araçta doğrulandı;
+ * buğu yalnızca AÇMA doğrulandı, kapatma henüz değil. [COMFORT_WRITE_VERIFIED] ve ilgili özellik bayrağı true
+ * olmadıkça (ve test sürümünde hiçbir zaman) araca HİÇBİR ŞEY gitmez. Araca ulaşan tek yol `LauncherEdition.sendItemValue` (test sürümünde boş).
  * Kapı [ClimateWriter.canWrite] ile aynıdır.
  */
 internal object ComfortWriter {
 
     /** Ana anahtar: araç testinden sonra true yapılır. Özellik bayrakları da true olmalı. */
-    const val COMFORT_WRITE_VERIFIED = false
-    const val SUNSHADE_WRITE_VERIFIED = false
+    const val COMFORT_WRITE_VERIFIED = true
+    const val SUNSHADE_WRITE_VERIFIED = true
+
+    /** Buğu AÇMA doğrulandı; KAPATMA doğrulanmadı, o yüzden kapalı kalır (kapatma değeri [DEFROST_OFF_VALUE] denenecek). */
     const val DEFROST_WRITE_VERIFIED = false
     const val STEER_HEAT_WRITE_VERIFIED = false
 
-    /** Perde komut değerleri (CarSetting 10): FrostNav'ın gönderdiği gibi 2 aç, 1 kapat. */
-    const val SUNSHADE_OPEN_VALUE = 2
-    const val SUNSHADE_CLOSE_VALUE = 1
+    /** VDEventCarInfo.MODULE_VR ve VrID.ID_VR_SUN_SHADE: perde yazması buradan gider (CarSetting 10 yazmaları yok sayılır). */
+    const val MODULE_VR = 327696
+    const val ID_VR_SUN_SHADE = 124
 
-    /** Perdenin tam yol süresi (ms): tam açılma süresi araçta ölçülecek; 11 sn yarıya kadar (araçta ölçüldü). Null = bilinmiyor. */
-    val SUNSHADE_TRAVEL_MS: Long? = null
+    /** Perde komut değerleri (VR 124, araçta ölçüldü): 1 aç, 2 kapat. Hareket sırasındaki komut yönü ters çevirir. */
+    const val SUNSHADE_OPEN_VALUE = 1
+    const val SUNSHADE_CLOSE_VALUE = 2
 
-    /** Perdeyi yarıda durduran CarSetting 10 değeri; bilinmiyor, araç testinde bulunacak. Null iken yalnızca tam açık/kapalı. */
+    /** Buğu kapatma değeri (Hvac 24/80); 0 ve ikinci 1 kapatmadı. 2 araçta denenecek. */
+    const val DEFROST_OFF_VALUE = 2 // araçta denenecek
+
+    /** Perdenin tam açılma / kapanma süresi (ms), araçta ölçüldü. */
+    const val SUNSHADE_OPEN_MS = 6_800L
+    const val SUNSHADE_CLOSE_MS = 8_100L
+
+    /** Tam yol süresi (ara konum hesabı için; yalnızca durdurma değeri bilinirse kullanılır). */
+    val SUNSHADE_TRAVEL_MS: Long? = SUNSHADE_CLOSE_MS
+
+    /** Perdeyi yarıda durduran değer; araçta bulunamadı (VR 124 = 3 denenecek). Null iken yalnızca tam açık/kapalı. */
     val SUNSHADE_STOP_VALUE: Int? = null
 
     /** Ara konum (yüzde) kontrolü mümkün mü: durdurma değeri biliniyorsa. */

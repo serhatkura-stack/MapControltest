@@ -126,9 +126,8 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 
 /**
  * Tavan perdesi: üstten bakışla çatı camı ve üzerini örten "perde". Aşağı sürükle = kapat (perde parmağı izler),
- * yukarı sürükle = aç. Dokun = araçtaki gibi adım (kapalı -> yarı -> tam açık, açıkken ters). Basılı sürükle = parmak
- * inikken hareket, bırakınca durur; bunun için durdurma değeri ([ComfortWriter.SUNSHADE_STOP_VALUE]) gerekir, o
- * bilinene kadar sürükleme dokunma adımına döner.
+ * yukarı sürükle = aç. Dokun = aç/kapat; hareket sırasında dokunma yönü ters çevirir (araçta komut durdurmaz). Ara
+ * konum için durdurma değeri ([ComfortWriter.SUNSHADE_STOP_VALUE]) gerekir; bilinene kadar sürükleme dokunmaya döner.
  */
 internal class SunshadeTile(context: Context) : ComfortTile(context) {
 

@@ -55,6 +55,9 @@
             android:name="com.mapcontrol.comfort.ComfortTestActivity"
             android:exported="true"
             android:label="Konfor Test"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
             android:screenOrientation="landscape"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
@@ -76,6 +79,20 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
+        </service>
+
+        <!-- Yandex -> HUD köprüsü (isteğe bağlı): yalnızca ru.yandex.yandexmaps, kullanıcı bir kez etkinleştirir
+             (adb komutu için bkz. NOTLAR). Ayarlarda "Yandex -> HUD" Kapalı iken hiçbir şey okunmaz/gönderilmez. -->
+        <service
+            android:name="com.mapcontrol.hud.YandexHudAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/hud_accessibility_config" />
         </service>
     </application>
 </manifest>
