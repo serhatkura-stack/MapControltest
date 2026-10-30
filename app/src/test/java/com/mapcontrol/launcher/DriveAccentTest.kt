@@ -39,6 +39,23 @@ class DriveAccentTest {
         }
     }
 
+    /** "Bitti" düğmesi: dolgu = buttonFill(vurgu), yazı beyaz; her mod ve tema (Normal'in varsayılan mavisi dahil) >= 4,5:1. */
+    @Test fun doneButtonHasStrongContrastForEveryAccent() {
+        val defaults = mapOf(true to 0xFF3B82F6.toInt(), false to 0xFF2563EB.toInt())
+        for (night in listOf(true, false)) {
+            for (m in 0..6) {
+                val accent = DriveAccent.accentFor(m, night) ?: defaults.getValue(night)
+                val fill = DriveAccent.buttonFill(accent)
+                assertTrue("mode $m night=$night %06X".format(fill and 0xFFFFFF), DriveAccent.contrastWithWhite(fill) >= 4.5)
+                assertEquals("ton aynı kalır", accent ushr 24, fill ushr 24)
+            }
+            val alert = if (night) 0xFFEF4444.toInt() else 0xFFDC2626.toInt()
+            assertTrue("alert night=$night", DriveAccent.contrastWithWhite(DriveAccent.buttonFill(alert)) >= 4.5)
+        }
+        val already = 0xFF7A4E2D.toInt()
+        assertEquals(already, DriveAccent.buttonFill(already))
+    }
+
     @Test fun debounceAppliesOnlyAfterStableWindow() {
         val p = DriveModePolicy(2_000)
         assertNull(p.update(0, 2, true))

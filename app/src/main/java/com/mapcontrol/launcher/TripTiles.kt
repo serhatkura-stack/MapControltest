@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
+import android.view.View
+import android.widget.LinearLayout
 import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
@@ -36,8 +39,49 @@ internal object CarSignals {
 }
 
 /**
+ * Yolculuk sinyallerinin ham değerden çözümü (saf işlevler, JVM'de sınanır). Tiggo 7'de 2026-10-29'da gösterge
+ * TripB sayfasıyla karşılaştırıldı: mesafe, ortalama tüketim ve ortalama hız onda bir birimdir.
+ */
+internal object TripDecode {
+    /** Anlık tüketim (sinyal 70): ham/10 L/100 km. 0xFFFF (araç duruyor) ve aralık dışı değer geçersizdir. */
+    fun instantL100(raw: Int?): Double? = raw?.takeIf { it in 0..999 }?.let { it / 10.0 }
+
+    /** Gösterge hızı (sinyal 119): km/sa doğrudan. Aralık dışı değer geçersizdir. */
+    fun speedKmh(raw: Int?): Int? = raw?.takeIf { it in 0..300 }
+
+    /**
+     * Gösterge hızı (119) varsa o, yoksa eski hız sinyali (0) kullanılır; ilki 0/geçersizse ikincisi denenir.
+     * Tiggo 7'de sinyal 0 hareket ederken de 0/geçersiz kalıyordu.
+     */
+    fun speed(gauge: Int?, legacy: Int?): Int? {
+        val g = speedKmh(gauge)
+        if (g != null && g > 0) return g
+        val l = speedKmh(legacy)
+        if (l != null && l > 0) return l
+        return g ?: l
+    }
+
+    /** Hareket kararı: hız > 0 ya da anlık tüketim geçerli. Hiçbiri okunamadıysa null (bilinmiyor). */
+    fun moving(speedKmh: Int?, instantL100: Double?): Boolean? = when {
+        speedKmh != null && speedKmh > 0 -> true
+        instantL100 != null -> true
+        speedKmh != null -> false
+        else -> null
+    }
+
+    /** Sıfırlamadan beri mesafe (sinyal 40): ham/10 km. */
+    fun tripKm(raw: Int?): Double? = raw?.takeIf { it >= 0 }?.let { it / 10.0 }
+
+    /** Sıfırlamadan beri ortalama tüketim (sinyal 37): ham/10 L/100 km. */
+    fun avgL100(raw: Int?): Double? = raw?.takeIf { it in 1..999 }?.let { it / 10.0 }
+
+    /** Sıfırlamadan beri ortalama hız (sinyal 41): ham/10, gösterge gibi tam sayıya yuvarlanmadan kırpılır (456 -> 45). */
+    fun avgSpeedKmh(raw: Int?): Int? = raw?.takeIf { it in 1..3000 }?.let { it / 10 }
+}
+
+/**
  * Yolculuk bilgisayarı verisi. Çevrimler Tiggo 7'de doğrulandı (2026-10-29, gösterge TripB ile eşleşti);
- * [driveAvgL100] hâlâ doğrulanmadı (okunan [0,0] = 0). [instantL100] yalnızca araç hareket ederken geçerli.
+ * [driveAvgL100] hâlâ doğrulanmadı (okunan [0,0] = 0). [instantL100] duruyorken 0xFFFF (geçersiz) gelir.
  */
 internal data class TripData(
     val connected: Boolean = false,
@@ -121,17 +165,18 @@ internal object TripSource {
         }
         fun ro(id: Int) = CarSignals.readInt(RO, id)
         fun hvac(id: Int) = CarSignals.readInt(HVAC, id)
-        // Anlık tüketim duruyorken 0xFFFF döner; yalnızca hızı > 0 iken geçerli.
-        val speed = ro(ReadOnlyID.ID_CAR_SPEED)
-        val moving = speed?.let { it in 1..300 }
+        // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
+        // Anlık tüketim duruyorken 0xFFFF döner; geçerli geldiğinde araç hareket ediyordur.
+        val instant = TripDecode.instantL100(ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
+        val speed = TripDecode.speed(ro(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), ro(ReadOnlyID.ID_CAR_SPEED))
         return TripData(
             connected = true,
-            moving = moving,
-            instantL100 = if (moving == true) ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION)?.takeIf { it in 0..999 }?.let { it / 10.0 } else null,
+            moving = TripDecode.moving(speed, instant),
+            instantL100 = instant,
             driveAvgL100 = ro(ReadOnlyID.ID_AVERAGE_FUEL_CONS_AFTER_RUNNING)?.takeIf { it in 1..999 }?.let { it / 10.0 },
-            tripKm = ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)?.takeIf { it >= 0 }?.let { it / 10.0 },
-            avgL100 = ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)?.takeIf { it in 1..999 }?.let { it / 10.0 },
-            avgSpeedKmh = ro(ReadOnlyID.ID_AVG_SPEED)?.takeIf { it in 1..300 },
+            tripKm = TripDecode.tripKm(ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)),
+            avgL100 = TripDecode.avgL100(ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)),
+            avgSpeedKmh = TripDecode.avgSpeedKmh(ro(ReadOnlyID.ID_AVERAGE_SPEED_AFTER_CLEAR)),
             batteryV = ro(ReadOnlyID.ID_IBS_VOLTAGE)?.takeIf { it in 5_000..20_000 }?.let { it / 1000.0 },
             coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
             lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
@@ -196,23 +241,126 @@ internal class ConsumptionTile(context: Context) :
     ).joinToString("\n").ifEmpty { null }
 }
 
-/** Yolculuk: yolculuk km; geniş boyutta ortalama tüketim ve ortalama hız. */
-internal class TripComputerTile(context: Context) :
-    TripTile(context, R.drawable.ic_mdi_road_variant, R.string.launcher_widget_trip) {
+/**
+ * Yolculuk: gösterge TripB sayfası gibi "Sıfırlamadan beri". Sol sütunda başlık, büyük mesafe ve alt başlık;
+ * boyuta göre sağda etiketli satırlar: dar boyutta yok, orta boyutta ortalama tüketim, geniş boyutta
+ * ortalama tüketim ve ortalama hız. Yalnızca okur; yeni veri uydurmaz.
+ */
+internal class TripComputerTile(private val context: Context) : SizedWidget {
 
-    override fun bind() {
+    private var data = TripData()
+    private var tier = 0
+    private val listener = TripSource.Listener {
+        data = it
+        bind()
+    }
+
+    private val valueText = text(context, VALUE_SP, medium = true)
+    private val subtitle = text(context, SUBTITLE_SP, LauncherTheme.TEXT_SECONDARY)
+    private val rows = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        visibility = View.GONE
+    }
+
+    private val mainColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon(context, R.drawable.ic_mdi_road_variant, 28, LauncherTheme.TEXT_SECONDARY))
+            addView(gap(context, 12))
+            addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_widget_trip) })
+        })
+        addView(gap(context, 4, vertical = true))
+        addView(valueText)
+        addView(subtitle)
+    }
+
+    private val root = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
+        minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        gravity = Gravity.CENTER_VERTICAL
+        addView(mainColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(rows, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply { marginStart = context.dp(16) })
+    }
+
+    override val view: View get() = root
+
+    override fun onVisible() = TripSource.add(context, listener)
+
+    override fun onHidden() = TripSource.remove(listener)
+
+    override fun release() = TripSource.remove(listener)
+
+    override fun applySpan(span: Span) {
+        tier = when {
+            span.w >= 4 -> 2
+            span.w >= 3 -> 1
+            else -> 0
+        }
+        valueText.textSize = if (tier >= 1) VALUE_WIDE_SP else VALUE_SP
+        rows.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, if (tier >= 1) 1.3f else 0f).apply {
+            marginStart = context.dp(16)
+        }
+        bind()
+    }
+
+    private fun one(value: Double) = String.format(java.util.Locale.getDefault(), "%.1f", value)
+
+    private fun bind() {
         val km = data.tripKm
         if (!data.connected || km == null) {
-            showMissing()
+            valueText.setTextColor(LauncherTheme.TEXT_SECONDARY)
+            valueText.setTextSmooth(context.getString(R.string.launcher_unavailable))
+            subtitle.text = context.getString(R.string.launcher_waiting_data)
+            rows.visibility = View.GONE
+            root.contentDescription = context.getString(R.string.launcher_waiting_data)
             return
         }
-        setValue(context.getString(R.string.launcher_km_value, one(km)), LauncherTheme.TEXT)
-        val parts = listOfNotNull(
-            data.avgL100?.let { context.getString(R.string.launcher_l100_value, one(it)) },
-            data.avgSpeedKmh?.let { context.getString(R.string.launcher_kmh_value, it) },
+        valueText.setTextColor(LauncherTheme.TEXT)
+        valueText.setTextSmooth(unitStyled(context.getString(R.string.launcher_km_value, one(km))))
+        subtitle.text = context.getString(R.string.launcher_trip_since_reset)
+        val entries = listOfNotNull(
+            data.avgL100?.let { context.getString(R.string.launcher_trip_avg_cons_label) to context.getString(R.string.launcher_l100_value, one(it)) },
+            data.avgSpeedKmh?.let { context.getString(R.string.launcher_trip_avg_speed_label) to context.getString(R.string.launcher_kmh_value, it) },
         )
-        // Orta boyutta tek satır (ilk ölçü); geniş boyutta ortalama tüketim ve ortalama hız alt alta.
-        showDetail((if (tier >= 2) parts else parts.take(1)).joinToString("\n").ifEmpty { null })
+        val shown = when (tier) {
+            0 -> emptyList()
+            1 -> entries.take(1)
+            else -> entries
+        }
+        rows.removeAllViews()
+        shown.forEachIndexed { i, (label, value) ->
+            rows.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(text(context, ROW_LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { text = label })
+                addView(unitRow(value))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                if (i > 0) topMargin = context.dp(6)
+            })
+        }
+        rows.visibility = if (shown.isEmpty()) View.GONE else View.VISIBLE
+        root.contentDescription = listOf(context.getString(R.string.launcher_trip_since_reset), context.getString(R.string.launcher_km_value, one(km)))
+            .plus(entries.map { "${it.first} ${it.second}" }).joinToString(", ")
+    }
+
+    /** "13,8 L/100 km" -> sayı normal, birim küçük ve ikincil tonda (km/sa dahil; [unitStyled] yalnızca bilinen birimleri tanır). */
+    private fun unitRow(value: String) = text(context, ROW_VALUE_SP, medium = true).apply {
+        val i = value.indexOf(' ')
+        text = if (i < 0) value else android.text.SpannableStringBuilder(value).apply {
+            setSpan(android.text.style.RelativeSizeSpan(0.7f), i, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(android.text.style.ForegroundColorSpan(LauncherTheme.TEXT_SECONDARY), i, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private companion object {
+        const val VALUE_SP = 32f
+        const val VALUE_WIDE_SP = 36f
+        const val SUBTITLE_SP = 17f
+        const val ROW_LABEL_SP = 17f
+        const val ROW_VALUE_SP = 24f
+        const val PADDING_DP = 20
     }
 }
 

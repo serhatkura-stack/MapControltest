@@ -120,7 +120,8 @@ internal class SeatHeatTile(
             segments.forEachIndexed { i, v ->
                 v.background = rounded(context, segmentColor(i), if (big == true) SEGMENT_RADIUS_BIG_DP else SEGMENT_RADIUS_DP)
             }
-            root.isEnabled = known
+            // Test sürümünde veri okunamasa da dokunuş açıklama göstermeli (sessiz kalmasın).
+            root.isEnabled = known || LauncherEdition.READ_ONLY
             root.contentDescription = context.getString(labelRes) + ", " + levelText
         }
     }

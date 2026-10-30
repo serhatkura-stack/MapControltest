@@ -272,18 +272,19 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_restart, R.string.launcher_edit_reset, LauncherTheme.CARD) { confirmReset() })
         addView(gap(context, 16))
-        addView(barButton(R.drawable.ic_mdi_check, R.string.launcher_edit_done, LauncherTheme.ACCENT) { exitEditMode() })
+        addView(barButton(R.drawable.ic_mdi_check, R.string.launcher_edit_done, DriveAccent.buttonFill(LauncherTheme.ACCENT), onFill = true) { exitEditMode() })
     }
 
-    private fun barButton(iconRes: Int, labelRes: Int, background: Int, onClick: () -> Unit): View = LinearLayout(this).apply {
+    private fun barButton(iconRes: Int, labelRes: Int, background: Int, onFill: Boolean = false, onClick: () -> Unit): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         this.background = rounded(context, background)
         setPadding(dp(24), 0, dp(24), 0)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(LauncherTheme.TOUCH_MIN_DP))
-        addView(icon(context, iconRes, 28))
+        // Birincil düğme: renkli dolgu üzerinde beyaz ikon ve yazı (karşıtlık >= 4,5:1, bkz. DriveAccent.buttonFill).
+        addView(if (onFill) icon(context, iconRes, 28, LauncherTheme.ON_ACCENT) else icon(context, iconRes, 28))
         addView(gap(context, 12))
-        addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+        addView(text(context, LauncherTheme.BODY_SP, if (onFill) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply { setText(labelRes) })
         contentDescription = getString(labelRes)
         isClickable = true
         setOnClickListener { onClick() }
@@ -292,7 +293,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     /**
      * "Widget ekle" paneli: beş sütunlu kutucuklar, her birinde ikon, ad ve boyutlar.
-     * Izgarada yer kalmayan türler soluk ve "Yer yok" der; dokunmak hiçbir şey eklemez.
+     * Ekranda zaten olan türler (APP hariç) soluk ve "Ekranda" der; yer kalmayanlar "Yer yok" der; dokunmak hiçbir şey eklemez.
      */
     private fun showAddDialog() {
         if (editLocked() || isFinishing || isDestroyed) return
@@ -321,7 +322,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private fun addTile(type: WidgetType, dismiss: () -> Unit): View {
-        val spot = spotFor(type)
+        val onScreen = !isAddable(type, layout)
+        val spot = if (onScreen) null else spotFor(type)
         val fits = spot != null
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -336,7 +338,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(gap(context, 4, vertical = true))
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                text = if (fits) type.sizes.joinToString("  ·  ") else getString(R.string.launcher_edit_no_room)
+                text = when {
+                    fits -> type.sizes.joinToString("  ·  ")
+                    onScreen -> getString(R.string.launcher_edit_on_screen)
+                    else -> getString(R.string.launcher_edit_no_room)
+                }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             alpha = if (fits) 1f else NO_ROOM_ALPHA
             contentDescription = getString(type.label)

@@ -128,4 +128,9 @@
     <string name="launcher_seat_driver">Driver seat</string>
     <string name="launcher_seat_passenger">Passenger seat</string>
     <string name="launcher_oem_mock_label">OEM (mock)</string>
+    <string name="launcher_app_phone">Phone</string>
+    <string name="launcher_edit_on_screen">On screen</string>
+    <string name="launcher_trip_since_reset">Since reset</string>
+    <string name="launcher_trip_avg_cons_label">Avg. consumption</string>
+    <string name="launcher_trip_avg_speed_label">Avg. speed</string>
 </resources>

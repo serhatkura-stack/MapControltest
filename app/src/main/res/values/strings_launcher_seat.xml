@@ -6,4 +6,6 @@
     <string name="launcher_widget_seat_heat_passenger">Passenger heat</string>
     <string name="launcher_widget_seat_vent_driver">Driver cooling</string>
     <string name="launcher_widget_seat_vent_passenger">Passenger cooling</string>
+    <string name="launcher_read_only_seat">Test build: change the seat from the car\'s climate screen</string>
+    <string name="launcher_read_only_lock">Test build: lock the car with the key or the car\'s own screen</string>
 </resources>

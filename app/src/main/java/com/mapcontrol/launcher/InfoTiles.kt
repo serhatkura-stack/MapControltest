@@ -389,8 +389,8 @@ class AppShortcutTile(
     private fun resolve(pkg: String): AppEntry? = try {
         val pm = context.packageManager
         val info = pm.getApplicationInfo(pkg, 0)
-        val label = pm.getApplicationLabel(info).toString().trim().ifEmpty { pkg }
-        AppEntry(label, AppIconHelper.load(context, pkg))
+        val label = AppIdentity.label(context, pkg, pm.getApplicationLabel(info).toString())
+        AppEntry(label, AppIdentity.overrideIcon(context, pkg, context.dp(ICON_DP)) ?: AppIconHelper.load(context, pkg))
     } catch (e: PackageManager.NameNotFoundException) {
         null
     }

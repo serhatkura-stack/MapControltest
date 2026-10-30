@@ -40,7 +40,7 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
 /**
  * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Sağda büyük araç görseli (kahraman), solda büyük menzil,
  * ince yakıt çubuğu ve altta tek sakin durum satırı (kilit). Bir sorun varsa (açık kapı/bagaj/cam tavan, lastik uyarısı)
- * kilit satırının yerini tek bir uyarı rengi satırı alır ve görselin köşesinde küçük kırmızı nokta belirir.
+ * kilit satırının yerini tek bir uyarı rengi satırı alır ve görselin köşesinde belirgin kırmızı nokta belirir; uyarı dolu kırmızı zeminde beyaz kalın yazıyla gösterilir.
  *
  * Yalnızca okur: kilit durumu dinleyiciden, kapılar ve menzil anlık görüntüden, lastik bayrağı 10 sn'de bir.
  */
@@ -75,9 +75,12 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-    /** Uyarı varsa görselin sağ üst köşesinde duran küçük kırmızı nokta; animasyonsuz. */
+    /** Uyarı varsa görselin sağ üst köşesinde duran belirgin kırmızı nokta (beyaz halkalı); animasyonsuz. */
     private val alertDot = View(context).apply {
-        background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setStroke(context.dp(ALERT_DOT_RING_DP), 0xFFFFFFFF.toInt())
+        }
         visibility = View.GONE
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
@@ -85,7 +88,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         addView(carImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val d = context.dp(ALERT_DOT_DP)
         addView(alertDot, FrameLayout.LayoutParams(d, d, Gravity.TOP or Gravity.END).apply {
-            topMargin = context.dp(8); marginEnd = context.dp(8)
+            topMargin = context.dp(12); marginEnd = context.dp(12)
         })
     }
 
@@ -284,7 +287,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
         calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
         alertDot.visibility = if (hasAlert) View.VISIBLE else View.GONE
-        (alertDot.background as GradientDrawable).setColor(LauncherTheme.ALERT)
+        (alertDot.background as GradientDrawable).setColor(DriveAccent.buttonFill(LauncherTheme.ALERT))
 
         // Sakin satır: kilit durumu; kilit açıksa da sessiz kalır (uyarı rengi yok).
         when (locked) {
@@ -310,8 +313,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
 
     /** Uyarı satırı: ALERT_SURFACE zeminli, ALERT renkli ikon + kısa metin. */
     private inner class AlertPill {
-        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_alert, LauncherTheme.ICON_S_DP, LauncherTheme.ALERT)
-        private val label: TextView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.ALERT, medium = true).apply {
+        private val iconView: ImageView = icon(context, R.drawable.ic_mdi_alert, LauncherTheme.ICON_S_DP, LauncherTheme.ON_ACCENT)
+        private val label: TextView = text(context, LauncherTheme.BODY_SP, LauncherTheme.ON_ACCENT, bold = true).apply {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
@@ -327,17 +330,26 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             addView(label, wrapLp())
         }
 
+        /** Dolu uyarı zemini, beyaz ikon ve kalın yazı; zemin beyazla >= 4,5:1 olacak kadar koyulaştırılır. */
         fun show(iconRes: Int, value: String) {
+            val wasHidden = root.visibility != View.VISIBLE
             iconView.setImageResource(iconRes)
-            iconView.imageTintList = ColorStateList.valueOf(LauncherTheme.ALERT)
+            iconView.imageTintList = ColorStateList.valueOf(LauncherTheme.ON_ACCENT)
             label.text = value
-            label.setTextColor(LauncherTheme.ALERT)
-            root.background = rounded(context, LauncherTheme.ALERT_SURFACE, 16f)
+            label.setTextColor(LauncherTheme.ON_ACCENT)
+            root.background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ALERT), 22f)
             root.contentDescription = value
             root.visibility = View.VISIBLE
+            // Belirdiğinde tek seferlik yumuşak giriş; döngü yok.
+            if (wasHidden) {
+                root.alpha = 0f
+                root.animate().alpha(1f).setDuration(FADE_IN_MS).start()
+            }
         }
 
         fun hide() {
+            root.animate().cancel()
+            root.alpha = 1f
             root.visibility = View.GONE
         }
     }
@@ -379,7 +391,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         const val MIN_WIDTH_FOR_CAR_DP = 360
         const val STATUS_HEIGHT_DP = 44
         const val FUEL_BAR_DP = 12
-        const val ALERT_DOT_DP = 16
+        const val ALERT_DOT_DP = 28
+        const val ALERT_DOT_RING_DP = 3
+        const val FADE_IN_MS = 250L
         /** Sol sütuna göre araç görselinin payı; görsel kartın büyük sağ kısmını alır. */
         const val CAR_WEIGHT = 1.25f
         const val FUEL_HYSTERESIS_TENTHS = 6

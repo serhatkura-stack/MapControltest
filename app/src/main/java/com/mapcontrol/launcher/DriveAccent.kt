@@ -36,6 +36,33 @@ object DriveAccent {
     fun accentFor(mode: Int, night: Boolean): Int? =
         ACCENTS[mode]?.let { if (night) it.first else it.second }
 
+    /** Beyaz yazının [fill] üzerindeki WCAG karşıtlığı. */
+    @JvmStatic
+    fun contrastWithWhite(fill: Int): Double {
+        fun ch(v: Int): Double { val x = v / 255.0; return if (x <= 0.03928) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4) }
+        val l = 0.2126 * ch((fill shr 16) and 0xFF) + 0.7152 * ch((fill shr 8) and 0xFF) + 0.0722 * ch(fill and 0xFF)
+        return 1.05 / (l + 0.05)
+    }
+
+    /**
+     * Birincil düğme (ör. düzenleme modunda "Bitti") dolgusu: [accent] beyaz yazıyla en az 4,5:1 olana kadar
+     * karartılır. Gündüz vurguları zaten yeterli, gece vurguları (açık tonlar) biraz koyulaşır; ton aynı kalır.
+     */
+    @JvmStatic
+    fun buttonFill(accent: Int): Int {
+        var c = accent
+        var i = 0
+        while (contrastWithWhite(c) < MIN_BUTTON_CONTRAST && i++ < 40) {
+            val r = ((c shr 16) and 0xFF) * 92 / 100
+            val g = ((c shr 8) and 0xFF) * 92 / 100
+            val b = (c and 0xFF) * 92 / 100
+            c = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return c
+    }
+
+    const val MIN_BUTTON_CONTRAST = 4.5
+
     /** Rozet gösterilecek mi: Normal ve bilinmeyen modda gösterilmez. */
     @JvmStatic
     fun hasBadge(mode: Int): Boolean = mode in ACCENTS

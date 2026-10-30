@@ -37,6 +37,20 @@ const val NAVIGATION_CARD_ENABLED = false
 fun addableWidgetTypes(): List<WidgetType> =
     WidgetType.values().filter { NAVIGATION_CARD_ENABLED || it != WidgetType.NAVIGATION }
 
+/** Düzende şu an bulunan widget türleri. */
+fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it.type }.toSet()
+
+/**
+ * Bu türden bir widget daha eklenebilir mi: APP kutucuğundan istenildiği kadar, diğerlerinden yalnızca bir tane.
+ * Kayıtlı düzende zaten çift olanlar silinmez ve yüklenir; bu yalnızca yeni eklemeyi engeller.
+ */
+fun isAddable(type: WidgetType, layout: List<PlacedWidget>): Boolean =
+    type == WidgetType.APP || type !in onScreenTypes(layout)
+
+/** [layout] verilince "Widget ekle" listesinde seçilebilir türler: ekranda olanlar elenir (APP hariç). */
+fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
+    addableWidgetTypes().filter { isAddable(it, layout) }
+
 /**
  * Eklenebilir widget türleri ve her birinin desteklediği boyutlar.
  * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.

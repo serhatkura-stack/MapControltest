@@ -254,16 +254,17 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
                 showMissing()
             }
         }
-        root.isEnabled = locked != null
+        // Test sürümünde veri yokken de dokunuş açıklama göstermeli.
+        root.isEnabled = locked != null || LauncherEdition.READ_ONLY
     }
 
     /** Kilit komutu senkron binder çağrısı; ana thread'i bloklamasın diye arka planda gönderilir. */
     private fun toggle() {
-        val current = locked ?: return
         if (LauncherEdition.READ_ONLY) {
-            Toast.makeText(appContext, R.string.launcher_read_only, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.launcher_read_only_lock, Toast.LENGTH_LONG).show()
             return
         }
+        val current = locked ?: return
         io.runSafely {
             try {
                 LauncherEdition.setCentralLock(appContext, !current)

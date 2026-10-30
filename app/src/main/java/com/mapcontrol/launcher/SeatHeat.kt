@@ -63,13 +63,14 @@ internal class SeatHeatModel(
         val current = if (driver) state.driver else state.passenger
         val level = nextLevel(current)
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_HEAT else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
-        // Soğutma yazması araçta doğrulanana kadar kapalı: yalnızca sakin bir bilgi mesajı.
-        if (vent && !(LauncherEdition.SEAT_VENT_WRITE_VERIFIED && !LauncherEdition.READ_ONLY)) {
-            Toast.makeText(context, R.string.launcher_seat_vent_later, Toast.LENGTH_SHORT).show()
+        // Test sürümünde dokunuş hiçbir şey yazmaz; sürücü boşuna basmasın diye sakin bir açıklama gösterilir.
+        if (LauncherEdition.READ_ONLY) {
+            Toast.makeText(context, R.string.launcher_read_only_seat, Toast.LENGTH_LONG).show()
             return
         }
-        if (LauncherEdition.READ_ONLY) {
-            Toast.makeText(context, R.string.launcher_read_only, Toast.LENGTH_SHORT).show()
+        // Soğutma yazması araçta doğrulanana kadar kapalı: yalnızca sakin bir bilgi mesajı.
+        if (vent && !LauncherEdition.SEAT_VENT_WRITE_VERIFIED) {
+            Toast.makeText(context, R.string.launcher_seat_vent_later, Toast.LENGTH_SHORT).show()
             return
         }
         val proxy = CarInfoProxy.getInstance()

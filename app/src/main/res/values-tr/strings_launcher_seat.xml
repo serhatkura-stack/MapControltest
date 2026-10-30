@@ -6,4 +6,6 @@
     <string name="launcher_widget_seat_heat_passenger">Yolcu ısıtma</string>
     <string name="launcher_widget_seat_vent_driver">Sürücü soğutma</string>
     <string name="launcher_widget_seat_vent_passenger">Yolcu soğutma</string>
+    <string name="launcher_read_only_seat">Test sürümü: koltuk araçtan değiştirilir</string>
+    <string name="launcher_read_only_lock">Test sürümü: kilit araçtan değiştirilir</string>
 </resources>
