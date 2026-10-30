@@ -1,371 +1,259 @@
 package com.mapcontrol.launcher
 
-import android.app.AlertDialog
+import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
-import android.text.InputType
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
-import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import com.mapcontrol.R
 
 /**
- * "Nereye?" kartı: adres arama alanı ile Ev / İş kısayolları.
- * Dokunma, tercih edilen navigasyon uygulamasını açar (Yandex Navi, yoksa Google Maps).
- * Zamanlayıcı ya da dinleyici yok; kısayol metinleri yalnızca görünür olunca tazelenir.
+ * "Nereye?" kartı (Yandex Haritalar): arama hapı ile Ev / İş düğmeleri.
+ *  - Hap: Yandex Haritalar'ı arama için açar.
+ *  - Ev / İş kısa dokunma: kayıtlı konum varsa rota başlar, yoksa "basılı tut" ipucu çıkar.
+ *  - Ev / İş uzun basma: GPS'in o anki konumu Ev / İş olarak kaydedilir (profile özel).
  *
- * İki yerleşim bir kez kurulur ve [applySpan] ile görünürlük değiştirilerek geçilir:
- * h >= 2 için tam yerleşim, h == 1 (2×1) için tek satırlık sıkışık yerleşim.
+ * Yerleşim tek kez kurulur; [applySpan] yalnızca yönü değiştirir: genişlik >= 4 sütunsa tek satır
+ * (hap | Ev | İş), daha darsa üst üste (hap, altında Ev | İş). Zamanlayıcı ya da sürekli dinleyici yok;
+ * GPS yalnızca uzun basmada tek seferlik ve zaman aşımlıdır.
  */
 class NavigationCard(private val context: Context) : SizedWidget {
 
     private val store = NavShortcutStore(context)
+    private val main = Handler(Looper.getMainLooper())
 
-    private val title = text(context, LauncherTheme.SECTION_SP, bold = true).apply {
-        setText(R.string.launcher_nav_title)
-    }
-    private val titleGap = gap(context, 24, vertical = true)
+    private val homeIcon = icon(context, R.drawable.ic_mdi_home, ICON_DP)
+    private val workIcon = icon(context, R.drawable.ic_mdi_briefcase, ICON_DP)
 
-    private val homeAddress = addressText()
-    private val workAddress = addressText()
+    private val pill = searchPill()
+    private val homeButton = placeButton(NavPlace.HOME, homeIcon, R.string.launcher_nav_home)
+    private val workButton = placeButton(NavPlace.WORK, workIcon, R.string.launcher_nav_work)
 
-    private val shortcutRow = LinearLayout(context)
-
-    /** Son hedef satırları (3×2 ve üstü); kayıt yoksa boş ve görünmez kalır. */
-    private val recentsBox = LinearLayout(context)
-    private var recents: List<NavRecent> = emptyList()
-    private var recentRowsFit = 0
-
-    /** Tam yerleşim: başlık, arama alanı, boşluk, altta Ev / İş düğmeleri. */
-    private val fullLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        addView(title)
-        addView(titleGap)
-        addView(searchField())
-        addView(recentsBox.apply { orientation = LinearLayout.VERTICAL })
-        // Kısayollar kartın altına yaslanır; medya kartındaki kontrollerle aynı hizada durur.
-        addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
-        addView(gap(context, 16, vertical = true))
-        addView(shortcutRow.apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                context.dp(LauncherTheme.MEDIA_BUTTON_DP),
-            )
-            addView(shortcutButton(NavPlace.HOME, R.drawable.ic_mdi_home, R.string.launcher_nav_home, homeAddress), weightLp(1f))
-            addView(gap(context, 16))
-            addView(shortcutButton(NavPlace.WORK, R.drawable.ic_mdi_briefcase, R.string.launcher_nav_work, workAddress), weightLp(1f))
-        })
-    }
-
-    /** Sıkışık yerleşim (2×1): başlıksız, tek satırda üç eşit düğme (arama, Ev, İş); adres metni yok. */
-    private val compactLayout = LinearLayout(context).apply {
+    private val placeRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        visibility = View.GONE
-        val h = LinearLayout.LayoutParams(0, context.dp(LauncherTheme.TOUCH_MIN_DP), 1f)
-        addView(compactSearchButton(), LinearLayout.LayoutParams(h))
-        addView(gap(context, COMPACT_GAP_DP))
-        addView(shortcutButton(NavPlace.HOME, R.drawable.ic_mdi_home, R.string.launcher_nav_home, null), LinearLayout.LayoutParams(h))
-        addView(gap(context, COMPACT_GAP_DP))
-        addView(shortcutButton(NavPlace.WORK, R.drawable.ic_mdi_briefcase, R.string.launcher_nav_work, null), LinearLayout.LayoutParams(h))
+        addView(homeButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        addView(gap(context, GAP_DP))
+        addView(workButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
     }
 
-    override val view: View = card(context).apply {
-        gravity = Gravity.CENTER_VERTICAL
-        addView(fullLayout, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.MATCH_PARENT,
-        ))
-        addView(compactLayout, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        ))
-        addOnLayoutChangeListener { v, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            if (bottom - top != oldBottom - oldTop) v.post { fitHeight(v.height) }
-        }
+    private val root = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        addView(pill)
+        addView(gap(context, GAP_DP, vertical = false))
+        addView(placeRow)
+    }
+
+    override val view: View = card(context, paddingDp = LauncherTheme.CARD_PAD_DP).apply {
+        addView(root, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
     }
 
     init {
-        bindAddresses()
-        bindRecents()
+        applySpan(Span(4, 2))
+        refreshTints()
     }
 
-    /**
-     * Izgara boyutuna göre yerleşimi seçer: h == 1 ise sıkışık, aksi halde tam.
-     * Görünümler yeniden kurulmaz; yalnızca görünürlük ve kart iç boşluğu değişir.
-     */
+    /** Genişlik >= 4: tek satır (hap iki pay, Ev ve İş birer pay). Daha dar: hap üstte, Ev | İş altta. */
     override fun applySpan(span: Span) {
-        val compact = span.h <= 2
-        fullLayout.visibility = if (compact) View.GONE else View.VISIBLE
-        compactLayout.visibility = if (compact) View.VISIBLE else View.GONE
-        // 150dp'lik tek hücreye 72dp'lik düğme sığsın diye sıkışık kartta iç boşluk azalır.
-        val p = context.dp(if (compact) COMPACT_PADDING_DP else LauncherTheme.PADDING_DP)
+        val row = span.w >= WIDE_MIN_COLS
+        root.orientation = if (row) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        val spacer = root.getChildAt(1)
+        spacer.layoutParams = if (row) LinearLayout.LayoutParams(context.dp(GAP_DP), 1) else LinearLayout.LayoutParams(1, context.dp(GAP_DP))
+        if (row) {
+            pill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            placeRow.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+        } else {
+            pill.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            placeRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val p = context.dp(if (row) LauncherTheme.CARD_PAD_DP else LauncherTheme.CARD_PAD_COMPACT_DP)
         view.setPadding(p, p, p, p)
     }
 
-    /** Kart kısaysa başlığı gizler, çok kısaysa kısayol düğmelerini küçültür; arama alanı kalır. */
-    private fun fitHeight(heightPx: Int) {
-        val visibility = if (heightPx < context.dp(COMPACT_HEIGHT_DP)) View.GONE else View.VISIBLE
-        if (title.visibility != visibility) {
-            title.visibility = visibility
-            titleGap.visibility = visibility
-        }
-        // Sıkışık (tek satır) kartta düğmeler iç yüksekliğe sığacak kadar küçülür; alt kenardan kesilmesin.
-        if (compactLayout.visibility == View.VISIBLE) {
-            val inner = heightPx - view.paddingTop - view.paddingBottom
-            val h = minOf(context.dp(LauncherTheme.TOUCH_MIN_DP), inner).coerceAtLeast(context.dp(48))
-            for (i in 0 until compactLayout.childCount step 2) {
-                val child = compactLayout.getChildAt(i)
-                val clp = child.layoutParams
-                if (clp.height != h) {
-                    clp.height = h
-                    child.layoutParams = clp
-                }
-            }
-        }
-        val buttonDp = if (heightPx < context.dp(TIGHT_HEIGHT_DP)) LauncherTheme.TOUCH_MIN_DP else LauncherTheme.MEDIA_BUTTON_DP
-        val lp = shortcutRow.layoutParams
-        if (lp != null && lp.height != context.dp(buttonDp)) {
-            lp.height = context.dp(buttonDp)
-            shortcutRow.layoutParams = lp
-        }
-        // Son hedef satırları: arama ile kısayollar arasında kalan boşluğa sığdığı kadar.
-        val titleBlock = if (title.visibility == View.VISIBLE) title.height + titleGap.height else 0
-        val fixed = view.paddingTop + view.paddingBottom + titleBlock +
-            context.dp(LauncherTheme.TOUCH_MIN_DP) + context.dp(16 + 16) + context.dp(buttonDp)
-        val rowPx = context.dp(RECENT_ROW_DP + RECENT_GAP_DP)
-        val fit = ((heightPx - fixed) / rowPx).coerceIn(0, NavShortcutStore.MAX_RECENTS)
-        if (fit != recentRowsFit) {
-            recentRowsFit = fit
-            showRecentRows()
-        }
-    }
-
-    private fun addressText(): TextView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-
-    /** 72dp'lik arama satırı; dokununca navigasyon uygulaması aramaya açılır. */
-    private fun searchField(): View = LinearLayout(context).apply {
+    /** Arama hapı: ikon + "Nereye?"; dokununca Yandex Haritalar arama için açılır. */
+    private fun searchPill(): View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        gravity = Gravity.CENTER
         background = rounded(context, LauncherTheme.GROUND, 20f)
-        val h = context.dp(24)
-        setPadding(h, 0, h, 0)
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            context.dp(LauncherTheme.TOUCH_MIN_DP),
-        )
-        addView(icon(context, R.drawable.ic_mdi_magnify, 28, LauncherTheme.TEXT_SECONDARY))
-        addView(gap(context, 16))
-        addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
-            setText(R.string.launcher_nav_search_hint)
-        })
-        contentDescription = context.getString(R.string.launcher_nav_search_hint)
+        val pad = context.dp(12)
+        setPadding(pad, 0, pad, 0)
+        addView(icon(context, R.drawable.ic_mdi_magnify, ICON_DP, LauncherTheme.TEXT_SECONDARY))
+        addView(gap(context, 12))
+        addView(text(context, VALUE_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply { setText(R.string.launcher_nav_title) })
+        contentDescription = context.getString(R.string.launcher_nav_title)
         isClickable = true
         isFocusable = true
         setOnClickListener { openSearch() }
         pressFeedback()
     }
 
-    /** Sıkışık arama düğmesi: ikon ve kısaltılmış ipucu, tek satır; dokununca aramaya açılır. */
-    private fun compactSearchButton(): View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        background = rounded(context, LauncherTheme.CONTROL, 20f)
-        val p = context.dp(COMPACT_BUTTON_PAD_DP)
-        setPadding(p, 0, p, 0)
-        addView(icon(context, R.drawable.ic_mdi_magnify, 24, LauncherTheme.TEXT_SECONDARY))
-        addView(gap(context, 8))
-        addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-            setText(R.string.launcher_nav_search_short)
-        })
-        contentDescription = context.getString(R.string.launcher_nav_search_hint)
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { openSearch() }
-        pressFeedback()
-    }
-
-    /**
-     * Ev / İş düğmesi: kısa dokunma yönlendirir (adres yoksa düzenler), uzun basma düzenler.
-     * [address] null ise sıkışık biçim: yalnızca ikon ve ad, ortalanmış.
-     */
-    private fun shortcutButton(kind: NavPlace, iconRes: Int, nameRes: Int, address: TextView?): View =
+    /** Ev / İş düğmesi: üstte ikon, altında ad, ortalı. */
+    private fun placeButton(kind: NavPlace, iconView: ImageView, @StringRes nameRes: Int): View =
         LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = if (address == null) Gravity.CENTER else Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             background = rounded(context, LauncherTheme.CONTROL, 20f)
-            val p = context.dp(if (address == null) COMPACT_BUTTON_PAD_DP else 24)
-            setPadding(p, 0, p, 0)
-            if (address == null) {
-                addView(icon(context, iconRes, 24))
-                addView(gap(context, 8))
-                addView(text(context, LauncherTheme.LABEL_SP, medium = true).apply { setText(nameRes) })
-            } else {
-                addView(icon(context, iconRes, 32))
-                addView(gap(context, 16))
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { setText(nameRes) })
-                    addView(address)
-                }, weightLp(1f).apply { width = 0; height = LinearLayout.LayoutParams.WRAP_CONTENT })
-            }
+            val pad = context.dp(8)
+            setPadding(pad, pad, pad, pad)
+            addView(iconView)
+            addView(gap(context, 4, vertical = true))
+            addView(text(context, VALUE_SP, medium = true).apply {
+                setText(nameRes)
+                gravity = Gravity.CENTER
+            })
             contentDescription = context.getString(nameRes)
             isClickable = true
             isFocusable = true
-            setOnClickListener {
-                val saved = store.get(kind)
-                if (saved.isEmpty()) showEditDialog(kind) else navigateTo(saved)
-            }
+            setOnClickListener { onPlaceTap(kind) }
             setOnLongClickListener {
-                showEditDialog(kind)
+                saveCurrentLocation(kind)
                 true
             }
             pressFeedback()
         }
 
-    /** Kayıtlı adresleri düğme metinlerine yazar; boşsa "ayarlanmadı" yazısı çıkar. */
-    private fun bindAddresses() {
-        bind(homeAddress, store.get(NavPlace.HOME))
-        bind(workAddress, store.get(NavPlace.WORK))
+    /** Kayıtlı yer tam renk, kayıtsız yer soluk ikon: ne kayıtlı olduğu bir bakışta anlaşılır. */
+    private fun refreshTints() {
+        homeIcon.setColorFilter(if (store.get(NavPlace.HOME) != null) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
+        workIcon.setColorFilter(if (store.get(NavPlace.WORK) != null) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
     }
 
-    /** Son hedefleri okuyup satırları yeniden kurar (en çok 3 görünüm, dinleyici/iş parçacığı yok). */
-    private fun bindRecents() {
-        val latest = store.recents()
-        if (latest == recents && recentsBox.childCount == latest.size) return
-        recents = latest
-        recentsBox.removeAllViews()
-        for (r in latest) {
-            recentsBox.addView(gap(context, RECENT_GAP_DP, vertical = true))
-            recentsBox.addView(recentRow(r))
-        }
-        showRecentRows()
+    private fun onPlaceTap(kind: NavPlace) {
+        val point = store.get(kind)
+        if (point == null) toast(R.string.launcher_nav_hold_to_save) else route(point)
     }
 
-    /** Sığan satırları gösterir; her satır kendi aralığıyla birlikte (gap + satır) çiftidir. */
-    private fun showRecentRows() {
-        for (i in 0 until recentsBox.childCount) {
-            recentsBox.getChildAt(i).visibility = if (i / 2 < recentRowsFit) View.VISIBLE else View.GONE
-        }
-    }
+    private fun installed(pkg: String): Boolean = context.packageManager.getLaunchIntentForPackage(pkg) != null
 
-    /** Büyük dokunma satırı: ikon + tek satır ad; dokununca aynı navigasyon yeniden başlar. */
-    private fun recentRow(r: NavRecent): View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        background = rounded(context, LauncherTheme.CONTROL, 20f)
-        val p = context.dp(24)
-        setPadding(p, 0, p, 0)
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(RECENT_ROW_DP))
-        addView(icon(context, R.drawable.ic_mdi_map_marker, 32, LauncherTheme.TEXT_SECONDARY))
-        addView(gap(context, 16))
-        addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { text = r.label }, weightLp(1f).apply { height = LinearLayout.LayoutParams.WRAP_CONTENT })
-        contentDescription = r.label
-        isClickable = true
-        isFocusable = true
-        setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(r.uri))
-            if (r.pkg.isNotEmpty()) intent.setPackage(r.pkg)
-            launch(intent)
-        }
-        pressFeedback()
-    }
-
-    private fun bind(target: TextView, address: String) {
-        if (address.isEmpty()) target.setText(R.string.launcher_nav_not_set) else target.text = address
-    }
-
-    /** Adres düzenleme penceresi; boş kayıt adresi siler. */
-    private fun showEditDialog(kind: NavPlace) {
-        val input = EditText(context).apply {
-            setHint(R.string.launcher_nav_dialog_hint)
-            setText(store.get(kind))
-            setSelection(text.length)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            setSingleLine()
-        }
-        val titleRes = if (kind == NavPlace.HOME) R.string.launcher_nav_dialog_home else R.string.launcher_nav_dialog_work
-        val host = context as? android.app.Activity
-        if (host != null && (host.isFinishing || host.isDestroyed)) return
-        editDialog?.dismiss()
-        editDialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(titleRes)
-            .setView(input)
-            .setPositiveButton(R.string.launcher_nav_dialog_save) { _, _ ->
-                store.set(kind, input.text.toString())
-                bindAddresses()
-            }
-            .setNegativeButton(R.string.launcher_nav_dialog_cancel, null)
-            .show()
-    }
-
-    /** Arama alanı: Yandex Navi'yi açar, yoksa Google Maps aramasını. */
     private fun openSearch() {
-        val intent = when {
-            isInstalled(YANDEX) -> context.packageManager.getLaunchIntentForPackage(YANDEX)
-            isInstalled(GOOGLE_MAPS) -> Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=")).setPackage(GOOGLE_MAPS)
-            else -> null
-        }
-        launch(intent)
+        val attempts = NavRoute.searchAttempts(::installed).map { toIntent(it) }.toMutableList()
+        context.packageManager.getLaunchIntentForPackage(NavRoute.YANDEX_MAPS)?.let { attempts += it }
+        launchFirst(attempts)
     }
 
-    /** Adrese rota başlatır. */
-    private fun navigateTo(address: String) {
-        val encoded = Uri.encode(address)
-        val intent = when {
-            isInstalled(YANDEX) -> Intent(Intent.ACTION_VIEW, Uri.parse("yandexnavi://map_search?text=$encoded")).setPackage(YANDEX)
-            isInstalled(GOOGLE_MAPS) -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$encoded")).setPackage(GOOGLE_MAPS)
-            else -> null
-        }
-        launch(intent)
-        if (intent != null) {
-            store.addRecent(address, intent.dataString.orEmpty(), intent.`package`.orEmpty())
-            bindRecents()
-        }
+    private fun route(point: NavPoint) = launchFirst(NavRoute.routeAttempts(point, ::installed).map { toIntent(it) })
+
+    private fun toIntent(l: NavLaunch): Intent {
+        val i = if (l.uri != null) Intent(l.action, Uri.parse(l.uri)) else Intent(l.action)
+        if (l.pkg.isNotEmpty()) i.setPackage(l.pkg)
+        for ((k, v) in l.extras) i.putExtra(k, v)
+        return i
     }
 
-    private fun launch(intent: Intent?) {
-        if (intent == null) {
-            noApp()
+    /** İlk başlatılabilen intent kazanır; hiçbiri çalışmazsa "uygulama yok" uyarısı. */
+    private fun launchFirst(intents: List<Intent>) {
+        for (intent in intents) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (e: ActivityNotFoundException) {
+                // sıradaki
+            } catch (e: SecurityException) {
+                // sıradaki
+            }
+        }
+        toast(R.string.launcher_nav_no_app)
+    }
+
+    // ---- Konum kaydı ----
+
+    private var locListener: LocationListener? = null
+    private var timeout: Runnable? = null
+
+    /** Uzun basma: izin yoksa ister; varsa son bilinen GPS konumunu, yoksa tek seferlik GPS'i kullanır. */
+    private fun saveCurrentLocation(kind: NavPlace) {
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            (context as? Activity)?.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQ_LOCATION)
+            toast(R.string.launcher_nav_perm_denied)
+            return
+        }
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (lm == null) {
+            toast(R.string.launcher_nav_no_location)
             return
         }
         try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: ActivityNotFoundException) {
-            noApp()
+            val last = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            if (last != null) {
+                commit(kind, last)
+                return
+            }
+            if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                toast(R.string.launcher_nav_no_location)
+                return
+            }
+            cancelLocation()
+            toast(R.string.launcher_nav_locating)
+            val l = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    cancelLocation()
+                    commit(kind, location)
+                }
+                @Deprecated("Eski API'ler için gerekli")
+                override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) {}
+            }
+            locListener = l
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, l, Looper.getMainLooper())
+            val t = Runnable {
+                cancelLocation()
+                toast(R.string.launcher_nav_no_location)
+            }
+            timeout = t
+            main.postDelayed(t, FIX_TIMEOUT_MS)
+        } catch (e: SecurityException) {
+            toast(R.string.launcher_nav_perm_denied)
         }
     }
 
-    private fun isInstalled(pkg: String): Boolean = context.packageManager.getLaunchIntentForPackage(pkg) != null
-
-    private fun noApp() = Toast.makeText(context, R.string.launcher_nav_no_app, Toast.LENGTH_LONG).show()
-
-    override fun onVisible() {
-        bindAddresses()
-        bindRecents()
+    private fun commit(kind: NavPlace, loc: Location) {
+        store.set(kind, NavPoint(loc.latitude, loc.longitude))
+        refreshTints()
+        toast(if (kind == NavPlace.HOME) R.string.launcher_nav_saved_home else R.string.launcher_nav_saved_work)
     }
 
-    private var editDialog: AlertDialog? = null
-
-    override fun onHidden() {
-        editDialog?.dismiss()
-        editDialog = null
+    /** Bekleyen tek seferlik GPS isteğini ve zaman aşımını temizler. */
+    private fun cancelLocation() {
+        timeout?.let { main.removeCallbacks(it) }
+        timeout = null
+        val l = locListener ?: return
+        locListener = null
+        try {
+            (context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(l)
+        } catch (e: SecurityException) {
+            // izin geri alınmış; yapılacak bir şey yok
+        }
     }
+
+    private fun toast(@StringRes res: Int) = Toast.makeText(context, res, Toast.LENGTH_SHORT).show()
+
+    override fun onVisible() = refreshTints()
+
+    override fun onHidden() = cancelLocation()
+
+    override fun release() = cancelLocation()
 
     private companion object {
-        const val YANDEX = "ru.yandex.yandexnavi"
-        const val GOOGLE_MAPS = "com.google.android.apps.maps"
-        const val COMPACT_HEIGHT_DP = 330
-        const val TIGHT_HEIGHT_DP = 230
-        const val COMPACT_PADDING_DP = 16
-        const val COMPACT_GAP_DP = 12
-        const val COMPACT_BUTTON_PAD_DP = 12
-        const val RECENT_ROW_DP = 76
-        const val RECENT_GAP_DP = 12
+        const val WIDE_MIN_COLS = 4
+        const val ICON_DP = 32
+        const val VALUE_SP = 24f
+        const val GAP_DP = 12
+        const val REQ_LOCATION = 4107
+        const val FIX_TIMEOUT_MS = 20_000L
     }
 }

@@ -11,7 +11,7 @@ data class RawWidget(val id: String, val typeKey: String, val col: Int, val row:
  * Ana ekran düzenini SharedPreferences'ta JSON olarak saklar.
  * Okunan düzen geçersizse (ızgara dışı, çakışan) varsayılan düzene dönülür.
  */
-class LayoutStore(context: Context) {
+class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PARK) {
 
     /** OEM alt çubuğu olan araçta (Desay) varsayılan düzen farklıdır. */
     private val oemBar = LauncherSafeArea.hasOemBar(context)
@@ -19,10 +19,15 @@ class LayoutStore(context: Context) {
     /** Varsayılan uygulama kutucukları alt çubuktaki uygulama şeridinin varsayılanlarıyla dolar. */
     private val appPackages = AppDock.installedDefaults(context, DEFAULT_APP_SLOTS)
 
-    private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(LayoutKeys.prefsName(Profiles.current(context)), Context.MODE_PRIVATE)
+
+    private val key = LayoutKeys.key(mode)
+
+    private fun fallback(): List<PlacedWidget> =
+        if (mode == LayoutMode.DRIVE) defaultDriveLayout(oemBar, appPackages) else defaultLayout(oemBar, appPackages)
 
     fun load(): List<PlacedWidget> {
-        val raw = prefs.getString(KEY, null) ?: return defaultLayout(oemBar, appPackages)
+        val raw = prefs.getString(key, null) ?: return fallback()
         return try {
             val array = JSONArray(raw)
             // Kaldırılmış/bilinmeyen türler (eski kayıtlar) sessizce atlanır; kalan düzen geçerliyse korunur.
@@ -39,7 +44,7 @@ class LayoutStore(context: Context) {
                 )
             }
             // Sürüm anahtarı yoksa kayıt eski 6×3 biçimindedir: bir kez ×2 taşınır ve yeni biçimde yazılır.
-            val oldGrid = prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
+            val oldGrid = mode == LayoutMode.PARK && prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
             val scaled = if (oldGrid) raws.map { it.copy(col = it.col * 2, row = it.row * 2, w = it.w * 2, h = it.h * 2) } else raws
             val resolved = resolveRaw(scaled)
             // Artık izin verilmeyen boyutlar en yakın izinli boyuta çekilir; yoksa tüm düzen varsayılana düşerdi.
@@ -48,9 +53,9 @@ class LayoutStore(context: Context) {
                 // Eski ızgara, eski koltuk anahtarları ya da boyut uyarlaması olduysa yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
                 if (oldGrid || migrated != resolved || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
                 migrated
-            } else defaultLayout(oemBar, appPackages)
+            } else fallback()
         } catch (e: org.json.JSONException) {
-            defaultLayout(oemBar, appPackages)
+            fallback()
         }
     }
 
@@ -67,17 +72,15 @@ class LayoutStore(context: Context) {
                 w.extra?.let { put("extra", it) }
             })
         }
-        prefs.edit().putString(KEY, array.toString()).putInt(KEY_GRID_VERSION, GRID_VERSION).apply()
+        prefs.edit().putString(key, array.toString()).putInt(KEY_GRID_VERSION, GRID_VERSION).apply()
     }
 
     /** Bu cihazın varsayılan düzeni (sıfırlama için). */
-    fun defaults(): List<PlacedWidget> = defaultLayout(oemBar, appPackages)
+    fun defaults(): List<PlacedWidget> = fallback()
 
-    fun reset() = prefs.edit().remove(KEY).apply()
+    fun reset() = prefs.edit().remove(key).apply()
 
     companion object {
-        private const val PREFS = "launcher_layout"
-        private const val KEY = "widgets_v1"
         private const val KEY_GRID_VERSION = "grid_v"
 
         /** Eski tek koltuk widget'ı anahtarları (ısıtma / soğutma; iki koltuğu birlikte gösterirdi). */

@@ -15,6 +15,12 @@
     <string name="launcher_nav_dialog_save">Kaydet</string>
     <string name="launcher_nav_dialog_cancel">Vazgeç</string>
     <string name="launcher_nav_no_app">Navigasyon uygulaması yüklü değil</string>
+    <string name="launcher_nav_hold_to_save">Kaydetmek için basılı tut</string>
+    <string name="launcher_nav_saved_home">Ev kaydedildi</string>
+    <string name="launcher_nav_saved_work">İş kaydedildi</string>
+    <string name="launcher_nav_locating">Konum alınıyor…</string>
+    <string name="launcher_nav_no_location">Konum alınamadı</string>
+    <string name="launcher_nav_perm_denied">Konum izni gerekli; izin ver, sonra tekrar basılı tut</string>
     <string name="launcher_media_idle">Şu an çalan yok</string>
     <string name="launcher_media_idle_hint">Başlatmak için bir müzik uygulaması aç</string>
     <string name="launcher_media_prev">Önceki</string>
@@ -158,4 +164,48 @@
     <string name="launcher_climate_decrease">Azalt</string>
     <string name="launcher_health_row_battery">Akü</string>
     <string name="launcher_health_row_engine">Motor</string>
+    <string name="launcher_layout_park">Park</string>
+    <string name="launcher_layout_drive">Sürüş</string>
+    <string name="launcher_layout_park_edit">Park düzeni</string>
+    <string name="launcher_layout_drive_edit">Sürüş düzeni</string>
+    <string name="launcher_widget_photo">Fotoğraf</string>
+    <string name="launcher_photo_add">Fotoğraf ekle</string>
+    <string name="launcher_photo_hint">FrostNav panelinden İndirilenler\'e yükle</string>
+    <string name="launcher_photo_pick_title">Fotoğraf seç</string>
+    <string name="launcher_photo_change">Fotoğrafı değiştir</string>
+    <string name="launcher_photo_remove">Fotoğrafı kaldır</string>
+    <string name="launcher_photo_refresh">Yenile</string>
+    <string name="launcher_photo_loading">Yükleniyor…</string>
+    <string name="launcher_photo_none">İndirilenler\'de fotoğraf yok. FrostNav panelinden yükle, sonra yenile.</string>
+    <string name="launcher_photo_permission">Depolama izni gerekli. İzin ver, sonra yenile.</string>
+    <string name="launcher_photo_failed">Bu fotoğraf kullanılamadı</string>
+    <string name="launcher_widget_screen_off">Ekranı karart</string>
+    <string name="launcher_screen_off_label">Ekranı karart</string>
+    <string name="launcher_screen_off_hint">Dokun</string>
+    <string name="launcher_widget_break">Mola</string>
+    <string name="launcher_widget_speed_limit">Hız limiti</string>
+    <string name="launcher_widget_battery">Akü</string>
+    <string name="launcher_widget_phone">Telefon</string>
+    <string name="launcher_widget_clock">Saat</string>
+    <string name="launcher_widget_body">Gövde</string>
+    <string name="launcher_break_hm" formatted="true">%1$d sa %2$d dk</string>
+    <string name="launcher_break_m" formatted="true">%1$d dk</string>
+    <string name="launcher_break_driving">sürüş</string>
+    <string name="launcher_break_driving_for" formatted="true">%1$s sürüş</string>
+    <string name="launcher_break_now">Mola zamanı</string>
+    <string name="launcher_speed_limit_cd" formatted="true">Hız limiti %1$d</string>
+    <string name="launcher_phone_charging">Telefon şarjda</string>
+    <string name="launcher_phone_pad_empty">Şarj pedi boş</string>
+    <string name="launcher_phone_on_pad">Telefon pedde</string>
+    <string name="launcher_phone_take">Telefonunu al</string>
+    <string name="launcher_body_all_closed">Hepsi kapalı</string>
+    <string name="launcher_body_win_lf">Sol ön cam</string>
+    <string name="launcher_body_win_rf">Sağ ön cam</string>
+    <string name="launcher_body_win_lr">Sol arka cam</string>
+    <string name="launcher_body_win_rr">Sağ arka cam</string>
+    <string name="launcher_body_hood">Kaput</string>
+    <string name="launcher_body_fuel_cap">Yakıt kapağı</string>
+    <string name="launcher_body_handbrake_on">El freni çekili</string>
+    <string name="launcher_body_handbrake_off">El freni indi</string>
+    <string name="launcher_window_part">Cam</string>
 </resources>

@@ -29,6 +29,18 @@ internal object LauncherDemo {
     var driveMode = 1
         private set
 
+    /** Demo hareket durumu (`--ez launcher_demo_moving true|false`); verilmediyse null. Yalnızca demo açıkken. */
+    const val EXTRA_MOVING = "launcher_demo_moving"
+
+    @Volatile
+    var moving: Boolean? = null
+        private set
+
+    fun applyMoving(intent: Intent?) {
+        if (!enabled || intent?.hasExtra(EXTRA_MOVING) != true) return
+        moving = intent.getBooleanExtra(EXTRA_MOVING, false)
+    }
+
     /** Etkinlik her açıldığında çağrılır; istek demo içermiyorsa önceki durum korunur (tema değişimi). */
     fun applyFrom(activity: Activity, intent: Intent?) {
         if (intent?.hasExtra(EXTRA) != true) return
@@ -67,6 +79,11 @@ internal object LauncherDemo {
     const val FAN_LEVEL = 3
     const val DRIVER_VENT_LEVEL = 1
     const val PASSENGER_VENT_LEVEL = 0
+
+    /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam ve direksiyon ısıtma kapalı. */
+    fun comfort(): ComfortReading = ComfortReading(
+        connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true, steerHeat = false,
+    )
 
     fun trip(): TripData = TripData(
         connected = true, moving = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 53.8,

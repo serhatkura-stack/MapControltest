@@ -27,6 +27,7 @@ class HeaderBar(
     private val onThemeChanged: () -> Unit,
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
+    private val onLayoutPill: () -> Unit = {},
 ) : LauncherWidget {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -57,6 +58,25 @@ class HeaderBar(
         }
     }
 
+    /** Park / Sürüş göstergesi: sakin bir hap; dokununca Sürüş düzeni düzenlenir. */
+    private val layoutPill = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+        setText(R.string.launcher_layout_park)
+        gravity = Gravity.CENTER
+        background = rounded(context, LauncherTheme.CONTROL, 999f)
+        setPadding(context.dp(16), context.dp(6), context.dp(16), context.dp(6))
+        isClickable = true
+        setOnClickListener { onLayoutPill() }
+        pressFeedback()
+    }
+
+    /** Etkin düzene göre hap yazısı; yeniden kurulmadan güncellenir. */
+    fun setLayoutMode(mode: LayoutMode) {
+        val label = if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive else R.string.launcher_layout_park
+        layoutPill.setText(label)
+        layoutPill.contentDescription = context.getString(R.string.launcher_layout_drive_edit)
+        layoutPill.setTextColor(if (mode == LayoutMode.DRIVE) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
+    }
+
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -66,6 +86,8 @@ class HeaderBar(
         addView(date)
         addView(View(context), weightLp(1f))
 
+        addView(layoutPill)
+        addView(gap(context, 24))
         driveBadge()?.let { addView(it) }
 
         weatherBox.addView(weatherIcon)

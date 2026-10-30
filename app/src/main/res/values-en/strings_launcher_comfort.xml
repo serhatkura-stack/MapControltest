@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_widget_sunshade">Sunshade</string>
+    <string name="launcher_widget_defrost">Defrost</string>
+    <string name="launcher_widget_steering_heat">Steering heat</string>
+    <string name="launcher_comfort_front">Front</string>
+    <string name="launcher_comfort_rear">Rear</string>
+    <string name="launcher_comfort_on">On</string>
+    <string name="launcher_comfort_off">Off</string>
+    <string name="launcher_sunshade_closed">Closed</string>
+    <string name="launcher_sunshade_opening">Opening</string>
+    <string name="launcher_sunshade_closing">Closing</string>
+    <string name="launcher_sunshade_open">Open</string>
+    <string name="launcher_sunshade_partial">Stopped</string>
+    <string name="launcher_read_only_comfort">Test build: change it from the car</string>
+    <string name="launcher_comfort_pending">Will open after the car test</string>
+</resources>

@@ -11,6 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -56,16 +57,26 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
     private val launcher = LauncherIo.serial()
     private var dialog: Dialog? = null
+    private var dataCheck: DataCheckSheet? = null
 
     fun show() {
         if (dialog?.isShowing == true) return
-        dialog = showLauncherSheet(activity, R.string.launcher_settings) { d -> buildPanel(d) }.apply {
+        dialog = showLauncherSheet(activity, R.string.launcher_settings) { d -> addScrollable(d) }.apply {
             setOnDismissListener { dialog = null }
         }
     }
 
     fun release() {
         dialog?.dismiss()
+        dataCheck?.release()
+    }
+
+    /** Satırlar araç ekranının yüksekliğini aşabilir (tema + alt çubuk + 4-5 satır): panel kaydırılır. */
+    private fun LinearLayout.addScrollable(d: Dialog) {
+        val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        content.buildPanel(d)
+        val maxH = activity.resources.displayMetrics.heightPixels - activity.dp(SCROLL_RESERVED_DP)
+        addView(ScrollView(activity).apply { addView(content) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxH))
     }
 
     private fun LinearLayout.buildPanel(d: Dialog) {
@@ -100,6 +111,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                 openApp(VEHICLE_SETTINGS_PACKAGE)
             }, fullWidth())
         }
+        addView(gap(activity, 12, vertical = true))
+        addView(row(R.drawable.ic_mdi_magnify, R.string.launcher_data_check, R.string.launcher_data_check_hint) {
+            d.dismiss()
+            dataCheck = (dataCheck ?: DataCheckSheet(activity)).also { it.show() }
+        }, fullWidth())
         if (LauncherEdition.HAS_SETTINGS) {
             addView(gap(activity, 12, vertical = true))
             addView(row(R.drawable.ic_mdi_cog, R.string.launcher_mapcontrol_settings) {
@@ -258,6 +274,8 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         /** Aracın kendi araç ayarları uygulaması (Desay SV). */
         const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
         const val ROW_HEIGHT_DP = 80
+        /** Başlık, iç boşluk ve ekran kenarı için ayrılan yükseklik. */
+        const val SCROLL_RESERVED_DP = 190
         const val SEGMENT_RADIUS_DP = 16f
     }
 }

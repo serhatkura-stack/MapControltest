@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_widget_sunshade">Tavan perdesi</string>
+    <string name="launcher_widget_defrost">Buğu giderme</string>
+    <string name="launcher_widget_steering_heat">Direksiyon ısıtma</string>
+    <string name="launcher_comfort_front">Ön</string>
+    <string name="launcher_comfort_rear">Arka</string>
+    <string name="launcher_comfort_on">Açık</string>
+    <string name="launcher_comfort_off">Kapalı</string>
+    <string name="launcher_sunshade_closed">Kapalı</string>
+    <string name="launcher_sunshade_opening">Açılıyor</string>
+    <string name="launcher_sunshade_closing">Kapanıyor</string>
+    <string name="launcher_sunshade_open">Açık</string>
+    <string name="launcher_sunshade_partial">Yarıda</string>
+    <string name="launcher_read_only_comfort">Test sürümü: araçtan değiştirilir</string>
+    <string name="launcher_comfort_pending">Araç testinden sonra açılacak</string>
+</resources>

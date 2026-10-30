@@ -45,7 +45,7 @@ public final class VehicleMetricsSnapshot {
     public final int sunroofPosi;
     /**
      * Güneşlik / Perde ({@link CarSettingID#ID_CAR_SUNSHADE}).
-     * 1 = kapalı, 2 = açık.
+     * 1 = kapalı, 2 = açılıyor, 4 = kapanıyor, 5 = tam açık, 6 = arada durdu (araçta ölçüldü).
      */
     public final int sunshade;
 
@@ -240,8 +240,12 @@ public final class VehicleMetricsSnapshot {
         return open != null && open;
     }
 
+    /**
+     * Güneşlik açık mı. Araçta ölçülen değerler: 1 kapalı, 2 açılıyor, 4 kapanıyor, 5 tam açık, 6 arada durdu.
+     * Kapalı (1) dışındaki her geçerli değer açık sayılır; 0 (sinyal yok) ve geçersiz açık sayılmaz.
+     */
     public boolean isSunshadeOpen() {
-        return isValid(sunshade) && sunshade == 2;
+        return isValid(sunshade) && sunshade > 0 && sunshade != 1;
     }
 
     public boolean isRaining() {

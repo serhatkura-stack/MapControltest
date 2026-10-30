@@ -8,6 +8,15 @@
     <uses-permission android:name="ivi.vds.permission.SERVICE" />
     <!-- Alt şeritteki uygulama seçicisi. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Fotoğraf widget'ı: İndirilenler klasöründeki resimleri listeler. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Navigasyon kartı: Ev / İş için o anki GPS konumu. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <queries>
+        <package android:name="ru.yandex.yandexmaps" />
+        <package android:name="ru.yandex.yandexnavi" />
+        <package android:name="com.google.android.apps.maps" />
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -39,6 +48,25 @@
             android:label="HUD Test"
             android:screenOrientation="landscape"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <!-- Konfor yazma testi (perde, buğu, direksiyon ısıtma): HUD testiyle aynı koruma deseni
+             (intent-filter yok, exported=true, ack + shell başlatan denetimi + park kapısı kodda). -->
+        <activity
+            android:name="com.mapcontrol.comfort.ComfortTestActivity"
+            android:exported="true"
+            android:label="Konfor Test"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <!-- Ekranı karart: tam siyah, en düşük parlaklık; dokununca kapanır. -->
+        <activity
+            android:name=".launcher.ScreenOffActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
         <!-- Medya kartı: çalan şarkıyı okumak için bildirim erişimi (kullanıcı ayarlardan verir). -->
         <service

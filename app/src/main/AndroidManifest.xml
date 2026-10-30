@@ -67,6 +67,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_UPDATES" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_INTERNAL_STORAGE" />
     
     <!-- Package uninstall permissions -->
@@ -88,6 +89,9 @@
         <package android:name="com.desaysv.materialvehiclet19fl" />
         <package android:name="com.desaysv.materialvehiclet1efl" />
         <package android:name="com.desaysv.engmode" />
+        <package android:name="ru.yandex.yandexmaps" />
+        <package android:name="ru.yandex.yandexnavi" />
+        <package android:name="com.google.android.apps.maps" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
@@ -160,6 +164,16 @@
             android:name=".ui.activity.ClusterVDBusTestActivity"
             android:label="Cluster / VDBus bench"
             android:screenOrientation="landscape" />
+
+        <!-- Ekranı karart: tam siyah, en düşük parlaklık; dokununca kapanır (launcher kutucuğu açar). -->
+        <activity
+            android:name=".launcher.ScreenOffActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
         <!-- Yeni launcher (Kotlin). HOME olarak seçilebilir; test için uygulama listesinde de görünür. -->
         <activity

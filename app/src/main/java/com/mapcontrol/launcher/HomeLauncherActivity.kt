@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import com.mapcontrol.R
 import com.mapcontrol.vehicle.VehicleMetricsRepository
+import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 
 /**
  * Yeni ana ekran (HOME). MapControl'ün geri kalanına "Ayarlar" düğmesinden girilir.
@@ -21,12 +22,17 @@ import com.mapcontrol.vehicle.VehicleMetricsRepository
  */
 class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
-    private val store by lazy { LayoutStore(this) }
+    private val parkStore by lazy { LayoutStore(this, LayoutMode.PARK) }
+    private val driveStore by lazy { LayoutStore(this, LayoutMode.DRIVE) }
+    /** Etkin düzenin deposu; düzenleme ve sıfırlama etkin düzene işler. */
+    private val store get() = if (activeMode == LayoutMode.DRIVE) driveStore else parkStore
     private val metrics by lazy { VehicleMetricsRepository(this) }
     private val settings by lazy { LauncherSettings(this, onEditHome = ::enterEditMode) }
     private val metricsListener = VehicleMetricsRepository.Listener { snap ->
         // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
         if (snap.connected && snap.hasDriveMode()) observedDriveMode = snap.driveMode
+        // Hareket: gösterge hızı > 0 (okunamıyorsa bilinmiyor; sayaçlar sıfırlanır).
+        observedMoving = if (snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))) snap.preferredSpeed() > 0 else null
         window.decorView.post {
             if (grid.editMode && LauncherSafeArea.isMoving(snap, EDIT_EXIT_KMH)) exitEditMode()
         }
@@ -34,11 +40,17 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     /** Aracın bildirdiği son sürüş modu (veri yoksa null); tema vurgusu bundan [DRIVE_STABLE_MS] sonra uyarlanır. */
     @Volatile private var observedDriveMode: Int? = null
+    @Volatile private var observedMoving: Boolean? = null
+
+    /** Park/Sürüş düzeni: etkin düzen, geçiş kararı ve başlıktaki düzenleme başlığı. */
+    private var activeMode = LayoutMode.PARK
+    private val layoutPolicy = DriveLayoutPolicy()
+    private lateinit var editTitle: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
     private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val driveTick = object : Runnable {
         override fun run() {
-            if (started) driveModeTick()
+            if (started) { driveModeTick(); layoutTick() }
             driveHandler.postDelayed(this, DRIVE_TICK_MS)
         }
     }
@@ -58,6 +70,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         LauncherDemo.applyFrom(this, intent)
+        LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
@@ -67,11 +80,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (!DriveAccent.enabled(this)) LauncherTheme.driveMode = DriveAccent.NORMAL
         else LauncherDemo.applyDriveMode(intent)?.let { LauncherTheme.driveMode = it }
         driveModePolicy.reset(LauncherTheme.driveMode)
+        // Tema geçişiyle yeniden kurulunca etkin düzen korunur (statik); otomatik seçenek kapalıysa Park.
+        activeMode = if (DriveLayoutPrefs.get(this)) rememberedMode else LayoutMode.PARK
+        layoutPolicy.reset(activeMode)
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles)
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
         val ourBar: OurBottomBar? = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
@@ -126,6 +142,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         } else {
             setContentView(root)
         }
+        header.setLayoutMode(activeMode)
         applyLayout(store.load(), persist = false)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
@@ -137,6 +154,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         super.onNewIntent(intent)
         setIntent(intent)
         LauncherDemo.applyDriveMode(intent)
+        LauncherDemo.applyMoving(intent)
     }
 
     /**
@@ -151,6 +169,47 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             LauncherTheme.driveMode = to
             ThemeTransition.recreate(this)
         }
+    }
+
+    /**
+     * Park/Sürüş geçişi: hız ve vites sinyallerinden [DriveLayoutPolicy] karar verir; düzenleme ya da sayfa açıkken ertelenir.
+     * Seçenek kapalıysa sürüş düzeni gösteriliyorsa Park'a dönülür. Demo `launcher_demo_moving false` beklemeden Park'a döner.
+     */
+    private fun layoutTick() {
+        val idle = !grid.editMode && sheet == null
+        if (!DriveLayoutPrefs.get(this)) {
+            if (activeMode == LayoutMode.DRIVE && idle) { layoutPolicy.reset(LayoutMode.PARK); switchMode(LayoutMode.PARK, true) }
+            return
+        }
+        val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
+        val to = layoutPolicy.update(
+            System.currentTimeMillis(), moving, DriveSignals.parked(), idle,
+            immediatePark = LauncherDemo.enabled && moving == false,
+        )
+        if (to != null) switchMode(to, true)
+    }
+
+    /** Düzeni değiştirir: ızgara kısa süre kararır, yeni düzen kurulur, geri açılır (etkinlik yeniden yaratılmaz). */
+    private fun switchMode(to: LayoutMode, animate: Boolean) {
+        if (to == activeMode) return
+        activeMode = to
+        rememberedMode = to
+        header.setLayoutMode(to)
+        val apply = { applyLayout(store.load(), persist = false) }
+        if (!animate || !started) { apply(); return }
+        grid.animate().cancel()
+        grid.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
+            apply()
+            grid.animate().alpha(1f).setDuration(FADE_IN_MS).start()
+        }.start()
+    }
+
+    /** Başlıktaki Park/Sürüş hapı: Sürüş düzenini açar ve düzenleme moduna girer. */
+    private fun editDriveLayout() {
+        if (grid.editMode || editLocked()) return
+        grid.animate().cancel(); grid.alpha = 1f
+        switchMode(LayoutMode.DRIVE, animate = false)
+        enterEditMode()
     }
 
     override fun onStart() {
@@ -244,6 +303,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (grid.editMode) return
         if (editLocked()) return
         grid.editMode = true
+        editTitle.text = getString(R.string.launcher_edit_title) + " · " + getString(
+            if (activeMode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
         dock?.setEditMode(true)
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
@@ -264,6 +325,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         dock?.setEditMode(false)
         editBar.visibility = View.GONE
         header.view.visibility = View.VISIBLE
+        // Önizleme/düzenleme bitince otomatik düzene dönülür (Sürüş'ü Park'tayken düzenlediyse).
+        val auto = if (DriveLayoutPrefs.get(this)) layoutPolicy.mode else LayoutMode.PARK
+        if (activeMode != auto) switchMode(auto, animate = false)
     }
 
     private fun buildEditBar(): View = LinearLayout(this).apply {
@@ -273,7 +337,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(text(context, LauncherTheme.SECTION_SP, bold = true).apply { setText(R.string.launcher_edit_title) })
+            addView(text(context, LauncherTheme.SECTION_SP, bold = true).apply { setText(R.string.launcher_edit_title); editTitle = this })
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_edit_hint) })
         })
         addView(View(context), weightLp(1f))
@@ -438,6 +502,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private companion object {
         const val EDIT_EXIT_KMH = 5
+        const val FADE_OUT_MS = 120L
+        const val FADE_IN_MS = 200L
+        /** Tema geçişiyle yeniden kurulmada etkin düzeni korur. */
+        @Volatile var rememberedMode = LayoutMode.PARK
         const val DRIVE_STABLE_MS = 2_000L
         const val DRIVE_TICK_MS = 500L
         const val ADD_COLUMNS = 5

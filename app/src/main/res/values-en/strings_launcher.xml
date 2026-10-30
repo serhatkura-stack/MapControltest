@@ -15,6 +15,12 @@
     <string name="launcher_nav_dialog_save">Save</string>
     <string name="launcher_nav_dialog_cancel">Cancel</string>
     <string name="launcher_nav_no_app">No navigation app installed</string>
+    <string name="launcher_nav_hold_to_save">Press and hold to save</string>
+    <string name="launcher_nav_saved_home">Home saved</string>
+    <string name="launcher_nav_saved_work">Work saved</string>
+    <string name="launcher_nav_locating">Getting location…</string>
+    <string name="launcher_nav_no_location">Could not get location</string>
+    <string name="launcher_nav_perm_denied">Location permission needed; allow it, then press and hold again</string>
     <string name="launcher_media_idle">Nothing playing</string>
     <string name="launcher_media_idle_hint">Open a music app to start</string>
     <string name="launcher_media_prev">Previous</string>
@@ -158,4 +164,48 @@
     <string name="launcher_climate_decrease">Decrease</string>
     <string name="launcher_health_row_battery">Battery</string>
     <string name="launcher_health_row_engine">Engine</string>
+    <string name="launcher_layout_park">Park</string>
+    <string name="launcher_layout_drive">Drive</string>
+    <string name="launcher_layout_park_edit">Park layout</string>
+    <string name="launcher_layout_drive_edit">Drive layout</string>
+    <string name="launcher_widget_photo">Photo</string>
+    <string name="launcher_photo_add">Add photo</string>
+    <string name="launcher_photo_hint">Upload from the FrostNav panel to Downloads</string>
+    <string name="launcher_photo_pick_title">Pick a photo</string>
+    <string name="launcher_photo_change">Change photo</string>
+    <string name="launcher_photo_remove">Remove photo</string>
+    <string name="launcher_photo_refresh">Refresh</string>
+    <string name="launcher_photo_loading">Loading…</string>
+    <string name="launcher_photo_none">No photos in Downloads. Upload from the FrostNav panel, then refresh.</string>
+    <string name="launcher_photo_permission">Storage permission is needed. Allow it, then refresh.</string>
+    <string name="launcher_photo_failed">Could not use this photo</string>
+    <string name="launcher_widget_screen_off">Screen off</string>
+    <string name="launcher_screen_off_label">Dim screen</string>
+    <string name="launcher_screen_off_hint">Tap</string>
+    <string name="launcher_widget_break">Break</string>
+    <string name="launcher_widget_speed_limit">Speed limit</string>
+    <string name="launcher_widget_battery">Battery</string>
+    <string name="launcher_widget_phone">Phone</string>
+    <string name="launcher_widget_clock">Clock</string>
+    <string name="launcher_widget_body">Body</string>
+    <string name="launcher_break_hm" formatted="true">%1$d h %2$d min</string>
+    <string name="launcher_break_m" formatted="true">%1$d min</string>
+    <string name="launcher_break_driving">driving</string>
+    <string name="launcher_break_driving_for" formatted="true">%1$s driving</string>
+    <string name="launcher_break_now">Time for a break</string>
+    <string name="launcher_speed_limit_cd" formatted="true">Speed limit %1$d</string>
+    <string name="launcher_phone_charging">Phone charging</string>
+    <string name="launcher_phone_pad_empty">Charging pad empty</string>
+    <string name="launcher_phone_on_pad">Phone on pad</string>
+    <string name="launcher_phone_take">Take your phone</string>
+    <string name="launcher_body_all_closed">All closed</string>
+    <string name="launcher_body_win_lf">Front left window</string>
+    <string name="launcher_body_win_rf">Front right window</string>
+    <string name="launcher_body_win_lr">Rear left window</string>
+    <string name="launcher_body_win_rr">Rear right window</string>
+    <string name="launcher_body_hood">Hood</string>
+    <string name="launcher_body_fuel_cap">Fuel cap</string>
+    <string name="launcher_body_handbrake_on">Handbrake on</string>
+    <string name="launcher_body_handbrake_off">Handbrake released</string>
+    <string name="launcher_window_part">Window</string>
 </resources>

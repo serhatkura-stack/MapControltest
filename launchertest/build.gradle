@@ -28,6 +28,8 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         include 'com/mapcontrol/util/AppIconHelper.java'
         // HUD testi: saf kodlayıcı (HudPayload) ve salt-okur yapılandırma okuyucu.
         include 'com/mapcontrol/hud/**'
+        // Konfor yazma testi: saf beyaz liste ve komut çözümleyici (ComfortPlan).
+        include 'com/mapcontrol/comfort/**'
         include 'com/mapcontrol/vehicle/material/OemEolConfigReader.java'
         // Araç veri yolu istemcisi (VDBus / CarInfoProxy).
         include 'com/desaysv/**'

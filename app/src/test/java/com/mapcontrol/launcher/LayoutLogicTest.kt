@@ -121,8 +121,8 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun addPickerHidesNavigationWhileDisabled() {
-        assertTrue(WidgetType.NAVIGATION !in addableWidgetTypes())
+    fun addPickerShowsNavigationWhenEnabled() {
+        assertTrue(WidgetType.NAVIGATION in addableWidgetTypes())
         assertTrue(WidgetType.VEHICLE in addableWidgetTypes())
         // Tür ve kayıtlı navigasyon widget'ları yine de yüklenir.
         assertEquals(WidgetType.NAVIGATION, WidgetType.fromKey("navigation"))
@@ -153,8 +153,8 @@ class LayoutLogicTest {
 
     @Test
     fun desayDefaultBottomRowIsDriverSeatEightThinAppsPassengerSeat() {
-        // Navigasyon kartı gizliyken (NAVIGATION_CARD_ENABLED = false) uygulama şeridi boşluğu doldurur.
-        assertTrue(!NAVIGATION_CARD_ENABLED)
+        // Navigasyon kartı gizliyken (NAVIGATION_IN_DEFAULT_LAYOUT = false) uygulama şeridi boşluğu doldurur.
+        assertTrue(!NAVIGATION_IN_DEFAULT_LAYOUT)
         val layout = defaultLayout(true)
         assertTrue(layout.none { it.type == WidgetType.NAVIGATION })
         val bottom = layout.filter { it.row == 4 }.sortedBy { it.col }

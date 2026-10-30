@@ -26,12 +26,14 @@ data class Span(val w: Int, val h: Int) {
 }
 
 /**
- * Navigasyon kartı henüz hazır değil: true yapılana kadar varsayılan düzenlerde yer almaz ve "Widget ekle"
- * listesinde görünmez. [WidgetType.NAVIGATION] türü ve [NavigationCard] durur; kayıtlı düzenlerdeki mevcut
+ * Navigasyon kartı (Yandex Haritalar): true iken "Widget ekle" listesinde görünür; false ise gizlenir. [WidgetType.NAVIGATION] türü ve [NavigationCard] durur; kayıtlı düzenlerdeki mevcut
  * navigasyon widget'ları yüklenmeye devam eder. Açmak için yalnızca bu bayrak true yapılır
  * (varsayılan düzenler de eski yerleşimine döner).
  */
-const val NAVIGATION_CARD_ENABLED = false
+const val NAVIGATION_CARD_ENABLED = true
+
+/** Navigasyon kartı varsayılan düzenlere konur mu? Hayır: yalnızca "Widget ekle" ile eklenir. */
+const val NAVIGATION_IN_DEFAULT_LAYOUT = false
 
 /** "Widget ekle" listesinde gösterilecek türler (hazır olmayanlar elenir). */
 fun addableWidgetTypes(): List<WidgetType> =
@@ -59,7 +61,7 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
-    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(6, 4), Span(6, 6), Span(6, 2), Span(4, 2))),
+    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(4, 2), Span(2, 2), Span(6, 2))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
@@ -73,7 +75,19 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
     SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
     SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
-    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2)));
+    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
+    AWD("awd", R.string.launcher_widget_awd, R.drawable.ic_mdi_car_cog, listOf(Span(4, 4), Span(2, 2))),
+    PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
+    SUNSHADE("sunshade", R.string.launcher_widget_sunshade, R.drawable.ic_mdi_car_sunroof, listOf(Span(2, 2), Span(2, 4))),
+    DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
+    STEERING_HEAT("steering_heat", R.string.launcher_widget_steering_heat, R.drawable.ic_mdi_steering_heat, listOf(Span(2, 2), Span(1, 2))),
+    SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2))),
+    BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
+    SPEED_LIMIT("speed_limit", R.string.launcher_widget_speed_limit, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2))),
+    BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
+    PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
+    CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2))),
+    BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -120,7 +134,7 @@ interface SizedWidget : LauncherWidget {
  * [NAVIGATION_CARD_ENABLED] açıksa navigasyon eski yerine döner (OEM'de 4 hücre + ince uygulama kutucukları).
  */
 fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
-    val nav = NAVIGATION_CARD_ENABLED
+    val nav = NAVIGATION_IN_DEFAULT_LAYOUT
     // Uygulama kutucuğu yalnızca 1×2'dir. Navigasyon yokken şerit 8 kutucukla (col 2-9) dolar; varken 4 kutucuk ve col 6'dan başlar.
     val appStart = if (nav) 6 else 2
     val appSlots = if (nav) 4 else DEFAULT_APP_SLOTS
@@ -182,5 +196,17 @@ object WidgetFactory {
         WidgetType.SEAT_HEAT_PASSENGER -> SeatHeatTile(activity, vent = false, driverSeat = false)
         WidgetType.SEAT_VENT_DRIVER -> SeatHeatTile(activity, vent = true, driverSeat = true)
         WidgetType.SEAT_VENT_PASSENGER -> SeatHeatTile(activity, vent = true, driverSeat = false)
+        WidgetType.AWD -> AwdTile(activity)
+        WidgetType.SUNSHADE -> SunshadeTile(activity)
+        WidgetType.DEFROST -> DefrostTile(activity)
+        WidgetType.STEERING_HEAT -> SteeringHeatTile(activity)
+        WidgetType.PHOTO -> PhotoTile(activity, placed.id)
+        WidgetType.SCREEN_OFF -> ScreenOffTile(activity)
+        WidgetType.BREAK_REMINDER -> BreakTile(activity)
+        WidgetType.SPEED_LIMIT -> SpeedLimitTile(activity)
+        WidgetType.BATTERY -> BatteryTile(activity)
+        WidgetType.PHONE_REMINDER -> PhoneTile(activity)
+        WidgetType.CLOCK -> ClockTile(activity)
+        WidgetType.BODY -> BodyTile(activity)
     }
 }

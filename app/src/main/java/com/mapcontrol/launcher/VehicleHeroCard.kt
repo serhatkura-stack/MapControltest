@@ -60,6 +60,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         lowFuel = it.lowFuel == true
         render()
     }
+    /** Cam ve kaput için salt-okur tur ([ExtraSource]); gelmezse uyarı çıkmaz. */
+    private var extra = ExtraData()
+    private val extraListener = ExtraSource.Listener {
+        if (it == extra) return@Listener
+        extra = it
+        render()
+    }
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
@@ -189,6 +196,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         startup = listOf(
             LauncherStartup.later { main.post(tirePoll) },
             LauncherStartup.later { TripSource.add(context, tripListener) },
+            LauncherStartup.later { ExtraSource.add(context, extraListener) },
         )
     }
 
@@ -197,6 +205,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         controls().removeListener(lockListener)
         startup.forEach { it.cancel() }
         TripSource.remove(tripListener)
+        ExtraSource.remove(extraListener)
         main.removeCallbacksAndMessages(null)
     }
 
@@ -242,13 +251,19 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         // Gövde durumu istisna bazlı: açık kapı/bagaj/cam tavan listelenir, hepsi kapalıysa sakin.
         val knowsSunroof = s.connected && s.hasSunroof()
         val knowsDoors = s.connected && (s.hasDoorLf() || s.hasDoorRf() || s.hasDoorLr() || s.hasDoorRr() || s.hasTrunk() || knowsSunroof)
-        val open = if (!knowsDoors) emptyList() else buildList {
-            if (s.isDoorLfOpen()) add(R.string.launcher_door_lf)
-            if (s.isDoorRfOpen()) add(R.string.launcher_door_rf)
-            if (s.isDoorLrOpen()) add(R.string.launcher_door_lr)
-            if (s.isDoorRrOpen()) add(R.string.launcher_door_rr)
-            if (s.isTrunkOpen()) add(R.string.launcher_trunk)
-            if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
+        // Cam ve kaput ayrı salt-okur turdan gelir ("Cam açık", "Kaput açık"); birden çok cam tek parça sayılır.
+        val knowsExtra = extra.connected && extra.bodyKnown
+        val open = buildList {
+            if (knowsDoors) {
+                if (s.isDoorLfOpen()) add(R.string.launcher_door_lf)
+                if (s.isDoorRfOpen()) add(R.string.launcher_door_rf)
+                if (s.isDoorLrOpen()) add(R.string.launcher_door_lr)
+                if (s.isDoorRrOpen()) add(R.string.launcher_door_rr)
+                if (s.isTrunkOpen()) add(R.string.launcher_trunk)
+                if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
+            }
+            if (knowsExtra && extra.anyWindowOpen()) add(R.string.launcher_window_part)
+            if (knowsExtra && extra.hoodOpen()) add(R.string.launcher_body_hood)
         }
         val tireAlert = tireWarning == true
 
@@ -287,7 +302,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         // Ekran okuyucu için tek cümlelik özet: kilit, biliniyorsa kapılar ve lastikler.
         val spoken = buildList {
             add(if (locked == null) context.getString(R.string.launcher_waiting_data) else statusText.text.toString())
-            if (knowsDoors && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
+            if ((knowsDoors || knowsExtra) && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
             if (tireWarning == false) add(context.getString(R.string.launcher_tires_ok))
         }.joinToString(", ")
         calmRow.contentDescription = spoken
