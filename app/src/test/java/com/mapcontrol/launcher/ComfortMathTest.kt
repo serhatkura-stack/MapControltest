@@ -136,4 +136,80 @@ class ComfortMathTest {
         assertEquals(0f, ComfortMath.toggleTarget(SunshadeState.PARTIAL))
         assertNull(ComfortMath.toggleTarget(SunshadeState.UNKNOWN))
     }
+
+    @Test fun trunkDecoding() {
+        fun d(pos: Int?, latch: Int? = null, motion: Int? = 2) = TrunkMath.decode(TrunkReading(pos, latch, motion))
+        assertEquals(TrunkState.CLOSED, d(0, 0))
+        assertEquals(TrunkState.CLOSED, d(0, null))
+        assertEquals(TrunkState.OPEN, d(0, 1)) // mandal açık, konum henüz 0
+        assertEquals(TrunkState.PARTIAL, d(40, 1))
+        assertEquals(TrunkState.PARTIAL, d(78, 1))
+        assertEquals(TrunkState.OPEN, d(79, 1))
+        assertEquals(TrunkState.OPEN, d(81, 1))
+        assertEquals(TrunkState.OPENING, d(30, 1, 3))
+        assertEquals(TrunkState.CLOSING, d(30, 1, 4))
+        assertEquals(TrunkState.OPENING, d(null, null, 3))
+        // Konum okunamazsa mandal.
+        assertEquals(TrunkState.CLOSED, d(null, 0, null))
+        assertEquals(TrunkState.OPEN, d(null, 1, null))
+        assertEquals(TrunkState.UNKNOWN, d(null, null, null))
+        assertEquals(TrunkState.UNKNOWN, TrunkMath.decode(null))
+        assertTrue(TrunkState.OPENING.moving && TrunkState.CLOSING.moving && !TrunkState.OPEN.moving && !TrunkState.PARTIAL.moving)
+    }
+
+    @Test fun trunkPercent() {
+        assertEquals(0, TrunkMath.percent(0))
+        assertEquals(100, TrunkMath.percent(81))
+        assertEquals(100, TrunkMath.percent(95))
+        assertEquals(0, TrunkMath.percent(-3))
+        assertEquals(41, TrunkMath.percent(33)) // 33/81 = 40,7
+        assertEquals(49, TrunkMath.percent(40)) // 40/81 = 49,4
+        assertNull(TrunkMath.percent(null))
+        assertEquals(0f, TrunkMath.openFraction(TrunkReading(0, 0, 2)))
+        assertEquals(1f, TrunkMath.openFraction(TrunkReading(81, 1, 2)))
+        assertEquals(1f, TrunkMath.openFraction(TrunkReading(null, 1, 2)))
+        assertEquals(0f, TrunkMath.openFraction(TrunkReading(null, 0, null)))
+        assertNull(TrunkMath.openFraction(TrunkReading(null, null, null)))
+        assertNull(TrunkMath.openFraction(null))
+    }
+
+    @Test fun trunkTapAction() {
+        assertEquals(TrunkAction.OPEN, TrunkMath.tapAction(TrunkState.CLOSED, false))
+        assertEquals(TrunkAction.CLOSE_CONFIRM, TrunkMath.tapAction(TrunkState.OPEN, false))
+        assertEquals(TrunkAction.CLOSE_CONFIRM, TrunkMath.tapAction(TrunkState.PARTIAL, true))
+        assertEquals(TrunkAction.STOP_UNKNOWN, TrunkMath.tapAction(TrunkState.OPENING, false))
+        assertEquals(TrunkAction.STOP_UNKNOWN, TrunkMath.tapAction(TrunkState.CLOSING, false))
+        assertEquals(TrunkAction.STOP, TrunkMath.tapAction(TrunkState.OPENING, true))
+        assertEquals(TrunkAction.STOP, TrunkMath.tapAction(TrunkState.CLOSING, true))
+        assertEquals(TrunkAction.NONE, TrunkMath.tapAction(TrunkState.UNKNOWN, true))
+    }
+
+    @Test fun trunkWriteIsOffUntilVerifiedAndParked() {
+        // Doğrulanmadı: kutucuk salt-okur, araca hiçbir şey gitmez.
+        assertFalse(ComfortWriter.TRUNK_WRITE_VERIFIED)
+        assertFalse(ComfortWriter.trunkEnabled)
+        assertFalse(ComfortWriter.trunkStopKnown)
+        assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.stopTrunk())
+        val sent = ArrayList<ComfortCmd>()
+        val cmd = listOf(TrunkMath.command(true, true))
+        assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.writeParked(false, { error("park okunmamalı") }, cmd) { sent += it })
+        assertEquals(TrunkWriteResult.NOT_PARKED, ComfortWriter.writeParked(true, { false }, cmd) { sent += it })
+        assertTrue(sent.isEmpty())
+        assertEquals(TrunkWriteResult.SENT, ComfortWriter.writeParked(true, { true }, cmd) { sent += it })
+        assertEquals(cmd, sent)
+    }
+
+    @Test fun trunkCommandValues() {
+        assertEquals(ComfortCmd(327696, 121, 1), TrunkMath.command(true, true))
+        assertEquals(ComfortCmd(327696, 121, 2), TrunkMath.command(false, true))
+        assertEquals(ComfortCmd(327681, 92, 3), TrunkMath.command(true, false))
+        assertEquals(ComfortCmd(327681, 92, 4), TrunkMath.command(false, false))
+    }
+
+    @Test fun trunkWidgetRegistered() {
+        val t = WidgetType.fromKey("trunk")
+        assertEquals(WidgetType.TRUNK, t)
+        assertEquals(listOf(Span(2, 2), Span(2, 4)), WidgetType.TRUNK.sizes)
+        assertFalse(WidgetType.TRUNK.parkOnly)
+    }
 }

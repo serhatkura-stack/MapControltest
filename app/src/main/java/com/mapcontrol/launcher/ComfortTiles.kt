@@ -1,6 +1,7 @@
 package com.mapcontrol.launcher
 
 import android.animation.ValueAnimator
+import android.app.AlertDialog
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
@@ -45,11 +46,17 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
     private val poll = object : Runnable {
         override fun run() {
             refreshNow()
-            main.postDelayed(this, POLL_MS)
+            main.postDelayed(this, pollIntervalMs())
         }
     }
 
     private val revert = Runnable { renderIfIdle() }
+
+    /** Sonraki okumaya kadar bekleme; bagaj hareket halindeyken kısalır. */
+    protected open fun pollIntervalMs(): Long = POLL_MS
+
+    /** Arka plan thread'inde okuma; bagaj kutucuğu kendi sinyallerini de okutur. */
+    protected open fun readNow(): ComfortReading = ComfortReader.read()
 
     /** Okumayı ve bekleyen (iyimser) hedefi ekrana yansıtır. */
     protected abstract fun render()
@@ -89,7 +96,7 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 
     private fun refreshNow() {
         io.runSafely {
-            val read = ComfortReader.read()
+            val read = readNow()
             main.post {
                 if (read == reading) return@post
                 reading = read
@@ -116,7 +123,10 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
             return
         }
         main.postDelayed(revert, REVERT_MS)
-        val msg = if (LauncherEdition.READ_ONLY) R.string.launcher_read_only_comfort else R.string.launcher_comfort_pending
+        showToast(if (LauncherEdition.READ_ONLY) R.string.launcher_read_only_comfort else R.string.launcher_comfort_pending)
+    }
+
+    protected fun showToast(msg: Int) {
         toast?.cancel()
         toast = Toast.makeText(context, msg, Toast.LENGTH_LONG).also { it.show() }
     }
@@ -435,6 +445,272 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
         const val VALUE_SP = 28f
         const val TALL_ROWS = 4
         const val ANIM_MS = 700L
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bagaj
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Bagaj kapağı: yandan bakışla araç siluetinde kapağın açılma açısı ve yüzde. Dokun = kapalıysa aç; açıksa "Bagaj kapansın mı?"
+ * onayıyla kapat; hareket halindeyse durdur (yalnızca durdurma değeri doğrulandıysa). Okuma 3 sn'de bir, hareket halinde 500 ms.
+ * Yazma YALNIZCA park halindeyken ve [ComfortWriter.TRUNK_WRITE_VERIFIED] true iken gider; o zamana dek kutucuk salt-okurdur ve
+ * dokunuş "henüz doğrulanmadı" ipucu gösterir.
+ */
+internal class TrunkTile(context: Context) : ComfortTile(context) {
+
+    private val car = TrunkView(context)
+    private val title = text(context, LABEL_SP).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val stateText = text(context, VALUE_SP, medium = true).apply { theme.bind { setTextColor(LauncherTheme.TEXT) } }
+    private val iconView: ImageView = icon(context, R.drawable.ic_mdi_car_trunk, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+
+    /** İyimser hareket (true açılıyor, false kapanıyor); null = araçtaki gösterilir. */
+    private var pendingOpening: Boolean? = null
+    private var dialog: AlertDialog? = null
+
+    private val header = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+    }
+    private val bottomGap = gap(context, 8, vertical = true)
+
+    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
+        theme.bind { background = cardSurface(context) }
+        addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(gap(context, 8, vertical = true))
+        addView(car, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        addView(bottomGap)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onTap() }
+        pressFeedback()
+    }
+
+    init {
+        title.setText(R.string.launcher_widget_trunk)
+        // Çizim renkleri çizimde okunur; tema değişince yalnızca yeniden çizilir.
+        theme.bind { car.invalidate() }
+    }
+
+    override val view: View get() = root
+
+    override fun readNow(): ComfortReading = ComfortReader.read(withTrunk = true)
+
+    private fun state(): TrunkState = TrunkMath.decode(reading.trunk).takeIf { reading.connected } ?: TrunkState.UNKNOWN
+
+    override fun pollIntervalMs(): Long = if (state().moving || pendingOpening != null) FAST_POLL_MS else POLL_MS
+
+    override fun applySpan(span: Span) {
+        // Yüksek (2x4): üstte ikon + başlık, silüet, altta ortalı büyük durum. Alçak (2x2): ikon + durum tek satırda.
+        val tall = span.h >= TALL_ROWS
+        header.removeAllViews()
+        (stateText.parent as? android.view.ViewGroup)?.removeView(stateText)
+        header.addView(iconView)
+        header.addView(gap(context, 10))
+        if (tall) {
+            header.addView(title)
+            root.addView(stateText, root.indexOfChild(bottomGap) + 1, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            stateText.gravity = Gravity.CENTER
+        } else {
+            header.addView(stateText)
+        }
+        bottomGap.visibility = if (tall) View.VISIBLE else View.GONE
+        val pad = context.dp(if (tall) PADDING_DP else COMPACT_PADDING_DP)
+        root.setPadding(pad, pad, pad, pad)
+    }
+
+    override fun clearPending() { pendingOpening = null }
+
+    override fun onStopped() {
+        car.cancelAnim()
+        dialog?.dismiss()
+        dialog = null
+    }
+
+    override fun render() {
+        val state = state()
+        val known = state != TrunkState.UNKNOWN
+        val pending = pendingOpening
+        val fraction = TrunkMath.openFraction(reading.trunk.takeIf { reading.connected })
+        val percent = TrunkMath.percent(reading.trunk?.position)
+        car.known = known || pending != null
+        val target = when {
+            pending != null -> if (pending) 1f else 0f
+            else -> fraction
+        }
+        if (target != null) car.animateTo(target)
+        val open = pending == true || (pending == null && state != TrunkState.CLOSED && known)
+        val str = when {
+            pending != null -> context.getString(if (pending) R.string.launcher_trunk_opening else R.string.launcher_trunk_closing)
+            !known -> context.getString(R.string.launcher_unavailable)
+            else -> when (state) {
+                TrunkState.CLOSED -> context.getString(R.string.launcher_trunk_closed)
+                TrunkState.OPENING -> context.getString(R.string.launcher_trunk_opening)
+                TrunkState.CLOSING -> context.getString(R.string.launcher_trunk_closing)
+                TrunkState.OPEN -> context.getString(R.string.launcher_trunk_open)
+                else -> if (percent != null) context.getString(R.string.launcher_trunk_percent, percent) else context.getString(R.string.launcher_trunk_open)
+            }
+        }
+        stateText.setTextSmooth(str)
+        iconView.imageTintList = ColorStateList.valueOf(if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
+        stateText.setTextColor(if (known || pending != null) (if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT) else LauncherTheme.TEXT_SECONDARY)
+        root.contentDescription = context.getString(R.string.launcher_widget_trunk) + ", " + str
+        root.isEnabled = known || LauncherEdition.READ_ONLY
+    }
+
+    // --- Dokunma ---
+
+    private fun onTap() {
+        val state = state()
+        // Doğrulanana kadar salt-okur: hiçbir komut hazırlanmaz, yalnızca ipucu.
+        if (!ComfortWriter.trunkEnabled) {
+            showToast(if (LauncherEdition.READ_ONLY) R.string.launcher_read_only_comfort else R.string.launcher_trunk_unverified)
+            return
+        }
+        when (TrunkMath.tapAction(state, ComfortWriter.trunkStopKnown)) {
+            TrunkAction.OPEN -> write(open = true)
+            TrunkAction.CLOSE_CONFIRM -> confirmClose()
+            TrunkAction.STOP -> write(open = null)
+            TrunkAction.STOP_UNKNOWN -> showToast(R.string.launcher_trunk_stop_unknown)
+            TrunkAction.NONE -> Unit
+        }
+    }
+
+    /** Kapatma, arkada biri varken tehlikeli olabilir: her seferinde onay istenir. */
+    private fun confirmClose() {
+        val host = context as? android.app.Activity
+        if (host != null && (host.isFinishing || host.isDestroyed)) return
+        dialog?.dismiss()
+        dialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(R.string.launcher_trunk_close_title)
+            .setMessage(R.string.launcher_trunk_close_message)
+            .setPositiveButton(R.string.launcher_trunk_close_confirm) { _, _ -> write(open = false) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create().also { it.hideOemBarIfNeeded(context); it.show() }
+    }
+
+    /** [open] true aç, false kapat, null durdur. Park kapısı arka planda denetlenir; sonuca göre ekran güncellenir. */
+    private fun write(open: Boolean?) {
+        io.runSafely {
+            val result = if (open == null) ComfortWriter.stopTrunk() else ComfortWriter.setTrunk(open)
+            main.post {
+                when (result) {
+                    TrunkWriteResult.SENT -> {
+                        if (open != null) pendingOpening = open
+                        afterCommit(true)
+                    }
+                    TrunkWriteResult.NOT_PARKED -> showToast(R.string.launcher_trunk_not_parked)
+                    TrunkWriteResult.DISABLED -> showToast(R.string.launcher_trunk_unverified)
+                }
+            }
+        }
+    }
+
+    // --- Çizim ---
+
+    /**
+     * Yandan stilize araç: gövde, cam bölmesi, tekerlekler ve arkada (sağda) tavandaki menteşeden açılan bagaj kapağı.
+     * [openness] 0 = kapak kapalı, 1 = tam açık.
+     */
+    private class TrunkView(context: Context) : View(context) {
+        var openness = 0f
+            private set
+        var known = false
+            set(v) { if (field != v) { field = v; invalidate() } }
+
+        private var anim: ValueAnimator? = null
+        private var animTarget = -1f
+        private var firstSet = true
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+        private val path = android.graphics.Path()
+
+        fun cancelAnim() { anim?.cancel(); anim = null }
+
+        private fun setOpenness(o: Float) {
+            openness = o.coerceIn(0f, 1f)
+            invalidate()
+        }
+
+        /** Yalnızca hedef değişince kısa bir geçiş; ilk gösterim anında oturur. */
+        fun animateTo(target: Float) {
+            if (firstSet || !isAttachedToWindow || width == 0) {
+                firstSet = false
+                cancelAnim()
+                setOpenness(target)
+                return
+            }
+            if (anim != null && target == animTarget) return
+            if (anim == null && Math.abs(target - openness) < 0.005f) return
+            cancelAnim()
+            animTarget = target
+            anim = ValueAnimator.ofFloat(openness, target).apply {
+                duration = ANIM_MS
+                interpolator = DecelerateInterpolator()
+                addUpdateListener { setOpenness(it.animatedValue as Float) }
+                start()
+            }
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+            // 100 × 56 birimlik tasarım alanı, orantılı sığdırılıp ortalanır.
+            val u = minOf(w / DESIGN_W, h / DESIGN_H)
+            canvas.save()
+            canvas.translate((w - DESIGN_W * u) / 2f, (h - DESIGN_H * u) / 2f)
+            canvas.scale(u, u)
+            val accent = if (known) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY
+            // Cam bölmesi (kabin).
+            path.reset()
+            path.moveTo(12f, 30f); path.lineTo(26f, HINGE_Y); path.lineTo(HINGE_X, HINGE_Y); path.lineTo(REAR_X, 30f); path.close()
+            paint.style = Paint.Style.FILL
+            paint.color = ColorUtils.blendARGB(LauncherTheme.CARD, accent, 0.30f)
+            canvas.drawPath(path, paint)
+            // Alt gövde.
+            rect.set(4f, 30f, 92f, 46f)
+            paint.color = LauncherTheme.CONTROL
+            canvas.drawRoundRect(rect, 6f, 6f, paint)
+            // Tekerlekler.
+            for (cx in floatArrayOf(24f, 70f)) {
+                paint.color = LauncherTheme.TEXT_SECONDARY
+                canvas.drawCircle(cx, 46f, 7f, paint)
+                paint.color = LauncherTheme.CARD
+                canvas.drawCircle(cx, 46f, 3f, paint)
+            }
+            // Bagaj kapağı: menteşeden, kapalıyken hafif eğik aşağı; açıldıkça arkaya ve yukarı döner.
+            val a = Math.toRadians((CLOSED_DEG + openness * (OPEN_DEG - CLOSED_DEG)).toDouble())
+            val ex = HINGE_X + GATE_LEN * Math.sin(a).toFloat()
+            val ey = HINGE_Y + GATE_LEN * Math.cos(a).toFloat()
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = 4.5f
+            paint.color = if (openness > 0.02f) accent else LauncherTheme.TEXT
+            canvas.drawLine(HINGE_X, HINGE_Y, ex, ey, paint)
+            canvas.restore()
+        }
+    }
+
+    private companion object {
+        const val PADDING_DP = 20
+        const val COMPACT_PADDING_DP = 14
+        const val ICON_DP = 28
+        const val LABEL_SP = 22f
+        const val VALUE_SP = 28f
+        const val TALL_ROWS = 4
+        const val ANIM_MS = 450L
+        const val FAST_POLL_MS = 500L
+        const val DESIGN_W = 100f
+        const val DESIGN_H = 56f
+        // Menteşe tavanın arka ucunda; kapalı kapak arka camı örter ve gövdenin arka ucuna iner.
+        const val HINGE_X = 80f
+        const val HINGE_Y = 12f
+        const val REAR_X = 84f
+        const val GATE_LEN = 18.5f
+        const val CLOSED_DEG = 12f
+        const val OPEN_DEG = 110f
     }
 }
 

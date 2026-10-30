@@ -66,4 +66,16 @@ Hepsi **adb ile, yalnız P (hız 0), her adım için senin sohbette açık "tama
   - Gözle: Desay navi uygulaması/HUD/gösterge tepkisi; logcat'te her `BROADCAST action=...` satırı. Sıra: limit 50 → limit 100 → limit_off; turbodog (ikon 2, sonra 3) → amap.
   - Tepki yoksa "yayın alınmadı" demek kesin değil (alıcı olmayabilir); sonucu 📷 ile kaydet, bir sonraki adıma geçmeden sana sorarım.
 
+## Tur 5: bagaj kapağı (elektrikli) testi
+**ARACA YAZAR (hepsi DOĞRULANMADI ADAY). Araç P'de (hız 0), el freni çekili; sen bagaj kapağının yanından/arkasından UZAKTA, açılma alanının dışında dur. Aynı anda TEK komut; her komut için sohbette açık "tamam"ın gerekir.** Park kapısı her gönderimden önce hızı okur (0 değilse reddeder). Başlatan paket yalnız shell, `--es ack PARKED` şart (salt-okur `trunk_info` dahil). Her yazma komutu sonrası 10 sn boyunca PLG 98 / TRUNK 19 / CS 92 geçişleri zaman damgasıyla günlüğe yazılır; bitmeden (~10 sn) sonrakini başlatma (başka test sürerken istek yok sayılır). Sonda geri alma yok: kapağı sonraki adım ya da elle kapatır.
+`C=com.mapcontrol.launchertest/com.mapcontrol.comfort.ComfortTestActivity` · günlük: `adb logcat -s ComfortTest` (ayrı terminalde)
+
+  1. **Okuma (yazmaz):** `adb shell am start -n $C --es c trunk_info --es ack PARKED` → PLG 98 (kapalıyken 0), TRUNK 19 (0), CS 92 (2) beklenir; park kapısı `true` mu? 📷
+  2. **VR açma:** `adb shell am start -n $C --es c trunk_open_vr --es ack PARKED` (VR 327696 / 121 ← 1) → kapak açılıyor mu? Günlükte CS 92 → 3, PLG 98 artıyor mu? 📷 + açılma süresi.
+  3. **Hiçbir şey olmadıysa CS açma:** `adb shell am start -n $C --es c trunk_open_cs --es ack PARKED` (CS 327681 / 92 ← 3). Kapak zaten VR ile açıldıysa bu adımı ATLA.
+  4. **Kapatma (kapak tam açıkken, arkada kimse yok):** `adb shell am start -n $C --es c trunk_close_vr --es ack PARKED` (VR 121 ← 2) → kapanıyor mu (CS 92 → 4, PLG 98 azalır)? Olmadıysa: `adb shell am start -n $C --es c trunk_close_cs --es ack PARKED` (CS 92 ← 4).
+  5. **Durdurma adayı (hareket sırasında):** önce kapağı elle ya da adım 2/3 ile açtır; hareket sürerken ayrı komut başlatılamayacağı için tek komutta aç-bekle-durdur: `adb shell am start -n $C --es c trunk_open_stop_cs --ei after_ms 2000 --es ack PARKED` (CS 92 ← 3, 2 sn sonra CS 92 ← 2) → kapak ortada durdu mu, PLG 98 sabitlendi mi, CS 92 → 2 mi? 📷 Tek başına durdurma: `adb shell am start -n $C --es c trunk_stop_cs --es ack PARKED` (yalnızca kapak hareket halindeyken anlamlı; önceki test bittikten sonra ancak elle başlatılmış harekette denenir).
+  - Sonuç yazılacak yerler: çalışan yol → `ComfortWriter.TRUNK_VIA_VR` (VR 121 çalışırsa true, CS 92 çalışırsa false); `TRUNK_WRITE_VERIFIED` → true; durdurma çalışırsa `TRUNK_STOP_VALUE` = 2. Bunlar yapılana dek bagaj kutucuğu salt-okur kalır.
+  - Gözle: kapağın gerçek hareketi, ölü bölge/ses/uyarı (kapanırken sıkışma koruması), logcat'te `SEND module=... id=... value=...` ve varsa `REFUSED` nedeni.
+
 Notlar: ekran görüntüsü kapalı, hepsi fotoğraf. Başka araç: `SERIAL=xxxx ./olcum.sh`. Çıktılar: `~/chery/katalog/loglar/tur2-<tarih>/`.

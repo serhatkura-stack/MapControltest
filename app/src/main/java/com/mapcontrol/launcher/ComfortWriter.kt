@@ -3,8 +3,10 @@ package com.mapcontrol.launcher
 import android.os.Handler
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
+import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
+import com.mapcontrol.hud.HudParkGate
 import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -31,8 +33,98 @@ internal enum class SunshadeState(val raw: Int) {
 /** Araca gidecek tek bir yazma: modül, sinyal, değer. */
 internal data class ComfortCmd(val module: Int, val id: Int, val value: Int)
 
+/**
+ * Bagaj kapağı durumu. Okuma (araçta ölçüldü): ReadOnly PLG_POSITION (98) 0 kapalı .. ~81 tam açık, TRUNK_STATE (19) 0 kapalı / 1 açık,
+ * CarSetting REAR_DOOR_CONTROL (92) 2 durdu / 3 açılıyor / 4 kapanıyor.
+ */
+internal enum class TrunkState {
+    CLOSED, OPENING, CLOSING, PARTIAL, OPEN, UNKNOWN;
+
+    val moving: Boolean get() = this == OPENING || this == CLOSING
+}
+
+/** Bagaj ham okuması; okunamayan alan null. */
+internal data class TrunkReading(val position: Int? = null, val latchOpen: Int? = null, val motion: Int? = null)
+
+/** Bagaj dokunuşunun sonucu: ne yapılacağı (saf karar, [TrunkMath.tapAction]). */
+internal enum class TrunkAction { OPEN, CLOSE_CONFIRM, STOP, STOP_UNKNOWN, NONE }
+
+/** Kapılı bagaj yazmasının sonucu. */
+internal enum class TrunkWriteResult { SENT, DISABLED, NOT_PARKED }
+
 /** Perde komut adımı: [delayMs] sonra [value] yazılır (VR 124: 1 aç, 2 kapat, [ComfortWriter.SUNSHADE_STOP_VALUE] durdur). */
 internal data class SunshadeStep(val value: Int, val delayMs: Long)
+
+/** Bagaj kapağının saf hesapları (JVM'de sınanır): ham okuma → durum ve yüzde, dokunuş kararı, yazma komutu. */
+internal object TrunkMath {
+
+    /** PLG_POSITION tam açıkken ölçülen değer (~81); yüzde buna göre. */
+    const val FULL_OPEN = 81
+
+    /** Bu değerden itibaren (tam açık - 2) "tam açık" sayılır; ölçüm kıpırdaması payı. */
+    const val OPEN_THRESHOLD = FULL_OPEN - 2
+
+    const val MOTION_STOPPED = 2
+    const val MOTION_OPENING = 3
+    const val MOTION_CLOSING = 4
+
+    /** Açıklık yüzdesi 0..100; konum okunamıyorsa null. */
+    fun percent(position: Int?): Int? =
+        position?.let { Math.round(it.coerceIn(0, FULL_OPEN) * 100f / FULL_OPEN) }
+
+    /**
+     * Durum: önce hareket (CS 92: 3 açılıyor, 4 kapanıyor). Sonra konum: 0 → kapalı (mandal açık diyorsa açık), [OPEN_THRESHOLD] ve üstü → açık,
+     * arası → yarı açık. Konum okunamazsa mandal (TRUNK_STATE 19). Hiçbiri yoksa bilinmiyor.
+     */
+    fun decode(r: TrunkReading?): TrunkState {
+        if (r == null) return TrunkState.UNKNOWN
+        when (r.motion) {
+            MOTION_OPENING -> return TrunkState.OPENING
+            MOTION_CLOSING -> return TrunkState.CLOSING
+        }
+        val pos = r.position
+        if (pos != null) return when {
+            pos <= 0 -> if (r.latchOpen == 1) TrunkState.OPEN else TrunkState.CLOSED
+            pos >= OPEN_THRESHOLD -> TrunkState.OPEN
+            else -> TrunkState.PARTIAL
+        }
+        return when (r.latchOpen) {
+            0 -> TrunkState.CLOSED
+            1 -> TrunkState.OPEN
+            else -> TrunkState.UNKNOWN
+        }
+    }
+
+    /** Çizim için açıklık 0..1; konum yoksa durumdan (kapalı 0, açık 1), bilinmiyorsa null. */
+    fun openFraction(r: TrunkReading?): Float? {
+        val pos = r?.position
+        if (pos != null) return pos.coerceIn(0, FULL_OPEN) / FULL_OPEN.toFloat()
+        return when (decode(r)) {
+            TrunkState.CLOSED -> 0f
+            TrunkState.OPEN -> 1f
+            else -> null
+        }
+    }
+
+    /**
+     * Dokunuş: kapalı → aç; açık/yarı açık → onaylı kapat; hareket halinde → durdur (yalnızca durdurma değeri doğrulandıysa
+     * [stopKnown], değilse ipucu); bilinmiyorsa hiçbir şey.
+     */
+    fun tapAction(state: TrunkState, stopKnown: Boolean): TrunkAction = when (state) {
+        TrunkState.CLOSED -> TrunkAction.OPEN
+        TrunkState.OPEN, TrunkState.PARTIAL -> TrunkAction.CLOSE_CONFIRM
+        TrunkState.OPENING, TrunkState.CLOSING -> if (stopKnown) TrunkAction.STOP else TrunkAction.STOP_UNKNOWN
+        TrunkState.UNKNOWN -> TrunkAction.NONE
+    }
+
+    /**
+     * Yazma komutu. [viaVr] true: VR 121 (1 aç, 2 kapat); false: CarSetting 92 (3 aç, 4 kapat). İkisi de araçta DOĞRULANMADI;
+     * hangisi çalışırsa [ComfortWriter.TRUNK_VIA_VR] ona ayarlanır.
+     */
+    fun command(open: Boolean, viaVr: Boolean): ComfortCmd =
+        if (viaVr) ComfortCmd(ComfortWriter.MODULE_VR, ComfortWriter.ID_VR_TRUNK, if (open) 1 else 2)
+        else ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, if (open) 3 else 4)
+}
 
 /**
  * Konfor widget'larının saf hesapları (arayüzden bağımsız, birim testli): durum çözme, perde sürükleme ve
@@ -165,6 +257,21 @@ internal object ComfortWriter {
     const val COMFORT_WRITE_VERIFIED = true
     const val SUNSHADE_WRITE_VERIFIED = true
 
+    /** Bagaj kapağı yazması araçta DOĞRULANMADI: false iken kutucuk salt-okur, dokunuş "henüz doğrulanmadı" ipucu gösterir. */
+    const val TRUNK_WRITE_VERIFIED = false
+
+    /** Bagaj yazması hangi yoldan: true VR 121 (1 aç / 2 kapat), false CarSetting 92 (3 aç / 4 kapat). Araç testinde çalışana ayarlanır. */
+    const val TRUNK_VIA_VR = true
+
+    /** VrID.ID_VR_TRUNK (bagaj yazma adayı). */
+    const val ID_VR_TRUNK = 121
+
+    /** Hareketteki bagajı durduran CarSetting 92 değeri; araçta bulunamadı (2 denenecek). Null iken dokunuş yalnızca ipucu gösterir. */
+    val TRUNK_STOP_VALUE: Int? = null
+
+    /** Durdurma değeri doğrulandı mı. */
+    val trunkStopKnown: Boolean get() = TRUNK_STOP_VALUE != null
+
     /** Buğu AÇMA doğrulandı; KAPATMA doğrulanmadı, o yüzden kapalı kalır (kapatma değeri [DEFROST_OFF_VALUE] denenecek). */
     const val DEFROST_WRITE_VERIFIED = false
     const val STEER_HEAT_WRITE_VERIFIED = false
@@ -198,6 +305,7 @@ internal object ComfortWriter {
         ClimateWriter.canWrite(master && feature, readOnly)
 
     val sunshadeEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, SUNSHADE_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
+    val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, TRUNK_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
     val defrostEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, DEFROST_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
     val steerEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, STEER_HEAT_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
 
@@ -208,6 +316,36 @@ internal object ComfortWriter {
         if (!allowed) return false
         commands.forEach(send)
         return true
+    }
+
+    /**
+     * Park kapılı yazma (saf, birim testli): [enabled] false ise DISABLED, [parked] false ise NOT_PARKED; ikisinde de [send] çağrılmaz.
+     * [parked] tembel: yalnızca kapı açıksa araçtan okunur.
+     */
+    fun writeParked(enabled: Boolean, parked: () -> Boolean, commands: List<ComfortCmd>, send: (ComfortCmd) -> Unit): TrunkWriteResult {
+        if (!enabled) return TrunkWriteResult.DISABLED
+        if (!parked()) return TrunkWriteResult.NOT_PARKED
+        commands.forEach(send)
+        return TrunkWriteResult.SENT
+    }
+
+    /** Park kararı: araç testi aracıyla aynı [HudParkGate] (gösterge hızı 119 == 0 ve eski hız 0 değil). Arka planda çağrılır. */
+    fun parkedNow(): Boolean {
+        val ro = VDEventCarInfo.MODULE_READONLY_INFO
+        return HudParkGate.evaluate(
+            CarSignals.readInt(ro, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), CarSignals.readInt(ro, ReadOnlyID.ID_CAR_SPEED),
+        ).allowed
+    }
+
+    /** Bagaj aç/kapat. Doğrulanmadıysa ya da araç park halinde değilse araca dokunmaz. Arka planda çağrılır. */
+    fun setTrunk(open: Boolean): TrunkWriteResult =
+        writeParked(trunkEnabled, ::parkedNow, listOf(TrunkMath.command(open, TRUNK_VIA_VR)), ::sendToCar)
+
+    /** Hareketteki bagajı durdur (CarSetting 92 ← [TRUNK_STOP_VALUE]); değer bilinmiyorsa DISABLED. Arka planda çağrılır. */
+    fun stopTrunk(): TrunkWriteResult {
+        val v = TRUNK_STOP_VALUE ?: return TrunkWriteResult.DISABLED
+        val cmd = ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, v)
+        return writeParked(trunkEnabled, ::parkedNow, listOf(cmd), ::sendToCar)
     }
 
     /** Buğu: ön/arka cam aç/kapat. Kapalıyken false döner ve araca dokunmaz. */
@@ -256,23 +394,29 @@ internal data class ComfortReading(
     val frontDefrost: Boolean? = null,
     val rearDefrost: Boolean? = null,
     val steerHeat: Boolean? = null,
+    val trunk: TrunkReading? = null,
 )
 
 /** Konfor sinyallerini okur (yalnızca okuma; arka plan thread'inde çağrılır). */
 internal object ComfortReader {
-    fun read(): ComfortReading {
+    /** [withTrunk] yalnızca bagaj kutucuğu için (üç ek okuma); diğer konfor kutucukları okumaz. */
+    fun read(withTrunk: Boolean = false): ComfortReading {
         if (LauncherDemo.enabled) return LauncherDemo.comfort()
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return ComfortReading()
         return try {
             fun cs(id: Int) = proxy.getItemValues(VDEventCarInfo.MODULE_CAR_SETTING, id)?.firstOrNull()
             fun hv(id: Int) = proxy.getItemValues(VDEventCarInfo.MODULE_HVAC, id)?.firstOrNull()
+            fun ro(id: Int) = proxy.getItemValues(VDEventCarInfo.MODULE_READONLY_INFO, id)?.firstOrNull()
             ComfortReading(
                 connected = true,
                 sunshade = ComfortMath.decodeSunshade(cs(CarSettingID.ID_CAR_SUNSHADE)),
                 frontDefrost = ComfortMath.decodeFront(hv(HvacID.ID_AC_MAX_FRONT_DEFOREST)),
                 rearDefrost = ComfortMath.decodeRear(hv(HvacID.ID_AC_REAR_DEFROST)),
                 steerHeat = ComfortMath.decodeSteer(cs(CarSettingID.ID_CAR_STEER_WHEEL_HEAT)),
+                trunk = if (withTrunk) {
+                    TrunkReading(ro(ReadOnlyID.ID_PLG_POSITION), ro(ReadOnlyID.ID_TRUNK_STATE), cs(CarSettingID.ID_CAR_REAR_DOOR_CONTROL))
+                } else null,
             )
         } catch (e: RuntimeException) {
             ComfortReading()

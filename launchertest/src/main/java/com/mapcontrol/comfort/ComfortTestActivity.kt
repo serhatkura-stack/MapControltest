@@ -19,10 +19,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * korumalar kodda). Launcher arayüzünden ulaşılmaz. HudTestActivity ile aynı desen.
  *
  * Ekstralar (`--es c <komut> --es ack PARKED`; ack olmadan hiçbir şey olmaz; salt-okur komutlar dahil):
- *  - `info`, `shade_time`: SALT-OKUR (shade_time perdeyi elle oynatırken 30 sn, 100 ms aralıkla geçişleri zaman damgalarıyla yazar).
+ *  - `info`, `shade_time`, `trunk_info`: SALT-OKUR (shade_time perdeyi elle oynatırken 30 sn, 100 ms aralıkla geçişleri zaman damgalarıyla yazar).
  *  - `shade_open`, `shade_close`, `shade_open_vr`, `shade_close_vr`, `shade_stop [--ei stop 3|6|0]`,
  *    `shade_open_stop [--ei after_ms 2000] [--ei stop 3]`.
  *  - `defrost_front`, `defrost_front_max`, `defrost_rear`, `defrost_rear_both`, `wheel_heat` (`--ei v 1|0`).
+ *  - Bagaj kapağı (HEPSİ DOĞRULANMADI ADAY): `trunk_open_vr` (VR 121←1), `trunk_close_vr` (VR 121←2), `trunk_open_cs` (CS 92←3),
+ *    `trunk_close_cs` (CS 92←4), `trunk_stop_cs` (CS 92←2), `trunk_open_stop_cs [--ei after_ms 2000]` (aç, bekle, durdur).
+ *    Yazmadan sonra 10 sn boyunca PLG 98 / TRUNK 19 / CS 92 geçişleri günlüğe yazılır.
  * Yazan komutlarda HER yazmadan önce park kapısı denetlenir; reddedilirse dizi durur. Yazmadan sonra ilgili kimlikler
  * okunur ve değişimler "ComfortTest" etiketiyle günlüğe yazılır. Sonda geri alma/temizleme YAPILMAZ.
  */
@@ -104,7 +107,7 @@ class ComfortTestActivity : Activity() {
         val connected = sender.connect()
         Log.i(ComfortSender.TAG, "START ${cmd.name} connected=$connected")
         when (cmd.kind) {
-            ComfortPlan.Kind.INFO -> info(sender, connected)
+            ComfortPlan.Kind.INFO -> info(sender, connected, cmd)
             ComfortPlan.Kind.TIMING -> {
                 if (!connected) return notConnected(cmd)
                 watch(sender, cmd, cmd.watchMs, "shade_time: perdeyi şimdi elle oynat")
@@ -123,13 +126,13 @@ class ComfortTestActivity : Activity() {
     }
 
     /** SALT-OKUR: yazma yok. */
-    private fun info(sender: ComfortSender, connected: Boolean) {
+    private fun info(sender: ComfortSender, connected: Boolean, cmd: ComfortPlan.Command) {
         val out = ArrayList<String>()
         out += "connected=$connected"
         if (connected) {
             val gate = sender.parkDecision()
             out += "park kapısı: ${gate.allowed} (${gate.reason})"
-            for (s in ComfortPlan.ALL_SIGNALS) out += "${s.name} (${s.module}/${s.id}) -> ${sender.read(s)?.contentToString()}"
+            for (s in cmd.watch.ifEmpty { ComfortPlan.ALL_SIGNALS }) out += "${s.name} (${s.module}/${s.id}) -> ${sender.read(s)?.contentToString()}"
         }
         out.forEach { Log.i(ComfortSender.TAG, "INFO $it") }
         show("Konfor bilgi (salt-okur)\n" + out.joinToString("\n"))

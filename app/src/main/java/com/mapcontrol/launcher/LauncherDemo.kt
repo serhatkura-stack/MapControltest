@@ -83,6 +83,7 @@ internal object LauncherDemo {
     /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam ve direksiyon ısıtma kapalı. */
     fun comfort(): ComfortReading = ComfortReading(
         connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true, steerHeat = false,
+        trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
     )
 
     /**

@@ -95,6 +95,7 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     AWD("awd", R.string.launcher_widget_awd, R.drawable.ic_mdi_car_cog, listOf(Span(4, 4), Span(2, 2))),
     PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4)), parkOnly = true),
     SUNSHADE("sunshade", R.string.launcher_widget_sunshade, R.drawable.ic_mdi_car_sunroof, listOf(Span(2, 2), Span(2, 4))),
+    TRUNK("trunk", R.string.launcher_widget_trunk, R.drawable.ic_mdi_car_trunk, listOf(Span(2, 2), Span(2, 4))),
     DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
     STEERING_HEAT("steering_heat", R.string.launcher_widget_steering_heat, R.drawable.ic_mdi_steering_heat, listOf(Span(2, 2), Span(1, 2))),
     SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2)), parkOnly = true),
@@ -214,6 +215,7 @@ object WidgetFactory {
         WidgetType.SEAT_VENT_PASSENGER -> SeatHeatTile(activity, vent = true, driverSeat = false)
         WidgetType.AWD -> AwdTile(activity)
         WidgetType.SUNSHADE -> SunshadeTile(activity)
+        WidgetType.TRUNK -> TrunkTile(activity)
         WidgetType.DEFROST -> DefrostTile(activity)
         WidgetType.STEERING_HEAT -> SteeringHeatTile(activity)
         WidgetType.PHOTO -> PhotoTile(activity, placed.id)

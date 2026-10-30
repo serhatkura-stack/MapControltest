@@ -14,6 +14,9 @@ object ComfortPlan {
     /** VDEventCarInfo.MODULE_HVAC. */
     const val MODULE_HVAC = 327690
 
+    /** VDEventCarInfo.MODULE_READONLY_INFO. */
+    const val MODULE_READONLY_INFO = 327684
+
     /** VDEventCarInfo.MODULE_VR. */
     const val MODULE_VR = 327696
 
@@ -40,6 +43,24 @@ object ComfortPlan {
 
     /** VR 124 durdurma ADAYI (araçta denenecek); yalnızca `shade_stop_vr` ile. */
     val VR_SHADE_STOP_CANDIDATES: Set<Int> = setOf(3)
+
+    /** VrID.ID_VR_TRUNK: bagaj kapağı yazma ADAYI (DOĞRULANMADI); perde VR 124 örneğiyle 1 aç, 2 kapat denenecek. */
+    const val ID_VR_TRUNK = 121
+
+    /** CarSettingID.ID_CAR_REAR_DOOR_CONTROL. Okuma (ölçüldü): 2 durdu, 3 açılıyor, 4 kapanıyor. Yazma yedek ADAY: 3 aç, 4 kapat, 2 durdur. */
+    const val ID_REAR_DOOR_CONTROL = 92
+
+    /** ReadOnlyID.ID_PLG_POSITION: bagaj kapağı açıklığı (ölçüldü): 0 kapalı .. ~81 tam açık. */
+    const val ID_PLG_POSITION = 98
+
+    /** ReadOnlyID.ID_TRUNK_STATE (ölçüldü): 0 kapalı, 1 açık. */
+    const val ID_TRUNK_STATE = 19
+
+    const val TRUNK_OPEN_VR = 1
+    const val TRUNK_CLOSE_VR = 2
+    const val TRUNK_OPEN_CS = 3
+    const val TRUNK_CLOSE_CS = 4
+    const val TRUNK_STOP_CS = 2
 
     /** Buğu KAPATMA adayı: 0 ve tekrar 1 kapatmadı (araçta ölçüldü); 2 denenecek. Yalnızca Hvac 24 ve 80. */
     const val DEFROST_OFF_CANDIDATE = 2
@@ -68,6 +89,11 @@ object ComfortPlan {
         add(Write(MODULE_VR, ID_VR_SUN_SHADE, 1))
         add(Write(MODULE_VR, ID_VR_SUN_SHADE, 2))
         for (s in VR_SHADE_STOP_CANDIDATES) add(Write(MODULE_VR, ID_VR_SUN_SHADE, s))
+        add(Write(MODULE_VR, ID_VR_TRUNK, TRUNK_OPEN_VR))
+        add(Write(MODULE_VR, ID_VR_TRUNK, TRUNK_CLOSE_VR))
+        add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS))
+        add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_CLOSE_CS))
+        add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS))
         add(Write(MODULE_HVAC, ID_MAX_FRONT_DEFOREST, DEFROST_OFF_CANDIDATE))
         add(Write(MODULE_HVAC, ID_REAR_DEFROST, DEFROST_OFF_CANDIDATE))
         for (v in 0..1) {
@@ -91,6 +117,12 @@ object ComfortPlan {
     val REAR_DEFROST = Signal("hvac80_rear_defrost", MODULE_HVAC, ID_REAR_DEFROST)
     val REAR_WINDOW_HEAT = Signal("cs159_rear_window_heat", MODULE_CAR_SETTING, ID_REAR_WINDOW_HEAT)
     val STEER_WHEEL_HEAT = Signal("cs160_steer_wheel_heat", MODULE_CAR_SETTING, ID_STEER_WHEEL_HEAT)
+    val PLG_POSITION = Signal("ro98_plg_position", MODULE_READONLY_INFO, ID_PLG_POSITION)
+    val TRUNK_STATE = Signal("ro19_trunk_state", MODULE_READONLY_INFO, ID_TRUNK_STATE)
+    val REAR_DOOR_CONTROL = Signal("cs92_rear_door_control", MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL)
+
+    /** Bagaj komutlarının geri okuduğu sinyaller (`trunk_info` bunları okur). */
+    val TRUNK_SIGNALS: List<Signal> = listOf(PLG_POSITION, TRUNK_STATE, REAR_DOOR_CONTROL)
 
     /** `info` komutunun okuduğu tüm sinyaller. */
     val ALL_SIGNALS: List<Signal> =
@@ -118,6 +150,7 @@ object ComfortPlan {
 
     const val READBACK_MS = 3000L
     const val STOP_WATCH_MS = 6000L
+    const val TRUNK_WATCH_MS = 10_000L
     const val TIMING_MS = 30_000L
     const val TIMING_INTERVAL_MS = 100L
     const val DEFAULT_AFTER_MS = 2000
@@ -127,12 +160,13 @@ object ComfortPlan {
         "info", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
         "shade_open_stop", "shade_stop", "shade_stop_vr", "defrost_front", "defrost_front_max", "defrost_rear",
         "defrost_rear_both", "wheel_heat",
+        "trunk_info", "trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs", "trunk_stop_cs", "trunk_open_stop_cs",
     )
 
     private fun send(module: Int, id: Int, value: Int) = Step.Send(validate(Write(module, id, value)))
 
     /**
-     * `--es c <ad> [--ei v 0|1 (defrost_front_max/defrost_rear: 0|1|2)] [--ei after_ms N] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
+     * `--es c <ad> [--ei v 0|1 (defrost_front_max/defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
      * Bilinmeyen ad, eksik/geçersiz v, geçersiz stop veya after_ms için [IllegalArgumentException].
      */
     fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null): Command {
@@ -176,6 +210,20 @@ object ComfortPlan {
                     listOf(SUNSHADE), STOP_WATCH_MS,
                 )
             }
+            "trunk_info" -> Command(c, Kind.INFO, watch = TRUNK_SIGNALS)
+            "trunk_open_vr" -> trunkCmd(c, listOf(send(MODULE_VR, ID_VR_TRUNK, TRUNK_OPEN_VR)))
+            "trunk_close_vr" -> trunkCmd(c, listOf(send(MODULE_VR, ID_VR_TRUNK, TRUNK_CLOSE_VR)))
+            "trunk_open_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS)))
+            "trunk_close_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_CLOSE_CS)))
+            "trunk_stop_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS)))
+            "trunk_open_stop_cs" -> {
+                val after = afterMs ?: DEFAULT_AFTER_MS
+                require(after in 0..MAX_AFTER_MS) { "--ei after_ms 0..$MAX_AFTER_MS olmalı (geldi: $after)" }
+                trunkCmd(
+                    c,
+                    listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS), Step.Wait(after.toLong()), send(cs, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS)),
+                )
+            }
             "defrost_front" -> writeCmd(c, listOf(send(hv, ID_FRONT_GLASS_HEAT, onOff())), listOf(FRONT_GLASS_HEAT))
             "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, onOffOrTwo())), listOf(MAX_FRONT_DEFOREST))
             "defrost_rear" -> writeCmd(c, listOf(send(hv, ID_REAR_DEFROST, onOffOrTwo())), listOf(REAR_DEFROST))
@@ -190,6 +238,9 @@ object ComfortPlan {
             else -> throw IllegalArgumentException("geçersiz komut: $c")
         }
     }
+
+    /** Bagaj yazması: PLG 98, TRUNK 19 ve CS 92 geçişleri [TRUNK_WATCH_MS] boyunca izlenir. */
+    private fun trunkCmd(name: String, steps: List<Step>) = Command(name, Kind.WRITE, steps, TRUNK_SIGNALS, TRUNK_WATCH_MS)
 
     private fun writeCmd(name: String, steps: List<Step>, watch: List<Signal>, watchMs: Long = READBACK_MS) =
         Command(name, Kind.WRITE, steps, watch, watchMs)
