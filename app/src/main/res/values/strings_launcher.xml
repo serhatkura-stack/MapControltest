@@ -27,6 +27,7 @@
     <string name="launcher_lock_unknown">Lock status unavailable</string>
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Check tire pressure</string>
+    <string name="launcher_tires_warning_short">Tire alert</string>
     <string name="launcher_car_offline">Vehicle data unavailable</string>
     <string name="launcher_seat_heat_driver">Driver seat heat</string>
     <string name="launcher_seat_heat_passenger">Passenger seat heat</string>

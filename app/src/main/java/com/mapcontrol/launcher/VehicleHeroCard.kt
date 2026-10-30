@@ -110,7 +110,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             addView(alertRow, wrapLp())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         addView(gap(context, LauncherTheme.GAP_S_DP))
-        addView(carBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CAR_WEIGHT))
+        // Genişliği görselin kendisi yükseklikten türetir; sağa yaslı, kartın tüm iç yüksekliğinde.
+        addView(carBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
         addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
             fitRange(v)
             if (r - l != or_ - ol) {
@@ -256,7 +257,11 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             if (open.size == 1) context.getString(R.string.launcher_part_open, context.getString(open[0]))
             else context.getString(R.string.launcher_doors_open_count, open.size),
         )
-        if (!tireAlert) tiresPill.hide() else tiresPill.show(R.drawable.ic_mdi_alert, context.getString(R.string.launcher_tires_warning))
+        if (!tireAlert) tiresPill.hide() else tiresPill.show(
+            R.drawable.ic_mdi_alert,
+            // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
+            context.getString(if (open.isNotEmpty()) R.string.launcher_tires_warning_short else R.string.launcher_tires_warning),
+        )
 
         val hasAlert = open.isNotEmpty() || tireAlert
         alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
@@ -376,8 +381,6 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         const val STATUS_HEIGHT_DP = 44
         const val FUEL_BAR_DP = 12
         const val FADE_IN_MS = 250L
-        /** Sol sütuna göre araç görselinin payı; görsel kartın büyük sağ kısmını alır. */
-        const val CAR_WEIGHT = 1.25f
         const val FUEL_HYSTERESIS_TENTHS = 6
         /** Menzil yazısı boyutları, büyükten küçüğe; kart alçaldıkça ilk sığan seçilir. */
         val RANGE_SIZES_SP = listOf(LauncherTheme.TIME_SP, 44f, 36f)

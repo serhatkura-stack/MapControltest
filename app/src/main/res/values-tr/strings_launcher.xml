@@ -27,6 +27,7 @@
     <string name="launcher_lock_unknown">Kilit durumu okunamıyor</string>
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
+    <string name="launcher_tires_warning_short">Lastik uyarısı</string>
     <string name="launcher_car_offline">Araç verisi alınamıyor</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>

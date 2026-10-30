@@ -10,11 +10,11 @@ import android.view.View
 import com.mapcontrol.R
 
 /**
- * Markasız, kuşbakışı SUV şeması (burun sağda). Araç görseli yerine: kapı, bagaj, cam tavan ve lastik durumunu
+ * Markasız, kuşbakışı SUV şeması (burun yukarıda, bagaj aşağıda; sürücü solda). Araç görseli yerine: kapı, bagaj, cam tavan ve lastik durumunu
  * doğrudan yerinde gösterir. Logo, ızgara ya da rozet yoktur.
  *
- * Çizim 230×(140) birimlik sabit bir uzayda yapılır; yollar yalnızca bir kez kurulur, boyut değişince yalnızca
- * tuval ölçeklenir. Animasyon yok: durum değişince bir kez yeniden çizilir. Renkler yalnızca [LauncherTheme]
+ * Çizim yaklaşık 100×230 birimlik dikey sabit bir uzayda yapılır; yollar yalnızca bir kez kurulur, boyut değişince yalnızca
+ * tuval ölçeklenir. Görünüm yüksekliğe göre en-boy oranını kendisi belirler (bkz. [onMeasure]). Animasyon yok: durum değişince bir kez yeniden çizilir. Renkler yalnızca [LauncherTheme]
  * belirteçlerinden okunur (gece/gündüz kendiliğinden).
  */
 class CarSchematicView(context: Context) : View(context) {
@@ -60,24 +60,24 @@ class CarSchematicView(context: Context) : View(context) {
     private val rearGlass = Path()
     private val roof = Path()
     private val roofRails = Path()
-    private val sunroofRect = RectF(SUN_L, -SUN_H, SUN_R, SUN_H)
+    private val sunroofRect = RectF(-SUN_HALF_W, SUN_T, SUN_HALF_W, SUN_B)
     private val wheelRects = arrayOf(
-        wheel(FRONT_WHEEL_X, -1), wheel(FRONT_WHEEL_X, 1), wheel(REAR_WHEEL_X, -1), wheel(REAR_WHEEL_X, 1),
+        wheel(-1, FRONT_WHEEL_Y), wheel(1, FRONT_WHEEL_Y), wheel(-1, REAR_WHEEL_Y), wheel(1, REAR_WHEEL_Y),
     )
     private val mirrors = arrayOf(
-        RectF(MIRROR_X - 6f, -MIRROR_OUT, MIRROR_X + 6f, -BODY_HALF_W + 1f),
-        RectF(MIRROR_X - 6f, BODY_HALF_W - 1f, MIRROR_X + 6f, MIRROR_OUT),
+        RectF(-MIRROR_OUT, MIRROR_Y - 6f, -BODY_HALF_W + 1f, MIRROR_Y + 6f),
+        RectF(BODY_HALF_W - 1f, MIRROR_Y - 6f, MIRROR_OUT, MIRROR_Y + 6f),
     )
     private val doorSeams = Path()
     private val trunkSeam = Path()
     private val hood = Path()
     private val trunkPanel = Path()
-    // Kapı şeritleri: [ön kenar x, arka kenar x]; sol üst (y<0), sağ alt (y>0).
+    // Kapı şeritleri (gövde kenarı ile tavan arası): 0 sol ön, 1 sağ ön, 2 sol arka, 3 sağ arka.
     private val doorStrips = arrayOf(
-        RectF(B_PILLAR, -BODY_HALF_W, A_PILLAR, -ROOF_HALF_W),
-        RectF(B_PILLAR, ROOF_HALF_W, A_PILLAR, BODY_HALF_W),
-        RectF(C_PILLAR, -BODY_HALF_W, B_PILLAR, -ROOF_HALF_W),
-        RectF(C_PILLAR, ROOF_HALF_W, B_PILLAR, BODY_HALF_W),
+        RectF(-BODY_HALF_W, A_PILLAR, -ROOF_HALF_W, B_PILLAR),
+        RectF(ROOF_HALF_W, A_PILLAR, BODY_HALF_W, B_PILLAR),
+        RectF(-BODY_HALF_W, B_PILLAR, -ROOF_HALF_W, C_PILLAR),
+        RectF(ROOF_HALF_W, B_PILLAR, BODY_HALF_W, C_PILLAR),
     )
 
     private val lockClosed: Drawable? = context.getDrawable(R.drawable.ic_mdi_lock)?.mutate()
@@ -92,58 +92,82 @@ class CarSchematicView(context: Context) : View(context) {
         buildPaths()
     }
 
-    private fun wheel(cx: Float, side: Int): RectF {
-        val cy = side * (BODY_HALF_W - 1f)
-        return RectF(cx - WHEEL_L / 2, cy - WHEEL_T / 2, cx + WHEEL_L / 2, cy + WHEEL_T / 2)
+    private fun wheel(side: Int, cy: Float): RectF {
+        val cx = side * (BODY_HALF_W - 1f)
+        return RectF(cx - WHEEL_T / 2, cy - WHEEL_L / 2, cx + WHEEL_T / 2, cy + WHEEL_L / 2)
     }
 
     private fun buildPaths() {
         val w = BODY_HALF_W
+        // Gövde: yumuşak daralan burun (üstte), hafif omuz kavisi, daha dolgun ama yuvarlak kuyruk (altta).
         body.apply {
-            moveTo(-98f, -w); lineTo(78f, -w)
-            cubicTo(100f, -w, 115f, -34f, 115f, -18f)
-            lineTo(115f, 18f)
-            cubicTo(115f, 34f, 100f, w, 78f, w)
-            lineTo(-98f, w)
-            cubicTo(-110f, w, -115f, 42f, -115f, 30f)
-            lineTo(-115f, -30f)
-            cubicTo(-115f, -42f, -110f, -w, -98f, -w)
+            moveTo(-14f, -NOSE_Y)
+            lineTo(14f, -NOSE_Y)
+            cubicTo(34f, -NOSE_Y, w, -92f, w, -58f)
+            cubicTo(w + 1.5f, -30f, w + 1.5f, 40f, w, 72f)
+            cubicTo(w, 98f, w - 7f, TAIL_Y, w - 22f, TAIL_Y)
+            lineTo(-(w - 22f), TAIL_Y)
+            cubicTo(-(w - 7f), TAIL_Y, -w, 98f, -w, 72f)
+            cubicTo(-(w + 1.5f), 40f, -(w + 1.5f), -30f, -w, -58f)
+            cubicTo(-w, -92f, -34f, -NOSE_Y, -14f, -NOSE_Y)
             close()
         }
-        // Ön cam: tabanı (x=62) geniş, tavana doğru hafif daralır.
+        // Ön cam: tabanı (burna yakın) geniş, tavana doğru hafif daralır.
         windshield.apply {
-            moveTo(62f, -37f); lineTo(62f, 37f); lineTo(A_PILLAR + 2f, ROOF_HALF_W + 1f)
-            lineTo(A_PILLAR + 2f, -ROOF_HALF_W - 1f); close()
+            moveTo(-37f, WINDSHIELD_BASE); lineTo(37f, WINDSHIELD_BASE)
+            lineTo(ROOF_HALF_W + 1f, A_PILLAR - 2f); lineTo(-ROOF_HALF_W - 1f, A_PILLAR - 2f); close()
         }
         rearGlass.apply {
-            moveTo(-92f, -33f); lineTo(-92f, 33f); lineTo(C_PILLAR - 2f, ROOF_HALF_W)
-            lineTo(C_PILLAR - 2f, -ROOF_HALF_W); close()
+            moveTo(-ROOF_HALF_W, C_PILLAR + 2f); lineTo(ROOF_HALF_W, C_PILLAR + 2f)
+            lineTo(30f, REAR_GLASS_BASE); lineTo(-30f, REAR_GLASS_BASE); close()
         }
-        roof.addRoundRect(RectF(C_PILLAR, -ROOF_HALF_W, A_PILLAR, ROOF_HALF_W), 8f, 8f, Path.Direction.CW)
+        roof.addRoundRect(RectF(-ROOF_HALF_W, A_PILLAR, ROOF_HALF_W, C_PILLAR), 10f, 10f, Path.Direction.CW)
         // Tavan rayları: SUV izlenimi, çok ince.
         for (s in intArrayOf(-1, 1)) {
-            roofRails.moveTo(C_PILLAR + 6f, s * (ROOF_HALF_W - 4f)); roofRails.lineTo(A_PILLAR - 6f, s * (ROOF_HALF_W - 4f))
+            roofRails.moveTo(s * (ROOF_HALF_W - 4f), A_PILLAR + 7f); roofRails.lineTo(s * (ROOF_HALF_W - 4f), C_PILLAR - 7f)
         }
-        for (x in floatArrayOf(A_PILLAR, B_PILLAR, C_PILLAR)) {
-            doorSeams.moveTo(x, -BODY_HALF_W + 1f); doorSeams.lineTo(x, -ROOF_HALF_W)
-            doorSeams.moveTo(x, BODY_HALF_W - 1f); doorSeams.lineTo(x, ROOF_HALF_W)
+        for (y in floatArrayOf(A_PILLAR, B_PILLAR, C_PILLAR)) {
+            doorSeams.moveTo(-BODY_HALF_W + 1f, y); doorSeams.lineTo(-ROOF_HALF_W, y)
+            doorSeams.moveTo(BODY_HALF_W - 1f, y); doorSeams.lineTo(ROOF_HALF_W, y)
         }
-        // Bagaj kapağı dikişi arka camın hemen arkasında hafif bombeli bir çizgi.
         // Kaput: iki hafif omuz çizgisi (ızgara/rozet yok).
         hood.apply {
-            moveTo(66f, -33f); quadTo(90f, -30f, 104f, -16f)
-            moveTo(66f, 33f); quadTo(90f, 30f, 104f, 16f)
+            moveTo(-33f, WINDSHIELD_BASE - 4f); quadTo(-30f, -90f, -16f, -104f)
+            moveTo(33f, WINDSHIELD_BASE - 4f); quadTo(30f, -90f, 16f, -104f)
         }
-        trunkSeam.apply { moveTo(-92f, -33f); quadTo(-95f, 0f, -92f, 33f) }
-        trunkPanel.apply { moveTo(-120f, -50f); lineTo(-92f, -50f); lineTo(-92f, -33f); quadTo(-95f, 0f, -92f, 33f); lineTo(-92f, 50f); lineTo(-120f, 50f); close() }
+        // Bagaj kapağı dikişi: arka camın hemen arkasında hafif bombeli bir çizgi.
+        trunkSeam.apply { moveTo(-33f, REAR_GLASS_BASE + 2f); quadTo(0f, REAR_GLASS_BASE + 5f, 33f, REAR_GLASS_BASE + 2f) }
+        trunkPanel.apply {
+            moveTo(-60f, TAIL_Y + 8f); lineTo(-60f, REAR_GLASS_BASE + 2f); lineTo(-33f, REAR_GLASS_BASE + 2f)
+            quadTo(0f, REAR_GLASS_BASE + 5f, 33f, REAR_GLASS_BASE + 2f); lineTo(60f, REAR_GLASS_BASE + 2f)
+            lineTo(60f, TAIL_Y + 8f); close()
+        }
+    }
+
+    /**
+     * Genişlik, verilen yüksekliğin en-boy oranıyla türetilir (görünüm tüm yüksekliği kullanır, sağa yaslanır).
+     * Yükseklik belirsizse ya da genişlik daha dar verilmişse genişliğe uyacak şekilde küçülür.
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val hMode = MeasureSpec.getMode(heightMeasureSpec)
+        val hSize = MeasureSpec.getSize(heightMeasureSpec)
+        val wMode = MeasureSpec.getMode(widthMeasureSpec)
+        val wSize = MeasureSpec.getSize(widthMeasureSpec)
+        var h = if (hMode == MeasureSpec.UNSPECIFIED) (resources.displayMetrics.density * DEFAULT_H_DP).toInt() else hSize
+        var w = (h * ASPECT).toInt()
+        if (wMode != MeasureSpec.UNSPECIFIED && w > wSize) {
+            w = wSize
+            h = if (hMode == MeasureSpec.EXACTLY) hSize else (w / ASPECT).toInt()
+        }
+        setMeasuredDimension(w, h)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        val spanX = EXT_R - EXT_L
-        val spanY = 2f * EXT_Y
+        val spanX = 2f * EXT_X
+        val spanY = EXT_B - EXT_T
         scale = minOf(w * FIT / spanX, h * FIT / spanY)
-        offX = w / 2f - (EXT_L + EXT_R) / 2f * scale
-        offY = h / 2f
+        offX = w / 2f
+        offY = h / 2f - (EXT_T + EXT_B) / 2f * scale
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -233,7 +257,7 @@ class CarSchematicView(context: Context) : View(context) {
         if (st.trunk) {
             stroke.strokeWidth = 6f * dp
             swing.reset()
-            swing.moveTo(-112f, -28f); swing.lineTo(-128f, -22f); swing.lineTo(-128f, 22f); swing.lineTo(-112f, 28f)
+            swing.moveTo(-28f, TAIL_Y); swing.lineTo(-22f, TAIL_Y + 16f); swing.lineTo(22f, TAIL_Y + 16f); swing.lineTo(28f, TAIL_Y)
             canvas.drawPath(swing, stroke)
         }
         // Lastik uyarısında tekerlek çerçevesi.
@@ -244,16 +268,16 @@ class CarSchematicView(context: Context) : View(context) {
         }
         canvas.restore()
 
-        // Kilit simgesi: dönmez, tavanın ön yarısında; piksel boyutu ölçekle gelir.
+        // Kilit simgesi: dik durur, tavanın ön yarısında; piksel boyutu ölçekle gelir.
         val locked = st.locked
         if (locked != null) {
             val d = if (locked) lockClosed else lockOpen
             if (d != null) {
-                val cx = offX + LOCK_X * scale
+                val cy = offY + LOCK_Y * scale
                 val half = LOCK_SIZE / 2f * scale
                 d.setTint(outline)
                 d.alpha = 220
-                d.setBounds((cx - half).toInt(), (offY - half).toInt(), (cx + half).toInt(), (offY + half).toInt())
+                d.setBounds((offX - half).toInt(), (cy - half).toInt(), (offX + half).toInt(), (cy + half).toInt())
                 d.draw(canvas)
             }
         }
@@ -264,14 +288,15 @@ class CarSchematicView(context: Context) : View(context) {
         0 -> s.doorLf; 1 -> s.doorRf; 2 -> s.doorLr; else -> s.doorRr
     }
 
-    private fun drawDoorSwing(canvas: Canvas, strip: RectF, top: Boolean) {
-        val side = if (top) -1f else 1f
-        val hingeX = strip.right
-        val hingeY = side * BODY_HALF_W
-        val len = strip.width()
+    /** Kapı ön kenarındaki menteşeden dışa doğru açılır; [left] true ise sol (sürücü) taraf. */
+    private fun drawDoorSwing(canvas: Canvas, strip: RectF, left: Boolean) {
+        val side = if (left) -1f else 1f
+        val hingeX = side * BODY_HALF_W
+        val hingeY = strip.top
+        val len = strip.height()
         val a = Math.toRadians(SWING_DEG.toDouble())
-        val ex = hingeX - len * Math.cos(a).toFloat()
-        val ey = hingeY + side * len * Math.sin(a).toFloat()
+        val ex = hingeX + side * len * Math.sin(a).toFloat()
+        val ey = hingeY + len * Math.cos(a).toFloat()
         swing.reset()
         swing.moveTo(hingeX, hingeY)
         swing.lineTo(ex, ey)
@@ -281,27 +306,35 @@ class CarSchematicView(context: Context) : View(context) {
     private fun withAlpha(color: Int, a: Int) = (color and 0x00FFFFFF) or (a.coerceIn(0, 255) shl 24)
 
     private companion object {
+        // Dikey birim uzayı: x sağa, y aşağı; burun üstte (y<0), kuyruk altta.
         const val BODY_HALF_W = 50f
         const val ROOF_HALF_W = 33f
-        const val A_PILLAR = 36f
-        const val B_PILLAR = -12f
-        const val C_PILLAR = -68f
-        const val FRONT_WHEEL_X = 72f
-        const val REAR_WHEEL_X = -70f
+        const val NOSE_Y = 114f
+        const val TAIL_Y = 112f
+        const val WINDSHIELD_BASE = -62f
+        const val A_PILLAR = -36f
+        const val B_PILLAR = 12f
+        const val C_PILLAR = 68f
+        const val REAR_GLASS_BASE = 90f
+        const val FRONT_WHEEL_Y = -72f
+        const val REAR_WHEEL_Y = 70f
         const val WHEEL_L = 34f
-        const val WHEEL_T = 14f
-        const val MIRROR_X = 44f
+        const val WHEEL_T = 17f
+        const val MIRROR_Y = -42f
         const val MIRROR_OUT = 59f
-        const val SUN_L = -58f
-        const val SUN_R = -22f
-        const val SUN_H = 19f
-        const val LOCK_X = 7f
+        const val SUN_HALF_W = 19f
+        const val SUN_T = 24f
+        const val SUN_B = 60f
+        const val LOCK_Y = -9f
         const val LOCK_SIZE = 20f
-        const val SWING_DEG = 28f
+        const val SWING_DEG = 26f
         // Birim uzayındaki en uç değerler (sallanan kapı ve kalkık bagaj dahil).
-        const val EXT_L = -131f
-        const val EXT_R = 117f
-        const val EXT_Y = 72f
-        const val FIT = 0.96f
+        const val EXT_X = 77f
+        const val EXT_T = -NOSE_Y - 2f
+        const val EXT_B = TAIL_Y + 19f
+        const val FIT = 0.98f
+        /** Genişlik / yükseklik. */
+        const val ASPECT = (2f * EXT_X) / (EXT_B - EXT_T)
+        const val DEFAULT_H_DP = 160
     }
 }
