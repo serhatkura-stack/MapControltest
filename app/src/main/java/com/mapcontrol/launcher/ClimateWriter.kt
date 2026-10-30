@@ -73,7 +73,7 @@ internal object ClimateWriter {
     fun canWrite(verified: Boolean, readOnly: Boolean): Boolean = verified && !readOnly
 
     /** Arayüzün "yazılacak mı / bilgi mesajı mı" kararı için. */
-    val enabled: Boolean get() = canWrite(CLIMATE_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
+    val enabled: Boolean get() = canWrite(WidgetWritePolicy.gate(CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
 
     /** Sıcaklığı yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setTemperature(side: ClimateSide, celsius: Double): Boolean {

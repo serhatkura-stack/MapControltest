@@ -80,6 +80,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var dataCheckExtra: DataCheckSheet? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        LauncherEdition.init(applicationContext)
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)

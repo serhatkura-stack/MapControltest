@@ -69,7 +69,7 @@ internal class SeatHeatModel(
             return
         }
         // Soğutma yazması araçta doğrulanana kadar kapalı: yalnızca sakin bir bilgi mesajı.
-        if (vent && !LauncherEdition.SEAT_VENT_WRITE_VERIFIED) {
+        if (vent && !WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST)) {
             Toast.makeText(context, R.string.launcher_seat_vent_later, Toast.LENGTH_SHORT).show()
             return
         }

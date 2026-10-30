@@ -333,8 +333,8 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         /** Sıcaklık: °C = 15,5 + ham/2 (araçta ekranla karşılaştırıldı: 21 → 26,0); makul aralık dışı "—". */
         fun decodeTemp(raw: Int): Double? = (15.5 + raw / 2.0).takeIf { raw >= 0 && it <= 32.0 }
 
-        /** Fan kademesi doğrudan okunur; makul aralık (0..9) dışı "—". */
-        fun decodeFan(raw: Int): Int? = raw.takeIf { it in 0..9 }
+        /** Fan kademesi doğrudan okunur; makul aralık (0..[ClimateMath.FAN_MAX]) dışı "—". Araçta en çok 10 okundu. */
+        fun decodeFan(raw: Int): Int? = raw.takeIf { it in 0..ClimateMath.FAN_MAX }
     }
 }
 

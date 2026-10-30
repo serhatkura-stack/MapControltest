@@ -135,13 +135,20 @@ public final class VehicleQuickControls {
         return centralLocked;
     }
 
+    /**
+     * Kilit komutu değeri (kilitle 2, aç 1). Kodlama araçta doğrulanmadı (okuma 0=kilitli, 1=açık); araç testinde denenecek.
+     * Launcher test sürümünün beyaz listesi de bu değeri kullanır.
+     */
+    public static int centralLockValue(boolean locked) {
+        return locked ? 2 : 1;
+    }
+
     public void setCentralLock(boolean locked) {
         ensureReady();
         if (!CarInfoProxy.getInstance().isServiceConnnected()) {
             return;
         }
-        // Komut kodlaması araçta doğrulanmadı (okuma 0=kilitli, 1=açık); 2. araç testinde denenecek.
-        int value = locked ? 2 : 1;
+        int value = centralLockValue(locked);
         CarInfoProxy.getInstance().sendItemValue(MODULE_SETTING, LOCK_CMD_ID, value);
     }
 

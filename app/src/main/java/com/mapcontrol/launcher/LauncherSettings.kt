@@ -119,6 +119,10 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             d.dismiss()
             dataCheck = (dataCheck ?: DataCheckSheet(activity)).also { it.show() }
         }, fullWidth())
+        if (LauncherEdition.HAS_WRITE_TEST) {
+            addView(gap(activity, 12, vertical = true))
+            addView(writeTestToggle(d), fullWidth())
+        }
         if (LauncherEdition.HAS_SETTINGS) {
             addView(gap(activity, 12, vertical = true))
             addView(row(R.drawable.ic_mdi_cog, R.string.launcher_mapcontrol_settings) {
@@ -174,6 +178,16 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
+    /** Yalnızca test sürümü: widget'lardan araca yazma anahtarı. Değişince ekran yeniden kurulur (kapılar yeniden okunur). */
+    private fun writeTestToggle(d: Dialog): View {
+        val on = LauncherEdition.WRITE_TEST
+        return rowText(R.drawable.ic_mdi_cog, LauncherEdition.writeTestTitle(on), LauncherEdition.writeTestHint()) {
+            d.dismiss()
+            LauncherEdition.setWriteTest(activity, !on)
+            ThemeTransition.recreate(activity)
+        }
+    }
+
     /** "Otomatik sürüş düzeni": açık/kapalı satırı; değişince ekran yeni seçimle kurulur. */
     private fun autoDriveLayoutToggle(d: Dialog): View {
         val on = DriveLayoutPrefs.get(activity)
@@ -226,6 +240,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         @StringRes labelRes: Int,
         @StringRes hintRes: Int = 0,
         onClick: () -> Unit,
+    ): View = rowText(iconRes, activity.getString(labelRes), if (hintRes == 0) null else activity.getString(hintRes), onClick)
+
+    private fun rowText(
+        @DrawableRes iconRes: Int,
+        label: String,
+        hint: String?,
+        onClick: () -> Unit,
     ): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -236,18 +257,18 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setPadding(p, 0, p, 0)
             addView(icon(activity, iconRes, 32, LauncherTheme.TEXT_SECONDARY))
             addView(gap(activity, 20))
-            if (hintRes == 0) {
-                addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+            if (hint == null) {
+                addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { text = label })
             } else {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+                    addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { text = label })
                     addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                        setText(hintRes)
+                        text = hint
                     })
                 })
             }
-            contentDescription = activity.getString(labelRes)
+            contentDescription = label
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }

@@ -297,9 +297,9 @@ internal object ComfortWriter {
     fun canWrite(master: Boolean, feature: Boolean, readOnly: Boolean): Boolean =
         ClimateWriter.canWrite(master && feature, readOnly)
 
-    val sunshadeEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, SUNSHADE_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
-    val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, TRUNK_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
-    val defrostEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, DEFROST_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
+    val sunshadeEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(SUNSHADE_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
+    val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(TRUNK_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
+    val defrostEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(DEFROST_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
 
     /**
      * Kapılı yazma (birim testli): [allowed] false ise [send] hiç çağrılmaz ve false döner.

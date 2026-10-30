@@ -20,6 +20,21 @@ internal object LauncherEdition {
     /** true: araç verisi yalnızca okunur, dokunuşlar komut göndermez. */
     const val READ_ONLY = false
 
+    /** Widget'lardan araca yazma testi anahtarı yalnızca test sürümünde var; bu derlemede hep kapalı. */
+    const val WRITE_TEST = false
+    const val HAS_WRITE_TEST = false
+
+    @Suppress("UNUSED_PARAMETER")
+    fun init(context: Context) = Unit
+
+    @Suppress("UNUSED_PARAMETER")
+    fun setWriteTest(context: Context, on: Boolean) = Unit
+
+    @Suppress("UNUSED_PARAMETER")
+    fun writeTestTitle(on: Boolean): String = ""
+
+    fun writeTestHint(): String = ""
+
     /** Ayarlar (MapControl ana ekranı) bu derlemede var mı. */
     const val HAS_SETTINGS = true
 
@@ -33,7 +48,8 @@ internal object LauncherEdition {
     fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
         if (!SEAT_VENT_WRITE_VERIFIED) return
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION
-        proxy.sendItemValue(VDEventCarInfo.MODULE_CAR_SETTING, id, level.coerceIn(0, 3))
+        // Kodlama ısıtmayla aynı (SeatHeatModel.encode: 0 kapalı → 1, 1..3 → 2..4), ClimateAutomationEngine.wireSeatLevel gibi.
+        proxy.sendItemValue(VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
     }
 
     fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
