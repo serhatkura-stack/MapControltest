@@ -143,9 +143,11 @@ internal class SeatHeatModel(
             return if (level >= ClimateAutomationStore.LEVEL_MAX) 0 else level + 1
         }
 
-        /** Araç değeri: 1 = kapalı, 2..4 = seviye 1..3 (ClimateAutomationEngine.wireSeatLevel). */
-        fun decode(wire: Int): Int =
-            if (wire <= 1) 0 else (wire - 1).coerceIn(ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX)
+        /**
+         * Araç değeri doğrudan seviyedir: 0 = kapalı, 1..3 = seviye. Tiggo 7'de 2026-10-31'de ölçüldü
+         * (ID_CAR_DRIVER_SEAT_HEAT / ID_CAR_COPILOT_SEAT_HEAT, 3→2→1→0 kademeli okundu).
+         */
+        fun decode(wire: Int): Int = wire.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
 
         /**
          * Soğutma değeri: 0 = kapalı, 1..3 = seviye. DOĞRULANMADI: araçta sinyal (93/94) şimdilik hep [0] okunuyor;
@@ -153,6 +155,7 @@ internal class SeatHeatModel(
          */
         fun decodeVent(wire: Int): Int = wire.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
 
+        /** DOĞRULANMADI: yazma kodlaması ölçülmedi; okumadaki gibi düz seviye de olabilir (test sürümü yazmaz). */
         fun encode(level: Int): Int = if (level <= 0) 1 else level.coerceIn(
             ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX) + 1
     }

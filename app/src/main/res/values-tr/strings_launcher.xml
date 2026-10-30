@@ -73,6 +73,8 @@
     <string name="launcher_theme">Tema</string>
     <string name="launcher_drive_theme_on">Sürüş moduna göre renk: Açık (kapatmak için dokun)</string>
     <string name="launcher_drive_theme_off">Sürüş moduna göre renk: Kapalı (açmak için dokun)</string>
+    <string name="launcher_fullscreen_on">Tam ekran: Açık (kapatmak için dokun)</string>
+    <string name="launcher_fullscreen_off">Tam ekran: Kapalı (açmak için dokun)</string>
     <string name="launcher_theme_auto">Otomatik</string>
     <string name="launcher_theme_day">Gündüz</string>
     <string name="launcher_theme_night">Gece</string>

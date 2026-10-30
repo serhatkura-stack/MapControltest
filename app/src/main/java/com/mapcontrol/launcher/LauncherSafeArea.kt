@@ -34,6 +34,9 @@ object LauncherSafeArea {
     /** Debug yapıda `launcher_oem_inset` ekstrasıyla taklit edilen çubuk mu (gerçek Desay tespitinde false). */
     fun isMocked(): Boolean = (debugOverridePx ?: 0) > 0
 
+    /** Mock çubuğu çizilecek mi: tam ekranda gizlenir (emülatör gerçek aracı taklit eder). */
+    fun showsMockBar(context: Context): Boolean = isMocked() && !LauncherFullscreen.enabled(context)
+
     /** Desay ünitesi mi: ucuz ve sağlam bir paket varlığı kontrolü (yalnızca bilgi; yerleşimi değiştirmez). */
     fun isDesayUnit(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(DESAY_PACKAGE, 0)
@@ -50,11 +53,13 @@ object LauncherSafeArea {
 
     /** Debug simülasyonunun ayırdığı OEM alt bandı (px); gerçek cihazda her zaman 0. */
     @Suppress("UNUSED_PARAMETER")
-    fun oemInsetPx(context: Context): Int = debugOverridePx ?: 0
+    fun oemInsetPx(context: Context): Int = if (LauncherFullscreen.enabled(context)) 0 else debugOverridePx ?: 0
 
     /** Alt güvenli alan = max(sistem gezinme çubuğu inset'i, debug OEM simülasyonu). */
     fun bottomInsetPx(context: Context, insets: WindowInsets?): Int {
         val system = when {
+            // Tam ekran: gezinme çubuğu gizli; geçici gösterim içeriği itmesin, ızgara 720 px'in tamamını alır.
+            LauncherFullscreen.enabled(context) -> 0
             insets == null -> 0
             Build.VERSION.SDK_INT >= 30 -> insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             else -> @Suppress("DEPRECATION") insets.systemWindowInsetBottom

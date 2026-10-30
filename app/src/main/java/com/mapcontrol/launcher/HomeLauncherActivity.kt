@@ -61,6 +61,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherProbe.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
+        LauncherFullscreen.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
         if (!DriveAccent.enabled(this)) LauncherTheme.driveMode = DriveAccent.NORMAL
@@ -104,7 +105,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 insets
             }
         }
-        if (LauncherSafeArea.isMocked()) {
+        if (LauncherSafeArea.showsMockBar(this)) {
             // Hata ayıklama: OEM çubuğunun taklidi ayrılan alt bandın içinde, uygulamaların üstünde durur.
             val band = LauncherSafeArea.oemInsetPx(this)
             setContentView(FrameLayout(this).apply {
@@ -119,6 +120,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         applyLayout(store.load(), persist = false)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
+        LauncherFullscreen.logResult(this)
     }
 
     /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */
@@ -154,6 +156,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     override fun onResume() {
         super.onResume()
+        hideSystemBars()
         // Otomatik temada araç lambası/ışık sensörü izlenir; düzenlerken ya da bir sayfa açıkken geçiş beklenir.
         LauncherTheme.startAutoNight(this, { !grid.editMode && sheet == null }) { ThemeTransition.recreate(this) }
     }
@@ -404,6 +407,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun hideSystemBars() {
         window.insetsController?.let {
             it.hide(WindowInsets.Type.statusBars())
+            if (LauncherFullscreen.enabled(this)) it.hide(WindowInsets.Type.navigationBars())
             // Gündüz görünümünde gezinme çubuğu simgeleri açık zeminde görünür kalsın.
             it.setSystemBarsAppearance(
                 if (LauncherTheme.night) 0 else WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,

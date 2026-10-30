@@ -73,6 +73,8 @@
     <string name="launcher_theme">Theme</string>
     <string name="launcher_drive_theme_on">Drive mode colors: On (tap to turn off)</string>
     <string name="launcher_drive_theme_off">Drive mode colors: Off (tap to turn on)</string>
+    <string name="launcher_fullscreen_on">Full screen: On (tap to turn off)</string>
+    <string name="launcher_fullscreen_off">Full screen: Off (tap to turn on)</string>
     <string name="launcher_theme_auto">Automatic</string>
     <string name="launcher_theme_day">Day</string>
     <string name="launcher_theme_night">Night</string>

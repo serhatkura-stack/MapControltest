@@ -73,6 +73,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(driveModeToggle(d), fullWidth())
 
+        addView(gap(activity, 12, vertical = true))
+        addView(fullscreenToggle(d), fullWidth())
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
@@ -136,6 +139,16 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
             // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
             if (on) ThemeTransition.recreate(activity)
+        }
+    }
+
+    /** "Tam ekran": OEM alt çubuğunu gizler (alttan kaydırınca geçici görünür); değişince ekran yeniden kurulur. */
+    private fun fullscreenToggle(d: Dialog): View {
+        val on = LauncherFullscreen.enabled(activity)
+        return row(R.drawable.ic_mdi_view_grid, if (on) R.string.launcher_fullscreen_on else R.string.launcher_fullscreen_off) {
+            d.dismiss()
+            LauncherFullscreen.setEnabled(activity, !on)
+            ThemeTransition.recreate(activity)
         }
     }
 
