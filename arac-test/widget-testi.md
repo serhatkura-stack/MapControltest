@@ -42,7 +42,7 @@ Kurallar: araç P'de; komutlar yalnızca park halindeyken gider (değilse redded
 | 2 | Koltuk ısıtma (sürücü) | 4 kez dokun: 1 → 2 → 3 → kapalı | CarSetting 95 ← 2, 3, 4, 1 | OEM ekranı aynı kademe | Kodlama doğrulanmadı (okuma 0–3, yazma 1–4) |
 | 3 | Koltuk ısıtma (yolcu) | Aynı | CarSetting 96 | Aynı | |
 | 4 | Koltuk soğutma (varsa) | Aynı | CarSetting 93 / 94 | Aynı | Doğrulanmadı |
-| 5 | Alt çubuk sıcaklık | Sürücü +0,5, sonra −0,5; yolcu aynı | Hvac 10 / 13 ← (°C − 15,5) × 2 | Klima ekranı değişir | Doğrulanmadı |
+| 5 | Alt çubuk sıcaklık | Sürücü: ok ile +0,5 / −0,5, sonra dereceyi yukarı-aşağı **kaydırarak** 2–3 derece değiştir; yolcu aynı; uzun bas → yolcu sürücüyle eşitlenir | Hvac 10 / 13 ← (°C − 15,5) × 2 | Klima ekranı değişir | Doğrulanmadı |
 | 6 | Alt çubuk fan | Kaydır 1 → 5 → 1 | Hvac 12 ← 0–10 | Fan hızı değişir | Doğrulanmadı |
 | 7 | Tavan perdesi | Aç, bitince kapat | VR 124 ← 1 / 2 | Perde hareket eder | adb'den doğrulandı, widget'tan değil |
 | 8 | Buğu ön | Aç, sonra kapat | Hvac 24 ← 1 / 2 | Simge yanar / söner | Açma doğrulandı; kapatma (2) denenecek |
