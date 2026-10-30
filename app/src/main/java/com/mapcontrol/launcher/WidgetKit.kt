@@ -54,24 +54,26 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
 /**
  * Eklenebilir widget türleri ve her birinin desteklediği boyutlar.
  * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.
+ * Kural: bir boyut yalnızca anlamlı ölçüde daha fazla bilgi gösteriyorsa vardır. Kayıtlı düzendeki artık
+ * geçersiz boyutlar [LayoutStore.snapSpans] ile en yakın izinli boyuta çekilir.
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
-    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(6, 6), Span(6, 4), Span(4, 2), Span(8, 6))),
+    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
     NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(6, 4), Span(6, 6), Span(6, 2), Span(4, 2))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(6, 4), Span(4, 4))),
-    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(2, 2), Span(3, 2))),
-    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(4, 2), Span(2, 2), Span(3, 2))),
-    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
-    AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2), Span(3, 2))),
+    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(2, 2))),
+    DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
+    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2), Span(4, 2))),
+    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(4, 2))),
+    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 2))),
+    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(2, 2))),
+    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(3, 2))),
+    AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2), Span(2, 2))),
-    SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(3, 2))),
-    SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(3, 2))),
-    SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(3, 2))),
-    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2), Span(3, 2)));
+    SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
+    SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
+    SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
+    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -130,17 +132,16 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
         } +
         PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
 } else listOf(
-    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 6)),
+    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
     PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
-) + if (NAVIGATION_CARD_ENABLED) {
-    listOf(PlacedWidget("navigation", WidgetType.NAVIGATION, 6, 4, Span(6, 2)))
-} else {
-    // Navigasyon yokken alt şerit iki hızlı denetimle dolar: kilit ve sürüş modu (3×2 + 3×2).
-    listOf(
-        PlacedWidget("lock", WidgetType.LOCK, 6, 4, Span(3, 2)),
-        PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 9, 4, Span(3, 2)),
-    )
-}
+    // Alt şerit altı adet 2×2 kutucukla dolar (medya yalnızca 4×2 ya da 6×4 olabildiği için sol alt de kutucuk).
+    PlacedWidget("weather", WidgetType.WEATHER, 0, 4, Span(2, 2)),
+    PlacedWidget("consumption", WidgetType.CONSUMPTION, 2, 4, Span(2, 2)),
+    PlacedWidget("trip", WidgetType.TRIP, 4, 4, Span(2, 2)),
+    PlacedWidget("lock", WidgetType.LOCK, 6, 4, Span(2, 2)),
+    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 8, 4, Span(2, 2)),
+    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 10, 4, Span(2, 2)),
+)
 
 /** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı. */
 const val DEFAULT_APP_SLOTS = 4

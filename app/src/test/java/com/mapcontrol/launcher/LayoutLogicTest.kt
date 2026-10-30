@@ -71,8 +71,8 @@ class LayoutLogicTest {
 
     @Test
     fun isValidRejectsSpanNotAllowedForType() {
-        // LOCK supports 2x2 and 3x2 only
-        val layout = listOf(widget("lock", WidgetType.LOCK, 0, 0, Span(4, 2)))
+        // LOCK supports 2x2 only
+        val layout = listOf(widget("lock", WidgetType.LOCK, 0, 0, Span(3, 2)))
         assertFalse(LayoutStore.isValid(layout))
     }
 
@@ -160,14 +160,14 @@ class LayoutLogicTest {
     @Test
     fun migrationDoublesEveryValueExactly() {
         val old = listOf(
-            widget("m", WidgetType.MEDIA, 0, 0, Span(3, 3)),
+            widget("m", WidgetType.MEDIA, 0, 0, Span(3, 2)),
             widget("v", WidgetType.VEHICLE, 3, 0, Span(3, 2)),
             widget("n", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
         )
         val migrated = migrateGridV1(old)
         assertEquals(
             listOf(
-                widget("m", WidgetType.MEDIA, 0, 0, Span(6, 6)),
+                widget("m", WidgetType.MEDIA, 0, 0, Span(6, 4)),
                 widget("v", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
                 widget("n", WidgetType.NAVIGATION, 6, 4, Span(6, 2)),
             ),
@@ -195,7 +195,6 @@ class LayoutLogicTest {
     fun everyOldSpanDoubledIsAllowedForItsType() {
         // Eski 6x3 boyut listeleri: her tür için çift katı yeni listede bulunmalı.
         val oldSizes = mapOf(
-            WidgetType.MEDIA to listOf(Span(3, 3), Span(3, 2), Span(2, 1), Span(4, 3)),
             WidgetType.NAVIGATION to listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1)),
             WidgetType.VEHICLE to listOf(Span(3, 2), Span(2, 2)),
             WidgetType.LOCK to listOf(Span(1, 1)),
@@ -208,16 +207,59 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun finerSpansExist() {
+    fun allowedSpansFollowTheSizeRule() {
         assertEquals(Span(1, 2), WidgetType.APP.sizes.first())
         assertTrue(Span(2, 2) in WidgetType.APP.sizes)
-        listOf(WidgetType.CONSUMPTION, WidgetType.TRIP, WidgetType.HEALTH, WidgetType.WEATHER, WidgetType.SERVICE,
-            WidgetType.AIR, WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER, WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
-            .forEach { assertTrue("$it", Span(3, 2) in it.sizes && Span(2, 2) in it.sizes) }
-        // Medya / araç / navigasyon: daha küçük asgari boyut yok (en küçüğü eski 2x1 = 4x2).
-        assertTrue(WidgetType.MEDIA.sizes.all { it.w >= 4 && it.h >= 2 })
-        assertTrue(WidgetType.VEHICLE.sizes.all { it.w >= 4 && it.h >= 4 })
-        assertTrue(WidgetType.NAVIGATION.sizes.all { it.w >= 4 && it.h >= 2 })
+        listOf(WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.WEATHER, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER,
+            WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
+            .forEach { assertEquals("$it", listOf(Span(2, 2)), it.sizes) }
+        assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.SERVICE.sizes)
+        listOf(WidgetType.AIR, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.HEALTH)
+            .forEach { assertEquals("$it", listOf(Span(2, 2), Span(4, 2)), it.sizes) }
+        assertEquals(listOf(Span(4, 2), Span(6, 4)), WidgetType.MEDIA.sizes)
+        assertEquals(listOf(Span(4, 4), Span(6, 4)).toSet(), WidgetType.VEHICLE.sizes.toSet())
+    }
+
+    @Test
+    fun snapShrinksLockToTwoByTwoInPlace() {
+        val out = LayoutStore.snapSpans(listOf(widget("l", WidgetType.LOCK, 6, 4, Span(3, 2))))
+        assertEquals(listOf(widget("l", WidgetType.LOCK, 6, 4, Span(2, 2))), out)
+    }
+
+    @Test
+    fun snapMediaEightBySixAndSixBySixBecomeSixByFour() {
+        listOf(Span(8, 6), Span(6, 6)).forEach {
+            val out = LayoutStore.snapSpans(listOf(widget("m", WidgetType.MEDIA, 0, 0, it)))
+            assertEquals(listOf(widget("m", WidgetType.MEDIA, 0, 0, Span(6, 4))), out)
+        }
+    }
+
+    @Test
+    fun snapAirThreeByTwoBecomesTwoByTwo() {
+        val out = LayoutStore.snapSpans(listOf(widget("a", WidgetType.AIR, 2, 2, Span(3, 2))))
+        assertEquals(listOf(widget("a", WidgetType.AIR, 2, 2, Span(2, 2))), out)
+    }
+
+    @Test
+    fun snapLeavesValidLayoutIdenticalAndDefaultsAreStable() {
+        listOf(defaultLayout(false), defaultLayout(true)).forEach { assertEquals(it, LayoutStore.snapSpans(it)) }
+    }
+
+    @Test
+    fun snapUsesFindSpotWhenSmallestDoesNotFitAndDropsWhenNoRoom() {
+        // 1x1 benzeri küçük kayıt: en küçük izinli (2x2) komşuyla çakışır, başka yere taşınır.
+        val moved = LayoutStore.snapSpans(listOf(
+            widget("a", WidgetType.APP, 0, 0, Span(1, 2)),
+            widget("l", WidgetType.LOCK, 0, 0, Span(1, 1)),
+        ))
+        assertEquals(2, moved.size)
+        assertTrue(LayoutStore.isValid(moved))
+        // Izgara tamamen dolu: yer kalmayan tek widget düşer, diğerleri aynen kalır.
+        val base = defaultLayout(false)
+        val out = LayoutStore.snapSpans(base.filter { it.id != "lock" } + widget("y", WidgetType.LOCK, 6, 4, Span(1, 1)))
+        assertEquals(base.size, out.size)
+        val full = LayoutStore.snapSpans(base + widget("z", WidgetType.CONSUMPTION, 0, 0, Span(1, 1)))
+        assertEquals(base, full)
     }
 
     @Test

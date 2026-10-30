@@ -7,11 +7,9 @@ import android.os.Looper
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -38,9 +36,9 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
     if (!connected) null else VehicleMetricsSnapshot.fuelPercentRounded(fuelPercent).takeIf { it >= 0 }
 
 /**
- * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Sağda büyük araç görseli (kahraman), solda büyük menzil,
+ * Araç kartı: "aracım iyi mi?" sorusunun tek bakışlık cevabı. Sağda markasız kuşbakışı araç şeması (kahraman), solda büyük menzil,
  * ince yakıt çubuğu ve altta tek sakin durum satırı (kilit). Bir sorun varsa (açık kapı/bagaj/cam tavan, lastik uyarısı)
- * kilit satırının yerini tek bir uyarı rengi satırı alır ve görselin köşesinde belirgin kırmızı nokta belirir; uyarı dolu kırmızı zeminde beyaz kalın yazıyla gösterilir.
+ * kilit satırının yerini tek bir uyarı rengi satırı alır; sorunun yeri şemada ALERT renginde görünür. Uyarı dolu kırmızı zeminde beyaz kalın yazıyla gösterilir.
  *
  * Yalnızca okur: kilit durumu dinleyiciden, kapılar ve menzil anlık görüntüden, lastik bayrağı 10 sn'de bir.
  */
@@ -66,31 +64,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
     private val fuelBar = FuelBar(context)
-    /**
-     * Araç görseli: proje sahibinin ürettiği Tiggo 7 görseli, arka planı ayrılmış, 720 px'lik tek PNG.
-     * Sabit görsel: kare başına çizim ya da 3B motor yok.
-     */
-    private val carImage = ImageView(context).apply {
-        setImageResource(R.drawable.launcher_car)
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    /** Uyarı varsa görselin sağ üst köşesinde duran belirgin kırmızı nokta (beyaz halkalı); animasyonsuz. */
-    private val alertDot = View(context).apply {
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setStroke(context.dp(ALERT_DOT_RING_DP), 0xFFFFFFFF.toInt())
-        }
-        visibility = View.GONE
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    private val carBox = FrameLayout(context).apply {
-        addView(carImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        val d = context.dp(ALERT_DOT_DP)
-        addView(alertDot, FrameLayout.LayoutParams(d, d, Gravity.TOP or Gravity.END).apply {
-            topMargin = context.dp(12); marginEnd = context.dp(12)
-        })
-    }
+    /** Araç şeması: markasız kuşbakışı SUV; açık kapı/bagaj/cam tavan ve lastik uyarısı yerinde gösterilir. */
+    private val carBox = CarSchematicView(context)
 
     private val statusIcon = icon(context, R.drawable.ic_mdi_lock, LauncherTheme.ICON_S_DP, LauncherTheme.TEXT_SECONDARY)
     private val statusText = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
@@ -286,8 +261,17 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         val hasAlert = open.isNotEmpty() || tireAlert
         alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
         calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
-        alertDot.visibility = if (hasAlert) View.VISIBLE else View.GONE
-        (alertDot.background as GradientDrawable).setColor(DriveAccent.buttonFill(LauncherTheme.ALERT))
+        carBox.setState(
+            CarSchematicView.State(
+                doorLf = knowsDoors && s.isDoorLfOpen(), doorRf = knowsDoors && s.isDoorRfOpen(),
+                doorLr = knowsDoors && s.isDoorLrOpen(), doorRr = knowsDoors && s.isDoorRrOpen(),
+                trunk = knowsDoors && s.isTrunkOpen(),
+                sunroof = knowsSunroof && s.sunroofOpenOrNull() == true,
+                tireWarning = tireAlert,
+                locked = locked,
+            ),
+        )
+        carBox.refreshTheme()
 
         // Sakin satır: kilit durumu; kilit açıksa da sessiz kalır (uyarı rengi yok).
         when (locked) {
@@ -391,8 +375,6 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         const val MIN_WIDTH_FOR_CAR_DP = 360
         const val STATUS_HEIGHT_DP = 44
         const val FUEL_BAR_DP = 12
-        const val ALERT_DOT_DP = 28
-        const val ALERT_DOT_RING_DP = 3
         const val FADE_IN_MS = 250L
         /** Sol sütuna göre araç görselinin payı; görsel kartın büyük sağ kısmını alır. */
         const val CAR_WEIGHT = 1.25f

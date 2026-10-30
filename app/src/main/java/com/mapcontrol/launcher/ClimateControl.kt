@@ -520,19 +520,19 @@ internal class ClimateControl(
 
     companion object {
         private const val DASH = "—"
-        private const val TEMP_SP = 44f
+        private const val TEMP_SP = 56f
         private const val BUBBLE_SP = 56f
-        private const val DEGREE_SCALE = 0.7f
-        private const val CHEVRON_DP = 28
+        private const val DEGREE_SCALE = 0.8f
+        private const val CHEVRON_DP = 32
         private const val CHEVRON_EDGE_DP = 8
         private const val CHEVRON_ALPHA = 0.6f
-        private const val FAN_SP = 32f
-        private const val FAN_ICON_DP = 32
-        private const val FAN_NUMBER_DP = 36
-        private const val SEGMENT_W_DP = 18
-        private const val SEGMENT_H_DP = 8
-        private const val SEGMENT_GAP_DP = 6
-        private const val SEGMENT_RADIUS_DP = 4f
+        private const val FAN_SP = 44f
+        private const val FAN_ICON_DP = 40
+        private const val FAN_NUMBER_DP = 48
+        private const val SEGMENT_W_DP = 28
+        private const val SEGMENT_H_DP = 10
+        private const val SEGMENT_GAP_DP = 7
+        private const val SEGMENT_RADIUS_DP = 5f
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140
         private const val BUBBLE_GAP_DP = 12

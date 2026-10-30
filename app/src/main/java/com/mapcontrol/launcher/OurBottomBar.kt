@@ -46,8 +46,7 @@ internal data class ClimateReadout(
  * ([ClimateControl]: sürükle/dokun/uzun bas), ayarlar · telefon (kare düğmeler). Klima yazması araçta doğrulanana
  * kadar kapalı ([ClimateWriter.CLIMATE_WRITE_VERIFIED]): değer kısa süre değişir, sonra araçtakine döner.
  * Okuma 3 sn'de bir, yalnızca ekran görünürken.
- *
- * Medya bölümü OEM çubuğunda yok; ana ekrandaki medya kartı kaldırıldıysa da müziği tek dokunuşla yönetmeyi sağlar.
+
  */
 class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
@@ -56,67 +55,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     private val main = Handler(Looper.getMainLooper())
     private var startup: LauncherStartup.Deferred? = null
     private var readout = ClimateReadout()
-
-    // --- Medya ---
-    private val media = LauncherMediaController(context)
-    private var listening = false
-    private val mediaListener = LauncherMediaController.Listener { state -> if (!LauncherDemo.enabled) bindMedia(state) }
-    private val playIcon = icon(context, R.drawable.ic_mdi_play, MEDIA_ICON_DP, LauncherTheme.TEXT)
-    private val mediaTitle = text(context, LauncherTheme.BODY_SP, bold = true)
-    private val mediaArtist = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val artImage = ImageView(context).apply {
-        scaleType = ImageView.ScaleType.CENTER_CROP
-        visibility = View.GONE
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    private val artPlaceholder = icon(context, R.drawable.ic_mdi_music_note, ART_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private var sourcePackage: String? = null
-    private var shownArt: Bitmap? = null
-    private val artIo = LauncherIo.serial()
-
-    private val mediaSurface: View = surface().apply {
-        isClickable = true
-        isFocusable = true
-        contentDescription = context.getString(R.string.launcher_bar_music)
-        val pad = context.dp(LauncherTheme.CARD_PAD_COMPACT_DP)
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(pad, pad, pad, pad)
-            val art = FrameLayout(context).apply {
-                background = rounded(context, LauncherTheme.CONTROL, ART_RADIUS_DP)
-                outlineProvider = object : ViewOutlineProvider() {
-                    override fun getOutline(v: View, outline: Outline) {
-                        outline.setRoundRect(0, 0, v.width, v.height, context.dpF(ART_RADIUS_DP))
-                    }
-                }
-                clipToOutline = true
-                addView(artImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                addView(artPlaceholder, FrameLayout.LayoutParams(context.dp(ART_ICON_DP), context.dp(ART_ICON_DP), Gravity.CENTER))
-            }
-            addView(art, LinearLayout.LayoutParams(context.dp(ART_DP), context.dp(ART_DP)))
-            addView(gap(context, LauncherTheme.GAP_M_DP))
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(mediaTitle)
-                addView(gap(context, 4, vertical = true))
-                addView(mediaArtist)
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(gap(context, LauncherTheme.GAP_S_DP))
-            addView(FrameLayout(context).apply {
-                background = oval(LauncherTheme.CONTROL)
-                contentDescription = context.getString(R.string.launcher_media_play)
-                isClickable = true
-                isFocusable = true
-                addView(playIcon, FrameLayout.LayoutParams(context.dp(MEDIA_ICON_DP), context.dp(MEDIA_ICON_DP), Gravity.CENTER))
-                setOnClickListener { media.playPause() }
-                pressFeedback()
-            }, LinearLayout.LayoutParams(context.dp(PLAY_DP), context.dp(PLAY_DP)))
-        }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        setOnClickListener { openMediaSource() }
-        pressFeedback()
-    }
 
     // --- Klima ---
     private val climateControl = ClimateControl(context, io, main)
@@ -127,7 +65,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
      */
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        val narrow = context.resources.displayMetrics.widthPixels < context.dp(NARROW_DP)
         var first = true
         fun add(v: View, lp: LinearLayout.LayoutParams) {
             if (!first) lp.marginStart = context.dp(LauncherGrid.GRID_GAP_DP)
@@ -139,8 +76,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { }, square())
         add(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() }, square())
         add(navButton(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, square())
-        // Dar ekranda önce medya düşer.
-        if (!narrow) add(mediaSurface, weightLp(W_MEDIA))
         add(climateControl.driverView, weightLp(W_TEMP))
         add(climateControl.fanView, weightLp(W_FAN))
         add(climateControl.passengerView, weightLp(W_TEMP))
@@ -150,12 +85,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
     override fun onVisible() {
         bindClimate(readout)
-        if (!listening) {
-            media.addListener(mediaListener)
-            listening = true
-        }
-        media.start()
-        bindMedia(if (LauncherDemo.enabled) LauncherDemo.media() else media.currentState())
         startup?.cancel()
         startup = LauncherStartup.later { main.post(poll) }
     }
@@ -163,11 +92,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     override fun onHidden() {
         startup?.cancel()
         main.removeCallbacks(poll)
-        if (listening) {
-            media.removeListener(mediaListener)
-            listening = false
-        }
-        media.stop()
         climateControl.onHidden()
         appsDialog?.dismiss()
         appsDialog = null
@@ -217,57 +141,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     // --- Bağlama ---
 
     private fun bindClimate(r: ClimateReadout) = climateControl.bind(r)
-
-    private fun bindMedia(state: MediaState) {
-        val session = state.sessionAvailable && !state.title.isNullOrBlank()
-        sourcePackage = if (session) state.source else sourcePackage
-        mediaTitle.setTextSmooth(if (session) state.title else context.getString(R.string.launcher_bar_music))
-        mediaTitle.setTextColor(if (session) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
-        mediaArtist.text = if (session) state.artist.orEmpty() else ""
-        mediaArtist.visibility = if (session && !state.artist.isNullOrBlank()) View.VISIBLE else View.GONE
-        playIcon.setImageResource(if (session && state.playing) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play)
-        bindArt(if (session) state.artwork else null)
-    }
-
-    /** Kapak 72dp'ye arka planda küçültülür; aynı bitmap yeniden işlenmez. */
-    private fun bindArt(bitmap: Bitmap?) {
-        if (bitmap === shownArt) return
-        shownArt = bitmap
-        if (bitmap == null) {
-            artImage.visibility = View.GONE
-            artImage.setImageDrawable(null)
-            artPlaceholder.visibility = View.VISIBLE
-            return
-        }
-        artImage.setImageDrawable(null)
-        val limit = context.dp(ART_DP) * 2
-        artIo.runSafely {
-            val scale = limit.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val scaled = if (scale >= 1f) bitmap else
-                Bitmap.createScaledBitmap(bitmap, maxOf(1, (bitmap.width * scale).toInt()), maxOf(1, (bitmap.height * scale).toInt()), true)
-            main.post {
-                if (shownArt !== bitmap) return@post
-                artImage.setImageBitmap(scaled)
-                artImage.visibility = View.VISIBLE
-                artPlaceholder.visibility = View.GONE
-            }
-        }
-    }
-
-    /** Medya yüzeyine dokunma: çalan parçanın uygulaması; bilinmiyorsa varsayılan müzik uygulaması. */
-    private fun openMediaSource() {
-        val pkg = sourcePackage
-        if (!pkg.isNullOrBlank()) {
-            openPackage(pkg)
-            return
-        }
-        try {
-            activity.startActivity(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: ActivityNotFoundException) {
-            // Müzik uygulaması yok: yapılacak bir şey yok.
-        }
-    }
 
     // --- Okuma ---
 
@@ -388,18 +261,10 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         private const val DASH = "—"
 
         private const val NAV_ICON_DP = 36
-        private const val MEDIA_ICON_DP = 32
-        private const val PLAY_DP = 64
-        private const val ART_DP = 72
-        private const val ART_ICON_DP = 36
-        private const val ART_RADIUS_DP = 16f
 
-        /** Bölüm ağırlıkları (kare düğmeler sabit): medya geniş, sıcaklıklar eşit, fan biraz dar. */
-        private const val W_MEDIA = 2.2f
-        private const val W_TEMP = 1.2f
-        private const val W_FAN = 1.0f
-        /** Bu genişliğin (dp) altında medya bölümü bırakılır. */
-        private const val NARROW_DP = 1500
+        /** Bölüm ağırlıkları (kare düğmeler sabit): sıcaklıklar geniş, fan biraz dar. */
+        private const val W_TEMP = 1.4f
+        private const val W_FAN = 1.2f
 
         private const val APPS_SHEET_WIDTH_DP = 1280
         private const val APPS_HEIGHT_DP = 440

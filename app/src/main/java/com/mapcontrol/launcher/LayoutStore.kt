@@ -41,10 +41,12 @@ class LayoutStore(context: Context) {
             // Sürüm anahtarı yoksa kayıt eski 6×3 biçimindedir: bir kez ×2 taşınır ve yeni biçimde yazılır.
             val oldGrid = prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
             val scaled = if (oldGrid) raws.map { it.copy(col = it.col * 2, row = it.row * 2, w = it.w * 2, h = it.h * 2) } else raws
-            val migrated = resolveRaw(scaled)
+            val resolved = resolveRaw(scaled)
+            // Artık izin verilmeyen boyutlar en yakın izinli boyuta çekilir; yoksa tüm düzen varsayılana düşerdi.
+            val migrated = snapSpans(resolved)
             if (migrated.isNotEmpty() && isValid(migrated)) {
-                // Eski ızgara ya da eski koltuk anahtarları dönüştürüldüyse yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
-                if (oldGrid || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
+                // Eski ızgara, eski koltuk anahtarları ya da boyut uyarlaması olduysa yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
+                if (oldGrid || migrated != resolved || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
                 migrated
             } else defaultLayout(oemBar, appPackages)
         } catch (e: org.json.JSONException) {
@@ -107,6 +109,26 @@ class LayoutStore(context: Context) {
             // Yolcu eşi yalnız yeri boşsa eklenir; aksi halde sadece sürücü kalır.
             passengers.forEach { p ->
                 if (result.none { it.id == p.id } && canPlace(result, p)) result += p
+            }
+            return result
+        }
+
+        /**
+         * İzinli olmayan boyutlu widget'ları en yakın izinli boyuta çeker: eski ayak izine sığan en büyük izinli
+         * boyut, yoksa en küçük izinli boyut. Konum korunur; sığmaz ya da çakışırsa [findSpot] ile yer aranır,
+         * yer yoksa yalnızca o widget düşer. İzinli boyutlu widget'lara dokunulmaz.
+         */
+        fun snapSpans(layout: List<PlacedWidget>): List<PlacedWidget> {
+            val result = mutableListOf<PlacedWidget>()
+            layout.forEachIndexed { i, w ->
+                if (w.span in w.type.sizes) { result += w; return@forEachIndexed }
+                val span = w.type.sizes.filter { it.w <= w.span.w && it.h <= w.span.h }.maxByOrNull { it.w * it.h }
+                    ?: w.type.sizes.minByOrNull { it.w * it.h }
+                    ?: return@forEachIndexed
+                // Engel: işlenmiş widget'lar ve henüz işlenmemiş olanların kayıtlı yerleri.
+                val others = result + layout.drop(i + 1)
+                val snapped = w.copy(span = span)
+                (if (canPlace(others, snapped)) snapped else findSpot(others, snapped))?.let { result += it }
             }
             return result
         }

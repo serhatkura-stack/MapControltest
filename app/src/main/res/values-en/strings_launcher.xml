@@ -152,7 +152,6 @@
     <string name="launcher_climate_fan">Fan speed</string>
     <string name="launcher_climate_driver_short">Driver</string>
     <string name="launcher_climate_passenger_short">Passenger</string>
-    <string name="launcher_bar_music">Music</string>
     <string name="launcher_climate_increase">Increase</string>
     <string name="launcher_climate_decrease">Decrease</string>
 </resources>
