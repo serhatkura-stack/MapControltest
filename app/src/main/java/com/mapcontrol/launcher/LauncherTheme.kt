@@ -47,6 +47,12 @@ object LauncherTheme {
     private const val NIGHT_EDIT_SCRIM = 0x8C1A1D23.toInt()
     private const val DAY_EDIT_SCRIM = 0x8CFFFFFF.toInt()
 
+    // Alt çubuk ("dock") yüzeyi: gündüz koyu grafit cam, gece kartlardan bir ton açık; üstte hafif açık, altta koyu.
+    private const val DAY_DOCK_TOP = 0xFF262D3B.toInt()
+    private const val DAY_DOCK_BOTTOM = 0xFF1C2230.toInt()
+    private const val NIGHT_DOCK_TOP = 0xFF232938.toInt()
+    private const val NIGHT_DOCK_BOTTOM = 0xFF1D2331.toInt()
+
     val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD
     val CONTROL: Int get() = if (night) NIGHT_CONTROL else DAY_CONTROL
@@ -57,6 +63,19 @@ object LauncherTheme {
     val ALERT: Int get() = if (night) NIGHT_ALERT else DAY_ALERT
     val TEXT: Int get() = if (night) NIGHT_TEXT else DAY_TEXT
     val TEXT_SECONDARY: Int get() = if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
+
+    /** Alt çubuk yüzeyi, üst ve alt gradyan uçları (iki görünümde de koyu). */
+    val DOCK_TOP: Int get() = if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
+    val DOCK_BOTTOM: Int get() = if (night) NIGHT_DOCK_BOTTOM else DAY_DOCK_BOTTOM
+    /** Alt çubuk üstündeki yazı/ikon: beyaza yakın; ikincil %65 beyaz; ayraç %10 beyaz; kısa basış örtüsü %12 beyaz. */
+    val DOCK_TEXT: Int get() = 0xFFF5F7FA.toInt()
+    val DOCK_TEXT_SECONDARY: Int get() = 0xA6FFFFFF.toInt()
+    val DOCK_DIVIDER: Int get() = 0x1AFFFFFF
+    val DOCK_PRESS: Int get() = 0x1FFFFFFF
+    /** Pasif nokta/iz: %25 beyaz. */
+    val DOCK_TRACK: Int get() = 0x40FFFFFF
+    /** Üst kenar parıltısı (%8 beyaz); yalnızca gecede, gündüz 0. */
+    val DOCK_HIGHLIGHT: Int get() = if (night) 0x14FFFFFF else 0
 
     /** Vurgu rengi üstündeki yazı/ikon; iki görünümde de beyaz. */
     val ON_ACCENT: Int get() = 0xFFFFFFFF.toInt()

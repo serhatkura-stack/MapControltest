@@ -4,7 +4,6 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -54,7 +53,7 @@ internal class ClimateControl(
     private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short)
     private val fan = FanCell()
 
-    /** Ayrı yüzeyler; yerleşimi ([OurBottomBar]) belirler. */
+    /** Dock bölümleri (zeminsiz, koyu dock üstünde); yerleşimi ([OurBottomBar]) belirler. */
     val driverView: View get() = driver.view
     val fanView: View get() = fan.view
     val passengerView: View get() = passenger.view
@@ -130,21 +129,19 @@ internal class ClimateControl(
     // --- Sıcaklık hücresi ---
 
     private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, TEMP_SP, medium = true).apply { gravity = Gravity.CENTER }
-        private val tint = GradientDrawable().apply {
-            cornerRadius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
-            alpha = 0
-        }
+        private val label = text(context, TEMP_SP, LauncherTheme.DOCK_TEXT, medium = true).apply { gravity = Gravity.CENTER }
+        private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = LayerDrawable(arrayOf(cardSurface(context), tint))
+            background = tint
+            foreground = dockPressOverlay(context)
             isClickable = true
             isFocusable = true
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.DOCK_TEXT_SECONDARY).apply {
                     text = context.getString(shortRes)
                     gravity = Gravity.CENTER
                 })
@@ -154,9 +151,9 @@ internal class ClimateControl(
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
             val chev = context.dp(CHEVRON_DP)
             val edge = context.dp(CHEVRON_EDGE_DP)
-            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP, LauncherTheme.TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
+            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP, LauncherTheme.DOCK_TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
                 FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
-            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP, LauncherTheme.TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
+            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP, LauncherTheme.DOCK_TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
                 FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
@@ -205,6 +202,7 @@ internal class ClimateControl(
         private fun touch(e: MotionEvent): Boolean {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    view.isPressed = true
                     view.parent?.requestDisallowInterceptTouchEvent(true)
                     val base = shownTemp(side)
                     active = base != null
@@ -223,6 +221,7 @@ internal class ClimateControl(
                     val slop = ViewConfiguration.get(context).scaledTouchSlop
                     if (!moved && abs(dy) > slop && abs(dy) > abs(e.rawX - downX)) {
                         moved = true
+                        view.isPressed = false
                         dragging = true
                         main.removeCallbacks(longPress)
                         main.removeCallbacks(revert)
@@ -237,6 +236,7 @@ internal class ClimateControl(
                     }
                 }
                 MotionEvent.ACTION_UP -> {
+                    view.isPressed = false
                     main.removeCallbacks(longPress)
                     when {
                         !active || longFired -> Unit
@@ -256,6 +256,7 @@ internal class ClimateControl(
                     endGesture()
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    view.isPressed = false
                     main.removeCallbacks(longPress)
                     bubble.dismiss()
                     fadeTint()
@@ -290,12 +291,11 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, FAN_SP, medium = true).apply { gravity = Gravity.CENTER }
+        private val number = text(context, FAN_SP, LauncherTheme.DOCK_TEXT, medium = true).apply { gravity = Gravity.CENTER }
         private val segments = List(ClimateMath.FAN_MAX) {
             View(context).apply { background = rounded(context, inactiveSegment(), SEGMENT_RADIUS_DP) }
         }
         private val tint = GradientDrawable().apply {
-            cornerRadius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
             setColor(TINT_FAN)
             alpha = 0
         }
@@ -303,7 +303,8 @@ internal class ClimateControl(
         private var level = -1
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = LayerDrawable(arrayOf(cardSurface(context), tint))
+            background = tint
+            foreground = dockPressOverlay(context)
             isClickable = true
             isFocusable = true
             addView(LinearLayout(context).apply {
@@ -312,7 +313,7 @@ internal class ClimateControl(
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP, LauncherTheme.TEXT_SECONDARY))
+                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP, LauncherTheme.DOCK_TEXT_SECONDARY))
                     addView(gap(context, LauncherTheme.GAP_S_DP))
                     addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -374,6 +375,7 @@ internal class ClimateControl(
         private fun touch(e: MotionEvent): Boolean {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    view.isPressed = true
                     view.parent?.requestDisallowInterceptTouchEvent(true)
                     val base = shownFan()
                     active = base != null
@@ -390,6 +392,7 @@ internal class ClimateControl(
                     val slop = ViewConfiguration.get(context).scaledTouchSlop
                     if (!moved && abs(dx) > slop && abs(dx) > abs(e.rawY - downY)) {
                         moved = true
+                        view.isPressed = false
                         dragging = true
                         main.removeCallbacks(revert)
                     }
@@ -403,6 +406,7 @@ internal class ClimateControl(
                     }
                 }
                 MotionEvent.ACTION_UP -> {
+                    view.isPressed = false
                     when {
                         !active -> Unit
                         moved -> {
@@ -424,6 +428,7 @@ internal class ClimateControl(
                     moved = false
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    view.isPressed = false
                     bubble.dismiss()
                     fadeTint()
                     if (moved) dragging = false
@@ -453,8 +458,8 @@ internal class ClimateControl(
 
     /** Kapsülün üstünde büyük değer; ayrı bir pencere (dokunmayı geçirir), çubuğun kırpmasına takılmaz. */
     private inner class ValueBubble {
-        private val value = text(context, BUBBLE_SP, bold = true).apply { gravity = Gravity.CENTER }
-        private val caption = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+        private val value = text(context, BUBBLE_SP, LauncherTheme.DOCK_TEXT, bold = true).apply { gravity = Gravity.CENTER }
+        private val caption = text(context, LauncherTheme.LABEL_SP, LauncherTheme.DOCK_TEXT_SECONDARY).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
         }
@@ -477,7 +482,7 @@ internal class ClimateControl(
             value.text = text
             caption.text = captionText
             caption.visibility = if (captionText == null) View.GONE else View.VISIBLE
-            panel.background = rounded(context, LauncherTheme.CONTROL, BUBBLE_RADIUS_DP, tintColor)
+            panel.background = rounded(context, LauncherTheme.DOCK_BOTTOM, BUBBLE_RADIUS_DP, tintColor)
             panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val w = maxOf(panel.measuredWidth, context.dp(BUBBLE_MIN_WIDTH_DP))
             val h = panel.measuredHeight
@@ -500,15 +505,15 @@ internal class ClimateControl(
 
     private fun format(c: Double): String = String.format(Locale.US, "%.1f°", c)
 
-    /** Etkin olmayan kademe noktası: ikincil metin renginin soluk hâli; gecede de görünür kalır. */
-    private fun inactiveSegment(): Int = (LauncherTheme.TEXT_SECONDARY and 0x00FFFFFF) or 0x59000000
+    /** Etkin olmayan kademe noktası: koyu dock üstünde %25 beyaz. */
+    private fun inactiveSegment(): Int = LauncherTheme.DOCK_TRACK
 
     /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
     private fun styled(c: Double): CharSequence {
         val num = String.format(Locale.US, "%.1f", c)
         return SpannableStringBuilder(num).append('°').apply {
             setSpan(RelativeSizeSpan(DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            setSpan(ForegroundColorSpan(LauncherTheme.TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(LauncherTheme.DOCK_TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 
@@ -525,7 +530,7 @@ internal class ClimateControl(
         private const val DEGREE_SCALE = 0.8f
         private const val CHEVRON_DP = 32
         private const val CHEVRON_EDGE_DP = 8
-        private const val CHEVRON_ALPHA = 0.6f
+        private const val CHEVRON_ALPHA = 0.85f
         private const val FAN_SP = 44f
         private const val FAN_ICON_DP = 40
         private const val FAN_NUMBER_DP = 48
@@ -548,9 +553,9 @@ internal class ClimateControl(
         private const val ACTION_INCREASE = 0x1C01
         private const val ACTION_DECREASE = 0x1C02
 
-        // Düşük alfalı renk tonları: aşağı = serin mavi, yukarı = sıcak turuncu (~%22), fan nötr mavi.
-        private val TINT_COOL = 0x3860A5FA.toInt()
-        private val TINT_WARM = 0x38FB923C.toInt()
-        private val TINT_FAN = 0x3860A5FA.toInt()
+        // Düşük alfalı renk tonları: aşağı = serin mavi, yukarı = sıcak turuncu (~%24, koyu dock üstünde), fan nötr mavi (~%20); bölüm dikdörtgeni boyunca.
+        private val TINT_COOL = 0x403B82F6.toInt()
+        private val TINT_WARM = 0x3DFB923C.toInt()
+        private val TINT_FAN = 0x333B82F6.toInt()
     }
 }

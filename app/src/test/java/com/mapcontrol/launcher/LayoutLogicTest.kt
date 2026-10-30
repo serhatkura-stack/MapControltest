@@ -138,6 +138,20 @@ class LayoutLogicTest {
     }
 
     @Test
+    fun defaultTopAreaIsMediaTwoTilesAndFourByFourVehicle() {
+        listOf(defaultLayout(false), defaultLayout(true)).forEach { layout ->
+            fun at(t: WidgetType) = layout.single { it.type == t }
+            assertEquals(Triple(0, 0, Span(6, 4)), at(WidgetType.MEDIA).let { Triple(it.col, it.row, it.span) })
+            assertEquals(Triple(6, 0, Span(2, 2)), at(WidgetType.CONSUMPTION).let { Triple(it.col, it.row, it.span) })
+            assertEquals(Triple(6, 2, Span(2, 2)), at(WidgetType.TRIP).let { Triple(it.col, it.row, it.span) })
+            assertEquals(Triple(8, 0, Span(4, 4)), at(WidgetType.VEHICLE).let { Triple(it.col, it.row, it.span) })
+            // APP dışında tür tekrarı yok
+            val nonApp = layout.filter { it.type != WidgetType.APP }.map { it.type }
+            assertEquals(nonApp.size, nonApp.toSet().size)
+        }
+    }
+
+    @Test
     fun desayDefaultBottomRowIsDriverSeatFourAppsPassengerSeat() {
         // Navigasyon kartı gizliyken (NAVIGATION_CARD_ENABLED = false) uygulama şeridi boşluğu doldurur.
         assertTrue(!NAVIGATION_CARD_ENABLED)

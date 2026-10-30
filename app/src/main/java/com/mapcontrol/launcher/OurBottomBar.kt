@@ -7,7 +7,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.LinearGradient
 import android.graphics.Outline
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.StateListDrawable
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
@@ -41,7 +50,7 @@ internal data class ClimateReadout(
 
 /**
  * Launcher'ın kendi alt çubuğu ("Alt çubuk: Bizimki"): OEM gezinme çubuğu gizlenirken yerini alır.
- * Çıplak bir satır; her bölüm kendi kart yüzeyi: ana ekran · uygulamalar · araç (kare düğmeler), medya (kapak,
+ * Tek parça koyu "dock" şeridi, bölümler ince ayraçlarla: ana ekran · uygulamalar · araç (kare düğmeler), medya (kapak,
  * başlık, sanatçı, oynat/duraklat; oturum yokken "Müzik"), sürücü sıcaklığı · fan · yolcu sıcaklığı
  * ([ClimateControl]: sürükle/dokun/uzun bas), ayarlar · telefon (kare düğmeler). Klima yazması araçta doğrulanana
  * kadar kapalı ([ClimateWriter.CLIMATE_WRITE_VERIFIED]): değer kısa süre değişir, sonra araçtakine döner.
@@ -60,14 +69,24 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     private val climateControl = ClimateControl(context, io, main)
 
     /**
-     * Çıplak satır: dış kart yok. Her bölüm kendi kart yüzeyi (ızgara kutucuklarıyla aynı köşe/renk/kenar),
-     * aralar ızgara boşluğu kadar, uçlar ızgaranın dış kenarıyla hizalı (kök dolgusu). Genişlik ağırlıkla dolar.
+     * Tek parça dock: koyu cam yüzeyli tek yuvarlak şerit (köşeler yalnızca iki uçta, kart yarıçapında), bölümler
+     * arası boşluksuz; ayrım 1dp ince ayraçlarla (üstten/alttan içeride). Genişlik ağırlıkla dolar.
      */
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
+        background = DockSurface(context)
+        clipToOutline = true
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(v: View, outline: Outline) {
+                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(LauncherTheme.CARD_RADIUS_DP))
+            }
+        }
         var first = true
         fun add(v: View, lp: LinearLayout.LayoutParams) {
-            if (!first) lp.marginStart = context.dp(LauncherGrid.GRID_GAP_DP)
+            if (!first) addView(divider(), LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                topMargin = context.dp(DIVIDER_INSET_DP)
+                bottomMargin = context.dp(DIVIDER_INSET_DP)
+            })
             first = false
             addView(v, lp)
         }
@@ -116,26 +135,31 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
     // --- Yerleşim ---
 
-    /** Izgara kutucuğuyla aynı yüzey: kart rengi, 20dp köşe, gündüz ince kenar. */
-    private fun surface(): FrameLayout = FrameLayout(context).apply { background = cardSurface(context) }
+    private fun divider(): View = View(context).apply { setBackgroundColor(LauncherTheme.DOCK_DIVIDER) }
 
-    /** Kare düğme yüzeyi (çubuk yüksekliği); etkin olan vurgu renginde dolu, beyaz ikonlu. */
+    /**
+     * Kare düğme (çubuk yüksekliği). Zemini yok, dock'un parçası; basınca beyaz örtü. Etkin olan, bölümün
+     * içinde vurgu renginde yuvarlak bir hap ve beyaz ikon.
+     */
     private fun navButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
         FrameLayout(context).apply {
-            background = if (active) {
-                rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), LauncherTheme.CARD_RADIUS_DP)
-            } else {
-                cardSurface(context)
-            }
+            foreground = dockPressOverlay(context)
             contentDescription = context.getString(labelRes)
             isClickable = true
             isFocusable = true
+            if (active) {
+                val inset = context.dp(PILL_INSET_DP)
+                addView(View(context).apply {
+                    background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), PILL_RADIUS_DP)
+                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                    setMargins(inset, inset, inset, inset)
+                })
+            }
             addView(
-                icon(context, iconRes, NAV_ICON_DP, if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT),
+                icon(context, iconRes, NAV_ICON_DP, if (active) LauncherTheme.ON_ACCENT else LauncherTheme.DOCK_TEXT),
                 FrameLayout.LayoutParams(context.dp(NAV_ICON_DP), context.dp(NAV_ICON_DP), Gravity.CENTER),
             )
             setOnClickListener { onClick() }
-            pressFeedback()
         }
 
     // --- Bağlama ---
@@ -261,6 +285,10 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         private const val DASH = "—"
 
         private const val NAV_ICON_DP = 36
+        /** Ayraçların alt/üstten içeri payı; Home hapının içeri payı ve yarıçapı. */
+        private const val DIVIDER_INSET_DP = 22
+        private const val PILL_INSET_DP = 12
+        private const val PILL_RADIUS_DP = 18f
 
         /** Bölüm ağırlıkları (kare düğmeler sabit): sıcaklıklar geniş, fan biraz dar. */
         private const val W_TEMP = 1.4f
@@ -278,4 +306,49 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         /** Fan kademesi doğrudan okunur; makul aralık (0..9) dışı "—". */
         fun decodeFan(raw: Int): Int? = raw.takeIf { it in 0..9 }
     }
+}
+
+/**
+ * Dock'un basış örtüsü: basılıyken %12 beyaz, bırakınca kısa solar. Bölümün üstünde (foreground); dış şekle
+ * kırpma dock'un `clipToOutline`ından gelir.
+ */
+internal fun dockPressOverlay(context: Context): Drawable = StateListDrawable().apply {
+    addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(LauncherTheme.DOCK_PRESS))
+    addState(intArrayOf(), ColorDrawable(0))
+    setEnterFadeDuration(0)
+    setExitFadeDuration(150)
+}
+
+/**
+ * Dock yüzeyi: üstü hafif açık düşey gradyan, kart yarıçapında köşeler. Gecede üst kenarda 1dp parıltı çizgisi
+ * (köşelerden aşağı doğru solar). Gölgeler bir kez [onBoundsChange]'de kurulur; çizimde ayırma yok.
+ */
+private class DockSurface(private val context: Context) : Drawable() {
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = context.dpF(1f)
+    }
+    private val rect = RectF()
+    private val radius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
+
+    override fun onBoundsChange(b: android.graphics.Rect) {
+        fill.shader = LinearGradient(0f, b.top.toFloat(), 0f, b.bottom.toFloat(), LauncherTheme.DOCK_TOP, LauncherTheme.DOCK_BOTTOM, Shader.TileMode.CLAMP)
+        val hl = LauncherTheme.DOCK_HIGHLIGHT
+        edge.shader = if (hl == 0) null else
+            LinearGradient(0f, b.top.toFloat(), 0f, b.top + radius * 1.2f, hl, hl and 0x00FFFFFF, Shader.TileMode.CLAMP)
+        val h = edge.strokeWidth / 2
+        rect.set(b.left + h, b.top + h, b.right - h, b.bottom - h)
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        canvas.drawRoundRect(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(), radius, radius, fill)
+        if (edge.shader != null) canvas.drawRoundRect(rect, radius, radius, edge)
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }
