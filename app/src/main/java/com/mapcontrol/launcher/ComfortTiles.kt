@@ -126,8 +126,9 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 
 /**
  * Tavan perdesi: üstten bakışla çatı camı ve üzerini örten "perde". Aşağı sürükle = kapat (perde parmağı izler),
- * yukarı sürükle = aç, dokun = değiştir. Ara konum yalnızca durdurma değeri bilinince ([ComfortWriter.SUNSHADE_STOP_VALUE])
- * yazılır; o zamana kadar bırakınca en yakın uca oturur.
+ * yukarı sürükle = aç. Dokun = araçtaki gibi adım (kapalı -> yarı -> tam açık, açıkken ters). Basılı sürükle = parmak
+ * inikken hareket, bırakınca durur; bunun için durdurma değeri ([ComfortWriter.SUNSHADE_STOP_VALUE]) gerekir, o
+ * bilinene kadar sürükleme dokunma adımına döner.
  */
 internal class SunshadeTile(context: Context) : ComfortTile(context) {
 
@@ -141,6 +142,9 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     /** İyimser hedef (açıklık 0..1) ve onun durumu; null = araçtaki gösterilir. */
     private var pendingOpen: Float? = null
     private var dragging = false
+
+    /** Son adımın yönü (true açma); yarıdayken sıradaki adımın yönünü belirler. Bilinmiyorsa null. */
+    private var lastOpening: Boolean? = null
 
     /** Üst satır, ortalı: ikon + başlık (yüksek kutu) ya da ikon + durum (alçak kutu). */
     private val header = LinearLayout(context).apply {
@@ -269,12 +273,21 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     private fun onTap() {
         val state = reading.sunshade
         // Bilinmeyen durumda (okunamıyor) yalnızca test sürümünde açıklama göster; gerçekte komut yok.
-        val target = ComfortMath.toggleTarget(state) ?: if (LauncherEdition.READ_ONLY) 1f else return
-        commit(target)
+        // Araçtaki düğme gibi: kapalı -> yarı -> tam açık, açıkken ters yön.
+        val target = ComfortMath.tapStep(state, lastOpening) ?: if (LauncherEdition.READ_ONLY) 0.5f else return
+        val cur = state.openFraction?.takeUnless { state.moving }
+        lastOpening = if (cur != null) target > cur else target >= 0.5f
+        commit(target, ComfortMath.stepPlan(cur, target))
     }
 
     private fun onDragEnd(startCoverage: Float) {
         val startOpen = 1f - startCoverage
+        // Durdurma değeri bilinmiyor: sürükleme araçtaki adıma dönüşür (perde yerine döner, tek adım atılır).
+        if (!ComfortWriter.partialPositionKnown) {
+            roof.animateTo(startCoverage)
+            onTap()
+            return
+        }
         val target = ComfortMath.releaseTarget(startOpen, roof.coverage, ComfortWriter.partialPositionKnown)
         // Başlangıçla aynı uca bırakıldıysa komut yok: perde yerine döner.
         if (target == startOpen && (target == 0f || target == 1f)) {
@@ -284,11 +297,14 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
         commit(target)
     }
 
-    private fun commit(targetOpen: Float) {
+    private fun commit(
+        targetOpen: Float,
+        steps: List<SunshadeStep> = ComfortMath.planSunshade(reading.sunshade.openFraction?.takeUnless { reading.sunshade.moving }, targetOpen),
+    ) {
         pendingOpen = targetOpen
         roof.animateTo(1f - targetOpen)
         if (ComfortWriter.sunshadeEnabled) {
-            runner.run(ComfortMath.planSunshade(reading.sunshade.openFraction?.takeUnless { reading.sunshade.moving }, targetOpen))
+            runner.run(steps)
         }
         afterCommit(ComfortWriter.sunshadeEnabled)
     }

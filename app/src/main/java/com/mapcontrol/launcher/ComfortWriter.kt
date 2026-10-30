@@ -9,9 +9,12 @@ import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
-/** Tavan perdesi durumu (CarSetting 10): 1 kapalı, 2 açılıyor, 4 kapanıyor, 5 açık, 6 yarıda durdu. */
+/**
+ * Tavan perdesi durumu (CarSetting 10, araçta ölçüldü): 1 kapalı, 2 açılıyor, 3 yarıda durdu (tek çekişte yarıya
+ * gelir, durur), 4 kapanıyor. 5 (açık) ve 6 (yarıda) bu araçta görülmedi; diğer araçlar için hoşgörülür.
+ */
 internal enum class SunshadeState(val raw: Int) {
-    CLOSED(1), OPENING(2), CLOSING(4), OPEN(5), PARTIAL(6), UNKNOWN(-1);
+    CLOSED(1), OPENING(2), PARTIAL(3), CLOSING(4), OPEN(5), UNKNOWN(-1);
 
     /** Hareket sonunda varılacak açıklık (0 kapalı .. 1 açık); bilinmiyorsa null. Yarıda durmuş perde ~0,5 sayılır. */
     val openFraction: Float?
@@ -40,16 +43,16 @@ internal object ComfortMath {
     /** Sürükleme bu orandan (parmak, parça yüksekliğinin payı) az hareket ettirdiyse yön yok sayılır. */
     const val SNAP_DRAG_FRACTION = 0.25f
 
-    fun decodeSunshade(raw: Int?): SunshadeState = SunshadeState.values().firstOrNull { it.raw == raw && it != SunshadeState.UNKNOWN }
-        ?: SunshadeState.UNKNOWN
+    fun decodeSunshade(raw: Int?): SunshadeState = when (raw) {
+        6 -> SunshadeState.PARTIAL
+        else -> SunshadeState.values().firstOrNull { it.raw == raw && it != SunshadeState.UNKNOWN } ?: SunshadeState.UNKNOWN
+    }
 
-    /** Ön cam: ısıtma (65) ya da maksimum buğu giderme (24) açıksa açık; ikisi de okunamıyorsa null. */
-    fun decodeFront(glassHeat: Int?, maxDeforest: Int?): Boolean? =
-        if (glassHeat == null && maxDeforest == null) null else (glassHeat ?: 0) > 0 || (maxDeforest ?: 0) > 0
+    /** Ön cam: yalnızca maksimum buğu giderme (Hvac 24) okunur (araçta ölçüldü; FRONT_GLASS_HEAT 65 hiç değişmedi). */
+    fun decodeFront(maxDeforest: Int?): Boolean? = maxDeforest?.let { it > 0 }
 
-    /** Arka cam: HVAC arka buğu (80) ya da CarSetting arka cam ısıtma (159) açıksa açık; ikisi de okunamıyorsa null. */
-    fun decodeRear(hvacDefrost: Int?, windowHeat: Int?): Boolean? =
-        if (hvacDefrost == null && windowHeat == null) null else (hvacDefrost ?: 0) > 0 || (windowHeat ?: 0) > 0
+    /** Arka cam: HVAC arka buğu (80) okunur (araçta ölçüldü: 0 → 1). */
+    fun decodeRear(hvacDefrost: Int?): Boolean? = hvacDefrost?.let { it > 0 }
 
     /** Direksiyon ısıtma (CarSetting 160): 0/1; okunamıyorsa null. */
     fun decodeSteer(raw: Int?): Boolean? = raw?.let { it > 0 }
@@ -86,8 +89,28 @@ internal object ComfortMath {
         SunshadeState.UNKNOWN -> null
     }
 
+    /**
+     * Araçtaki düğme gibi adım adım dokunma: kapalı → yarı → tam açık, açıkken ters yön. Tek çekiş perdeyi yarıda
+     * durdurur. Yarıdayken yön [lastOpening] (son adım açma yönündeyse true) ile belirlenir; bilinmiyorsa aç.
+     * Hareket halindeyse ters yöne; durum bilinmiyorsa null.
+     */
+    fun tapStep(state: SunshadeState, lastOpening: Boolean?): Float? = when (state) {
+        SunshadeState.CLOSED -> 0.5f
+        SunshadeState.OPEN -> 0.5f
+        SunshadeState.PARTIAL -> if (lastOpening == false) 0f else 1f
+        SunshadeState.OPENING -> 0f
+        SunshadeState.CLOSING -> 1f
+        SunshadeState.UNKNOWN -> null
+    }
+
+    /** Tek adım: hedef mevcut açıklıktan büyükse "aç" (2), değilse "kapat" (1); mevcut bilinmiyorsa hedef >= 0,5 açar. */
+    fun stepPlan(currentOpen: Float?, targetOpen: Float): List<SunshadeStep> {
+        val opening = if (currentOpen != null) targetOpen > currentOpen else targetOpen >= 0.5f
+        return listOf(SunshadeStep(if (opening) ComfortWriter.SUNSHADE_OPEN_VALUE else ComfortWriter.SUNSHADE_CLOSE_VALUE, 0))
+    }
+
     /** [from] açıklığından [to] açıklığına gitmek için komuttan sonra durdurma gecikmesi (ms): yol payı × tam yol süresi. */
-    fun stopDelayMs(from: Float, to: Float, travelMs: Long = ComfortWriter.SUNSHADE_TRAVEL_MS): Long =
+    fun stopDelayMs(from: Float, to: Float, travelMs: Long): Long =
         (abs(to.coerceIn(0f, 1f) - from.coerceIn(0f, 1f)) * travelMs).roundToLong()
 
     /**
@@ -99,11 +122,11 @@ internal object ComfortMath {
         currentOpen: Float?,
         targetOpen: Float,
         stopValue: Int? = ComfortWriter.SUNSHADE_STOP_VALUE,
-        travelMs: Long = ComfortWriter.SUNSHADE_TRAVEL_MS,
+        travelMs: Long? = ComfortWriter.SUNSHADE_TRAVEL_MS,
     ): List<SunshadeStep> {
         if (targetOpen >= 1f) return listOf(SunshadeStep(ComfortWriter.SUNSHADE_OPEN_VALUE, 0))
         if (targetOpen <= 0f) return listOf(SunshadeStep(ComfortWriter.SUNSHADE_CLOSE_VALUE, 0))
-        if (stopValue == null || currentOpen == null || currentOpen == targetOpen) {
+        if (stopValue == null || travelMs == null || currentOpen == null || currentOpen == targetOpen) {
             return planSunshade(currentOpen, if (targetOpen >= 0.5f) 1f else 0f, null, travelMs)
         }
         val dir = if (targetOpen > currentOpen) ComfortWriter.SUNSHADE_OPEN_VALUE else ComfortWriter.SUNSHADE_CLOSE_VALUE
@@ -112,12 +135,12 @@ internal object ComfortMath {
 
     // --- Komutlar ---
 
-    /** Buğu/ısıtma yazması FrostNav'ın otomasyonuyla aynı: ön cam HV 65 + HV 24, arka cam HV 80 + CS 159. */
+    /** Buğu/ısıtma yazması: ön cam HV 24 (ölçülen) + HV 65, arka cam HV 80 + CS 159. */
     fun defrostCommands(front: Boolean, on: Boolean): List<ComfortCmd> {
         val v = if (on) 1 else 0
         return if (front) listOf(
-            ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v),
             ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, v),
+            ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, v),
         ) else listOf(
             ComfortCmd(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_REAR_DEFROST, v),
             ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_WINDOW_HEAT, v),
@@ -149,8 +172,8 @@ internal object ComfortWriter {
     const val SUNSHADE_OPEN_VALUE = 2
     const val SUNSHADE_CLOSE_VALUE = 1
 
-    /** Perdenin tam yol süresi (ms); araçta ölçülecek (tahmin: KONFOR-ARASTIRMA'da 6-8,5 sn aralığı). */
-    const val SUNSHADE_TRAVEL_MS = 8000L
+    /** Perdenin tam yol süresi (ms): tam açılma süresi araçta ölçülecek; 11 sn yarıya kadar (araçta ölçüldü). Null = bilinmiyor. */
+    val SUNSHADE_TRAVEL_MS: Long? = null
 
     /** Perdeyi yarıda durduran CarSetting 10 değeri; bilinmiyor, araç testinde bulunacak. Null iken yalnızca tam açık/kapalı. */
     val SUNSHADE_STOP_VALUE: Int? = null
@@ -235,8 +258,8 @@ internal object ComfortReader {
             ComfortReading(
                 connected = true,
                 sunshade = ComfortMath.decodeSunshade(cs(CarSettingID.ID_CAR_SUNSHADE)),
-                frontDefrost = ComfortMath.decodeFront(hv(HvacID.ID_AC_FRONT_GLASS_HEAT), hv(HvacID.ID_AC_MAX_FRONT_DEFOREST)),
-                rearDefrost = ComfortMath.decodeRear(hv(HvacID.ID_AC_REAR_DEFROST), cs(CarSettingID.ID_CAR_REAR_WINDOW_HEAT)),
+                frontDefrost = ComfortMath.decodeFront(hv(HvacID.ID_AC_MAX_FRONT_DEFOREST)),
+                rearDefrost = ComfortMath.decodeRear(hv(HvacID.ID_AC_REAR_DEFROST)),
                 steerHeat = ComfortMath.decodeSteer(cs(CarSettingID.ID_CAR_STEER_WHEEL_HEAT)),
             )
         } catch (e: RuntimeException) {

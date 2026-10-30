@@ -18,6 +18,7 @@ internal object ClimateMath {
     const val TEMP_STEP = 0.5
 
     const val FAN_MIN = 1
+    // TODO: araçta fan kademesi en çok 10 okundu (max ön buğu çözmede); ölçek henüz değiştirilmedi.
     const val FAN_MAX = 7
 
     /** Sıcaklık: dikey her 40dp yol = 1 adım (0,5 °C). */

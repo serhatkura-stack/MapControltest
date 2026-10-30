@@ -17,7 +17,7 @@ object ComfortPlan {
     /** VDEventCarInfo.MODULE_VR. */
     const val MODULE_VR = 327696
 
-    /** CarSettingID.ID_CAR_SUNSHADE. Okuma: 1 kapalı, 2 açılıyor, 4 kapanıyor, 5 açık, 6 yarıda. */
+    /** CarSettingID.ID_CAR_SUNSHADE. Okuma (ölçüldü): 1 kapalı, 2 açılıyor, 3 yarıda durdu, 4 kapanıyor. */
     const val ID_SUNSHADE = 10
 
     /** CarSettingID.ID_CAR_REAR_WINDOW_HEAT. */

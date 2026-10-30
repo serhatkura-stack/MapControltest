@@ -11,7 +11,7 @@
     <string name="launcher_sunshade_opening">Açılıyor</string>
     <string name="launcher_sunshade_closing">Kapanıyor</string>
     <string name="launcher_sunshade_open">Açık</string>
-    <string name="launcher_sunshade_partial">Yarıda</string>
+    <string name="launcher_sunshade_partial">Yarı açık / Durdu</string>
     <string name="launcher_read_only_comfort">Test sürümü: araçtan değiştirilir</string>
     <string name="launcher_comfort_pending">Araç testinden sonra açılacak</string>
 </resources>

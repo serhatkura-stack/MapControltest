@@ -243,7 +243,7 @@ class AppDock(
                     .setItems(rows.map { it.label }.toTypedArray()) { _, which ->
                         assignSlot(index, rows[which].packageName)
                     }
-                    .show()
+                    .create().also { it.hideOemBarIfNeeded(context); it.show() }
             }
         }
     }

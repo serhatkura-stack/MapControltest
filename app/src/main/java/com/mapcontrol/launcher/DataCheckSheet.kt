@@ -74,7 +74,7 @@ class DataCheckSheet(private val activity: Activity) {
         if (dialog?.isShowing == true) return
         rows.clear()
         signalRows.clear()
-        dialog = showLauncherSheet(activity, R.string.launcher_data_check, SHEET_WIDTH_DP) { d -> build(d) }.apply {
+        dialog = showLauncherSheet(activity, R.string.launcher_data_check, SHEET_WIDTH_DP, fullScreen = true) { d -> build(d) }.apply {
             setOnDismissListener {
                 visible = false
                 main.removeCallbacksAndMessages(null)
@@ -138,8 +138,7 @@ class DataCheckSheet(private val activity: Activity) {
             }
         }
         val scroll = ScrollView(activity).apply { addView(list) }
-        val maxH = activity.resources.displayMetrics.heightPixels - activity.dp(LIST_RESERVED_DP)
-        addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxH))
+        addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         addView(gap(activity, 12, vertical = true))
         addView(LinearLayout(activity).apply {
@@ -323,7 +322,6 @@ class DataCheckSheet(private val activity: Activity) {
         private const val POLL_MS = 1_000L
         private const val SHEET_WIDTH_DP = 1100
         /** Başlık, ipucu, gösterge, düğme ve iç boşluk için ayrılan yükseklik; kalanı kaydırılan liste. */
-        private const val LIST_RESERVED_DP = 330
         private const val BodySp = 17f
         private const val LabelSp = 15f
         private const val SubSp = 13f

@@ -11,7 +11,7 @@
     <string name="launcher_sunshade_opening">Opening</string>
     <string name="launcher_sunshade_closing">Closing</string>
     <string name="launcher_sunshade_open">Open</string>
-    <string name="launcher_sunshade_partial">Stopped</string>
+    <string name="launcher_sunshade_partial">Half open / stopped</string>
     <string name="launcher_read_only_comfort">Test build: change it from the car</string>
     <string name="launcher_comfort_pending">Will open after the car test</string>
 </resources>

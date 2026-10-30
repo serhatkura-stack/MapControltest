@@ -241,7 +241,7 @@ public final class VehicleMetricsSnapshot {
     }
 
     /**
-     * Güneşlik açık mı. Araçta ölçülen değerler: 1 kapalı, 2 açılıyor, 4 kapanıyor, 5 tam açık, 6 arada durdu.
+     * Güneşlik açık mı. Araçta ölçülen değerler: 1 kapalı, 2 açılıyor, 3 yarıda durdu, 4 kapanıyor (5/6 diğer araçlarda).
      * Kapalı (1) dışındaki her geçerli değer açık sayılır; 0 (sinyal yok) ve geçersiz açık sayılmaz.
      */
     public boolean isSunshadeOpen() {

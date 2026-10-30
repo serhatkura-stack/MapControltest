@@ -85,9 +85,9 @@ class DriveLayoutTest {
         assertEquals(LayoutMode.PARK, p.update(6000, false, false, true, immediatePark = true))
     }
 
-    @Test fun signalsUnknownUntilMeasured() {
-        assertNull(DriveSignals.PARK_GEAR_VALUE)
-        assertNull(DriveSignals.HANDBRAKE_ON_VALUE)
+    @Test fun signalsMeasuredOnCar() {
+        assertEquals(1, DriveSignals.PARK_GEAR_VALUE)
+        assertEquals(1, DriveSignals.HANDBRAKE_ON_VALUE)
     }
 
     @Test fun layoutKeysPerProfileAndMode() {

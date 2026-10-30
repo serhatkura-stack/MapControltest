@@ -151,8 +151,23 @@ internal object DataCheckTable {
         }
     }
 
-    /** Tavan perdesi okuma (ComfortPlan): 1 kapalı, 2 açılıyor, 4 kapanıyor, 5 açık, 6 yarıda. */
-    val sunshade = labels(1 to "Kapalı", 2 to "Açılıyor", 4 to "Kapanıyor", 5 to "Açık", 6 to "Yarıda")
+    /** Tavan perdesi (araçta ölçüldü): 1 kapalı, 2 açılıyor, 3 yarı açık / durdu, 4 kapanıyor; 5/6 diğer araçlar. */
+    val sunshade = labels(1 to "Kapalı", 2 to "Açılıyor", 3 to "Yarı açık / Durdu", 4 to "Kapanıyor", 5 to "Açık", 6 to "Yarı açık / Durdu")
+
+    /** Kilit (IVI_LOCK 169): 1 açık, 0 kilitli. */
+    val lock = labels(0 to "Kilitli", 1 to "Açık")
+
+    /** Vites (ReadOnly 26): P=1, R=2, N=3, D=5. */
+    val gear = labels(1 to "P", 2 to "R", 3 to "N", 5 to "D")
+
+    /** El freni (ReadOnly 75): 1 çekili, 2 bırakılıyor, 0 inik, 3 çekiliyor. */
+    val handbrake = labels(1 to "Çekili", 2 to "Bırakılıyor", 0 to "İnik", 3 to "Çekiliyor")
+
+    /** Kablosuz şarj (CarSetting 44): 0 pad boş, 1 telefon pedde. */
+    val wirelessCharge = labels(0 to "Şarj pedi boş", 1 to "Telefon şarjda")
+
+    /** Cam (CarSetting 100..): 2 kapalı, diğerleri açık / hareket. */
+    val window: (Int) -> String? = { v -> if (v == 2) "Kapalı" else "Açık ($v)" }
 
     // ---- Tablo ----
 
@@ -163,7 +178,7 @@ internal object DataCheckTable {
         val car = "Araç kartı"
         s(car, "Menzil", RO, ReadOnlyID.ID_ENDURANCE_KM, num(0..2000, "km"))
         s(car, "Yakıt", RO, ReadOnlyID.ID_FUEL_PERCENT, fuel)
-        s(car, "Kilit (IVI_LOCK)", SET, CarSettingID.ID_CAR_IVI_LOCK, unverified)
+        s(car, "Kilit (IVI_LOCK)", SET, CarSettingID.ID_CAR_IVI_LOCK, lock)
         s(car, "Kapı sol ön", RO, ReadOnlyID.ID_DRIVE_DOOR_STATE, openClosed)
         s(car, "Kapı sağ ön", RO, ReadOnlyID.ID_PASSENGER_DOOR_STATE, openClosed)
         s(car, "Kapı sol arka", RO, ReadOnlyID.ID_LFFT_BEHIND_DOOR_STATE, openClosed)
@@ -206,15 +221,15 @@ internal object DataCheckTable {
         val climate = "Klima"
         s(climate, "Sıcaklık sürücü", HVAC, HvacID.ID_AC_TEMPERATURE_DRIVER, climateTemp)
         s(climate, "Sıcaklık yolcu", HVAC, HvacID.ID_AC_TEMPERATURE_COPILOT, climateTemp)
-        s(climate, "Fan kademesi", HVAC, HvacID.ID_AC_BLOW_SPEED_LEVEL, num(0..9))
+        s(climate, "Fan kademesi", HVAC, HvacID.ID_AC_BLOW_SPEED_LEVEL, num(0..9)) // TODO: fan en çok 10 olabilir (max ön buğu çözmede 10 okundu)
         s(climate, "A/C durumu", HVAC, HvacID.ID_AC_STATE, unverified)
 
         s("Tavan perdesi", "Perde", SET, CarSettingID.ID_CAR_SUNSHADE, sunshade)
 
         val defog = "Buğu"
         s(defog, "Ön cam ısıtma", HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT, unverified)
-        s(defog, "Maks. ön buğu çözme", HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, unverified)
-        s(defog, "Arka buğu çözme", HVAC, HvacID.ID_AC_REAR_DEFROST, unverified)
+        s(defog, "Maks. ön buğu çözme", HVAC, HvacID.ID_AC_MAX_FRONT_DEFOREST, onOff)
+        s(defog, "Arka buğu çözme", HVAC, HvacID.ID_AC_REAR_DEFROST, onOff)
         s(defog, "Arka cam ısıtma", SET, CarSettingID.ID_CAR_REAR_WINDOW_HEAT, unverified)
 
         s("Direksiyon ısıtma", "Direksiyon ısıtma", SET, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, unverified)
@@ -227,18 +242,18 @@ internal object DataCheckTable {
 
         val phone = "Telefon"
         s(phone, "Telefon unutuldu", SET, CarSettingID.ID_CAR_PHONE_FORGOT, unverified)
-        s(phone, "Kablosuz şarj durumu", SET, CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE, unverified)
+        s(phone, "Kablosuz şarj durumu", SET, CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE, wirelessCharge)
 
         val body = "Gövde"
-        s(body, "Cam sol ön", SET, CarSettingID.ID_CAR_FL_WINDOW, unverified)
-        s(body, "Cam sağ ön", SET, CarSettingID.ID_CAR_FR_WINDOW, unverified)
-        s(body, "Cam sol arka", SET, CarSettingID.ID_CAR_RL_WINDOW, unverified)
-        s(body, "Cam sağ arka", SET, CarSettingID.ID_CAR_RR_WINDOW, unverified)
+        s(body, "Cam sol ön", SET, CarSettingID.ID_CAR_FL_WINDOW, window)
+        s(body, "Cam sağ ön", SET, CarSettingID.ID_CAR_FR_WINDOW, window)
+        s(body, "Cam sol arka", SET, CarSettingID.ID_CAR_RL_WINDOW, window)
+        s(body, "Cam sağ arka", SET, CarSettingID.ID_CAR_RR_WINDOW, window)
         s(body, "Kaput", RO, ReadOnlyID.ID_HOOD_STATE, openClosed)
-        s(body, "El freni", RO, ReadOnlyID.ID_HANDBRAKE_STATE, labels(0 to "Serbest", 1 to "Çekili"))
+        s(body, "El freni", RO, ReadOnlyID.ID_HANDBRAKE_STATE, handbrake)
         s(body, "Yakıt kapağı", SET, CarSettingID.ID_FUEL_FILLER_CAP, unverified)
 
-        s("Vites", "Vites", RO, ReadOnlyID.ID_GEARBOX_STATE, unverified)
+        s("Vites", "Vites", RO, ReadOnlyID.ID_GEARBOX_STATE, gear)
     }
 
     /** Grup sırası, tablodaki ilk görünüşe göre. */

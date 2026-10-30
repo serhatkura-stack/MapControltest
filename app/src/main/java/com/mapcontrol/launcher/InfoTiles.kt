@@ -386,7 +386,7 @@ class AppShortcutTile(
                         prefs.edit().putString(tileId, rows[which].packageName).apply()
                         refresh()
                     }
-                    .show()
+                    .create().also { it.hideOemBarIfNeeded(context); it.show() }
             }
         }
     }

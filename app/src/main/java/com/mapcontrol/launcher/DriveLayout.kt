@@ -88,11 +88,11 @@ object DriveLayoutPrefs {
  * [DriveLayoutPolicy.STILL_FALLBACK_MS] yedeği çalışır.
  */
 internal object DriveSignals {
-    /** ReadOnly ID_GEARBOX_STATE (26) değeri: vites P. Araçta ölçülecek. */
-    val PARK_GEAR_VALUE: Int? = null
+    /** ReadOnly ID_GEARBOX_STATE (26) değeri: P=1, R=2, N=3, D=5 (araçta ölçüldü). */
+    val PARK_GEAR_VALUE: Int? = 1
 
-    /** ReadOnly ID_HANDBRAKE_STATE (75) değeri: el freni çekili. Araçta ölçülecek. */
-    val HANDBRAKE_ON_VALUE: Int? = null
+    /** ReadOnly ID_HANDBRAKE_STATE (75) değeri: 1 çekili, 2 bırakılıyor, 0 inik, 3 çekiliyor (araçta ölçüldü). */
+    val HANDBRAKE_ON_VALUE: Int? = 1
 
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
     private val io = Executors.newSingleThreadExecutor()

@@ -24,7 +24,7 @@ public class SunshadeStateTest {
 
     @Test
     public void everyOtherMeasuredValueIsOpen() {
-        for (int v : new int[] {2, 4, 5, 6}) {
+        for (int v : new int[] {2, 3, 4, 5, 6}) {
             assertTrue("deger " + v, withSunshade(v).isSunshadeOpen());
         }
     }

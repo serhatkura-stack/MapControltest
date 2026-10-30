@@ -12,10 +12,10 @@ class ComfortMathTest {
         assertEquals(SunshadeState.CLOSED, ComfortMath.decodeSunshade(1))
         assertEquals(SunshadeState.OPENING, ComfortMath.decodeSunshade(2))
         assertEquals(SunshadeState.CLOSING, ComfortMath.decodeSunshade(4))
+        assertEquals(SunshadeState.PARTIAL, ComfortMath.decodeSunshade(3))
         assertEquals(SunshadeState.OPEN, ComfortMath.decodeSunshade(5))
         assertEquals(SunshadeState.PARTIAL, ComfortMath.decodeSunshade(6))
         assertEquals(SunshadeState.UNKNOWN, ComfortMath.decodeSunshade(0))
-        assertEquals(SunshadeState.UNKNOWN, ComfortMath.decodeSunshade(3))
         assertEquals(SunshadeState.UNKNOWN, ComfortMath.decodeSunshade(null))
         assertEquals(0f, SunshadeState.CLOSED.openFraction)
         assertEquals(1f, SunshadeState.OPEN.openFraction)
@@ -25,14 +25,12 @@ class ComfortMathTest {
     }
 
     @Test fun defrostAndSteerDecoding() {
-        assertEquals(true, ComfortMath.decodeFront(1, 0))
-        assertEquals(true, ComfortMath.decodeFront(0, 1))
-        assertEquals(false, ComfortMath.decodeFront(0, 0))
-        assertEquals(true, ComfortMath.decodeFront(null, 1))
-        assertNull(ComfortMath.decodeFront(null, null))
-        assertEquals(true, ComfortMath.decodeRear(0, 1))
-        assertEquals(false, ComfortMath.decodeRear(0, null))
-        assertNull(ComfortMath.decodeRear(null, null))
+        assertEquals(true, ComfortMath.decodeFront(1))
+        assertEquals(false, ComfortMath.decodeFront(0))
+        assertNull(ComfortMath.decodeFront(null))
+        assertEquals(true, ComfortMath.decodeRear(1))
+        assertEquals(false, ComfortMath.decodeRear(0))
+        assertNull(ComfortMath.decodeRear(null))
         assertEquals(true, ComfortMath.decodeSteer(1))
         assertEquals(false, ComfortMath.decodeSteer(0))
         assertNull(ComfortMath.decodeSteer(null))
@@ -55,7 +53,7 @@ class ComfortMathTest {
 
     @Test fun commandsCarryFrostNavValues() {
         val on = ComfortMath.defrostCommands(front = true, on = true)
-        assertEquals(listOf(65, 24), on.map { it.id })
+        assertEquals(listOf(24, 65), on.map { it.id })
         assertTrue(on.all { it.value == 1 })
         val rearOff = ComfortMath.defrostCommands(front = false, on = false)
         assertEquals(listOf(80, 159), rearOff.map { it.id })
@@ -70,7 +68,7 @@ class ComfortMathTest {
         assertEquals(2000L, ComfortMath.stopDelayMs(1f, 0.75f, 8000L))
         assertEquals(0L, ComfortMath.stopDelayMs(0.3f, 0.3f, 8000L))
         assertEquals(8000L, ComfortMath.stopDelayMs(-1f, 2f, 8000L))
-        assertEquals(8000L, ComfortWriter.SUNSHADE_TRAVEL_MS)
+        assertNull(ComfortWriter.SUNSHADE_TRAVEL_MS)
     }
 
     @Test fun planWithoutStopValueOnlyFullOpenClose() {
@@ -103,6 +101,18 @@ class ComfortMathTest {
         assertEquals(0f, ComfortMath.releaseTarget(0f, 0.9f, partialAllowed = false), 0f)
         // Ara konum izinliyse parmağın bıraktığı yer.
         assertEquals(0.4f, ComfortMath.releaseTarget(1f, 0.6f, partialAllowed = true), 1e-6f)
+    }
+
+    @Test fun tapStepsLikeTheCar() {
+        assertEquals(0.5f, ComfortMath.tapStep(SunshadeState.CLOSED, null))
+        assertEquals(1f, ComfortMath.tapStep(SunshadeState.PARTIAL, null))
+        assertEquals(1f, ComfortMath.tapStep(SunshadeState.PARTIAL, true))
+        assertEquals(0f, ComfortMath.tapStep(SunshadeState.PARTIAL, false))
+        assertEquals(0.5f, ComfortMath.tapStep(SunshadeState.OPEN, null))
+        assertNull(ComfortMath.tapStep(SunshadeState.UNKNOWN, null))
+        assertEquals(listOf(SunshadeStep(2, 0)), ComfortMath.stepPlan(0f, 0.5f))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(1f, 0.5f))
+        assertEquals(listOf(SunshadeStep(1, 0)), ComfortMath.stepPlan(0.5f, 0f))
     }
 
     @Test fun tapToggles() {

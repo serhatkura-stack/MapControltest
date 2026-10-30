@@ -494,7 +494,7 @@ internal class BatteryTile(context: Context) :
 /**
  * Telefon hatırlatıcı: kablosuz şarj padinin durumu ("Telefon şarjda" / "Şarj pedi boş"). Pedde unutulan telefon
  * bayrağı (PHONE_FORGOT_ON_WIRLESS_BOARD) kalkarsa sakin ALERT zeminiyle "Telefonunu al". Araçta yalnızca pedin
- * boş (0) durumu görüldü; şarj/unutma değerleri doğrulanmadı.
+ * boş (0) ve telefon pedde (1) durumları araçta ölçüldü (CarSetting 44).
  */
 internal class PhoneTile(context: Context) :
     ExtraTile(context, R.drawable.ic_mdi_cellphone, R.string.launcher_widget_phone, narrowValueSp = 30f) {

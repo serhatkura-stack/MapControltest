@@ -35,9 +35,14 @@ const val NAVIGATION_CARD_ENABLED = true
 /** Navigasyon kartı varsayılan düzenlere konur mu? Hayır: yalnızca "Widget ekle" ile eklenir. */
 const val NAVIGATION_IN_DEFAULT_LAYOUT = false
 
+/** Direksiyon ısıtma bu araçta yok ("TR pakette yok"): seçiciden gizlenir, kayıtlı düzenler yine yüklenir. */
+const val STEERING_HEAT_AVAILABLE = false
+
 /** "Widget ekle" listesinde gösterilecek türler (hazır olmayanlar elenir). */
 fun addableWidgetTypes(): List<WidgetType> =
-    WidgetType.values().filter { NAVIGATION_CARD_ENABLED || it != WidgetType.NAVIGATION }
+    WidgetType.values().filter {
+        (NAVIGATION_CARD_ENABLED || it != WidgetType.NAVIGATION) && (STEERING_HEAT_AVAILABLE || it != WidgetType.STEERING_HEAT)
+    }
 
 /** Düzende şu an bulunan widget türleri. */
 fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it.type }.toSet()
