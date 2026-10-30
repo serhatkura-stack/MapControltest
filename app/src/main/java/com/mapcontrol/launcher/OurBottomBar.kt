@@ -6,6 +6,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Outline
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
@@ -14,6 +16,7 @@ import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -38,13 +41,13 @@ internal data class ClimateReadout(
 
 /**
  * Launcher'ın kendi alt çubuğu ("Alt çubuk: Bizimki"): OEM gezinme çubuğu gizlenirken yerini alır.
- * Solda ana ekran · uygulamalar · araç ve (varsa) çalan parça, ortada sürücü sıcaklığı · fan · yolcu sıcaklığı
- * kapsülü ([ClimateControl]: sürükle/dokun/uzun bas), sağda ayarlar · telefon. Klima yazması araçta doğrulanana
+ * Çıplak bir satır; her bölüm kendi kart yüzeyi: ana ekran · uygulamalar · araç (kare düğmeler), medya (kapak,
+ * başlık, sanatçı, oynat/duraklat; oturum yokken "Müzik"), sürücü sıcaklığı · fan · yolcu sıcaklığı
+ * ([ClimateControl]: sürükle/dokun/uzun bas), ayarlar · telefon (kare düğmeler). Klima yazması araçta doğrulanana
  * kadar kapalı ([ClimateWriter.CLIMATE_WRITE_VERIFIED]): değer kısa süre değişir, sonra araçtakine döner.
  * Okuma 3 sn'de bir, yalnızca ekran görünürken.
  *
- * Ekstra: çalan parçanın küçük kontrolü (başlık + oynat/duraklat). OEM çubuğunda yok, ana ekrandaki medya
- * kartı kaldırıldıysa da müziği tek dokunuşla yönetmeyi sağlar; oturum yokken hiç yer kaplamaz.
+ * Medya bölümü OEM çubuğunda yok; ana ekrandaki medya kartı kaldırıldıysa da müziği tek dokunuşla yönetmeyi sağlar.
  */
 class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
@@ -54,46 +57,95 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     private var startup: LauncherStartup.Deferred? = null
     private var readout = ClimateReadout()
 
-    // --- Medya (ekstra) ---
+    // --- Medya ---
     private val media = LauncherMediaController(context)
     private var listening = false
     private val mediaListener = LauncherMediaController.Listener { state -> if (!LauncherDemo.enabled) bindMedia(state) }
-    private val playIcon = icon(context, R.drawable.ic_mdi_play, MEDIA_ICON_DP)
-    private val mediaTitle = text(context, LauncherTheme.BODY_SP, medium = true)
-    private val mediaMini: View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+    private val playIcon = icon(context, R.drawable.ic_mdi_play, MEDIA_ICON_DP, LauncherTheme.TEXT)
+    private val mediaTitle = text(context, LauncherTheme.BODY_SP, bold = true)
+    private val mediaArtist = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
+    private val artImage = ImageView(context).apply {
+        scaleType = ImageView.ScaleType.CENTER_CROP
         visibility = View.GONE
-        val playButton = FrameLayout(context).apply {
-            background = oval(LauncherTheme.CONTROL)
-            contentDescription = context.getString(R.string.launcher_media_play)
-            isClickable = true
-            isFocusable = true
-            addView(playIcon, FrameLayout.LayoutParams(context.dp(MEDIA_ICON_DP), context.dp(MEDIA_ICON_DP), Gravity.CENTER))
-            setOnClickListener { media.playPause() }
-            pressFeedback()
-        }
-        addView(playButton, LinearLayout.LayoutParams(context.dp(BUTTON_DP), context.dp(BUTTON_DP)))
-        addView(gap(context, LauncherTheme.GAP_SM_DP))
-        addView(mediaTitle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    private val artPlaceholder = icon(context, R.drawable.ic_mdi_music_note, ART_ICON_DP, LauncherTheme.TEXT_SECONDARY)
+    private var sourcePackage: String? = null
+    private var shownArt: Bitmap? = null
+    private val artIo = LauncherIo.serial()
+
+    private val mediaSurface: View = surface().apply {
+        isClickable = true
+        isFocusable = true
+        contentDescription = context.getString(R.string.launcher_bar_music)
+        val pad = context.dp(LauncherTheme.CARD_PAD_COMPACT_DP)
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(pad, pad, pad, pad)
+            val art = FrameLayout(context).apply {
+                background = rounded(context, LauncherTheme.CONTROL, ART_RADIUS_DP)
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, outline: Outline) {
+                        outline.setRoundRect(0, 0, v.width, v.height, context.dpF(ART_RADIUS_DP))
+                    }
+                }
+                clipToOutline = true
+                addView(artImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                addView(artPlaceholder, FrameLayout.LayoutParams(context.dp(ART_ICON_DP), context.dp(ART_ICON_DP), Gravity.CENTER))
+            }
+            addView(art, LinearLayout.LayoutParams(context.dp(ART_DP), context.dp(ART_DP)))
+            addView(gap(context, LauncherTheme.GAP_M_DP))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(mediaTitle)
+                addView(gap(context, 4, vertical = true))
+                addView(mediaArtist)
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(gap(context, LauncherTheme.GAP_S_DP))
+            addView(FrameLayout(context).apply {
+                background = oval(LauncherTheme.CONTROL)
+                contentDescription = context.getString(R.string.launcher_media_play)
+                isClickable = true
+                isFocusable = true
+                addView(playIcon, FrameLayout.LayoutParams(context.dp(MEDIA_ICON_DP), context.dp(MEDIA_ICON_DP), Gravity.CENTER))
+                setOnClickListener { media.playPause() }
+                pressFeedback()
+            }, LinearLayout.LayoutParams(context.dp(PLAY_DP), context.dp(PLAY_DP)))
+        }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        setOnClickListener { openMediaSource() }
+        pressFeedback()
     }
 
     // --- Klima ---
     private val climateControl = ClimateControl(context, io, main)
-    private val climate: View = climateControl.view
 
-    override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_COMPACT_DP).apply {
-        // Kart köşe yarıçapı ve belirteçler diğer kartlarla aynı; içerik üç bölgeye ayrılır.
-        gravity = Gravity.CENTER_VERTICAL
-        val frame = FrameLayout(context)
-        frame.addView(buildLeft(), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START))
-        // Kapsül tam ortada: sol ve sağ grupların genişliği farklı olsa da ortalı kalır.
-        frame.addView(climate, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-        frame.addView(buildRight(), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END))
-        addView(frame, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
+    /**
+     * Çıplak satır: dış kart yok. Her bölüm kendi kart yüzeyi (ızgara kutucuklarıyla aynı köşe/renk/kenar),
+     * aralar ızgara boşluğu kadar, uçlar ızgaranın dış kenarıyla hizalı (kök dolgusu). Genişlik ağırlıkla dolar.
+     */
+    override val view: View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        val narrow = context.resources.displayMetrics.widthPixels < context.dp(NARROW_DP)
+        var first = true
+        fun add(v: View, lp: LinearLayout.LayoutParams) {
+            if (!first) lp.marginStart = context.dp(LauncherGrid.GRID_GAP_DP)
+            first = false
+            addView(v, lp)
+        }
+        fun square() = LinearLayout.LayoutParams(context.dp(HEIGHT_DP), LinearLayout.LayoutParams.MATCH_PARENT)
+        // Ana ekran: zaten ana ekrandayız; dokunuş bir şey yapmaz, vurgu "buradasın" der.
+        add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { }, square())
+        add(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() }, square())
+        add(navButton(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, square())
+        // Dar ekranda önce medya düşer.
+        if (!narrow) add(mediaSurface, weightLp(W_MEDIA))
+        add(climateControl.driverView, weightLp(W_TEMP))
+        add(climateControl.fanView, weightLp(W_FAN))
+        add(climateControl.passengerView, weightLp(W_TEMP))
+        add(navButton(R.drawable.ic_mdi_cog, R.string.launcher_bar_settings) { openAndroidSettings() }, square())
+        add(navButton(R.drawable.ic_mdi_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, square())
     }
 
     override fun onVisible() {
@@ -140,39 +192,24 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
     // --- Yerleşim ---
 
-    private fun buildLeft(): View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        // Ana ekran: zaten ana ekrandayız; dokunuş bir şey yapmaz, vurgu "buradasın" der.
-        addView(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { })
-        addView(gap(context, LauncherTheme.GAP_S_DP))
-        addView(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() })
-        addView(gap(context, LauncherTheme.GAP_S_DP))
-        addView(navButton(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) })
-        addView(gap(context, LauncherTheme.GAP_L_DP))
-        addView(mediaMini, LinearLayout.LayoutParams(context.dp(MEDIA_WIDTH_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
-    }
+    /** Izgara kutucuğuyla aynı yüzey: kart rengi, 20dp köşe, gündüz ince kenar. */
+    private fun surface(): FrameLayout = FrameLayout(context).apply { background = cardSurface(context) }
 
-    private fun buildRight(): View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        addView(navButton(R.drawable.ic_mdi_cog, R.string.launcher_bar_settings) { openAndroidSettings() })
-        addView(gap(context, LauncherTheme.GAP_S_DP))
-        addView(navButton(R.drawable.ic_mdi_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) })
-    }
-
-    /** Şeffaf kare dokunma hedefi (72dp); etkin olan vurgu renginde dolu. */
+    /** Kare düğme yüzeyi (çubuk yüksekliği); etkin olan vurgu renginde dolu, beyaz ikonlu. */
     private fun navButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
         FrameLayout(context).apply {
-            background = if (active) rounded(context, LauncherTheme.ACCENT, NAV_RADIUS_DP) else rounded(context, LauncherTheme.CONTROL, NAV_RADIUS_DP)
+            background = if (active) {
+                rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), LauncherTheme.CARD_RADIUS_DP)
+            } else {
+                cardSurface(context)
+            }
             contentDescription = context.getString(labelRes)
             isClickable = true
             isFocusable = true
             addView(
-                icon(context, iconRes, LauncherTheme.ICON_M_DP, if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT),
-                FrameLayout.LayoutParams(context.dp(LauncherTheme.ICON_M_DP), context.dp(LauncherTheme.ICON_M_DP), Gravity.CENTER),
+                icon(context, iconRes, NAV_ICON_DP, if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT),
+                FrameLayout.LayoutParams(context.dp(NAV_ICON_DP), context.dp(NAV_ICON_DP), Gravity.CENTER),
             )
-            layoutParams = LinearLayout.LayoutParams(context.dp(NAV_DP), context.dp(NAV_DP))
             setOnClickListener { onClick() }
             pressFeedback()
         }
@@ -182,11 +219,54 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     private fun bindClimate(r: ClimateReadout) = climateControl.bind(r)
 
     private fun bindMedia(state: MediaState) {
-        val show = state.sessionAvailable && !state.title.isNullOrBlank()
-        mediaMini.visibility = if (show) View.VISIBLE else View.GONE
-        if (!show) return
-        mediaTitle.text = state.title
-        playIcon.setImageResource(if (state.playing) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play)
+        val session = state.sessionAvailable && !state.title.isNullOrBlank()
+        sourcePackage = if (session) state.source else sourcePackage
+        mediaTitle.setTextSmooth(if (session) state.title else context.getString(R.string.launcher_bar_music))
+        mediaTitle.setTextColor(if (session) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
+        mediaArtist.text = if (session) state.artist.orEmpty() else ""
+        mediaArtist.visibility = if (session && !state.artist.isNullOrBlank()) View.VISIBLE else View.GONE
+        playIcon.setImageResource(if (session && state.playing) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play)
+        bindArt(if (session) state.artwork else null)
+    }
+
+    /** Kapak 72dp'ye arka planda küçültülür; aynı bitmap yeniden işlenmez. */
+    private fun bindArt(bitmap: Bitmap?) {
+        if (bitmap === shownArt) return
+        shownArt = bitmap
+        if (bitmap == null) {
+            artImage.visibility = View.GONE
+            artImage.setImageDrawable(null)
+            artPlaceholder.visibility = View.VISIBLE
+            return
+        }
+        artImage.setImageDrawable(null)
+        val limit = context.dp(ART_DP) * 2
+        artIo.runSafely {
+            val scale = limit.toFloat() / maxOf(bitmap.width, bitmap.height)
+            val scaled = if (scale >= 1f) bitmap else
+                Bitmap.createScaledBitmap(bitmap, maxOf(1, (bitmap.width * scale).toInt()), maxOf(1, (bitmap.height * scale).toInt()), true)
+            main.post {
+                if (shownArt !== bitmap) return@post
+                artImage.setImageBitmap(scaled)
+                artImage.visibility = View.VISIBLE
+                artPlaceholder.visibility = View.GONE
+            }
+        }
+    }
+
+    /** Medya yüzeyine dokunma: çalan parçanın uygulaması; bilinmiyorsa varsayılan müzik uygulaması. */
+    private fun openMediaSource() {
+        val pkg = sourcePackage
+        if (!pkg.isNullOrBlank()) {
+            openPackage(pkg)
+            return
+        }
+        try {
+            activity.startActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            // Müzik uygulaması yok: yapılacak bir şey yok.
+        }
     }
 
     // --- Okuma ---
@@ -307,11 +387,19 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         private const val POLL_MS = 3_000L
         private const val DASH = "—"
 
-        private const val NAV_DP = 72
-        private const val NAV_RADIUS_DP = 18f
-        private const val BUTTON_DP = 56
-        private const val MEDIA_ICON_DP = 28
-        private const val MEDIA_WIDTH_DP = 340
+        private const val NAV_ICON_DP = 36
+        private const val MEDIA_ICON_DP = 32
+        private const val PLAY_DP = 64
+        private const val ART_DP = 72
+        private const val ART_ICON_DP = 36
+        private const val ART_RADIUS_DP = 16f
+
+        /** Bölüm ağırlıkları (kare düğmeler sabit): medya geniş, sıcaklıklar eşit, fan biraz dar. */
+        private const val W_MEDIA = 2.2f
+        private const val W_TEMP = 1.2f
+        private const val W_FAN = 1.0f
+        /** Bu genişliğin (dp) altında medya bölümü bırakılır. */
+        private const val NARROW_DP = 1500
 
         private const val APPS_SHEET_WIDTH_DP = 1280
         private const val APPS_HEIGHT_DP = 440

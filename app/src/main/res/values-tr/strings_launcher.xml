@@ -150,6 +150,9 @@
     <string name="launcher_climate_driver">Sürücü sıcaklığı</string>
     <string name="launcher_climate_passenger">Yolcu sıcaklığı</string>
     <string name="launcher_climate_fan">Fan kademesi</string>
+    <string name="launcher_climate_driver_short">Sürücü</string>
+    <string name="launcher_climate_passenger_short">Yolcu</string>
+    <string name="launcher_bar_music">Müzik</string>
     <string name="launcher_climate_increase">Artır</string>
     <string name="launcher_climate_decrease">Azalt</string>
 </resources>

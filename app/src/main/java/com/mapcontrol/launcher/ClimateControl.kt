@@ -4,6 +4,11 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.os.Handler
 import android.view.Gravity
 import android.view.MotionEvent
@@ -21,10 +26,11 @@ import java.util.concurrent.Executor
 import kotlin.math.abs
 
 /**
- * "Bizimki" alt çubuğunun klima kapsülü: sürücü sıcaklığı | fan | yolcu sıcaklığı. Üç hücre de etkileşimlidir:
+ * "Bizimki" alt çubuğunun klima bölümleri: sürücü sıcaklığı, fan, yolcu sıcaklığı. Her biri ayrı bir kart yüzeyidir
+ * (çubuk üçünü ayrı yerleştirir) ve etkileşimlidir:
  *  - sıcaklık: dikey sürükleme (her 40dp = 0,5 °C, yukarı = sıcak), dokunuşta sağ yarı +0,5 / sol yarı −0,5,
  *    uzun basış diğer tarafı bu değere eşitler;
- *  - fan: yatay sürükleme 1..7, dokunuş kapat/aç, altında ince doluluk çubuğu.
+ *  - fan: yatay sürükleme 1..7, dokunuş kapat/aç, altında ince 7 noktalı kademe göstergesi.
  *
  * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
  * aracın gerçek değerine döner ve sakin bir bilgi mesajı çıkar; araca hiçbir şey gitmez. Sürekli animasyon yok;
@@ -44,22 +50,14 @@ internal class ClimateControl(
     private var toast: Toast? = null
 
     private val bubble = ValueBubble()
-    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver)
-    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger)
+    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short)
+    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short)
     private val fan = FanCell()
 
-    /** Kapsülün kendisi. */
-    val view: View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        background = rounded(context, LauncherTheme.CONTROL, CAPSULE_RADIUS_DP)
-        contentDescription = context.getString(R.string.launcher_bar_climate)
-        addView(driver.view, LinearLayout.LayoutParams(context.dp(TEMP_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT))
-        addView(divider())
-        addView(fan.view, LinearLayout.LayoutParams(context.dp(FAN_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT))
-        addView(divider())
-        addView(passenger.view, LinearLayout.LayoutParams(context.dp(TEMP_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT))
-    }
+    /** Ayrı yüzeyler; yerleşimi ([OurBottomBar]) belirler. */
+    val driverView: View get() = driver.view
+    val fanView: View get() = fan.view
+    val passengerView: View get() = passenger.view
 
     private val revert = Runnable {
         pendingDriver = null
@@ -81,11 +79,6 @@ internal class ClimateControl(
         toast?.cancel()
         dragging = false
         revert.run()
-    }
-
-    private fun divider(): View = View(context).apply {
-        setBackgroundColor(LauncherTheme.TRACK)
-        layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(DIVIDER_DP))
     }
 
     // --- Durum ---
@@ -136,19 +129,35 @@ internal class ClimateControl(
 
     // --- Sıcaklık hücresi ---
 
-    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int) {
+    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
         private val label = text(context, TEMP_SP, medium = true).apply { gravity = Gravity.CENTER }
         private val tint = GradientDrawable().apply {
-            cornerRadius = context.dpF(CAPSULE_RADIUS_DP)
+            cornerRadius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
             alpha = 0
         }
         private var tintAnim: ValueAnimator? = null
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = tint
+            background = LayerDrawable(arrayOf(cardSurface(context), tint))
             isClickable = true
             isFocusable = true
-            addView(label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                    text = context.getString(shortRes)
+                    gravity = Gravity.CENTER
+                })
+                addView(gap(context, 2, vertical = true))
+                addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
+            val chev = context.dp(CHEVRON_DP)
+            val edge = context.dp(CHEVRON_EDGE_DP)
+            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP, LauncherTheme.TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
+                FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
+            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP, LauncherTheme.TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
+                FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
         private var start = 0.0
@@ -188,7 +197,7 @@ internal class ClimateControl(
         }
 
         fun show(c: Double?) {
-            label.setTextSmooth(if (c == null) DASH else format(c))
+            label.setTextSmooth(if (c == null) DASH else styled(c))
             view.contentDescription = context.getString(labelRes) + ", " + (if (c == null) DASH else format(c))
         }
 
@@ -221,7 +230,7 @@ internal class ClimateControl(
                     if (moved) {
                         val steps = ClimateMath.stepsForDrag(dy, context.resources.displayMetrics.density, ClimateMath.TEMP_DRAG_DP_PER_STEP)
                         target = ClimateMath.targetTemp(start, steps)
-                        label.text = format(target)
+                        label.text = styled(target)
                         val color = tintFor(target - start)
                         showTint(color)
                         bubble.show(view, format(target), null, color)
@@ -281,35 +290,41 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, LauncherTheme.BODY_SP, medium = true).apply { gravity = Gravity.CENTER }
-        private val fill = View(context).apply {
-            background = rounded(context, LauncherTheme.ACCENT, FILL_RADIUS_DP)
-            pivotX = 0f
-            scaleX = 0f
+        private val number = text(context, FAN_SP, medium = true).apply { gravity = Gravity.CENTER }
+        private val segments = List(ClimateMath.FAN_MAX) {
+            View(context).apply { background = rounded(context, inactiveSegment(), SEGMENT_RADIUS_DP) }
         }
         private val tint = GradientDrawable().apply {
-            cornerRadius = context.dpF(CAPSULE_RADIUS_DP)
+            cornerRadius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
             setColor(TINT_FAN)
             alpha = 0
         }
         private var tintAnim: ValueAnimator? = null
-        private var level = 0
+        private var level = -1
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = tint
+            background = LayerDrawable(arrayOf(cardSurface(context), tint))
             isClickable = true
             isFocusable = true
             addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(icon(context, R.drawable.ic_mdi_fan, LauncherTheme.ICON_S_DP, LauncherTheme.TEXT_SECONDARY))
-                addView(gap(context, LauncherTheme.GAP_S_DP))
-                addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-            // İnce iz + doluluk: ikonun altında, kademeyi gösterir.
-            val barLp = { FrameLayout.LayoutParams(context.dp(FAN_BAR_DP), context.dp(FAN_BAR_HEIGHT_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = context.dp(FAN_BAR_BOTTOM_DP) } }
-            addView(View(context).apply { background = rounded(context, LauncherTheme.TRACK, FILL_RADIUS_DP) }, barLp())
-            addView(fill, barLp())
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP, LauncherTheme.TEXT_SECONDARY))
+                    addView(gap(context, LauncherTheme.GAP_S_DP))
+                    addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+                addView(gap(context, LauncherTheme.GAP_SM_DP, vertical = true))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    segments.forEachIndexed { i, v ->
+                        if (i > 0) addView(gap(context, SEGMENT_GAP_DP))
+                        addView(v, LinearLayout.LayoutParams(context.dp(SEGMENT_W_DP), context.dp(SEGMENT_H_DP)))
+                    }
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
 
         private var start = 0
@@ -345,11 +360,14 @@ internal class ClimateControl(
             view.contentDescription = context.getString(R.string.launcher_climate_fan) + ", " + (l?.toString() ?: DASH)
         }
 
+        /** Kademe kadar nokta vurgu renginde, kalanı iz renginde; animasyonsuz, yalnızca değişince. */
         private fun setLevel(l: Int) {
-            level = l
-            val s = l.coerceIn(0, ClimateMath.FAN_MAX) / ClimateMath.FAN_MAX.toFloat()
-            fill.animate().cancel()
-            fill.animate().scaleX(s).setDuration(FILL_MS).start()
+            val n = l.coerceIn(0, ClimateMath.FAN_MAX)
+            if (n == level) return
+            level = n
+            segments.forEachIndexed { i, v ->
+                (v.background as GradientDrawable).setColor(if (i < n) LauncherTheme.ACCENT else inactiveSegment())
+            }
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -482,6 +500,18 @@ internal class ClimateControl(
 
     private fun format(c: Double): String = String.format(Locale.US, "%.1f°", c)
 
+    /** Etkin olmayan kademe noktası: ikincil metin renginin soluk hâli; gecede de görünür kalır. */
+    private fun inactiveSegment(): Int = (LauncherTheme.TEXT_SECONDARY and 0x00FFFFFF) or 0x59000000
+
+    /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
+    private fun styled(c: Double): CharSequence {
+        val num = String.format(Locale.US, "%.1f", c)
+        return SpannableStringBuilder(num).append('°').apply {
+            setSpan(RelativeSizeSpan(DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(LauncherTheme.TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
     private fun tintFor(delta: Double): Int = when {
         delta > 0 -> TINT_WARM
         delta < 0 -> TINT_COOL
@@ -490,17 +520,19 @@ internal class ClimateControl(
 
     companion object {
         private const val DASH = "—"
-        private const val TEMP_SP = 32f
+        private const val TEMP_SP = 44f
         private const val BUBBLE_SP = 56f
-        private const val CAPSULE_RADIUS_DP = 22f
-        private const val TEMP_WIDTH_DP = 150
-        private const val FAN_WIDTH_DP = 120
-        private const val FAN_NUMBER_DP = 28
-        private const val DIVIDER_DP = 32
-        private const val FAN_BAR_DP = 56
-        private const val FAN_BAR_HEIGHT_DP = 4
-        private const val FAN_BAR_BOTTOM_DP = 10
-        private const val FILL_RADIUS_DP = 2f
+        private const val DEGREE_SCALE = 0.7f
+        private const val CHEVRON_DP = 28
+        private const val CHEVRON_EDGE_DP = 8
+        private const val CHEVRON_ALPHA = 0.6f
+        private const val FAN_SP = 32f
+        private const val FAN_ICON_DP = 32
+        private const val FAN_NUMBER_DP = 36
+        private const val SEGMENT_W_DP = 18
+        private const val SEGMENT_H_DP = 8
+        private const val SEGMENT_GAP_DP = 6
+        private const val SEGMENT_RADIUS_DP = 4f
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140
         private const val BUBBLE_GAP_DP = 12
@@ -511,7 +543,6 @@ internal class ClimateControl(
         private const val CONFIRM_MS = 4_000L
         private const val SYNC_SHOW_MS = 900L
         private const val TINT_FADE_MS = 200L
-        private const val FILL_MS = 120L
         private const val FAN_DEFAULT_ON = 2
 
         private const val ACTION_INCREASE = 0x1C01
