@@ -107,24 +107,21 @@ internal class AwdTile(private val context: Context) : SizedWidget {
 
     private val main = Handler(Looper.getMainLooper())
     private val flow = AwdFlowView(context)
-    private val title = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
-    private val status = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
-    private val split = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true)
+    private val title = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
+    private val headIcon = icon(context, R.drawable.ic_mdi_car_cog, HEAD_ICON_DP, LauncherTheme.TEXT_SECONDARY)
+    private val status = text(context, STATUS_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
+    private val split = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
 
-    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, LauncherTheme.CARD_PAD_DP).apply {
-        val head = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(status)
-        }
-        addView(head, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        addView(flow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = context.dp(LauncherTheme.GAP_S_DP)
-            bottomMargin = context.dp(LauncherTheme.GAP_S_DP)
-        })
-        addView(split, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    /** Üst satır, ortalı: ikon + "4x4" (ailenin etiket satırı gibi). */
+    private val head = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        addView(headIcon)
+        addView(gap(context, 10))
+        addView(title)
     }
+
+    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, LauncherTheme.CARD_PAD_DP)
 
     override val view: View get() = root
 
@@ -141,7 +138,7 @@ internal class AwdTile(private val context: Context) : SizedWidget {
     init {
         title.text = "4x4"
         split.gravity = Gravity.CENTER_HORIZONTAL
-        status.gravity = Gravity.END
+        status.gravity = Gravity.CENTER_HORIZONTAL
         applySpan(Span(4, 4))
         bind(0)
     }
@@ -150,12 +147,26 @@ internal class AwdTile(private val context: Context) : SizedWidget {
     override fun applySpan(span: Span) {
         compact = span.w < FULL_MIN_COLS || span.h < FULL_MIN_ROWS
         flow.compact = compact
-        // Küçükte başlık satırı sade: "4x4" etiketi ve durum yazısı kalır, yüzde altta.
-        val p = context.dp(if (compact) LauncherTheme.CARD_PAD_COMPACT_DP else LauncherTheme.CARD_PAD_DP)
+        // Dizilim: etiket satırı ortada; büyükte şema ortada, durum ve pay altta; küçükte durum üstte, çubuk ortada, pay altta.
+        val p = context.dp(if (compact) COMPACT_PAD_DP else LauncherTheme.CARD_PAD_DP)
         root.setPadding(p, p, p, p)
-        val sp = if (compact) LauncherTheme.LABEL_SP else LauncherTheme.BODY_SP
-        status.textSize = sp
-        split.textSize = sp
+        root.removeAllViews()
+        val match = LinearLayout.LayoutParams.MATCH_PARENT
+        val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
+        root.addView(head, LinearLayout.LayoutParams(match, wrap))
+        val gapPx = context.dp(LauncherTheme.GAP_S_DP)
+        if (compact) {
+            root.addView(status, LinearLayout.LayoutParams(match, wrap).apply { topMargin = gapPx / 2 })
+            root.addView(flow, LinearLayout.LayoutParams(match, 0, 1f).apply { topMargin = gapPx / 2; bottomMargin = gapPx / 2 })
+            root.addView(split, LinearLayout.LayoutParams(match, wrap))
+        } else {
+            root.addView(flow, LinearLayout.LayoutParams(match, 0, 1f).apply { topMargin = gapPx; bottomMargin = gapPx })
+            root.addView(status, LinearLayout.LayoutParams(match, wrap))
+            root.addView(split, LinearLayout.LayoutParams(match, wrap))
+        }
+        split.textSize = LauncherTheme.LABEL_SP
+        // Büyükte yüzdeler şemanın iki yanında çizilir; alttaki özet satırı yalnızca küçükte.
+        split.visibility = if (compact) View.VISIBLE else View.GONE
         flow.requestLayout()
     }
 
@@ -216,15 +227,19 @@ internal class AwdTile(private val context: Context) : SizedWidget {
     private fun bind(rearPct: Int) {
         rear = rearPct
         flow.setRear(rearPct)
+        flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
         val active = rearPct > 0
         status.setTextSmooth(context.getString(if (active) R.string.launcher_awd_active else R.string.launcher_awd_front))
-        status.setTextColor(if (active) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
+        status.setTextColor(if (active) LauncherTheme.ACCENT else LauncherTheme.TEXT)
         val front = AwdMath.frontPercent(rearPct)
         split.setTextSmooth(context.getString(R.string.launcher_awd_split, front, rearPct))
         root.contentDescription = context.getString(R.string.launcher_awd_split, front, rearPct)
     }
 
     private companion object {
+        const val HEAD_ICON_DP = 28
+        const val STATUS_SP = 28f
+        const val COMPACT_PAD_DP = 12
         const val FULL_MIN_COLS = 4
         const val FULL_MIN_ROWS = 4
         const val POLL_MS = 250L
@@ -245,6 +260,20 @@ internal class AwdFlowView(context: Context) : View(context) {
             field = value
             invalidate()
         }
+
+    /** Ön / Arka kısa adları (yüzde etiketleri için); büyük şemada iki yanda çizilir. */
+    var labels: Pair<String, String> = "" to ""
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
+    private val pctPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        textSize = PCT_SP * context.resources.displayMetrics.scaledDensity
+    }
+    private val capPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = CAP_SP * context.resources.displayMetrics.scaledDensity }
 
     /** Ekran görünürken true; false iken nokta animasyonu durur. */
     var running = false
@@ -354,9 +383,32 @@ internal class AwdFlowView(context: Context) : View(context) {
         axle(c, cx, hubY, frontY, inner, frontShare)
         axle(c, cx, hubY, rearY, inner, rearShare)
 
+        // Yüzde etiketleri: ön aksın solunda, arka aksın sağında (köşegen denge); sığmazsa çizilmez.
+        val gutter = carW * 0.43f + context.dpF(20f)
+        if (cx - gutter > context.dpF(70f)) {
+            val front = (frontShare * 100f).roundToInt()
+            val rearPctV = (rearShare * 100f).roundToInt()
+            sideLabel(c, cx - gutter, frontY, Paint.Align.RIGHT, labels.first, front)
+            sideLabel(c, cx + gutter, rearY, Paint.Align.LEFT, labels.second, rearPctV)
+        }
+
         // Merkez (şanzıman / transfer): vurgu noktası.
         fill.color = LauncherTheme.ACCENT
         c.drawCircle(cx, hubY, context.dpF(7f), fill)
+    }
+
+    /** Küçük ad üstte, büyük yüzde altta; ikisi [y] çevresinde dikey ortalı. */
+    private fun sideLabel(c: Canvas, x: Float, y: Float, align: Paint.Align, name: String, pct: Int) {
+        pctPaint.textAlign = align
+        capPaint.textAlign = align
+        pctPaint.color = LauncherTheme.TEXT
+        capPaint.color = LauncherTheme.TEXT_SECONDARY
+        val pctH = -pctPaint.fontMetrics.ascent * 0.72f
+        val capH = -capPaint.fontMetrics.ascent * 0.8f
+        val total = capH + context.dpF(6f) + pctH
+        val top = y - total / 2f
+        c.drawText(name, x, top + capH, capPaint)
+        c.drawText("%$pct", x, top + total, pctPaint)
     }
 
     private fun wheel(c: Canvas, x: Float, y: Float, w: Float, h: Float, share: Float) {
@@ -410,5 +462,7 @@ internal class AwdFlowView(context: Context) : View(context) {
         const val MIN_STROKE_DP = 2f
         const val MAX_STROKE_DP = 9f
         const val BAR_H_DP = 22f
+        const val PCT_SP = 32f
+        const val CAP_SP = 20f
     }
 }

@@ -208,4 +208,6 @@
     <string name="launcher_body_handbrake_on">El freni çekili</string>
     <string name="launcher_body_handbrake_off">El freni indi</string>
     <string name="launcher_window_part">Cam</string>
+    <string name="launcher_auto_drive_layout_on">Otomatik sürüş düzeni: Açık (kapatmak için dokun)</string>
+    <string name="launcher_auto_drive_layout_off">Otomatik sürüş düzeni: Kapalı (açmak için dokun)</string>
 </resources>

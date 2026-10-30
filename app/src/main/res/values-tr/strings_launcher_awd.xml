@@ -4,4 +4,6 @@
     <string name="launcher_awd_active">4x4 aktif</string>
     <string name="launcher_awd_front">Ön çekiş</string>
     <string name="launcher_awd_split">Ön %%%1$d · Arka %%%2$d</string>
+    <string name="launcher_awd_front_short">Ön</string>
+    <string name="launcher_awd_rear_short">Arka</string>
 </resources>

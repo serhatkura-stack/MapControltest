@@ -142,17 +142,18 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     private var pendingOpen: Float? = null
     private var dragging = false
 
+    /** Üst satır, ortalı: ikon + başlık (yüksek kutu) ya da ikon + durum (alçak kutu). */
+    private val header = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+    }
+    private val bottomGap = gap(context, 8, vertical = true)
+
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(iconView)
-            addView(gap(context, 10))
-            addView(title, weightLp(1f).apply { width = 0; height = LinearLayout.LayoutParams.WRAP_CONTENT })
-            addView(stateText)
-        })
-        addView(gap(context, 10, vertical = true))
+        addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(gap(context, 8, vertical = true))
         addView(roof, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        addView(bottomGap)
         isClickable = true
         isFocusable = true
     }
@@ -165,8 +166,22 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     override val view: View get() = root
 
     override fun applySpan(span: Span) {
-        // Alçak (2×2) kutucukta başlık gizlenir; durum yazısı kalır, perde alanı büyür.
-        title.visibility = if (span.h >= TALL_ROWS) View.VISIBLE else View.GONE
+        // Yüksek (2x4): üstte ikon + başlık, perde, altta ortalı büyük durum. Alçak (2x2): ikon + durum tek satırda, perde şerit.
+        val tall = span.h >= TALL_ROWS
+        header.removeAllViews()
+        (stateText.parent as? android.view.ViewGroup)?.removeView(stateText)
+        header.addView(iconView)
+        header.addView(gap(context, 10))
+        if (tall) {
+            header.addView(title)
+            root.addView(stateText, root.indexOfChild(bottomGap) + 1, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            stateText.gravity = Gravity.CENTER
+        } else {
+            header.addView(stateText)
+        }
+        bottomGap.visibility = if (tall) View.VISIBLE else View.GONE
+        val pad = context.dp(if (tall) PADDING_DP else COMPACT_PADDING_DP)
+        root.setPadding(pad, pad, pad, pad)
     }
 
     override fun busy() = dragging
@@ -341,6 +356,21 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
             val glassR = radius - 4f * d
             paint.color = ColorUtils.blendARGB(LauncherTheme.CARD, if (known) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY, 0.30f)
             canvas.drawRoundRect(rect, glassR, glassR, paint)
+            // Cam parlaması: iki ince çapraz şerit, camın cam olduğunu söyler.
+            canvas.save()
+            canvas.clipPath(android.graphics.Path().apply { addRoundRect(rect, glassR, glassR, android.graphics.Path.Direction.CW) })
+            paint.color = ColorUtils.setAlphaComponent(LauncherTheme.CARD, 0x40)
+            val sheen = android.graphics.Path()
+            val sw = rect.width() * 0.10f
+            for (k in 0..1) {
+                val x0 = rect.left + rect.width() * (0.55f + 0.2f * k)
+                sheen.reset()
+                sheen.moveTo(x0, rect.top); sheen.lineTo(x0 + sw, rect.top)
+                sheen.lineTo(x0 + sw - rect.height() * 0.5f, rect.bottom); sheen.lineTo(x0 - rect.height() * 0.5f, rect.bottom)
+                sheen.close()
+                canvas.drawPath(sheen, paint)
+            }
+            canvas.restore()
             // Perde: camın üst kenarından coverage kadar aşağı.
             val curtainBottom = rect.top + rect.height() * coverage
             if (coverage > 0.001f) {
@@ -357,21 +387,22 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
                     y += 12f * d
                 }
                 canvas.restore()
-                // Tutamak (perdenin ön kenarı).
-                paint.color = LauncherTheme.TEXT
-                val hw = (rect.width() * 0.28f).coerceAtMost(80f * d)
-                val cy = curtainBottom.coerceIn(rect.top + 5f * d, rect.bottom - 5f * d)
-                val hr = RectF(rect.centerX() - hw / 2, cy - 3f * d, rect.centerX() + hw / 2, cy + 3f * d)
-                canvas.drawRoundRect(hr, 3f * d, 3f * d, paint)
             }
+            // Tutamak (perdenin ön kenarı); perde tamamen çekiliyken camın üst kenarında durur.
+            paint.color = LauncherTheme.TEXT
+            val hw = (rect.width() * 0.28f).coerceAtMost(80f * d)
+            val cy = curtainBottom.coerceIn(rect.top + 5f * d, rect.bottom - 5f * d)
+            val hr = RectF(rect.centerX() - hw / 2, cy - 3f * d, rect.centerX() + hw / 2, cy + 3f * d)
+            canvas.drawRoundRect(hr, 3f * d, 3f * d, paint)
         }
     }
 
     private companion object {
         const val PADDING_DP = 20
+        const val COMPACT_PADDING_DP = 14
         const val ICON_DP = 28
         const val LABEL_SP = 22f
-        const val VALUE_SP = 24f
+        const val VALUE_SP = 28f
         const val TALL_ROWS = 4
         const val ANIM_MS = 700L
     }

@@ -67,11 +67,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
     private var sheet: android.app.Dialog? = null
+    /** `--ez launcher_data_check true` ile açılan Veri kontrolü paneli (yalnızca debug). */
+    private var dataCheckExtra: DataCheckSheet? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
+        dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
         LauncherBottomBar.applyFrom(this, intent)
@@ -251,7 +254,20 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         gridWidgets.values.forEach { it.release() }
         metrics.release()
         settings.release()
+        dataCheckExtra?.release()
+        dataCheckExtra = null
         super.onDestroy()
+    }
+
+    /** İzin sonuçları: depolama verilince açık fotoğraf seçici yenilenir; konum verilince bekleyen kayıt sürer. */
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) return
+        when (requestCode) {
+            PhotoTile.REQ_STORAGE -> PhotoTile.pickerRefresh?.invoke()
+            NavigationCard.REQ_LOCATION -> NavigationCard.active?.retryPendingSave()
+        }
     }
 
     /** Ana ekrandayken geri tuşu yalnızca düzenleme modundan çıkar. */

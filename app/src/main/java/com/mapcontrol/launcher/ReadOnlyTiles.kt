@@ -583,15 +583,20 @@ internal class ClockTile(private val context: Context) : SizedWidget {
         gravity = Gravity.CENTER
         setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LauncherTheme.TIME_SP)
     }
+    private val datePattern: String =
+        android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEE d MMMM")
+    /** Geniş kutuda tarih iki satır: gün adı üstte, gün ve ay altta (yerel desenlerin ikisi ayrı alınır). */
+    private val dateWidePattern: String =
+        android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEE") + "'\n'" +
+            android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "d MMMM")
     private val date = TextClock(context).apply {
-        val pattern = android.text.format.DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEE d MMMM")
-        format12Hour = pattern
-        format24Hour = pattern
+        format12Hour = datePattern
+        format24Hour = datePattern
         setTextColor(LauncherTheme.TEXT_SECONDARY)
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         includeFontPadding = false
         gravity = Gravity.CENTER
-        maxLines = 1
+        maxLines = 2
         ellipsize = android.text.TextUtils.TruncateAt.END
         setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LauncherTheme.LABEL_SP)
     }
@@ -599,17 +604,36 @@ internal class ClockTile(private val context: Context) : SizedWidget {
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        addView(time, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        addView(date, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = context.dp(6)
-        })
     }
 
     override val view: View get() = root
 
+    /** 2x2: saat üstte, tarih altta (56sp). 4x2: saat solda 80sp, tarih sağda iki satır; kutu alçak olduğundan yan yana. */
     override fun applySpan(span: Span) {
-        time.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, if (span.w >= WIDE_MIN_COLS) WIDE_TIME_SP else LauncherTheme.TIME_SP)
-        date.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, if (span.w >= WIDE_MIN_COLS) LauncherTheme.BODY_SP else LauncherTheme.LABEL_SP)
+        val wide = span.w >= WIDE_MIN_COLS
+        root.removeAllViews()
+        val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
+        if (wide) {
+            root.orientation = LinearLayout.HORIZONTAL
+            time.gravity = Gravity.CENTER
+            time.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, WIDE_TIME_SP)
+            date.format12Hour = dateWidePattern
+            date.format24Hour = dateWidePattern
+            date.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            date.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LauncherTheme.SECTION_SP * 0.75f)
+            root.addView(time, LinearLayout.LayoutParams(wrap, wrap))
+            root.addView(gap(context, 32))
+            root.addView(date, LinearLayout.LayoutParams(wrap, wrap))
+        } else {
+            root.orientation = LinearLayout.VERTICAL
+            time.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LauncherTheme.TIME_SP)
+            date.format12Hour = datePattern
+            date.format24Hour = datePattern
+            date.gravity = Gravity.CENTER
+            date.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LauncherTheme.LABEL_SP)
+            root.addView(time, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wrap))
+            root.addView(date, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wrap).apply { topMargin = context.dp(6) })
+        }
     }
 
     override fun onVisible() {}
@@ -618,6 +642,6 @@ internal class ClockTile(private val context: Context) : SizedWidget {
 
     private companion object {
         const val PADDING_DP = 16
-        const val WIDE_TIME_SP = 88f
+        const val WIDE_TIME_SP = 80f
     }
 }

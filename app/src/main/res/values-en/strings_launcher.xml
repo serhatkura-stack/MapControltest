@@ -208,4 +208,6 @@
     <string name="launcher_body_handbrake_on">Handbrake on</string>
     <string name="launcher_body_handbrake_off">Handbrake released</string>
     <string name="launcher_window_part">Window</string>
+    <string name="launcher_auto_drive_layout_on">Auto drive layout: On (tap to turn off)</string>
+    <string name="launcher_auto_drive_layout_off">Auto drive layout: Off (tap to turn on)</string>
 </resources>

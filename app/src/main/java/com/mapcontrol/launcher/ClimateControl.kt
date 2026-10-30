@@ -505,7 +505,7 @@ internal class ClimateControl(
 
     private fun format(c: Double): String = String.format(Locale.US, "%.1f°", c)
 
-    /** Etkin olmayan kademe noktası: koyu dock üstünde %25 beyaz. */
+    /** Etkin olmayan kademe noktası: dock yüzeyine göre gece %25 beyaz, gündüz %20 koyu. */
     private fun inactiveSegment(): Int = LauncherTheme.DOCK_TRACK
 
     /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
@@ -553,9 +553,9 @@ internal class ClimateControl(
         private const val ACTION_INCREASE = 0x1C01
         private const val ACTION_DECREASE = 0x1C02
 
-        // Düşük alfalı renk tonları: aşağı = serin mavi, yukarı = sıcak turuncu (~%24, koyu dock üstünde), fan nötr mavi (~%20); bölüm dikdörtgeni boyunca.
-        private val TINT_COOL = 0x403B82F6.toInt()
-        private val TINT_WARM = 0x3DFB923C.toInt()
-        private val TINT_FAN = 0x333B82F6.toInt()
+        // Düşük alfalı renk tonları (aşağı serin mavi, yukarı sıcak turuncu, fan mavi) temadan gelir: LauncherTheme.DOCK_TINT_*.
+        private val TINT_COOL get() = LauncherTheme.DOCK_TINT_COOL
+        private val TINT_WARM get() = LauncherTheme.DOCK_TINT_WARM
+        private val TINT_FAN get() = LauncherTheme.DOCK_TINT_FAN
     }
 }

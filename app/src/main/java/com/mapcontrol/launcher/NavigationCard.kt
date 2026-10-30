@@ -65,6 +65,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
     init {
         applySpan(Span(4, 2))
         refreshTints()
+        active = this
     }
 
     /** Genişlik >= 4: tek satır (hap iki pay, Ev ve İş birer pay). Daha dar: hap üstte, Ev | İş altta. */
@@ -172,11 +173,21 @@ class NavigationCard(private val context: Context) : SizedWidget {
     // ---- Konum kaydı ----
 
     private var locListener: LocationListener? = null
+    /** İzin istenirken bekleyen kayıt türü; izin verilince [retryPendingSave] ile sürdürülür. */
+    private var pendingSave: NavPlace? = null
+
+    /** Konum izni verildi: bekleyen kaydı yeniden dener. */
+    fun retryPendingSave() {
+        val kind = pendingSave ?: return
+        pendingSave = null
+        saveCurrentLocation(kind)
+    }
     private var timeout: Runnable? = null
 
     /** Uzun basma: izin yoksa ister; varsa son bilinen GPS konumunu, yoksa tek seferlik GPS'i kullanır. */
     private fun saveCurrentLocation(kind: NavPlace) {
         if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            pendingSave = kind
             (context as? Activity)?.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQ_LOCATION)
             toast(R.string.launcher_nav_perm_denied)
             return
@@ -246,14 +257,20 @@ class NavigationCard(private val context: Context) : SizedWidget {
 
     override fun onHidden() = cancelLocation()
 
-    override fun release() = cancelLocation()
+    override fun release() {
+        cancelLocation()
+        if (active === this) active = null
+    }
 
-    private companion object {
+    companion object {
         const val WIDE_MIN_COLS = 4
         const val ICON_DP = 32
         const val VALUE_SP = 24f
         const val GAP_DP = 12
         const val REQ_LOCATION = 4107
+
+        /** Etkin kart (varsa); izin sonucu Activity'den buraya iletilir. */
+        @Volatile var active: NavigationCard? = null
         const val FIX_TIMEOUT_MS = 20_000L
     }
 }

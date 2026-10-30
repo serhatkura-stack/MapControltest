@@ -99,6 +99,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(bottomBarSegments(d), fullWidth())
 
+        addView(gap(activity, 12, vertical = true))
+        addView(autoDriveLayoutToggle(d), fullWidth())
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
@@ -167,6 +170,16 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
             // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
             if (on) ThemeTransition.recreate(activity)
+        }
+    }
+
+    /** "Otomatik sürüş düzeni": açık/kapalı satırı; değişince ekran yeni seçimle kurulur. */
+    private fun autoDriveLayoutToggle(d: Dialog): View {
+        val on = DriveLayoutPrefs.get(activity)
+        return row(R.drawable.ic_mdi_view_grid, if (on) R.string.launcher_auto_drive_layout_on else R.string.launcher_auto_drive_layout_off) {
+            d.dismiss()
+            DriveLayoutPrefs.set(activity, !on)
+            ThemeTransition.recreate(activity)
         }
     }
 

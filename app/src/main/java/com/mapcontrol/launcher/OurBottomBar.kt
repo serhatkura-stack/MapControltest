@@ -79,8 +79,10 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) {
                 outline.setRoundRect(0, 0, v.width, v.height, context.dpF(LauncherTheme.CARD_RADIUS_DP))
+                outline.alpha = 1f
             }
         }
+        elevation = context.dpF(LauncherTheme.DOCK_ELEVATION_DP)
         var first = true
         fun add(v: View, lp: LinearLayout.LayoutParams) {
             if (!first) addView(divider(), LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
@@ -320,7 +322,7 @@ internal fun dockPressOverlay(context: Context): Drawable = StateListDrawable().
 }
 
 /**
- * Dock yüzeyi: üstü hafif açık düşey gradyan, kart yarıçapında köşeler. Gecede üst kenarda 1dp parıltı çizgisi
+ * Dock yüzeyi: üstü hafif açık düşey gradyan, kart yarıçapında köşeler. Gündüz 1dp koyu ince kenar çizgisi; gecede üst kenarda 1dp parıltı çizgisi
  * (köşelerden aşağı doğru solar). Gölgeler bir kez [onBoundsChange]'de kurulur; çizimde ayırma yok.
  */
 private class DockSurface(private val context: Context) : Drawable() {
@@ -330,6 +332,11 @@ private class DockSurface(private val context: Context) : Drawable() {
         strokeWidth = context.dpF(1f)
     }
     private val rect = RectF()
+    private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = context.dpF(1f)
+        color = LauncherTheme.DOCK_BORDER
+    }
     private val radius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
 
     override fun onBoundsChange(b: android.graphics.Rect) {
@@ -345,6 +352,7 @@ private class DockSurface(private val context: Context) : Drawable() {
         val b = bounds
         canvas.drawRoundRect(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(), radius, radius, fill)
         if (edge.shader != null) canvas.drawRoundRect(rect, radius, radius, edge)
+        if (border.color != 0) canvas.drawRoundRect(rect, radius, radius, border)
     }
 
     override fun setAlpha(alpha: Int) {}

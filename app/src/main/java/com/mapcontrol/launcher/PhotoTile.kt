@@ -299,6 +299,8 @@ class PhotoTile(
             addView(gap(context, 12, vertical = true))
             addView(actionRow(R.drawable.ic_mdi_folder, R.string.launcher_photo_refresh) { fillPicker(d, grid, status) }, sheetFullWidth())
             fillPicker(d, grid, status)
+            // İzin sonradan verilirse açık seçici kendini yeniler (HomeLauncherActivity.onRequestPermissionsResult).
+            pickerRefresh = { if (d.isShowing) fillPicker(d, grid, status) }
         }
     }
 
@@ -394,7 +396,7 @@ class PhotoTile(
     companion object {
         private const val EMPTY_ICON_DP = 48
         private const val EMPTY_ICON_NARROW_DP = 40
-        private const val HINT_SP = 13f
+        private const val HINT_SP = 19f
         private const val DISPLAY_W = 1024
         private const val DISPLAY_H = 640
         private const val PICKER_WIDTH_DP = 760
@@ -404,7 +406,10 @@ class PhotoTile(
         private const val THUMB_H_DP = 112
         private const val THUMB_REQ_W = 240
         private const val THUMB_REQ_H = 160
-        private const val REQ_STORAGE = 4711
+        const val REQ_STORAGE = 4711
+
+        /** Açık fotoğraf seçici varsa onu yeniden tarar; depolama izni verilince Activity çağırır. */
+        @Volatile var pickerRefresh: (() -> Unit)? = null
 
         /** Kopyalanan fotoğrafların klasörü (uygulamaya özel, temizlenmeye karşı güvenli). */
         fun photoDir(context: Context): File = File(context.filesDir, "launcher_photos").apply { mkdirs() }
