@@ -46,7 +46,7 @@ class DataCheckTest {
         assertEquals("12.1 L/100km", decode("Hız ve tüketim", "Anlık tüketim", 121))
         assertNull(decode("Hız ve tüketim", "Anlık tüketim", 0xFFFF))
         assertEquals("3978 km", decode("Bakım", "Servise kalan km", 3978))
-        assertEquals("12.50 V", decode("Araç sağlığı", "Akü voltajı (IBS)", 12500))
+        assertEquals("12.5 V", decode("Araç sağlığı", "Akü voltajı", 125))
         assertEquals("21.5 °C", decode("Klima", "Sıcaklık sürücü", 12))
         assertEquals("45 km/sa", decode("Yolculuk", "Ort. hız", 456))
         assertEquals("Kademe 2", decode("Koltuklar", "Sürücü ısıtma", 2))

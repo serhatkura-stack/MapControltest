@@ -66,8 +66,8 @@ internal object ReadOnlyDecode {
      */
     fun speedLimit(raw: Int?): Int? = raw?.takeIf { it in 5..200 }
 
-    /** Akü gerilimi (ReadOnly 110): ham/1000 V. Araçta [44,86] -> 11350 -> 11,35 V (sağlık kutucuğuyla aynı çözüm). */
-    fun batteryVolts(raw: Int?): Double? = raw?.takeIf { it in 5_000..20_000 }?.let { it / 1000.0 }
+    /** Akü gerilimi (ReadOnly 76, BATTERY_LEVEL): ham/10 V. Araçta motor çalışırken [0,142] -> 14,2 V. 8,0-16,5 V dışı geçersiz. */
+    fun batteryVolts(raw: Int?): Double? = raw?.takeIf { it in 80..165 }?.let { it / 10.0 }
 
     /**
      * Akü şarjı (ReadOnly 85, IBS_SOC): 1..100 %. Araçta hep [0] okundu; 0 "desteklenmiyor" sayılır (boş aküyü
@@ -251,7 +251,7 @@ internal object ExtraSource {
             connected = true,
             driveMinutes = ReadOnlyDecode.driveMinutes(CarSignals.read(RO, ReadOnlyID.ID_DRIVE_TIME)),
             speedLimit = ReadOnlyDecode.speedLimit(cs(CarSettingID.ID_NAV_SPEED_LIMIT)),
-            batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_IBS_VOLTAGE)),
+            batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
             batterySoc = ReadOnlyDecode.batterySoc(ro(ReadOnlyID.ID_IBS_SOC)),
             padState = ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
             phoneForgotten = ReadOnlyDecode.phoneForgotten(

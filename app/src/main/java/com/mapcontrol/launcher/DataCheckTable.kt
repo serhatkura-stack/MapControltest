@@ -133,7 +133,7 @@ internal object DataCheckTable {
     }
 
     val battery: (Int) -> String? = { v ->
-        if (v in 5_000..20_000) String.format(java.util.Locale.US, "%.2f V", v / 1000.0) else null
+        if (v in 80..165) String.format(java.util.Locale.US, "%.1f V", v / 10.0) else null
     }
 
     val driveMode = labels(0 to "Eco", 1 to "Normal", 2 to "Sport", 3 to "Kar", 4 to "Çamur", 5 to "Kum", 6 to "Arazi")
@@ -200,7 +200,8 @@ internal object DataCheckTable {
         s(trip, "Ort. hız", RO, ReadOnlyID.ID_AVERAGE_SPEED_AFTER_CLEAR) { TripDecode.avgSpeedKmh(it)?.let { v -> "$v km/sa" } }
 
         val health = "Araç sağlığı"
-        s(health, "Akü voltajı (IBS)", RO, ReadOnlyID.ID_IBS_VOLTAGE, battery)
+        s(health, "Akü voltajı", RO, ReadOnlyID.ID_BATTERY_LEVEL, battery)
+        s(health, "IBS (anlamı belirsiz)", RO, ReadOnlyID.ID_IBS_VOLTAGE) { v -> "ham $v" }
         s(health, "Soğutma suyu sıcaklığı", RO, ReadOnlyID.ID_WATER_TEMPERATURE, coolant)
         s(health, "Akü doluluk (IBS SOC)", RO, ReadOnlyID.ID_IBS_SOC, num(0..100, "%"))
 

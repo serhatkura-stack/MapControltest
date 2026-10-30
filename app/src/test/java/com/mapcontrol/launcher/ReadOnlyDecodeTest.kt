@@ -46,8 +46,10 @@ class ReadOnlyDecodeTest {
     }
 
     @Test fun batteryVoltsMatchesHealthTile() {
-        assertEquals(11.35, ReadOnlyDecode.batteryVolts(44 * 256 + 86)!!, 1e-9)
-        assertEquals(14.1, ReadOnlyDecode.batteryVolts(14_100)!!, 1e-9)
+        assertEquals(14.2, ReadOnlyDecode.batteryVolts(142)!!, 1e-9)
+        assertEquals(14.1, ReadOnlyDecode.batteryVolts(141)!!, 1e-9)
+        assertNull(ReadOnlyDecode.batteryVolts(10_998))
+        assertNull(ReadOnlyDecode.batteryVolts(79))
         assertNull(ReadOnlyDecode.batteryVolts(0))
         assertNull(ReadOnlyDecode.batteryVolts(0xFFFF))
         assertNull(ReadOnlyDecode.batteryVolts(null))

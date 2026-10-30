@@ -234,10 +234,10 @@ public final class VehicleMetricsFormatter {
     }
 
     public String formatVoltage(int combined) {
-        if (!VehicleMetricsSnapshot.isValid(combined) || combined <= 0) {
+        if (!VehicleMetricsSnapshot.isValid(combined) || combined < 80 || combined > 165) {
             return unknown();
         }
-        return String.format(Locale.getDefault(), "%.1f volt", combined / 1000.0);
+        return String.format(Locale.getDefault(), "%.1f volt", combined / 10.0);
     }
 
     public String formatLowFuel(int combined) {
