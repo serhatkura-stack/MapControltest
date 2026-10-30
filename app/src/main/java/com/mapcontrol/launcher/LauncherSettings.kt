@@ -223,13 +223,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Yandex → HUD" (Kapalı/Açık, profil başına). Uzun basış: hata ayıklama için düz ok. Yerinde güncellenir. */
+    /** "Yandex → HUD" (Kapalı/Açık, profil başına; bildirim erişimi gerekir, erişilebilirlik isteğe bağlı). Uzun basış: hata ayıklama için düz ok. Yerinde güncellenir. */
     private fun hudBridgeRow(): View {
         fun hint(): String {
             val state = activity.getString(
                 if (LauncherEdition.hudBridgeEnabled(activity)) R.string.launcher_hud_bridge_on else R.string.launcher_hud_bridge_off)
             var h = if (LauncherEdition.hudBridgeServiceGranted(activity)) state else
-                activity.getString(R.string.launcher_hud_bridge_need_a11y) + " · " + activity.getString(R.string.launcher_hud_bridge_need_a11y_hint)
+                activity.getString(R.string.launcher_hud_bridge_need_notif) + " · " + activity.getString(R.string.launcher_hud_bridge_need_notif_hint)
             if (LauncherEdition.hudBridgeForceStraight(activity)) {
                 h += " · " + activity.getString(R.string.launcher_hud_bridge_straight, "9")
             }

@@ -3,7 +3,7 @@
     <string name="launcher_hud_bridge">Yandex → HUD</string>
     <string name="launcher_hud_bridge_off">Kapalı</string>
     <string name="launcher_hud_bridge_on">Açık</string>
-    <string name="launcher_hud_bridge_need_a11y">Erişilebilirlik izni gerekli</string>
-    <string name="launcher_hud_bridge_need_a11y_hint">Ayarlar › Erişilebilirlik › Launcher Test</string>
+    <string name="launcher_hud_bridge_need_notif">Bildirim erişimi gerekli</string>
+    <string name="launcher_hud_bridge_need_notif_hint">Ayarlar › Bildirim erişimi › Launcher Test (erişilebilirlik isteğe bağlı: toplam mesafe)</string>
     <string name="launcher_hud_bridge_straight">Hata ayıklama: düz ok %1$s</string>
 </resources>

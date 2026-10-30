@@ -4,8 +4,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.provider.Settings
 import com.mapcontrol.launcher.Profiles
+import com.mapcontrol.media.LauncherMediaNotificationListener
 
-/** "Yandex → HUD" tercihleri (profil başına) ve erişilebilirlik izni durumu. Varsayılan KAPALI. */
+/** "Yandex → HUD" tercihleri (profil başına) ve bildirim erişimi durumu. Varsayılan KAPALI. */
 internal object HudBridgeSettings {
     private const val PREFS = "launcher_settings"
     private const val KEY_ENABLED = "hud_bridge"
@@ -28,13 +29,21 @@ internal object HudBridgeSettings {
         return n
     }
 
-    fun component(c: Context): String =
-        ComponentName(c.packageName, YandexHudAccessibilityService::class.java.name).flattenToString()
+    /** Bildirim dinleyicisi (ana kaynak) bileşeni. */
+    fun listenerComponent(c: Context): String =
+        ComponentName(c.packageName, LauncherMediaNotificationListener::class.java.name).flattenToString()
 
-    /** Hizmet kullanıcı tarafından etkinleştirilmiş mi (güvenli ayarlar yalnızca OKUNUR). */
+    /** Bildirim erişimi verilmiş mi (ana kaynak; güvenli ayarlar yalnızca OKUNUR). Erişilebilirlik gerekmez. */
     fun serviceGranted(c: Context): Boolean {
+        val list = Settings.Secure.getString(c.contentResolver, "enabled_notification_listeners")
+        return HudAccessibilityCheck.isListed(list, listenerComponent(c))
+    }
+
+    /** İsteğe bağlı erişilebilirlik hizmeti etkin mi (toplam mesafe için). */
+    fun accessibilityGranted(c: Context): Boolean {
         if (YandexHudAccessibilityService.connected) return true
         val list = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-        return HudAccessibilityCheck.isListed(list, component(c))
+        return HudAccessibilityCheck.isListed(
+            list, ComponentName(c.packageName, YandexHudAccessibilityService::class.java.name).flattenToString())
     }
 }

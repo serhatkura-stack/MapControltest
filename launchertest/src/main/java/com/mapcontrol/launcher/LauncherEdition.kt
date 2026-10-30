@@ -19,7 +19,7 @@ internal object LauncherEdition {
     const val HAS_HUD_BRIDGE = true
     fun hudBridgeEnabled(context: Context) = HudBridgeSettings.enabled(context)
     fun setHudBridgeEnabled(context: Context, on: Boolean) = HudBridgeSettings.setEnabled(context, on)
-    fun hudBridgeServiceGranted(context: Context) = HudBridgeSettings.serviceGranted(context)
+    fun hudBridgeServiceGranted(context: Context) = HudBridgeSettings.serviceGranted(context) // bildirim erişimi
     fun hudBridgeForceStraight(context: Context) = HudBridgeSettings.forceStraight(context)
     fun toggleHudBridgeForceStraight(context: Context) = HudBridgeSettings.toggleForceStraight(context)
 

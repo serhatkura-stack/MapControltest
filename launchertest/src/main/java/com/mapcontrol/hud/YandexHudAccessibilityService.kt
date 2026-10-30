@@ -15,18 +15,16 @@ import com.mapcontrol.nav.YandexNavStability
 import java.util.concurrent.Executors
 
 /**
- * Yandex Haritalar rehberliğini erişilebilirlikle okuyup HUD'a aktaran hizmet (launchertest, isteğe bağlı).
- * Tercih KAPALIYKEN olaylar hemen atılır; hiçbir şey okunmaz ya da gönderilmez.
- * Okuma (ağaç gezme, binder beklemesi) ve gönderim tek bir arka plan iş parçacığında; ana iş parçacığı serbest.
- * Okuma en çok 2 Hz (500 ms); ayrıca olay gelmese de 500 ms'de bir yoklanır (arka plan penceresi).
+ * Yandex Haritalar ekranını erişilebilirlikle okuyan İSTEĞE BAĞLI hizmet (launchertest). Ana kaynak artık bildirimdir
+ * (YandexNotificationBridge); bu hizmet açıksa toplam kalan mesafeyi (ve bildirim bayatsa yedek mesafe/sokağı)
+ * [HudBridgeController]'a ekler. Kapalıysa köprü yalnızca bildirimle çalışır, toplam mesafe (53) gönderilmez.
+ * Tercih KAPALIYKEN olaylar hemen atılır. Okuma (ağaç gezme, binder beklemesi) arka plan iş parçacığında; en çok 2 Hz.
  */
 class YandexHudAccessibilityService : AccessibilityService() {
 
     private val main = Handler(Looper.getMainLooper())
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "hud-bridge").apply { isDaemon = true } }
     private val stability = YandexNavStability()
-    private var sender: HudBridgeSender? = null
-    private var engine: HudBridgeEngine? = null
     private var lastScrapeMs = 0L
     private var lastLogged: YandexNavSnapshot? = null
     @Volatile private var scrapeQueued = false
@@ -44,13 +42,7 @@ class YandexHudAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         connected = true
         Log.i(TAG, "erişilebilirlik hizmeti bağlandı")
-        val s = HudBridgeSender(applicationContext)
-        sender = s
-        engine = HudBridgeEngine(
-            send = { s.send(it) },
-            iconSource = { iconSource.currentIcon() ?: if (HudBridgeSettings.forceStraight(this)) HudBridgeEngine.ICON_STRAIGHT else null },
-            log = { Log.i(TAG, it) },
-        )
+        HudBridgeController.attach(applicationContext)
         main.postDelayed(poll, POLL_MS)
     }
 
@@ -66,9 +58,7 @@ class YandexHudAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         connected = false
         main.removeCallbacks(poll)
-        // Hizmet kapanırken ekranda kalmasın.
-        val e = engine
-        if (e != null && wasEnabled) exec.execute { e.onGuidanceEnded(SystemClock.elapsedRealtime()) }
+        // Köprünün kendisi (bildirim) çalışmaya devam eder; yalnızca bu kaynağın verisi bayatlayıp düşer.
         return super.onUnbind(intent)
     }
 
@@ -80,37 +70,27 @@ class YandexHudAccessibilityService : AccessibilityService() {
     }
 
     private fun work() {
-        val e = engine ?: return
         val now = SystemClock.elapsedRealtime()
-        val enabled = HudBridgeSettings.enabled(this)
-        if (!enabled) {
+        if (!HudBridgeSettings.enabled(this)) {
             if (wasEnabled) {
-                // Kapatıldı: ekranı temizle ve durumu sıfırla.
-                e.onGuidanceEnded(now)
                 stability.clear()
                 wasEnabled = false
-                Log.i(TAG, "köprü kapatıldı")
             }
             return
         }
         wasEnabled = true
-        if (now - lastScrapeMs < SCRAPE_GAP_MS) {
-            e.tick(now)
-            return
-        }
+        if (now - lastScrapeMs < SCRAPE_GAP_MS) return
         lastScrapeMs = now
         val read = readYandex()
-        if (read.found != null) {
-            val stable = stability.accept(read.found, now)
-            logIfChanged(stable)
-            if (!stable.guidanceActive) {
-                e.onGuidanceEnded(now)
-            } else {
-                val st = HudStateMapper.map(stable.maneuverDistance, stable.maneuverUnit, stable.nextStreet, stable.etaDistance)
-                if (st != null) e.onState(st, now) else e.tick(now)
-            }
+        val found = read.found ?: return
+        val stable = stability.accept(found, now)
+        logIfChanged(stable)
+        if (!stable.guidanceActive) {
+            HudBridgeController.onAccessibility(null)
         } else {
-            e.tick(now)
+            HudBridgeController.onAccessibility(
+                HudStateMapper.map(stable.maneuverDistance, stable.maneuverUnit, stable.nextStreet, stable.etaDistance),
+            )
         }
     }
 
@@ -162,8 +142,5 @@ class YandexHudAccessibilityService : AccessibilityService() {
 
         /** Hizmet bağlı mı (ayarlar satırı için). */
         @Volatile var connected = false
-
-        /** Dönüş tipini tanıyan kaynak. Şimdilik hiçbiri: ikon 0. */
-        @Volatile var iconSource: ManeuverIconSource = NoManeuverIcon
     }
 }
