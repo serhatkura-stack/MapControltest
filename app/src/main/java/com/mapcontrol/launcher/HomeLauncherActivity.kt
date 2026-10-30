@@ -61,7 +61,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherProbe.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
-        LauncherFullscreen.applyFrom(this, intent)
+        LauncherBottomBar.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
         if (!DriveAccent.enabled(this)) LauncherTheme.driveMode = DriveAccent.NORMAL
@@ -72,10 +72,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         hideSystemBars()
 
         header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.recreate(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles)
-        // OEM alt çubuğu varsa (Desay) bizimki kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
-        val bottomBar: Pair<AppDock, ClimateBar>? = if (oemBar) null else AppDock(this).let { it to ClimateBar(this, it.view) }
+        // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
+        // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
+        val ourBar: OurBottomBar? = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
+        val bottomBar: Pair<AppDock, ClimateBar>? =
+            if (oemBar || ourBar != null) null else AppDock(this).let { it to ClimateBar(this, it.view) }
         dock = bottomBar?.first
-        fixedWidgets = listOfNotNull(header, bottomBar?.first, bottomBar?.second)
+        fixedWidgets = listOfNotNull(header, bottomBar?.first, bottomBar?.second, ourBar)
         editBar = buildEditBar()
         grid = LauncherGrid(this, this)
 
@@ -95,9 +98,15 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 addView(bottomBar.second.view, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
             }
+            if (ourBar != null) {
+                addView(gap(context, 16, vertical = true))
+                addView(ourBar.view, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.HEIGHT_DP)))
+            }
 
-            // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın.
-            val baseBottom = dp(20)
+            // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın. Bizimki'nde en altta
+            // dar bir boşluk kalır: alttan kaydırma hareketi (OEM çubuğunu geçici çağırır) çubuğumuza takılmaz.
+            val baseBottom = dp(if (ourBar != null) OurBottomBar.BOTTOM_GAP_DP else 20)
             setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom, LauncherSafeArea.oemInsetPx(context)))
             setOnApplyWindowInsetsListener { v, insets ->
                 val bottom = maxOf(baseBottom, LauncherSafeArea.bottomInsetPx(context, insets))
@@ -120,7 +129,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         applyLayout(store.load(), persist = false)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
-        LauncherFullscreen.logResult(this)
+        LauncherBottomBar.logResult(this)
     }
 
     /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */
@@ -413,7 +422,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun hideSystemBars() {
         window.insetsController?.let {
             it.hide(WindowInsets.Type.statusBars())
-            if (LauncherFullscreen.enabled(this)) it.hide(WindowInsets.Type.navigationBars())
+            if (LauncherBottomBar.hidesOemBar(this)) it.hide(WindowInsets.Type.navigationBars())
             // Gündüz görünümünde gezinme çubuğu simgeleri açık zeminde görünür kalsın.
             it.setSystemBarsAppearance(
                 if (LauncherTheme.night) 0 else WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,

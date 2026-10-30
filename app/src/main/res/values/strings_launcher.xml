@@ -73,8 +73,6 @@
     <string name="launcher_theme">Theme</string>
     <string name="launcher_drive_theme_on">Drive mode colors: On (tap to turn off)</string>
     <string name="launcher_drive_theme_off">Drive mode colors: Off (tap to turn on)</string>
-    <string name="launcher_fullscreen_on">Full screen: On (tap to turn off)</string>
-    <string name="launcher_fullscreen_off">Full screen: Off (tap to turn on)</string>
     <string name="launcher_theme_auto">Automatic</string>
     <string name="launcher_theme_day">Day</string>
     <string name="launcher_theme_night">Night</string>
@@ -128,9 +126,30 @@
     <string name="launcher_seat_driver">Driver seat</string>
     <string name="launcher_seat_passenger">Passenger seat</string>
     <string name="launcher_oem_mock_label">OEM (mock)</string>
+    <string name="launcher_open_frostnav">Open FrostNav</string>
+    <string name="launcher_open_frostnav_hint">FrostNav\'s own screens and settings</string>
+    <string name="launcher_open_frostnav_failed">Could not open FrostNav</string>
+    <string name="launcher_app_frostnav" translatable="false">FrostNav</string>
     <string name="launcher_app_phone">Phone</string>
     <string name="launcher_edit_on_screen">On screen</string>
     <string name="launcher_trip_since_reset">Since reset</string>
     <string name="launcher_trip_avg_cons_label">Avg. consumption</string>
     <string name="launcher_trip_avg_speed_label">Avg. speed</string>
+    <string name="launcher_bottom_bar">Bottom bar</string>
+    <string name="launcher_bottom_bar_original">Original</string>
+    <string name="launcher_bottom_bar_ours">Ours</string>
+    <string name="launcher_bottom_bar_hidden">Hidden</string>
+    <string name="launcher_bar_home">Home</string>
+    <string name="launcher_bar_apps">Apps</string>
+    <string name="launcher_bar_settings">Settings</string>
+    <string name="launcher_bar_climate">Climate</string>
+    <string name="launcher_read_only_climate">Test build: change the climate from the car</string>
+    <string name="launcher_climate_from_car">Change the climate with the car\'s own controls</string>
+    <string name="launcher_climate_pending">Climate control will open after the car test</string>
+    <string name="launcher_climate_sync">Sync</string>
+    <string name="launcher_climate_driver">Driver temperature</string>
+    <string name="launcher_climate_passenger">Passenger temperature</string>
+    <string name="launcher_climate_fan">Fan speed</string>
+    <string name="launcher_climate_increase">Increase</string>
+    <string name="launcher_climate_decrease">Decrease</string>
 </resources>

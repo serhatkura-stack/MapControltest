@@ -2,13 +2,16 @@ package com.mapcontrol.launcher
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
@@ -66,6 +69,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     }
 
     private fun LinearLayout.buildPanel(d: Dialog) {
+        frostNavPackage()?.let { pkg ->
+            addView(row(R.drawable.ic_mdi_open_in_new, R.string.launcher_open_frostnav, R.string.launcher_open_frostnav_hint) {
+                d.dismiss()
+                openFrostNav(pkg)
+            }, fullWidth())
+            addView(gap(activity, 24, vertical = true))
+        }
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_theme) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(themeSegments(d), fullWidth())
@@ -74,7 +84,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(driveModeToggle(d), fullWidth())
 
         addView(gap(activity, 12, vertical = true))
-        addView(fullscreenToggle(d), fullWidth())
+        addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
+        addView(gap(activity, 12, vertical = true))
+        addView(bottomBarSegments(d), fullWidth())
 
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
@@ -142,17 +154,48 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Tam ekran": OEM alt çubuğunu gizler (alttan kaydırınca geçici görünür); değişince ekran yeniden kurulur. */
-    private fun fullscreenToggle(d: Dialog): View {
-        val on = LauncherFullscreen.enabled(activity)
-        return row(R.drawable.ic_mdi_view_grid, if (on) R.string.launcher_fullscreen_on else R.string.launcher_fullscreen_off) {
-            d.dismiss()
-            LauncherFullscreen.setEnabled(activity, !on)
-            ThemeTransition.recreate(activity)
+    /**
+     * "Alt çubuk": Orijinal | Bizimki | Gizli. Seçim kaydedilir ve ekran yeniden kurulur (OEM çubuğu gizlenir ya da
+     * görünür, kendi çubuğumuz eklenir ya da kalkar). Tema seçimiyle aynı üç parçalı görünüm.
+     */
+    private fun bottomBarSegments(d: Dialog): View {
+        val current = LauncherBottomBar.mode(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
+            val p = activity.dp(6)
+            setPadding(p, p, p, p)
+            BottomBarMode.values().forEachIndexed { i, mode ->
+                if (i > 0) addView(gap(activity, 6))
+                val selected = mode == current
+                addView(text(activity, LauncherTheme.BODY_SP,
+                    if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+                    setText(mode.label)
+                    gravity = Gravity.CENTER
+                    if (selected) background = rounded(activity, LauncherTheme.ACCENT, SEGMENT_RADIUS_DP - 4)
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = activity.getString(R.string.launcher_bottom_bar) + ": " + activity.getString(mode.label)
+                    setOnClickListener {
+                        d.dismiss()
+                        if (mode != current) {
+                            LauncherBottomBar.setMode(activity, mode)
+                            ThemeTransition.recreate(activity)
+                        }
+                    }
+                    pressFeedback()
+                }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
+            }
         }
     }
 
-    private fun row(@DrawableRes iconRes: Int, @StringRes labelRes: Int, onClick: () -> Unit): View =
+    private fun row(
+        @DrawableRes iconRes: Int,
+        @StringRes labelRes: Int,
+        @StringRes hintRes: Int = 0,
+        onClick: () -> Unit,
+    ): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -162,7 +205,15 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setPadding(p, 0, p, 0)
             addView(icon(activity, iconRes, 32, LauncherTheme.TEXT_SECONDARY))
             addView(gap(activity, 20))
-            addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+            if (hintRes == 0) {
+                addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+            } else {
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
+                    addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(hintRes) })
+                })
+            }
             contentDescription = activity.getString(labelRes)
             isClickable = true
             isFocusable = true
@@ -176,6 +227,23 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     private fun openApp(packageName: String) {
         launcher.runSafely {
             AppLaunchHelper.launchAppOnDisplay(activity, packageName, Display.DEFAULT_DISPLAY, 0)
+        }
+    }
+
+    /** Launcher FrostNav'ın dışında çalışıyorsa ve FrostNav kuruluysa açılacak paket; yoksa null. */
+    private fun frostNavPackage(): String? = FrostNavLink.choosePackage(
+        activity.packageName,
+        listOf(FrostNavLink.PRIMARY_PACKAGE, FrostNavLink.FALLBACK_PACKAGE).filter { isInstalled(it) }.toSet(),
+    )
+
+    private fun openFrostNav(packageName: String) {
+        val intent = activity.packageManager.getLaunchIntentForPackage(packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            if (intent == null) throw ActivityNotFoundException(packageName)
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(activity, R.string.launcher_open_frostnav_failed, Toast.LENGTH_SHORT).show()
         }
     }
 

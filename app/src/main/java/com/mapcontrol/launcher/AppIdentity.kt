@@ -17,13 +17,15 @@ import com.mapcontrol.R
  */
 object AppIdentity {
 
-    /** Bilinen bir paketin kendi adı ve ikonu. */
-    class Override(@StringRes val label: Int, @DrawableRes val icon: Int)
+    /** Bilinen bir paketin kendi adı ve ikonu; [icon] 0 ise yalnız ad değişir, gerçek uygulama ikonu korunur. */
+    class Override(@StringRes val label: Int, @DrawableRes val icon: Int = 0)
 
     /** Etiketi ve ikonu araçta çirkin görünen paketler. */
     val OVERRIDES: Map<String, Override> = mapOf(
         "com.desaysv.vehiclesetting" to Override(R.string.launcher_app_vehicle_settings, R.drawable.ic_mdi_car_cog),
         "com.desaysv.bluetooth.phone" to Override(R.string.launcher_app_phone, R.drawable.ic_mdi_phone),
+        // FrostNav'ın ikonu kendi markası: yalnız ad yazılır, ikon olduğu gibi kalır.
+        FrostNavLink.PRIMARY_PACKAGE to Override(R.string.launcher_app_frostnav),
     )
 
     /** Etiket paket adının kendisi ya da ona benziyor mu: boş, ya da noktalı ve boşluksuz. */
@@ -58,7 +60,7 @@ object AppIdentity {
      * Listede olmayan paketler için null; gerçek uygulama ikonu korunur.
      */
     fun overrideIcon(context: Context, packageName: String, sizePx: Int): Drawable? {
-        val o = OVERRIDES[packageName] ?: return null
+        val o = OVERRIDES[packageName]?.takeIf { it.icon != 0 } ?: return null
         val vector = context.getDrawable(o.icon)?.mutate() ?: return null
         val size = Math.max(1, sizePx)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)

@@ -62,6 +62,9 @@ internal object LauncherDemo {
 
     const val DRIVER_SEAT_LEVEL = 2
     const val PASSENGER_SEAT_LEVEL = 0
+    const val DRIVER_TEMP = 22.0
+    const val PASSENGER_TEMP = 24.5
+    const val FAN_LEVEL = 3
     const val DRIVER_VENT_LEVEL = 1
     const val PASSENGER_VENT_LEVEL = 0
 

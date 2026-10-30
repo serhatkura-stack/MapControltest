@@ -30,6 +30,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Tek seferlik HUD testi: intent-filter YOK (yalnızca açık bileşen adıyla başlatılır).
+             exported=false iken adb shell (uid 2000) başlatamıyor (emülatörde SecurityException), bu yüzden
+             exported=true; koruma kodda: "ack" onay ekstrası + başlatan paket denetimi + park kapısı. -->
+        <activity
+            android:name="com.mapcontrol.hud.HudTestActivity"
+            android:exported="true"
+            android:label="HUD Test"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
         <!-- Medya kartı: çalan şarkıyı okumak için bildirim erişimi (kullanıcı ayarlardan verir). -->
         <service
             android:name=".media.LauncherMediaNotificationListener"
