@@ -36,15 +36,6 @@ class ReadOnlyDecodeTest {
         assertFalse(ReadOnlyDecode.breakDue(null))
     }
 
-    @Test fun speedLimitValidRange() {
-        assertEquals(50, ReadOnlyDecode.speedLimit(50))
-        assertEquals(120, ReadOnlyDecode.speedLimit(120))
-        assertNull(ReadOnlyDecode.speedLimit(0))
-        assertNull(ReadOnlyDecode.speedLimit(0xFF))
-        assertNull(ReadOnlyDecode.speedLimit(0xFFFF))
-        assertNull(ReadOnlyDecode.speedLimit(null))
-    }
-
     @Test fun batteryVoltsMatchesHealthTile() {
         assertEquals(14.2, ReadOnlyDecode.batteryVolts(142)!!, 1e-9)
         assertEquals(14.1, ReadOnlyDecode.batteryVolts(141)!!, 1e-9)

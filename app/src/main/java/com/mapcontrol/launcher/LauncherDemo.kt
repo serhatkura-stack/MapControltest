@@ -80,9 +80,9 @@ internal object LauncherDemo {
     const val DRIVER_VENT_LEVEL = 1
     const val PASSENGER_VENT_LEVEL = 0
 
-    /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam ve direksiyon ısıtma kapalı. */
+    /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam kapalı. */
     fun comfort(): ComfortReading = ComfortReading(
-        connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true, steerHeat = false,
+        connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true,
         trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
     )
 

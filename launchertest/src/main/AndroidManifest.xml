@@ -10,13 +10,8 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Fotoğraf widget'ı: İndirilenler klasöründeki resimleri listeler. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <!-- Navigasyon kartı: Ev / İş için o anki GPS konumu. -->
+    <!-- Veri kontrolü: son GPS konumu. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <queries>
-        <package android:name="ru.yandex.yandexmaps" />
-        <package android:name="ru.yandex.yandexnavi" />
-        <package android:name="com.google.android.apps.maps" />
-    </queries>
 
     <application
         android:allowBackup="false"
@@ -39,17 +34,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Tek seferlik HUD testi: intent-filter YOK (yalnızca açık bileşen adıyla başlatılır).
-             exported=false iken adb shell (uid 2000) başlatamıyor (emülatörde SecurityException), bu yüzden
-             exported=true; koruma kodda: "ack" onay ekstrası + başlatan paket denetimi + park kapısı. -->
-        <activity
-            android:name="com.mapcontrol.hud.HudTestActivity"
-            android:exported="true"
-            android:label="HUD Test"
-            android:screenOrientation="landscape"
-            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
-
-        <!-- Konfor yazma testi (perde, buğu, direksiyon ısıtma): HUD testiyle aynı koruma deseni
+        <!-- Konfor yazma testi (perde, buğu, direksiyon ısıtma): Koruma deseni
              (intent-filter yok, exported=true, ack + shell başlatan denetimi + park kapısı kodda). -->
         <activity
             android:name="com.mapcontrol.comfort.ComfortTestActivity"
@@ -79,20 +64,6 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-        </service>
-
-        <!-- Yandex -> HUD köprüsü (isteğe bağlı): yalnızca ru.yandex.yandexmaps, kullanıcı bir kez etkinleştirir
-             (adb komutu için bkz. NOTLAR). Ayarlarda "Yandex -> HUD" Kapalı iken hiçbir şey okunmaz/gönderilmez. -->
-        <service
-            android:name="com.mapcontrol.hud.YandexHudAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/hud_accessibility_config" />
         </service>
     </application>
 </manifest>

@@ -131,8 +131,6 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
         toast = Toast.makeText(context, msg, Toast.LENGTH_LONG).also { it.show() }
     }
 
-    protected fun onColor(on: Boolean) = if (on) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT
-
     protected fun onFill() = DriveAccent.buttonFill(LauncherTheme.ACCENT)
 
     companion object {
@@ -858,77 +856,5 @@ internal class DefrostTile(context: Context) : ComfortTile(context) {
         const val NAME_SP = 22f
         const val STATE_SP = 16f
         const val CHIP_RADIUS_DP = 16f
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Direksiyon ısıtma
-// ---------------------------------------------------------------------------------------------
-
-/** Direksiyon ısıtma: tek açma/kapama düğmesi; açıkken kutucuk vurgu dolgulu. */
-internal class SteeringHeatTile(context: Context) : ComfortTile(context) {
-
-    private var pendingOn: Boolean? = null
-
-    private val iconView: ImageView = icon(context, R.drawable.ic_mdi_steering_heat, ICON_DP, LauncherTheme.TEXT)
-    private val title = text(context, LABEL_SP, LauncherTheme.TEXT, medium = true).apply { gravity = Gravity.CENTER; maxLines = 2 }
-    private val stateLabel = text(context, STATE_SP, LauncherTheme.TEXT_SECONDARY).apply { gravity = Gravity.CENTER }
-
-    private val root: LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        val p = context.dp(PADDING_DP)
-        setPadding(p, p, p, p)
-        addView(iconView, LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-        addView(gap(context, 6, vertical = true))
-        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        addView(stateLabel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { toggle() }
-        pressFeedback()
-    }
-
-    init { title.setText(R.string.launcher_widget_steering_heat) }
-
-    override val view: View get() = root
-
-    /** 1 sütunlu ince kutucukta yalnızca ikon ve durum; başlık gizlenir. */
-    override fun applySpan(span: Span) {
-        title.visibility = if (span.w >= 2) View.VISIBLE else View.GONE
-    }
-
-    override fun clearPending() { pendingOn = null }
-
-    private fun isOn(): Boolean? = pendingOn ?: reading.steerHeat.takeIf { reading.connected }
-
-    override fun render() {
-        val on = isOn()
-        val known = on != null
-        val active = on == true
-        root.background = cardSurface(context, if (active) onFill() else LauncherTheme.CARD)
-        iconView.imageTintList = ColorStateList.valueOf(if (active) LauncherTheme.ON_ACCENT else if (known) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
-        title.setTextColor(if (active) LauncherTheme.ON_ACCENT else if (known) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
-        stateLabel.setTextColor(if (active) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT_SECONDARY)
-        val state = context.getString(if (!known) R.string.launcher_unavailable else if (active) R.string.launcher_comfort_on else R.string.launcher_comfort_off)
-        stateLabel.setTextSmooth(state)
-        root.isEnabled = known || LauncherEdition.READ_ONLY
-        root.contentDescription = context.getString(R.string.launcher_widget_steering_heat) + ", " + state
-    }
-
-    private fun toggle() {
-        val current = isOn()
-        if (current == null && !LauncherEdition.READ_ONLY) return
-        val target = !(current ?: false)
-        pendingOn = target
-        if (ComfortWriter.steerEnabled) io.runSafely { ComfortWriter.setSteerHeat(target) }
-        afterCommit(ComfortWriter.steerEnabled)
-    }
-
-    private companion object {
-        const val PADDING_DP = 10
-        const val ICON_DP = 36
-        const val LABEL_SP = 20f
-        const val STATE_SP = 16f
     }
 }

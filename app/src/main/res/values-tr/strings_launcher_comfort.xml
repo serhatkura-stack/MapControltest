@@ -2,7 +2,6 @@
 <resources>
     <string name="launcher_widget_sunshade">Tavan perdesi</string>
     <string name="launcher_widget_defrost">Buğu giderme</string>
-    <string name="launcher_widget_steering_heat">Direksiyon ısıtma</string>
     <string name="launcher_comfort_front">Ön</string>
     <string name="launcher_comfort_rear">Arka</string>
     <string name="launcher_comfort_on">Açık</string>

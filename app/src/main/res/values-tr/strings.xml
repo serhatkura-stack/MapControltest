@@ -160,19 +160,14 @@
     <string name="vehicle_info_etm_only_body">*</string>
 
     <string name="launcher_dashboard_speed_unit">km/h</string>
-    <string name="launcher_dashboard_tap_details">Ayrıntılar için dokunun</string>
-    <string name="launcher_dashboard_card_driving">Sürüş</string>
-    <string name="launcher_dashboard_card_media">Araç</string>
     <string name="launcher_dashboard_card_clock">Saat ve durum</string>
     <string name="launcher_dashboard_tab_music">Müzik</string>
     <string name="launcher_dashboard_tab_drive">Sürüş</string>
     <string name="launcher_dashboard_card_fuel_motor">Yakıt ve motor</string>
     <string name="launcher_dashboard_card_quick">Hızlı erişim</string>
-    <string name="launcher_dashboard_quick_apps_label">Uygulamalar</string>
     <string name="launcher_dashboard_quick_shortcuts_label">MapControl</string>
     <string name="launcher_dashboard_quick_add">Uygulama ekle</string>
     <string name="launcher_dashboard_quick_pick_title">Uygulama seç</string>
-    <string name="launcher_dashboard_quick_system_suffix"> (Sistem)</string>
     <string name="launcher_dashboard_quick_cleared">Uygulama kaldırıldı</string>
     <string name="launcher_dashboard_quick_empty_list">Eklenecek uygulama bulunamadı</string>
     <string name="launcher_dashboard_quick_exit">Modu Kapat</string>
@@ -195,10 +190,6 @@
     <string name="launcher_swipe_action_cluster_open">Küme yansıtmasını aç</string>
     <string name="launcher_swipe_action_cluster_close">Küme yansıtmasını kapat</string>
     <string name="launcher_swipe_pick_app">Uygulama seç…</string>
-    <string name="launcher_dashboard_quick_menu_launcher_mode">Launcher modu</string>
-    <string name="launcher_dashboard_launcher_mode_title">Launcher modu</string>
-    <string name="launcher_dashboard_display_mode_3d">3D Model</string>
-    <string name="launcher_dashboard_display_mode_lite">Lite</string>
     <string name="launcher_lite_stat_speed_unit">km/h</string>
     <string name="launcher_lite_stat_gear">vites</string>
     <string name="launcher_lite_stat_fuel">yakıt</string>
@@ -215,22 +206,8 @@
     <string name="weather_showers">Sağanak</string>
     <string name="weather_thunder">Fırtınalı</string>
     <string name="weather_unknown">Hava durumu</string>
-    <string name="launcher_dashboard_quick_list_all_title">Tüm uygulamalar</string>
-    <string name="launcher_dashboard_quick_count_settings">Kısayol sayısı</string>
     <string name="launcher_dashboard_quick_count_title">Kaç hızlı erişim uygulaması gösterilsin?</string>
     <string name="launcher_dashboard_quick_count_option">%d uygulama</string>
-    <string name="launcher_dashboard_card_pose">3D model pozisyonu</string>
-    <string name="launcher_dashboard_pose_apply">Göster</string>
-    <string name="launcher_dashboard_interior_mode">İç mekan görünümü</string>
-    <string name="launcher_dashboard_exterior_mode">Dış görünüm</string>
-    <string name="launcher_dashboard_trunk_open">Bagajı aç</string>
-    <string name="launcher_dashboard_trunk_close">Bagajı kapat</string>
-    <string name="launcher_dashboard_trunk_blocked_moving">Araç hareket halindeyken bagaj açılamaz</string>
-    <string name="launcher_dashboard_sunroof_open">Cam tavanı aç</string>
-    <string name="launcher_dashboard_sunroof_close">Cam tavanı kapat</string>
-    <string name="launcher_dashboard_doors_open">Kapıları aç</string>
-    <string name="launcher_dashboard_doors_close">Kapıları kapat</string>
-    <string name="launcher_dashboard_drive_mode">Sürüş modu: %1$s</string>
     <string name="launcher_dashboard_gear_label">Vites: %1$s</string>
     <string name="launcher_dashboard_rpm_label">Devir</string>
     <string name="launcher_dashboard_trip_label">Trip</string>
@@ -242,11 +219,7 @@
     <string name="launcher_dashboard_stat_low_fuel">Düşük yakıt</string>
     <string name="launcher_dashboard_low_fuel_yes">Evet</string>
     <string name="launcher_dashboard_low_fuel_no">Hayır</string>
-    <string name="launcher_dashboard_stat_battery">Akü</string>
-    <string name="launcher_dashboard_stat_gear">Vites</string>
     <string name="launcher_dashboard_loading">Araç verisi yükleniyor…</string>
-    <string name="launcher_dashboard_model_loading">3D model yükleniyor…</string>
-    <string name="launcher_dashboard_model_load_failed">3D model yüklenemedi</string>
     <string name="launcher_dashboard_offline">Araç verisi bekleniyor</string>
     <string name="launcher_dashboard_media_empty_title">Bluetooth hazır</string>
     <string name="launcher_dashboard_media_empty_body">Çalmak için bir şarkı seçin</string>
@@ -261,11 +234,6 @@
     <string name="launcher_media_volume_down">Sesi kıs</string>
     <string name="launcher_media_volume_up">Sesi aç</string>
     <string name="launcher_media_mute">Sessize al</string>
-    <string name="launcher_dashboard_vehicle_fallback">Araç görseli</string>
     <string name="launcher_dashboard_vehicle_tap_select">Araç görseli seçmek için dokunun</string>
-    <string name="launcher_quick_control_lock">Merkezi kilit</string>
-    <string name="launcher_quick_control_trunk">Bagaj</string>
-    <string name="launcher_quick_control_trunk_hint">Bagajı aç/kapatmak için araca dokunun</string>
-    <string name="launcher_quick_control_back">Geri</string>
 </resources>
 

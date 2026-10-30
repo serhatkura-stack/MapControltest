@@ -71,9 +71,6 @@ object LauncherTheme {
     private const val DAY_TEXT_SECONDARY = 0xFF4B5563.toInt()
     private const val NIGHT_ALERT_SURFACE = 0xFF3A1F22.toInt()
     private const val DAY_ALERT_SURFACE = 0xFFFDE8E8.toInt()
-    // Düzenlemede kartın üstündeki perde yarı saydam: widget'ın o boyuttaki gerçek hâli altında görünür.
-    private const val NIGHT_EDIT_SCRIM = 0x8C1A1D23.toInt()
-    private const val DAY_EDIT_SCRIM = 0x8CFFFFFF.toInt()
 
     // Alt çubuk ("dock") yüzeyi: gece kartlardan bir ton açık koyu cam; gündüz soğuk buzlu gri-mavi, koyu ince kenarlı.
     private const val DAY_DOCK_TOP = 0xFFE9EDF3.toInt()
@@ -122,9 +119,6 @@ object LauncherTheme {
 
     /** Uyarı durumundaki kart zemini (ör. lastik uyarısı). */
     val ALERT_SURFACE: Int get() = if (night) NIGHT_ALERT_SURFACE else DAY_ALERT_SURFACE
-
-    /** Düzenleme modunda widget içeriğinin üstüne gelen örtü; içerik etiketlerle çakışmasın diye çok opak. */
-    val EDIT_SCRIM: Int get() = if (night) NIGHT_EDIT_SCRIM else DAY_EDIT_SCRIM
 
     /**
      * Görünümü seçer. [ThemeMode.AUTO] sistemin gündüz/gece durumunu izler; bilinmeyen durum gece sayılır

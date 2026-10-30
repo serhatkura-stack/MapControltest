@@ -25,24 +25,8 @@ data class Span(val w: Int, val h: Int) {
     override fun toString() = "${w}×$h"
 }
 
-/**
- * Navigasyon kartı (Yandex Haritalar): true iken "Widget ekle" listesinde görünür; false ise gizlenir. [WidgetType.NAVIGATION] türü ve [NavigationCard] durur; kayıtlı düzenlerdeki mevcut
- * navigasyon widget'ları yüklenmeye devam eder. Açmak için yalnızca bu bayrak true yapılır
- * (varsayılan düzenler de eski yerleşimine döner).
- */
-const val NAVIGATION_CARD_ENABLED = true
-
-/** Navigasyon kartı varsayılan düzenlere konur mu? Hayır: yalnızca "Widget ekle" ile eklenir. */
-const val NAVIGATION_IN_DEFAULT_LAYOUT = false
-
-/** Direksiyon ısıtma bu araçta yok ("TR pakette yok"): seçiciden gizlenir, kayıtlı düzenler yine yüklenir. */
-const val STEERING_HEAT_AVAILABLE = false
-
 /** "Widget ekle" listesinde gösterilecek türler (hazır olmayanlar elenir). */
-fun addableWidgetTypes(): List<WidgetType> =
-    WidgetType.values().filter {
-        (NAVIGATION_CARD_ENABLED || it != WidgetType.NAVIGATION) && (STEERING_HEAT_AVAILABLE || it != WidgetType.STEERING_HEAT)
-    }
+fun addableWidgetTypes(): List<WidgetType> = WidgetType.values().toList()
 
 /** Düzende şu an bulunan widget türleri. */
 fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it.type }.toSet()
@@ -77,7 +61,6 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>, val parkOnly: Boolean = false) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
-    NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(4, 2), Span(2, 2), Span(6, 2))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
@@ -97,10 +80,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     SUNSHADE("sunshade", R.string.launcher_widget_sunshade, R.drawable.ic_mdi_car_sunroof, listOf(Span(2, 2), Span(2, 4))),
     TRUNK("trunk", R.string.launcher_widget_trunk, R.drawable.ic_mdi_car_trunk, listOf(Span(2, 2), Span(2, 4))),
     DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
-    STEERING_HEAT("steering_heat", R.string.launcher_widget_steering_heat, R.drawable.ic_mdi_steering_heat, listOf(Span(2, 2), Span(1, 2))),
     SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2)), parkOnly = true),
     BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
-    SPEED_LIMIT("speed_limit", R.string.launcher_widget_speed_limit, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2))),
     BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
     CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
@@ -148,20 +129,18 @@ interface SizedWidget : LauncherWidget {
  * Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
  * OEM çubuğu yoksa alt iki satır altı adet 2×2 kutucukla dolar: hava durumu, sağlık, kilit, sürüş modu,
  * sürücü ve yolcu koltuk ısıtma.
- * [NAVIGATION_CARD_ENABLED] açıksa navigasyon eski yerine döner (OEM'de 4 hücre + ince uygulama kutucukları).
  */
 fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
-    val nav = NAVIGATION_IN_DEFAULT_LAYOUT
-    // Uygulama kutucuğu yalnızca 1×2'dir. Navigasyon yokken şerit 8 kutucukla (col 2-9) dolar; varken 4 kutucuk ve col 6'dan başlar.
-    val appStart = if (nav) 6 else 2
-    val appSlots = if (nav) 4 else DEFAULT_APP_SLOTS
+    // Uygulama kutucuğu yalnızca 1×2'dir; şerit 8 kutucukla (col 2-9) dolar.
+    val appStart = 2
+    val appSlots = DEFAULT_APP_SLOTS
     listOf(
         PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
         PlacedWidget("consumption", WidgetType.CONSUMPTION, 6, 0, Span(2, 2)),
         PlacedWidget("trip", WidgetType.TRIP, 6, 2, Span(2, 2)),
         PlacedWidget("vehicle", WidgetType.VEHICLE, 8, 0, Span(4, 4)),
         PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-    ) + (if (nav) listOf(PlacedWidget("navigation", WidgetType.NAVIGATION, 2, 4, Span(4, 2))) else emptyList()) +
+    ) +
         // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
         (0 until appSlots).map { i ->
             PlacedWidget("app_dock_$i", WidgetType.APP, appStart + i, 4, Span(1, 2), appPackages.getOrNull(i))
@@ -198,7 +177,6 @@ fun migrateGridV1(layout: List<PlacedWidget>): List<PlacedWidget> = layout.map {
 object WidgetFactory {
     fun create(activity: Activity, placed: PlacedWidget): SizedWidget = when (placed.type) {
         WidgetType.MEDIA -> MediaCard(activity)
-        WidgetType.NAVIGATION -> NavigationCard(activity)
         WidgetType.VEHICLE -> VehicleHeroCard(activity)
         WidgetType.LOCK -> LockTile(activity)
         WidgetType.DRIVE_MODE -> DriveModeTile(activity)
@@ -217,11 +195,9 @@ object WidgetFactory {
         WidgetType.SUNSHADE -> SunshadeTile(activity)
         WidgetType.TRUNK -> TrunkTile(activity)
         WidgetType.DEFROST -> DefrostTile(activity)
-        WidgetType.STEERING_HEAT -> SteeringHeatTile(activity)
         WidgetType.PHOTO -> PhotoTile(activity, placed.id)
         WidgetType.SCREEN_OFF -> ScreenOffTile(activity)
         WidgetType.BREAK_REMINDER -> BreakTile(activity)
-        WidgetType.SPEED_LIMIT -> SpeedLimitTile(activity)
         WidgetType.BATTERY -> BatteryTile(activity)
         WidgetType.PHONE_REMINDER -> PhoneTile(activity)
         WidgetType.CLOCK -> ClockTile(activity)

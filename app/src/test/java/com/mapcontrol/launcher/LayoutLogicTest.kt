@@ -31,7 +31,7 @@ class LayoutLogicTest {
     @Test
     fun overlapsIsTrueForIntersectingWidgets() {
         val media = widget("media", WidgetType.MEDIA, 0, 0, Span(6, 6))
-        val nav = widget("nav", WidgetType.NAVIGATION, 4, 4, Span(6, 4))
+        val nav = widget("nav", WidgetType.AIR, 4, 4, Span(6, 4))
         assertTrue(media.overlaps(nav))
         assertTrue(nav.overlaps(media))
     }
@@ -39,7 +39,7 @@ class LayoutLogicTest {
     @Test
     fun overlapsIsFalseForTouchingEdges() {
         val left = widget("left", WidgetType.MEDIA, 0, 0, Span(6, 6))
-        val right = widget("right", WidgetType.NAVIGATION, 6, 0, Span(6, 4))
+        val right = widget("right", WidgetType.AIR, 6, 0, Span(6, 4))
         val below = widget("below", WidgetType.CONSUMPTION, 0, 6, Span(2, 2))
         assertFalse(left.overlaps(right))
         assertFalse(right.overlaps(left))
@@ -121,11 +121,23 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun addPickerShowsNavigationWhenEnabled() {
-        assertTrue(WidgetType.NAVIGATION in addableWidgetTypes())
+    fun addPickerListsEveryRemainingType() {
+        assertEquals(WidgetType.values().toList(), addableWidgetTypes())
         assertTrue(WidgetType.VEHICLE in addableWidgetTypes())
-        // Tür ve kayıtlı navigasyon widget'ları yine de yüklenir.
-        assertEquals(WidgetType.NAVIGATION, WidgetType.fromKey("navigation"))
+    }
+
+    @Test
+    fun removedNavigationSpeedLimitAndSteeringKeysAreDroppedOnLoad() {
+        listOf("navigation", "speed_limit", "steering_heat").forEach { assertNull(it, WidgetType.fromKey(it)) }
+        val out = LayoutStore.resolveRaw(listOf(
+            raw("m", "media", 0, 0, 6, 4),
+            raw("n", "navigation", 6, 0, 4, 2),
+            raw("s", "speed_limit", 6, 2, 2, 2),
+            raw("h", "steering_heat", 8, 2, 2, 2),
+            raw("l", "lock", 10, 2, 1, 2),
+        ))
+        assertEquals(listOf(WidgetType.MEDIA, WidgetType.LOCK), out.map { it.type })
+        assertTrue(LayoutStore.isValid(out))
     }
 
     @Test
@@ -153,10 +165,7 @@ class LayoutLogicTest {
 
     @Test
     fun desayDefaultBottomRowIsDriverSeatEightThinAppsPassengerSeat() {
-        // Navigasyon kartı gizliyken (NAVIGATION_IN_DEFAULT_LAYOUT = false) uygulama şeridi boşluğu doldurur.
-        assertTrue(!NAVIGATION_IN_DEFAULT_LAYOUT)
         val layout = defaultLayout(true)
-        assertTrue(layout.none { it.type == WidgetType.NAVIGATION })
         val bottom = layout.filter { it.row == 4 }.sortedBy { it.col }
         assertEquals(
             listOf(WidgetType.SEAT_HEAT_DRIVER) + List(8) { WidgetType.APP } + WidgetType.SEAT_HEAT_PASSENGER,
@@ -176,14 +185,14 @@ class LayoutLogicTest {
         val old = listOf(
             widget("m", WidgetType.MEDIA, 0, 0, Span(3, 2)),
             widget("v", WidgetType.MEDIA, 3, 0, Span(3, 2)),
-            widget("n", WidgetType.NAVIGATION, 3, 2, Span(3, 1)),
+            widget("n", WidgetType.AIR, 3, 2, Span(2, 1)),
         )
         val migrated = migrateGridV1(old)
         assertEquals(
             listOf(
                 widget("m", WidgetType.MEDIA, 0, 0, Span(6, 4)),
                 widget("v", WidgetType.MEDIA, 6, 0, Span(6, 4)),
-                widget("n", WidgetType.NAVIGATION, 6, 4, Span(6, 2)),
+                widget("n", WidgetType.AIR, 6, 4, Span(4, 2)),
             ),
             migrated,
         )
@@ -210,7 +219,7 @@ class LayoutLogicTest {
     fun everyOldSpanDoubledSnapsToAnAllowedSpan() {
         // Eski 6x3 boyut listeleri: çift katı artık izinli olmayabilir; snapSpans en yakın izinli boyuta çeker.
         val oldSizes = mapOf(
-            WidgetType.NAVIGATION to listOf(Span(3, 2), Span(3, 3), Span(3, 1), Span(2, 1)),
+            WidgetType.AIR to listOf(Span(2, 1), Span(1, 1)),
             WidgetType.VEHICLE to listOf(Span(3, 2), Span(2, 2)),
             WidgetType.LOCK to listOf(Span(1, 1)),
             WidgetType.APP to listOf(Span(1, 1)),
@@ -335,9 +344,9 @@ class LayoutLogicTest {
         // Sağdaki hücreleri sonradan gelen bir widget tutuyor: yolcu eklenmez.
         val out = LayoutStore.resolveRaw(listOf(
             raw("s", "seat_heat", 0, 4, 4, 2),
-            raw("n", "navigation", 2, 4, 4, 2),
+            raw("n", "air", 2, 4, 4, 2),
         ))
-        assertEquals(listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.NAVIGATION), out.map { it.type })
+        assertEquals(listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.AIR), out.map { it.type })
         assertTrue(LayoutStore.isValid(out))
     }
 

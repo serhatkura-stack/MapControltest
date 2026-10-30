@@ -3,46 +3,20 @@
 <resources>
     <string name="launcher_settings">Ayarlar</string>
     <string name="launcher_degrees" formatted="true">%1$d°</string>
-    <string name="launcher_degrees_decimal" formatted="true">%1$.1f°</string>
-    <string name="launcher_nav_title">Nereye?</string>
-    <string name="launcher_nav_search_hint">Adres veya yer ara</string>
-    <string name="launcher_nav_home">Ev</string>
-    <string name="launcher_nav_work">İş</string>
-    <string name="launcher_nav_not_set">Eklemek için dokun</string>
-    <string name="launcher_nav_dialog_home">Ev adresi</string>
-    <string name="launcher_nav_dialog_work">İş adresi</string>
-    <string name="launcher_nav_dialog_hint">Sokak, ilçe, şehir</string>
-    <string name="launcher_nav_dialog_save">Kaydet</string>
     <string name="launcher_nav_dialog_cancel">Vazgeç</string>
-    <string name="launcher_nav_no_app">Navigasyon uygulaması yüklü değil</string>
-    <string name="launcher_nav_hold_to_save">Kaydetmek için basılı tut</string>
-    <string name="launcher_nav_saved_home">Ev kaydedildi</string>
-    <string name="launcher_nav_saved_work">İş kaydedildi</string>
-    <string name="launcher_nav_locating">Konum alınıyor…</string>
-    <string name="launcher_nav_no_location">Konum alınamadı</string>
-    <string name="launcher_nav_perm_denied">Konum izni gerekli; izin ver, sonra tekrar basılı tut</string>
-    <string name="launcher_media_idle">Şu an çalan yok</string>
     <string name="launcher_media_idle_hint">Başlatmak için bir müzik uygulaması aç</string>
     <string name="launcher_media_prev">Önceki</string>
-    <string name="launcher_range" formatted="true">%1$d km menzil</string>
-    <string name="launcher_range_unknown">Menzil okunamıyor</string>
-    <string name="launcher_fuel" formatted="true">Yakıt %%%1$d</string>
     <string name="launcher_percent" formatted="true">%%%1$d</string>
     <string name="launcher_locked">Kilitli</string>
     <string name="launcher_unlocked">Kilit açık</string>
-    <string name="launcher_lock_unknown">Kilit durumu okunamıyor</string>
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
     <string name="launcher_tires_warning_short">Lastik uyarısı</string>
-    <string name="launcher_car_offline">Araç verisi alınamıyor</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
     <string name="launcher_app_empty">Uygulama ekle</string>
     <string name="launcher_app_pick_title">Uygulama seç</string>
-    <string name="launcher_parked_only">Araç park halindeyken kullanılabilir</string>
     <string name="launcher_widget_media">Medya</string>
-    <string name="launcher_widget_navigation">Navigasyon</string>
-    <string name="launcher_widget_range">Menzil</string>
     <string name="launcher_widget_lock">Kapı kilidi</string>
     <string name="launcher_widget_drive_mode">Sürüş modu</string>
     <string name="launcher_drive_eco">Eko</string>
@@ -52,8 +26,6 @@
     <string name="launcher_drive_mud">Çamur</string>
     <string name="launcher_drive_offroad">Arazi</string>
     <string name="launcher_drive_sand">Kum</string>
-    <string name="launcher_closed">Kapalı</string>
-    <string name="launcher_none">Yok</string>
     <string name="launcher_door_lf">Sol ön</string>
     <string name="launcher_door_rf">Sağ ön</string>
     <string name="launcher_door_lr">Sol arka</string>
@@ -73,10 +45,8 @@
     <string name="launcher_edit_reset_confirm">Varsayılan düzene dönülsün mü?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
-    <string name="launcher_tires_check">Uyarı</string>
     <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">—</string>
-    <string name="launcher_read_only">Test sürümü: yalnızca okuma</string>
     <string name="launcher_theme">Tema</string>
     <string name="launcher_drive_theme_on">Sürüş moduna göre renk: Açık (kapatmak için dokun)</string>
     <string name="launcher_drive_theme_off">Sürüş moduna göre renk: Kapalı (açmak için dokun)</string>
@@ -94,7 +64,6 @@
     <string name="launcher_doors_closed">Kapılar kapalı</string>
     <string name="launcher_part_open" formatted="true">%1$s açık</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d yer açık</string>
-    <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Kapat</string>
     <string name="launcher_edit_no_room">Yer yok</string>
     <string name="launcher_widget_consumption">Anlık tüketim</string>
@@ -103,20 +72,14 @@
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
     <string name="launcher_consumption_idle">Araç duruyor</string>
     <string name="launcher_app_vehicle_settings">Araç ayarları</string>
-    <string name="launcher_drive_avg" formatted="true">Bu sürüş %1$s L/100</string>
-    <string name="launcher_trip_avg" formatted="true">Yolculuk ort. %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
-    <string name="launcher_volt_value" formatted="true">%1$s V</string>
-    <string name="launcher_coolant_value" formatted="true">Motor suyu %1$d°</string>
     <string name="launcher_fuel_low" formatted="true">Yakıt az · %%%1$d</string>
-    <string name="launcher_tires_none">Basınç uyarısı yok</string>
     <string name="launcher_health_good">İyi</string>
     <string name="launcher_health_check">Kontrol et</string>
     <string name="launcher_health_low_fuel">Yakıt az</string>
     <string name="launcher_health_battery">Akü voltajı</string>
     <string name="launcher_health_hot">Motor sıcak</string>
-    <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
     <string name="launcher_widget_service">Bakım</string>
@@ -130,7 +93,6 @@
     <string name="launcher_air_out" formatted="true">Dışarı %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³ · Kötü</string>
     <string name="launcher_air_recirc_hint">İç sirkülasyon önerilir</string>
-    <string name="launcher_widget_seat_heat">Koltuk ısıtma</string>
     <string name="launcher_seat_driver">Sürücü koltuğu</string>
     <string name="launcher_seat_passenger">Yolcu koltuğu</string>
     <string name="launcher_oem_mock_label">OEM (taklit)</string>
@@ -151,9 +113,7 @@
     <string name="launcher_bar_home">Ana ekran</string>
     <string name="launcher_bar_apps">Uygulamalar</string>
     <string name="launcher_bar_settings">Ayarlar</string>
-    <string name="launcher_bar_climate">Klima</string>
     <string name="launcher_read_only_climate">Test sürümü: klima araçtan değiştirilir</string>
-    <string name="launcher_climate_from_car">Klima araçtaki tuşlardan değiştirilir</string>
     <string name="launcher_climate_pending">Klima kontrolü araç testinden sonra açılacak</string>
     <string name="launcher_climate_sync">Senkron</string>
     <string name="launcher_climate_driver">Sürücü sıcaklığı</string>
@@ -184,7 +144,6 @@
     <string name="launcher_screen_off_label">Ekranı karart</string>
     <string name="launcher_screen_off_hint">Dokun</string>
     <string name="launcher_widget_break">Mola</string>
-    <string name="launcher_widget_speed_limit">Hız limiti</string>
     <string name="launcher_widget_battery">Akü</string>
     <string name="launcher_widget_phone">Telefon</string>
     <string name="launcher_widget_clock">Saat</string>
@@ -194,7 +153,6 @@
     <string name="launcher_break_driving">sürüş</string>
     <string name="launcher_break_driving_for" formatted="true">%1$s sürüş</string>
     <string name="launcher_break_now">Mola zamanı</string>
-    <string name="launcher_speed_limit_cd" formatted="true">Hız limiti %1$d</string>
     <string name="launcher_phone_charging">Telefon şarjda</string>
     <string name="launcher_phone_pad_empty">Şarj pedi boş</string>
     <string name="launcher_phone_on_pad">Telefon pedde</string>

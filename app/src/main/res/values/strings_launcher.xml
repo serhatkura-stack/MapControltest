@@ -3,46 +3,20 @@
 <resources>
     <string name="launcher_settings">Settings</string>
     <string name="launcher_degrees" formatted="true">%1$d°</string>
-    <string name="launcher_degrees_decimal" formatted="true">%1$.1f°</string>
-    <string name="launcher_nav_title">Where to?</string>
-    <string name="launcher_nav_search_hint">Search address or place</string>
-    <string name="launcher_nav_home">Home</string>
-    <string name="launcher_nav_work">Work</string>
-    <string name="launcher_nav_not_set">Tap to add</string>
-    <string name="launcher_nav_dialog_home">Home address</string>
-    <string name="launcher_nav_dialog_work">Work address</string>
-    <string name="launcher_nav_dialog_hint">Street, district, city</string>
-    <string name="launcher_nav_dialog_save">Save</string>
     <string name="launcher_nav_dialog_cancel">Cancel</string>
-    <string name="launcher_nav_no_app">No navigation app installed</string>
-    <string name="launcher_nav_hold_to_save">Press and hold to save</string>
-    <string name="launcher_nav_saved_home">Home saved</string>
-    <string name="launcher_nav_saved_work">Work saved</string>
-    <string name="launcher_nav_locating">Getting location…</string>
-    <string name="launcher_nav_no_location">Could not get location</string>
-    <string name="launcher_nav_perm_denied">Location permission needed; allow it, then press and hold again</string>
-    <string name="launcher_media_idle">Nothing playing</string>
     <string name="launcher_media_idle_hint">Open a music app to start</string>
     <string name="launcher_media_prev">Previous</string>
-    <string name="launcher_range" formatted="true">%1$d km range</string>
-    <string name="launcher_range_unknown">Range unavailable</string>
-    <string name="launcher_fuel" formatted="true">Fuel %1$d%%</string>
     <string name="launcher_percent" formatted="true">%1$d%%</string>
     <string name="launcher_locked">Locked</string>
     <string name="launcher_unlocked">Unlocked</string>
-    <string name="launcher_lock_unknown">Lock status unavailable</string>
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Check tire pressure</string>
     <string name="launcher_tires_warning_short">Tire alert</string>
-    <string name="launcher_car_offline">Vehicle data unavailable</string>
     <string name="launcher_seat_heat_driver">Driver seat heat</string>
     <string name="launcher_seat_heat_passenger">Passenger seat heat</string>
     <string name="launcher_app_empty">Add app</string>
     <string name="launcher_app_pick_title">Choose an app</string>
-    <string name="launcher_parked_only">Available when parked</string>
     <string name="launcher_widget_media">Media</string>
-    <string name="launcher_widget_navigation">Navigation</string>
-    <string name="launcher_widget_range">Range</string>
     <string name="launcher_widget_lock">Door lock</string>
     <string name="launcher_widget_drive_mode">Drive mode</string>
     <string name="launcher_drive_eco">Eco</string>
@@ -52,8 +26,6 @@
     <string name="launcher_drive_mud">Mud</string>
     <string name="launcher_drive_offroad">Off-road</string>
     <string name="launcher_drive_sand">Sand</string>
-    <string name="launcher_closed">Closed</string>
-    <string name="launcher_none">None</string>
     <string name="launcher_door_lf">Front left</string>
     <string name="launcher_door_rf">Front right</string>
     <string name="launcher_door_lr">Rear left</string>
@@ -73,10 +45,8 @@
     <string name="launcher_edit_reset_confirm">Restore the default layout?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
-    <string name="launcher_tires_check">Warning</string>
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">—</string>
-    <string name="launcher_read_only">Test version: read only</string>
     <string name="launcher_theme">Theme</string>
     <string name="launcher_drive_theme_on">Drive mode colors: On (tap to turn off)</string>
     <string name="launcher_drive_theme_off">Drive mode colors: Off (tap to turn on)</string>
@@ -94,7 +64,6 @@
     <string name="launcher_doors_closed">Doors closed</string>
     <string name="launcher_part_open" formatted="true">%1$s open</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
-    <string name="launcher_normal">Normal</string>
     <string name="launcher_close">Close</string>
     <string name="launcher_edit_no_room">No room</string>
     <string name="launcher_widget_consumption">Consumption</string>
@@ -103,20 +72,14 @@
     <string name="launcher_l100_value" formatted="true">%1$s L/100 km</string>
     <string name="launcher_consumption_idle">Stationary</string>
     <string name="launcher_app_vehicle_settings">Vehicle settings</string>
-    <string name="launcher_drive_avg" formatted="true">This drive %1$s L/100</string>
-    <string name="launcher_trip_avg" formatted="true">Trip avg %1$s L/100</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>
-    <string name="launcher_volt_value" formatted="true">%1$s V</string>
-    <string name="launcher_coolant_value" formatted="true">Coolant %1$d°</string>
     <string name="launcher_fuel_low" formatted="true">Low fuel · %1$d%%</string>
-    <string name="launcher_tires_none">No pressure warning</string>
     <string name="launcher_health_good">Good</string>
     <string name="launcher_health_check">Check</string>
     <string name="launcher_health_low_fuel">Low fuel</string>
     <string name="launcher_health_battery">Battery voltage</string>
     <string name="launcher_health_hot">Engine hot</string>
-    <string name="launcher_health_numbers" formatted="true">%1$s V · %2$d°C</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
     <string name="launcher_widget_service">Service</string>
@@ -130,7 +93,6 @@
     <string name="launcher_air_out" formatted="true">Outside %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Outside %1$d µg/m³ · Poor</string>
     <string name="launcher_air_recirc_hint">Recirculation advised</string>
-    <string name="launcher_widget_seat_heat">Seat heating</string>
     <string name="launcher_seat_driver">Driver seat</string>
     <string name="launcher_seat_passenger">Passenger seat</string>
     <string name="launcher_oem_mock_label">OEM (mock)</string>
@@ -151,9 +113,7 @@
     <string name="launcher_bar_home">Home</string>
     <string name="launcher_bar_apps">Apps</string>
     <string name="launcher_bar_settings">Settings</string>
-    <string name="launcher_bar_climate">Climate</string>
     <string name="launcher_read_only_climate">Test build: change the climate from the car</string>
-    <string name="launcher_climate_from_car">Change the climate with the car\'s own controls</string>
     <string name="launcher_climate_pending">Climate control will open after the car test</string>
     <string name="launcher_climate_sync">Sync</string>
     <string name="launcher_climate_driver">Driver temperature</string>
@@ -184,7 +144,6 @@
     <string name="launcher_screen_off_label">Dim screen</string>
     <string name="launcher_screen_off_hint">Tap</string>
     <string name="launcher_widget_break">Break</string>
-    <string name="launcher_widget_speed_limit">Speed limit</string>
     <string name="launcher_widget_battery">Battery</string>
     <string name="launcher_widget_phone">Phone</string>
     <string name="launcher_widget_clock">Clock</string>
@@ -194,7 +153,6 @@
     <string name="launcher_break_driving">driving</string>
     <string name="launcher_break_driving_for" formatted="true">%1$s driving</string>
     <string name="launcher_break_now">Time for a break</string>
-    <string name="launcher_speed_limit_cd" formatted="true">Speed limit %1$d</string>
     <string name="launcher_phone_charging">Phone charging</string>
     <string name="launcher_phone_pad_empty">Charging pad empty</string>
     <string name="launcher_phone_on_pad">Phone on pad</string>

@@ -65,7 +65,6 @@ internal object ReadOnlyDecode {
      * Hız limiti (CarSetting 86): km/sa doğrudan. 0 = limit yok; 5..200 dışı (0xFF, 0xFFFF) geçersiz.
      * Durum sinyali (85) araçta hep 0 geldi; anlamı bilinmediği için limit onsuz da gösterilir.
      */
-    fun speedLimit(raw: Int?): Int? = raw?.takeIf { it in 5..200 }
 
     /** Akü gerilimi (ReadOnly 76, BATTERY_LEVEL): ham/10 V. Araçta motor çalışırken [0,142] -> 14,2 V. 8,0-16,5 V dışı geçersiz. */
     fun batteryVolts(raw: Int?): Double? = raw?.takeIf { it in 80..165 }?.let { it / 10.0 }
@@ -152,7 +151,6 @@ internal enum class BodyPart(@StringRes val label: Int) {
 internal data class ExtraData(
     val connected: Boolean = false,
     val driveMinutes: Int? = null,
-    val speedLimit: Int? = null,
     val batteryV: Double? = null,
     val batterySoc: Int? = null,
     val padState: Int? = null,
@@ -284,7 +282,6 @@ internal object ExtraSource {
                 set(BodyPart.HOOD, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_HOOD_STATE)))
             }
             d = d.copy(
-                speedLimit = ReadOnlyDecode.speedLimit(cs(CarSettingID.ID_NAV_SPEED_LIMIT)),
                 handbrakeOn = ReadOnlyDecode.handbrakeOn(ro(ReadOnlyID.ID_HANDBRAKE_STATE)),
             )
         }
@@ -300,7 +297,6 @@ internal object ReadOnlyDemo {
     fun extra(): ExtraData = ExtraData(
         connected = true,
         driveMinutes = 72,
-        speedLimit = 50,
         batteryV = 14.1,
         batterySoc = 85,
         padState = ReadOnlyDecode.PAD_CHARGING,
@@ -387,124 +383,6 @@ internal class BreakTile(context: Context) :
     private fun durationText(minutes: Int): String =
         if (minutes >= 60) context.getString(R.string.launcher_break_hm, minutes / 60, minutes % 60)
         else context.getString(R.string.launcher_break_m, minutes)
-}
-
-/**
- * Hız limiti: trafik levhası görünümlü yuvarlak (kırmızı halka, beyaz zemin, siyah sayı). Limit yok ya da 0 ise
- * gri halka ve "—". Kaynak CarSetting NAV_SPEED_LIMIT; Tiggo 7'de bu sinyal hep 0 okundu (gösterge tabelası başka
- * yoldan geliyor), yani araçta dolu geldiği doğrulanmadı.
- */
-internal class SpeedLimitTile(private val context: Context) : SizedWidget, Themeable {
-
-    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
-    private val theme = ThemeBindings()
-    private val sign = SignView(context)
-    private val headerIcon = icon(context, R.drawable.ic_mdi_speedometer, HEADER_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
-    private val label = text(context, LauncherTheme.LABEL_SP).apply {
-        setText(R.string.launcher_widget_speed_limit)
-        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
-    }
-    private var data = ExtraData()
-    private val listener = ExtraSource.Listener {
-        data = it
-        bind()
-    }
-
-    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
-        gravity = Gravity.CENTER_HORIZONTAL
-        minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        theme.bind { background = cardSurface(context) }
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            addView(headerIcon)
-            addView(gap(context, 10))
-            addView(label)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        addView(sign, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = context.dp(6)
-        })
-    }
-
-    override val view: View get() = root
-
-    override fun applySpan(span: Span) = bind()
-
-    /** Tema değişti: yüzey, başlık ve tabela yeni renklerle (tabela halkası/sayısı çizimde okunur, yalnızca yeniden çizilir). */
-    override fun applyTheme() {
-        theme.reapply()
-        sign.invalidate()
-    }
-
-    override fun onVisible() = ExtraSource.add(context, listener)
-
-    override fun onHidden() = ExtraSource.remove(listener)
-
-    override fun release() = ExtraSource.remove(listener)
-
-    private fun bind() {
-        val limit = if (data.connected) data.speedLimit else null
-        sign.set(limit)
-        root.contentDescription = if (limit != null) context.getString(R.string.launcher_speed_limit_cd, limit)
-        else context.getString(R.string.launcher_waiting_data)
-    }
-
-    /** Tabela: yalnızca değer değişince yeniden çizilir, animasyon yok. */
-    private class SignView(context: Context) : View(context) {
-        private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val number = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            textAlign = Paint.Align.CENTER
-        }
-        private var limit: Int? = null
-
-        init {
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-
-        fun set(value: Int?) {
-            if (value == limit) return
-            limit = value
-            invalidate()
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            val d = minOf(width, height).toFloat()
-            if (d <= 0f) return
-            val cx = width / 2f
-            val cy = height / 2f
-            val stroke = d * RING_FRAC
-            val r = d / 2f - stroke / 2f
-            val v = limit
-            ring.strokeWidth = stroke
-            if (v != null) {
-                fill.color = SIGN_WHITE
-                canvas.drawCircle(cx, cy, r, fill)
-                ring.color = SIGN_RED
-                canvas.drawCircle(cx, cy, r, ring)
-                number.color = SIGN_BLACK
-                val text = v.toString()
-                number.textSize = d * if (text.length >= 3) 0.34f else 0.46f
-                canvas.drawText(text, cx, cy - (number.descent() + number.ascent()) / 2f, number)
-            } else {
-                ring.color = LauncherTheme.TRACK
-                canvas.drawCircle(cx, cy, r, ring)
-                number.color = LauncherTheme.TEXT_SECONDARY
-                number.textSize = d * 0.40f
-                canvas.drawText(context.getString(R.string.launcher_unavailable), cx, cy - (number.descent() + number.ascent()) / 2f, number)
-            }
-        }
-    }
-
-    private companion object {
-        const val HEADER_ICON_DP = 28
-        const val PADDING_DP = 16
-        const val RING_FRAC = 0.13f
-        const val SIGN_RED = 0xFFD62828.toInt()
-        const val SIGN_WHITE = 0xFFFFFFFF.toInt()
-        const val SIGN_BLACK = 0xFF111111.toInt()
-    }
 }
 
 /**

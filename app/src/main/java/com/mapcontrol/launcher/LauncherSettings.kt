@@ -119,10 +119,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             d.dismiss()
             dataCheck = (dataCheck ?: DataCheckSheet(activity)).also { it.show() }
         }, fullWidth())
-        if (LauncherEdition.HAS_HUD_BRIDGE) {
-            addView(gap(activity, 12, vertical = true))
-            addView(hudBridgeRow(), fullWidth())
-        }
         if (LauncherEdition.HAS_SETTINGS) {
             addView(gap(activity, 12, vertical = true))
             addView(row(R.drawable.ic_mdi_cog, R.string.launcher_mapcontrol_settings) {
@@ -225,37 +221,10 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Yandex → HUD" (Kapalı/Açık, profil başına; bildirim erişimi gerekir, erişilebilirlik isteğe bağlı). Uzun basış: hata ayıklama için düz ok. Yerinde güncellenir. */
-    private fun hudBridgeRow(): View {
-        fun hint(): String {
-            val state = activity.getString(
-                if (LauncherEdition.hudBridgeEnabled(activity)) R.string.launcher_hud_bridge_on else R.string.launcher_hud_bridge_off)
-            var h = if (LauncherEdition.hudBridgeServiceGranted(activity)) state else
-                activity.getString(R.string.launcher_hud_bridge_need_notif) + " · " + activity.getString(R.string.launcher_hud_bridge_need_notif_hint)
-            if (LauncherEdition.hudBridgeForceStraight(activity)) {
-                h += " · " + activity.getString(R.string.launcher_hud_bridge_straight, "9")
-            }
-            return h
-        }
-        val view = row(R.drawable.ic_mdi_open_in_new, R.string.launcher_hud_bridge, hintText = hint()) { }
-        fun refresh() { view.findViewWithTag<android.widget.TextView>(HINT_TAG)?.text = hint() }
-        view.setOnClickListener {
-            LauncherEdition.setHudBridgeEnabled(activity, !LauncherEdition.hudBridgeEnabled(activity))
-            refresh()
-        }
-        view.setOnLongClickListener {
-            LauncherEdition.toggleHudBridgeForceStraight(activity)
-            refresh()
-            true
-        }
-        return view
-    }
-
     private fun row(
         @DrawableRes iconRes: Int,
         @StringRes labelRes: Int,
         @StringRes hintRes: Int = 0,
-        hintText: String? = null,
         onClick: () -> Unit,
     ): View =
         LinearLayout(activity).apply {
@@ -267,14 +236,14 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setPadding(p, 0, p, 0)
             addView(icon(activity, iconRes, 32, LauncherTheme.TEXT_SECONDARY))
             addView(gap(activity, 20))
-            if (hintRes == 0 && hintText == null) {
+            if (hintRes == 0) {
                 addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
             } else {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { setText(labelRes) })
                     addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                        if (hintText != null) { text = hintText; tag = HINT_TAG } else setText(hintRes)
+                        setText(hintRes)
                     })
                 })
             }
@@ -321,7 +290,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     private companion object {
         /** Aracın kendi araç ayarları uygulaması (Desay SV). */
         const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
-        const val HINT_TAG = "row_hint"
         const val ROW_HEIGHT_DP = 80
         /** Başlık, iç boşluk ve ekran kenarı için ayrılan yükseklik. */
         /** Başlık + kart dolgusu + sistem çubuğu (1920x720 ekranda 48 px) düşülür; aksi halde son satır pencere altında kırpılır. */

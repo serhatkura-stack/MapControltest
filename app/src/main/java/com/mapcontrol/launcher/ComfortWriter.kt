@@ -6,7 +6,7 @@ import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
-import com.mapcontrol.hud.HudParkGate
+import com.mapcontrol.comfort.ParkGate
 import java.util.concurrent.Executor
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -146,9 +146,6 @@ internal object ComfortMath {
     /** Arka cam: HVAC arka buğu (80) okunur (araçta ölçüldü: 0 → 1). */
     fun decodeRear(hvacDefrost: Int?): Boolean? = hvacDefrost?.let { it > 0 }
 
-    /** Direksiyon ısıtma (CarSetting 160): 0/1; okunamıyorsa null. */
-    fun decodeSteer(raw: Int?): Boolean? = raw?.let { it > 0 }
-
     // --- Perde ---
 
     /**
@@ -237,9 +234,6 @@ internal object ComfortMath {
         return listOf(ComfortCmd(VDEventCarInfo.MODULE_HVAC, id, v))
     }
 
-    fun steerCommands(on: Boolean): List<ComfortCmd> =
-        listOf(ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, if (on) 1 else 0))
-
     /** Perde yazması VR modülünden (327696) kimlik 124 (araçta doğrulandı); CarSetting 10 yazmaları yok sayılıyor. */
     fun sunshadeCommand(value: Int): ComfortCmd =
         ComfortCmd(ComfortWriter.MODULE_VR, ComfortWriter.ID_VR_SUN_SHADE, value)
@@ -274,7 +268,6 @@ internal object ComfortWriter {
 
     /** Buğu AÇMA doğrulandı; KAPATMA doğrulanmadı, o yüzden kapalı kalır (kapatma değeri [DEFROST_OFF_VALUE] denenecek). */
     const val DEFROST_WRITE_VERIFIED = false
-    const val STEER_HEAT_WRITE_VERIFIED = false
 
     /** VDEventCarInfo.MODULE_VR ve VrID.ID_VR_SUN_SHADE: perde yazması buradan gider (CarSetting 10 yazmaları yok sayılır). */
     const val MODULE_VR = 327696
@@ -307,7 +300,6 @@ internal object ComfortWriter {
     val sunshadeEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, SUNSHADE_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
     val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, TRUNK_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
     val defrostEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, DEFROST_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
-    val steerEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, STEER_HEAT_WRITE_VERIFIED, LauncherEdition.READ_ONLY)
 
     /**
      * Kapılı yazma (birim testli): [allowed] false ise [send] hiç çağrılmaz ve false döner.
@@ -329,10 +321,10 @@ internal object ComfortWriter {
         return TrunkWriteResult.SENT
     }
 
-    /** Park kararı: araç testi aracıyla aynı [HudParkGate] (gösterge hızı 119 == 0 ve eski hız 0 değil). Arka planda çağrılır. */
+    /** Park kararı: araç testi aracıyla aynı [ParkGate] (gösterge hızı 119 == 0 ve eski hız 0 değil). Arka planda çağrılır. */
     fun parkedNow(): Boolean {
         val ro = VDEventCarInfo.MODULE_READONLY_INFO
-        return HudParkGate.evaluate(
+        return ParkGate.evaluate(
             CarSignals.readInt(ro, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), CarSignals.readInt(ro, ReadOnlyID.ID_CAR_SPEED),
         ).allowed
     }
@@ -351,10 +343,6 @@ internal object ComfortWriter {
     /** Buğu: ön/arka cam aç/kapat. Kapalıyken false döner ve araca dokunmaz. */
     fun setDefrost(front: Boolean, on: Boolean): Boolean =
         writeAll(defrostEnabled, ComfortMath.defrostCommands(front, on), ::sendToCar)
-
-    /** Direksiyon ısıtma aç/kapat. Kapalıyken false döner ve araca dokunmaz. */
-    fun setSteerHeat(on: Boolean): Boolean =
-        writeAll(steerEnabled, ComfortMath.steerCommands(on), ::sendToCar)
 
     /**
      * Perde adımlarını zamanlar (gecikmeli adım = durdurma). Önceki bekleyen adımlar iptal edilir.
@@ -393,7 +381,6 @@ internal data class ComfortReading(
     val sunshade: SunshadeState = SunshadeState.UNKNOWN,
     val frontDefrost: Boolean? = null,
     val rearDefrost: Boolean? = null,
-    val steerHeat: Boolean? = null,
     val trunk: TrunkReading? = null,
 )
 
@@ -413,7 +400,6 @@ internal object ComfortReader {
                 sunshade = ComfortMath.decodeSunshade(cs(CarSettingID.ID_CAR_SUNSHADE)),
                 frontDefrost = ComfortMath.decodeFront(hv(HvacID.ID_AC_MAX_FRONT_DEFOREST)),
                 rearDefrost = ComfortMath.decodeRear(hv(HvacID.ID_AC_REAR_DEFROST)),
-                steerHeat = ComfortMath.decodeSteer(cs(CarSettingID.ID_CAR_STEER_WHEEL_HEAT)),
                 trunk = if (withTrunk) {
                     TrunkReading(ro(ReadOnlyID.ID_PLG_POSITION), ro(ReadOnlyID.ID_TRUNK_STATE), cs(CarSettingID.ID_CAR_REAR_DOOR_CONTROL))
                 } else null,

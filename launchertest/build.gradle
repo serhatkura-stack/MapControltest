@@ -26,13 +26,7 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         include 'com/mapcontrol/util/ProjectionTargetApps.java'
         include 'com/mapcontrol/util/AppLaunchHelper.java'
         include 'com/mapcontrol/util/AppIconHelper.java'
-        // HUD testi: saf kodlayıcı (HudPayload) ve salt-okur yapılandırma okuyucu.
-        include 'com/mapcontrol/hud/**'
-        // Yandex -> HUD köprüsü: erişilebilirlik okuyucusu (isteğe bağlı, varsayılan kapalı).
-        include 'com/mapcontrol/nav/YandexNavScraper.java'
-        include 'com/mapcontrol/nav/YandexNavSnapshot.java'
-        include 'com/mapcontrol/nav/YandexNavStability.java'
-        // Konfor yazma testi: saf beyaz liste ve komut çözümleyici (ComfortPlan).
+        // Konfor yazma testi: saf beyaz liste, komut çözümleyici (ComfortPlan) ve park kapısı (ParkGate).
         include 'com/mapcontrol/comfort/**'
         include 'com/mapcontrol/vehicle/material/OemEolConfigReader.java'
         // Araç veri yolu istemcisi (VDBus / CarInfoProxy).

@@ -2,7 +2,6 @@
 <resources>
     <string name="launcher_widget_sunshade">Sunshade</string>
     <string name="launcher_widget_defrost">Defrost</string>
-    <string name="launcher_widget_steering_heat">Steering heat</string>
     <string name="launcher_comfort_front">Front</string>
     <string name="launcher_comfort_rear">Rear</string>
     <string name="launcher_comfort_on">On</string>

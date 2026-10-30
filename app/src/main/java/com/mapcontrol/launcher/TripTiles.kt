@@ -231,33 +231,6 @@ internal object TripSource {
     }
 }
 
-/** Yolculuk widget'larının ortak iskeleti: görünürken [TripSource]'u dinler. */
-internal abstract class TripTile(
-    context: Context,
-    iconRes: Int,
-    labelRes: Int,
-) : VehicleTile(context, iconRes, labelRes) {
-
-    protected var data = TripData()
-        private set
-    private val listener = TripSource.Listener {
-        data = it
-        bind()
-    }
-
-    override fun onVisible() = TripSource.add(context, listener)
-
-    override fun onHidden() = TripSource.remove(listener)
-
-    override fun release() = TripSource.remove(listener)
-
-    override fun bindDetail() = bind()
-
-    protected abstract fun bind()
-
-    protected fun one(value: Double) = String.format(java.util.Locale.getDefault(), "%.1f", value)
-}
-
 /**
  * Yolculuk ailesinin (tüketim, yolculuk, sağlık) ortak kartı. İçerik her boyutta kartın ortasındadır:
  * başlık satırı (küçük ikon + etiket), büyük değer, isteğe bağlı küçük alt başlık. 3 sütun ve üzerinde

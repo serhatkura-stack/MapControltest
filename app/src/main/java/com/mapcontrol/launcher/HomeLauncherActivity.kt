@@ -389,14 +389,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         super.onDestroy()
     }
 
-    /** İzin sonuçları: depolama verilince açık fotoğraf seçici yenilenir; konum verilince bekleyen kayıt sürer. */
+    /** İzin sonuçları: depolama verilince açık fotoğraf seçici yenilenir. */
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!granted) return
         when (requestCode) {
             PhotoTile.REQ_STORAGE -> PhotoTile.pickerRefresh?.invoke()
-            NavigationCard.REQ_LOCATION -> NavigationCard.active?.retryPendingSave()
         }
     }
 

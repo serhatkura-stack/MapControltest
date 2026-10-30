@@ -6,13 +6,12 @@ import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
-import com.mapcontrol.hud.HudParkGate
 import com.mapcontrol.launcher.CarSignals
 
 /**
  * Konfor testinde araca yazan TEK sınıf (tavan perdesi, buğu giderme, direksiyon ısıtma). Dar tutuldu:
  *  - yalnızca [ComfortPlan.ALLOWED] beyaz listesindeki (modül, kimlik, değer) üçlüleri gider;
- *  - HER yazmadan hemen önce park kapısı ([HudParkGate]: gösterge hızı 119 == 0, eski hız 0 == 0) ve servis bağlantısı denetlenir;
+ *  - HER yazmadan hemen önce park kapısı ([ParkGate]: gösterge hızı 119 == 0, eski hız 0 == 0) ve servis bağlantısı denetlenir;
  *  - her gönderim `Log.i("ComfortTest", ...)` ile yazılır.
  * Yalnızca ComfortTestActivity çağırır (adb ile başlatılır). Okuma ([read]) salt-okurdur.
  */
@@ -45,13 +44,13 @@ internal class ComfortSender(context: Context) {
     }
 
     /** Park kapısı kararı; ham değerler (vites, el freni) bilgi için günlüğe yazılır. */
-    fun parkDecision(): HudParkGate.Decision {
+    fun parkDecision(): ParkGate.Decision {
         val ro = VDEventCarInfo.MODULE_READONLY_INFO
         val gauge = CarSignals.readInt(ro, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY)
         val legacy = CarSignals.readInt(ro, ReadOnlyID.ID_CAR_SPEED)
         val gear = CarSignals.readInt(ro, ReadOnlyID.ID_GEARBOX_STATE)
         val brake = CarSignals.readInt(ro, ReadOnlyID.ID_HANDBRAKE_STATE)
-        val d = HudParkGate.evaluate(gauge, legacy)
+        val d = ParkGate.evaluate(gauge, legacy)
         Log.i(TAG, "GATE speed119=$gauge speed0=$legacy gear26=$gear handbrake75=$brake -> ${d.allowed} (${d.reason})")
         return d
     }

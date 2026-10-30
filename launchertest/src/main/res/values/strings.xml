@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="hud_bridge_service_description">Yandex Haritalar yönlendirmesini okuyup aracın HUD\'una aktarır.</string>
-</resources>

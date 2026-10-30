@@ -24,24 +24,20 @@ class ComfortMathTest {
         assertTrue(SunshadeState.OPENING.moving && SunshadeState.CLOSING.moving && !SunshadeState.OPEN.moving)
     }
 
-    @Test fun defrostAndSteerDecoding() {
+    @Test fun defrostDecoding() {
         assertEquals(true, ComfortMath.decodeFront(1))
         assertEquals(false, ComfortMath.decodeFront(0))
         assertNull(ComfortMath.decodeFront(null))
         assertEquals(true, ComfortMath.decodeRear(1))
         assertEquals(false, ComfortMath.decodeRear(0))
         assertNull(ComfortMath.decodeRear(null))
-        assertEquals(true, ComfortMath.decodeSteer(1))
-        assertEquals(false, ComfortMath.decodeSteer(0))
-        assertNull(ComfortMath.decodeSteer(null))
     }
 
     @Test fun gateNeverWritesWhenUnverified() {
-        // Ana anahtar açık, ama yalnızca perde özelliği doğrulandı (buğu kapatma/direksiyon ısıtma kapalı).
+        // Ana anahtar açık, ama yalnızca perde özelliği doğrulandı (buğu kapatma kapalı).
         assertTrue(ComfortWriter.COMFORT_WRITE_VERIFIED)
         assertTrue(ComfortWriter.SUNSHADE_WRITE_VERIFIED)
         assertFalse(ComfortWriter.DEFROST_WRITE_VERIFIED)
-        assertFalse(ComfortWriter.STEER_HEAT_WRITE_VERIFIED)
         assertFalse(ComfortWriter.canWrite(false, true, false))
         assertFalse(ComfortWriter.canWrite(true, false, false))
         assertFalse(ComfortWriter.canWrite(true, true, true))
@@ -61,8 +57,6 @@ class ComfortMathTest {
         val rearOff = ComfortMath.defrostCommands(front = false, on = false)
         assertEquals(listOf(80), rearOff.map { it.id })
         assertTrue(rearOff.all { it.value == 2 })
-        assertEquals(listOf(160), ComfortMath.steerCommands(true).map { it.id })
-        assertEquals(1, ComfortMath.steerCommands(true).single().value)
         val shade = ComfortMath.sunshadeCommand(1)
         assertEquals(327696, shade.module)
         assertEquals(124, shade.id)
