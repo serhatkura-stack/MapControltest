@@ -57,13 +57,17 @@ internal data class ClimateReadout(
  * Okuma 3 sn'de bir, yalnızca ekran görünürken.
 
  */
-class OurBottomBar(private val activity: Activity) : LauncherWidget {
+class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
 
     private val context: Context = activity
     private val io = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
     private var startup: LauncherStartup.Deferred? = null
     private var readout = ClimateReadout()
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
+    private val surface = DockSurface(context)
 
     // --- Klima ---
     private val climateControl = ClimateControl(context, io, main)
@@ -74,7 +78,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
      */
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        background = DockSurface(context)
+        background = surface
         clipToOutline = true
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) {
@@ -82,7 +86,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
                 outline.alpha = 1f
             }
         }
-        elevation = context.dpF(LauncherTheme.DOCK_ELEVATION_DP)
+        theme.bind { elevation = context.dpF(LauncherTheme.DOCK_ELEVATION_DP) }
         var first = true
         fun add(v: View, lp: LinearLayout.LayoutParams) {
             if (!first) addView(divider(), LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
@@ -102,6 +106,16 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         add(climateControl.passengerView, weightLp(W_TEMP))
         add(navButton(R.drawable.ic_mdi_cog, R.string.launcher_bar_settings) { openAndroidSettings() }, square())
         add(navButton(R.drawable.ic_mdi_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, square())
+    }
+
+    /** Tema değişti: yüzey, ayraçlar, düğmeler ve klima bölümleri yeni renklerle yenilenir; görünümler korunur. */
+    override fun applyTheme() {
+        appsDialog?.dismiss()
+        appsDialog = null
+        theme.reapply()
+        surface.applyTheme()
+        climateControl.applyTheme()
+        view.invalidate()
     }
 
     override fun onVisible() {
@@ -137,7 +151,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
     // --- Yerleşim ---
 
-    private fun divider(): View = View(context).apply { setBackgroundColor(LauncherTheme.DOCK_DIVIDER) }
+    private fun divider(): View = View(context).apply { theme.bind { setBackgroundColor(LauncherTheme.DOCK_DIVIDER) } }
 
     /**
      * Kare düğme (çubuk yüksekliği). Zemini yok, dock'un parçası; basınca beyaz örtü. Etkin olan, bölümün
@@ -145,20 +159,22 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
      */
     private fun navButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
         FrameLayout(context).apply {
-            foreground = dockPressOverlay(context)
+            theme.bind { foreground = dockPressOverlay(context) }
             contentDescription = context.getString(labelRes)
             isClickable = true
             isFocusable = true
             if (active) {
                 val inset = context.dp(PILL_INSET_DP)
                 addView(View(context).apply {
-                    background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), PILL_RADIUS_DP)
+                    theme.bind { background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), PILL_RADIUS_DP) }
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
                     setMargins(inset, inset, inset, inset)
                 })
             }
             addView(
-                icon(context, iconRes, NAV_ICON_DP, if (active) LauncherTheme.ON_ACCENT else LauncherTheme.DOCK_TEXT),
+                icon(context, iconRes, NAV_ICON_DP).also { ic ->
+                    theme.bind { ic.setTint(if (active) LauncherTheme.ON_ACCENT else LauncherTheme.DOCK_TEXT) }
+                },
                 FrameLayout.LayoutParams(context.dp(NAV_ICON_DP), context.dp(NAV_ICON_DP), Gravity.CENTER),
             )
             setOnClickListener { onClick() }
@@ -350,6 +366,13 @@ private class DockSurface(private val context: Context) : Drawable() {
         color = LauncherTheme.DOCK_BORDER
     }
     private val radius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
+
+    /** Tema değişti: kenar rengi ve gradyanlar yeni renklerle kurulur (sınırlar aynı kalır). */
+    fun applyTheme() {
+        border.color = LauncherTheme.DOCK_BORDER
+        if (!bounds.isEmpty) onBoundsChange(bounds)
+        invalidateSelf()
+    }
 
     override fun onBoundsChange(b: android.graphics.Rect) {
         fill.shader = LinearGradient(0f, b.top.toFloat(), 0f, b.bottom.toFloat(), LauncherTheme.DOCK_TOP, LauncherTheme.DOCK_BOTTOM, Shader.TileMode.CLAMP)

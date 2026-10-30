@@ -22,16 +22,21 @@ import com.mapcontrol.R
  * "Ekranı karart" kutucuğu (1×2 ve 2×2): dokununca [ScreenOffActivity] ile tam siyah, en düşük parlaklıkta
  * bir ekran açar. Araca ya da sistem ayarlarına hiçbir şey yazılmaz.
  */
-class ScreenOffTile(private val activity: Activity) : SizedWidget {
+class ScreenOffTile(private val activity: Activity) : SizedWidget, Themeable {
 
-    private val icon = icon(activity, R.drawable.ic_mdi_weather_night, ICON_DP, LauncherTheme.TEXT)
-    private val label = text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
+
+    private val icon = icon(activity, R.drawable.ic_mdi_weather_night, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT) } }
+    private val label = text(activity, LauncherTheme.LABEL_SP, maxLines = 2).apply {
         setText(R.string.launcher_screen_off_label)
         gravity = Gravity.CENTER
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
 
     private val root: LinearLayout = card(activity, LinearLayout.VERTICAL, paddingDp = 8).apply {
         gravity = Gravity.CENTER
+        theme.bind { background = cardSurface(activity) }
         isClickable = true
         isFocusable = true
         contentDescription = activity.getString(R.string.launcher_screen_off_label)
@@ -43,6 +48,9 @@ class ScreenOffTile(private val activity: Activity) : SizedWidget {
     }
 
     override val view: View = root
+
+    /** Tema değişti: yüzey, ikon ve etiket yeniden atanır. */
+    override fun applyTheme() = theme.reapply()
 
     /** İnce (1 sütun) kutucukta yalnızca ikon görünür; 2×2'de ikon ve etiket. */
     override fun applySpan(span: Span) {

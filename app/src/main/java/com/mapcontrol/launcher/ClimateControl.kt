@@ -48,6 +48,8 @@ internal class ClimateControl(
     private var dragging = false
     private var toast: Toast? = null
 
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
     private val bubble = ValueBubble()
     private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short)
     private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short)
@@ -68,6 +70,14 @@ internal class ClimateControl(
     /** Aracın son okuması; bekleyen (henüz işlenmiş) bir değer varken ekran onu gösterir. */
     fun bind(r: ClimateReadout) {
         readout = r
+        render()
+    }
+
+    /** Tema değişti: hücrelerin renkleri, yüzey katmanları ve değer yazıları yeniden atanır (görünümler korunur). */
+    fun applyTheme() {
+        theme.reapply()
+        driver.resetTint(); passenger.resetTint(); fan.resetTint()
+        fan.invalidateLevel()
         render()
     }
 
@@ -129,21 +139,31 @@ internal class ClimateControl(
     // --- Sıcaklık hücresi ---
 
     private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, TEMP_SP, LauncherTheme.DOCK_TEXT, medium = true).apply { gravity = Gravity.CENTER }
+        private val label = text(context, TEMP_SP, medium = true).apply {
+            gravity = Gravity.CENTER
+            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+        }
         private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
 
+        /** Tema değişti: gesture ortasında kalmış bir ton varsa sönük başlar (renk jetonlardan yeniden alınır). */
+        fun resetTint() {
+            tintAnim?.cancel()
+            tint.alpha = 0
+        }
+
         val view: FrameLayout = FrameLayout(context).apply {
             background = tint
-            foreground = dockPressOverlay(context)
+            theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.DOCK_TEXT_SECONDARY).apply {
+                addView(text(context, LauncherTheme.LABEL_SP).apply {
                     text = context.getString(shortRes)
                     gravity = Gravity.CENTER
+                    theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
                 })
                 addView(gap(context, 2, vertical = true))
                 addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -151,10 +171,14 @@ internal class ClimateControl(
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
             val chev = context.dp(CHEVRON_DP)
             val edge = context.dp(CHEVRON_EDGE_DP)
-            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP, LauncherTheme.DOCK_TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
-                FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
-            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP, LauncherTheme.DOCK_TEXT_SECONDARY).apply { alpha = CHEVRON_ALPHA },
-                FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
+            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP).apply {
+                alpha = CHEVRON_ALPHA
+                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+            }, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
+            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP).apply {
+                alpha = CHEVRON_ALPHA
+                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+            }, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
         private var start = 0.0
@@ -291,20 +315,36 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, FAN_SP, LauncherTheme.DOCK_TEXT, medium = true).apply { gravity = Gravity.CENTER }
+        private val number = text(context, FAN_SP, medium = true).apply {
+            gravity = Gravity.CENTER
+            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+        }
         private val segments = List(ClimateMath.FAN_MAX) {
             View(context).apply { background = rounded(context, inactiveSegment(), SEGMENT_RADIUS_DP) }
         }
-        private val tint = GradientDrawable().apply {
-            setColor(TINT_FAN)
-            alpha = 0
-        }
+        private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
         private var level = -1
 
+        init {
+            theme.bind { tint.setColor(TINT_FAN) }
+        }
+
+        /** Tema değişti: kademe noktaları yeni renklerle yeniden boyanır (önbellekli düzey sıfırlanır). */
+        fun invalidateLevel() {
+            val l = level
+            level = -1
+            if (l >= 0) setLevel(l)
+        }
+
+        fun resetTint() {
+            tintAnim?.cancel()
+            tint.alpha = 0
+        }
+
         val view: FrameLayout = FrameLayout(context).apply {
             background = tint
-            foreground = dockPressOverlay(context)
+            theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
             addView(LinearLayout(context).apply {
@@ -313,7 +353,7 @@ internal class ClimateControl(
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP, LauncherTheme.DOCK_TEXT_SECONDARY))
+                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP).also { ic -> theme.bind { ic.setTint(LauncherTheme.DOCK_TEXT_SECONDARY) } })
                     addView(gap(context, LauncherTheme.GAP_S_DP))
                     addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -458,10 +498,14 @@ internal class ClimateControl(
 
     /** Kapsülün üstünde büyük değer; ayrı bir pencere (dokunmayı geçirir), çubuğun kırpmasına takılmaz. */
     private inner class ValueBubble {
-        private val value = text(context, BUBBLE_SP, LauncherTheme.DOCK_TEXT, bold = true).apply { gravity = Gravity.CENTER }
-        private val caption = text(context, LauncherTheme.LABEL_SP, LauncherTheme.DOCK_TEXT_SECONDARY).apply {
+        private val value = text(context, BUBBLE_SP, bold = true).apply {
+            gravity = Gravity.CENTER
+            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+        }
+        private val caption = text(context, LauncherTheme.LABEL_SP).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
+            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
         }
         private val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL

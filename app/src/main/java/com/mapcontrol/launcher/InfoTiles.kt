@@ -41,7 +41,10 @@ internal fun weatherAgeText(context: Context, ageMs: Long): String {
  * Başlık yok: üst şeritte de hava var, ikon kutucuğu zaten anlatır. 125dp'ye sığması için iç boşluk 20dp.
  * Veri [OpenMeteoWeatherClient] üzerinden gelir; ekran gizlenince dinleme durur.
  */
-class WeatherTile(private val context: Context) : SizedWidget {
+class WeatherTile(private val context: Context) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val client = OpenMeteoWeatherClient(context)
     private var snapshot: OpenMeteoWeatherSnapshot? = null
@@ -49,16 +52,19 @@ class WeatherTile(private val context: Context) : SizedWidget {
     /** Çekim hiç başarısız olduysa ve veri yoksa "Bağlantı yok" gösterilir. */
     private var failed = false
 
-    private val weatherIcon = icon(context, R.drawable.ic_mdi_weather_partly_cloudy, ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val tempText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+    private val weatherIcon = icon(context, R.drawable.ic_mdi_weather_partly_cloudy, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val tempText = text(context, LauncherTheme.BODY_SP, medium = true).apply {
         setText(R.string.launcher_unavailable)
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
-    private val conditionText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2)
-    private val windText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
+    private val conditionText = text(context, LauncherTheme.BODY_SP, maxLines = 2).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val windText = text(context, LauncherTheme.BODY_SP).apply {
         visibility = View.GONE
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
-    private val ageText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
+    private val ageText = text(context, LauncherTheme.BODY_SP).apply {
         visibility = View.GONE
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
 
     private val listener = object : OpenMeteoWeatherClient.Listener {
@@ -102,6 +108,7 @@ class WeatherTile(private val context: Context) : SizedWidget {
 
     override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
+        theme.bind { background = cardSurface(context) }
         addView(leftColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         addView(rightColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0f).apply {
             marginStart = context.dp(16)
@@ -136,6 +143,12 @@ class WeatherTile(private val context: Context) : SizedWidget {
         }
         (rightColumn.layoutParams as LinearLayout.LayoutParams).apply { width = 0; weight = if (wide) 1f else 0f }
         view.requestLayout()
+        render()
+    }
+
+    /** Tema değişti: sabit renkler varsayılana döner, sıcaklık rengi (güncel/eski veri) [render] ile yeniden atanır. */
+    override fun applyTheme() {
+        theme.reapply()
         render()
     }
 
@@ -216,7 +229,7 @@ class AppShortcutTile(
     private val activity: Activity,
     private val packageName: String?,
     private val tileId: String = "app",
-) : SizedWidget {
+) : SizedWidget, Themeable {
 
     /** Ekranda şu an ne gösterildiği; tıklamanın ne yapacağını belirler. */
     private sealed class Shown {
@@ -288,6 +301,15 @@ class AppShortcutTile(
     }
 
     override val view: View = root
+
+    /**
+     * Tema değişti: yüzeyi [JoinedCard] çizimde okur (yalnızca yeniden çizilir); etiket rengi ve boş kutunun
+     * zemini/artısı mevcut duruma göre yeniden atanır. Uygulama ikonu temadan bağımsızdır.
+     */
+    override fun applyTheme() {
+        if (shown is Shown.Empty) bindEmpty() else labelView.setTextColor(LauncherTheme.TEXT)
+        root.invalidate()
+    }
 
     /**
      * 1 hücre genişliğindeki ince kutucukta (≈143 px) ikon küçülür, etiket küçük puntoyla tek satıra sığar

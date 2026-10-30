@@ -16,6 +16,25 @@ interface Themeable {
 }
 
 /**
+ * Temaya bağlı atamaların tek kaydı: [bind] bloğu hemen çalıştırır ve saklar, [reapply] hepsini LauncherTheme'in
+ * o anki değerleriyle yeniden çalıştırır. Kurucu ile tema değişimi aynı kodu kullandığı için ikisi birbirinden sapmaz.
+ * Bloklar görünüm kurulumunda sabit kalan atamalar içindir (arka plan, metin/ikon rengi, boya, yükselti);
+ * veriye bağlı renkler widget'ın kendi bağlama (bind) işlevinden yeniden atanır.
+ */
+class ThemeBindings {
+    private val blocks = ArrayList<() -> Unit>()
+
+    fun bind(block: () -> Unit) {
+        blocks += block
+        block()
+    }
+
+    fun reapply() {
+        for (b in blocks) b()
+    }
+}
+
+/**
  * Yeni launcher'ın tasarım değerleri (gündüz ve gece görünümü).
  * Tek vurgu rengi var: [ACCENT] yalnızca birincil/aktif öğede, [ALERT] yalnızca uyarıda (her zaman ikonla).
  */

@@ -20,7 +20,10 @@ internal class SeatHeatTile(
     private val context: Context,
     private val vent: Boolean = false,
     private val driverSeat: Boolean = true,
-) : SizedWidget {
+) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val model = SeatHeatModel(context, vent) { bind(it) }
 
@@ -31,10 +34,17 @@ internal class SeatHeatTile(
 
     private val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
+        theme.bind { background = cardSurface(context) }
         addView(seat.root, weightLp(1f))
     }
 
     override val view: View get() = root
+
+    /** Tema değişti: yüzey ve koltuk içeriği yeni renklerle yeniden atanır (seviye ve model korunur). */
+    override fun applyTheme() {
+        theme.reapply()
+        seat.applyTheme()
+    }
 
     /** 3 sütun ve üstünde seviye yazısı ve dilimler büyür; yalnızca boyut değişince çalışır. */
     override fun applySpan(span: Span) = seat.applySize(span.w >= BIG_MIN_COLS)
@@ -51,8 +61,9 @@ internal class SeatHeatTile(
 
     /** Tek koltuk: üstte ikon + ad, altta seviye yazısı ve üç dilimli seviye göstergesi. */
     private inner class Seat(@StringRes private val labelRes: Int, private val driver: Boolean) {
-        private val iconView: ImageView = icon(context, if (vent) R.drawable.ic_mdi_car_seat_vent else R.drawable.ic_mdi_car_seat_heater, ICON_DP, LauncherTheme.TEXT_SECONDARY)
-        private val value: TextView = text(context, VALUE_SP, medium = true)
+        private val iconView: ImageView = icon(context, if (vent) R.drawable.ic_mdi_car_seat_vent else R.drawable.ic_mdi_car_seat_heater, ICON_DP)
+            .also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+        private val value: TextView = text(context, VALUE_SP, medium = true).apply { theme.bind { setTextColor(LauncherTheme.TEXT) } }
         private val segments = List(SEGMENTS) { View(context) }
 
         val root: LinearLayout = LinearLayout(context).apply {
@@ -65,7 +76,10 @@ internal class SeatHeatTile(
                 gravity = Gravity.CENTER_VERTICAL
                 addView(iconView)
                 addView(gap(context, 12))
-                addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) })
+                addView(text(context, LauncherTheme.LABEL_SP).apply {
+                    setText(labelRes)
+                    theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
+                })
             })
             addView(gap(context, 4, vertical = true))
             addView(LinearLayout(context).apply {
@@ -103,11 +117,22 @@ internal class SeatHeatTile(
 
         private var lastLevel = 0
         private var lastKnown = false
+        private var lastConnected = false
+        private var lastRaw: Int? = null
+        private var bound = false
+
+        /** Tema değişti: ikon, yazı ve dilimler son duruma göre yeni renklerle yeniden atanır; hiç bağlanmadıysa yalnızca sabit renkler. */
+        fun applyTheme() {
+            if (bound) bind(lastConnected, lastRaw)
+        }
 
         private fun segmentColor(i: Int) = if (lastKnown && i < lastLevel) activeColor() else LauncherTheme.TRACK
 
         fun bind(connected: Boolean, level: Int?) {
             // Soğutma sinyali desteklenmese de sakin "Kapalı" göster (okunamayan değer 0 sayılır).
+            bound = true
+            lastConnected = connected
+            lastRaw = level
             val known = connected && (level != null || vent)
             val lv = if (known) level ?: 0 else 0
             val active = lv > 0

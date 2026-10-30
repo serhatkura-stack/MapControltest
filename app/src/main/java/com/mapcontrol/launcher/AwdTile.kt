@@ -103,14 +103,17 @@ internal object AwdDemo {
 }
 
 /** Kutucuk: dolu boyutta (>= 4 sütun) üstten görünüm şeması + güç akışı, küçükte yalnızca ön/arka yüzde çubuğu. */
-internal class AwdTile(private val context: Context) : SizedWidget {
+internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val main = Handler(Looper.getMainLooper())
     private val flow = AwdFlowView(context)
-    private val title = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val headIcon = icon(context, R.drawable.ic_mdi_car_cog, HEAD_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val status = text(context, STATUS_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
-    private val split = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
+    private val title = text(context, LauncherTheme.LABEL_SP).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val headIcon = icon(context, R.drawable.ic_mdi_car_cog, HEAD_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val status = text(context, STATUS_SP, medium = true).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val split = text(context, LauncherTheme.LABEL_SP).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
 
     /** Üst satır, ortalı: ikon + "4x4" (ailenin etiket satırı gibi). */
     private val head = LinearLayout(context).apply {
@@ -121,9 +124,18 @@ internal class AwdTile(private val context: Context) : SizedWidget {
         addView(title)
     }
 
-    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, LauncherTheme.CARD_PAD_DP)
+    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, LauncherTheme.CARD_PAD_DP).apply {
+        theme.bind { background = cardSurface(context) }
+    }
 
     override val view: View get() = root
+
+    /** Tema değişti: yüzey ve yazılar yeniden atanır, durum satırı [bind] ile yeni renkte; şema çizimde okur, yalnızca yeniden çizilir. */
+    override fun applyTheme() {
+        theme.reapply()
+        bind(rear)
+        flow.invalidate()
+    }
 
     private var compact = false
     private var rear = 0

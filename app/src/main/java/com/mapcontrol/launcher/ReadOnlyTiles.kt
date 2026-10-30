@@ -340,6 +340,11 @@ internal abstract class ExtraTile(
 
     override fun bindDetail() = bind()
 
+    /** Tema değişti: [CenteredTile] kart yüzeyini normale çevirdi; uyarı zemini [bind] ile yeniden verilir. */
+    override fun resetThemeState() {
+        alertSurface = false
+    }
+
     /** Sakin uyarı zemini: kart yüzeyi ALERT_SURFACE tonuna geçer; uyarı geçince normale döner. */
     protected fun setAlertSurface(on: Boolean) {
         if (on == alertSurface && view.background != null) return
@@ -389,12 +394,15 @@ internal class BreakTile(context: Context) :
  * gri halka ve "—". Kaynak CarSetting NAV_SPEED_LIMIT; Tiggo 7'de bu sinyal hep 0 okundu (gösterge tabelası başka
  * yoldan geliyor), yani araçta dolu geldiği doğrulanmadı.
  */
-internal class SpeedLimitTile(private val context: Context) : SizedWidget {
+internal class SpeedLimitTile(private val context: Context) : SizedWidget, Themeable {
 
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
     private val sign = SignView(context)
-    private val headerIcon = icon(context, R.drawable.ic_mdi_speedometer, HEADER_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val label = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+    private val headerIcon = icon(context, R.drawable.ic_mdi_speedometer, HEADER_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val label = text(context, LauncherTheme.LABEL_SP).apply {
         setText(R.string.launcher_widget_speed_limit)
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
     private var data = ExtraData()
     private val listener = ExtraSource.Listener {
@@ -405,6 +413,7 @@ internal class SpeedLimitTile(private val context: Context) : SizedWidget {
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER_HORIZONTAL
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        theme.bind { background = cardSurface(context) }
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -420,6 +429,12 @@ internal class SpeedLimitTile(private val context: Context) : SizedWidget {
     override val view: View get() = root
 
     override fun applySpan(span: Span) = bind()
+
+    /** Tema değişti: yüzey, başlık ve tabela yeni renklerle (tabela halkası/sayısı çizimde okunur, yalnızca yeniden çizilir). */
+    override fun applyTheme() {
+        theme.reapply()
+        sign.invalidate()
+    }
 
     override fun onVisible() = ExtraSource.add(context, listener)
 
@@ -603,12 +618,15 @@ internal class BodyTile(context: Context) :
  * Büyük saat: ortalı saat ve tarih. Araç verisi yok; [TextClock] dakikada bir sistem yayınıyla güncellenir
  * (kendi zamanlayıcımız ya da animasyon yok). 2x2'de saat 56sp, 4x2'de 88sp.
  */
-internal class ClockTile(private val context: Context) : SizedWidget {
+internal class ClockTile(private val context: Context) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val time = TextClock(context).apply {
         format12Hour = "HH:mm"
         format24Hour = "HH:mm"
-        setTextColor(LauncherTheme.TEXT)
+        theme.bind { setTextColor(LauncherTheme.TEXT) }
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         fontFeatureSettings = "tnum"
         includeFontPadding = false
@@ -624,7 +642,7 @@ internal class ClockTile(private val context: Context) : SizedWidget {
     private val date = TextClock(context).apply {
         format12Hour = datePattern
         format24Hour = datePattern
-        setTextColor(LauncherTheme.TEXT_SECONDARY)
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         includeFontPadding = false
         gravity = Gravity.CENTER
@@ -636,9 +654,13 @@ internal class ClockTile(private val context: Context) : SizedWidget {
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        theme.bind { background = cardSurface(context) }
     }
 
     override val view: View get() = root
+
+    /** Tema değişti: yüzey ve saat/tarih renkleri yeniden atanır (saat çalışmaya devam eder). */
+    override fun applyTheme() = theme.reapply()
 
     /** 2x2: saat üstte, tarih altta (56sp). 4x2: saat solda 80sp, tarih sağda iki satır; kutu alçak olduğundan yan yana. */
     override fun applySpan(span: Span) {

@@ -143,10 +143,13 @@ private object PhotoDecoder {
 class PhotoTile(
     private val activity: Activity,
     private val tileId: String,
-) : SizedWidget {
+) : SizedWidget, Themeable {
 
     private val context: Context = activity
     private val executor = LauncherIo.serial()
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     /** Her yenilemede artar; eski arka plan sonuçları bu değişmişse yok sayılır. */
     private var generation = 0
@@ -160,14 +163,16 @@ class PhotoTile(
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
-    private val emptyIcon = icon(context, R.drawable.ic_mdi_image, EMPTY_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val emptyTitle = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT, medium = true).apply {
+    private val emptyIcon = icon(context, R.drawable.ic_mdi_image, EMPTY_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val emptyTitle = text(context, LauncherTheme.LABEL_SP, medium = true).apply {
         setText(R.string.launcher_photo_add)
         gravity = Gravity.CENTER
+        theme.bind { setTextColor(LauncherTheme.TEXT) }
     }
-    private val emptyHint = text(context, HINT_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+    private val emptyHint = text(context, HINT_SP, maxLines = 2).apply {
         setText(R.string.launcher_photo_hint)
         gravity = Gravity.CENTER
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
     private val emptyBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -182,7 +187,7 @@ class PhotoTile(
     }
 
     private val root = FrameLayout(context).apply {
-        background = cardSurface(context)
+        theme.bind { background = cardSurface(context) }
         clipToOutline = true
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) {
@@ -203,6 +208,9 @@ class PhotoTile(
     }
 
     override val view: View = root
+
+    /** Tema değişti: boş durumun yüzeyi, ikonu ve yazıları yeniden atanır; yüklü fotoğraf dokunulmaz. */
+    override fun applyTheme() = theme.reapply()
 
     /** Dar kutucukta (2 sütun) ipucu gizlenir ve ikon küçülür; 4 sütunda tam boy. */
     override fun applySpan(span: Span) {

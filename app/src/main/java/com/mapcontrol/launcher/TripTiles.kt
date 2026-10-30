@@ -268,7 +268,10 @@ internal abstract class TripCard(
     protected val context: Context,
     @DrawableRes iconRes: Int,
     @StringRes labelRes: Int,
-) : SizedWidget {
+) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     protected var data = TripData()
         private set
@@ -282,12 +285,19 @@ internal abstract class TripCard(
         bind()
     }
 
-    protected val headerIcon: ImageView = icon(context, iconRes, TITLE_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val titleText = text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) }
-    private val valueText = text(context, VALUE_SP, medium = true).apply { gravity = Gravity.CENTER }
-    private val subtitleText = text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+    protected val headerIcon: ImageView = icon(context, iconRes, TITLE_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val titleText = text(context, TITLE_SP).apply {
+        setText(labelRes)
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
+    }
+    private val valueText = text(context, VALUE_SP, medium = true).apply {
+        gravity = Gravity.CENTER
+        theme.bind { setTextColor(LauncherTheme.TEXT) }
+    }
+    private val subtitleText = text(context, TITLE_SP, maxLines = 2).apply {
         gravity = Gravity.CENTER
         visibility = View.GONE
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
 
     private val mainColumn = LinearLayout(context).apply {
@@ -305,7 +315,7 @@ internal abstract class TripCard(
     }
 
     private val divider = View(context).apply {
-        setBackgroundColor(LauncherTheme.TRACK)
+        theme.bind { setBackgroundColor(LauncherTheme.TRACK) }
         visibility = View.GONE
     }
 
@@ -319,6 +329,7 @@ internal abstract class TripCard(
     protected val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
         gravity = Gravity.CENTER_VERTICAL
+        theme.bind { background = cardSurface(context) }
         addView(mainColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         addView(divider, LinearLayout.LayoutParams(context.dp(1), context.dp(DIVIDER_DP)).apply {
             marginStart = context.dp(8)
@@ -337,6 +348,12 @@ internal abstract class TripCard(
 
     override fun applySpan(span: Span) {
         wide = span.w >= 3
+        bind()
+    }
+
+    /** Tema değişti: sabit renkler varsayılana döner, ardından değer/ikon/alt başlık/sağ satırlar [bind] ile yeniden atanır. */
+    override fun applyTheme() {
+        theme.reapply()
         bind()
     }
 

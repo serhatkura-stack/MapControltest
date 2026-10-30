@@ -29,7 +29,10 @@ import java.util.concurrent.Executor
  * komut yalnızca [ComfortWriter] kapısı açıksa gider. Kapı kapalıyken (araç testi öncesi) ekran ~1,5 sn sonra aracın
  * gerçek durumuna döner ve bilgi mesajı gösterilir; klima kapsülüyle aynı davranış.
  */
-internal abstract class ComfortTile(protected val context: Context) : SizedWidget {
+internal abstract class ComfortTile(protected val context: Context) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    protected val theme = ThemeBindings()
 
     protected val main = Handler(Looper.getMainLooper())
     protected val io: Executor = LauncherIo.serial()
@@ -56,6 +59,15 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 
     /** Bekleyen iyimser hedefleri temizler (revert/okuma sonrası). */
     protected abstract fun clearPending()
+
+    /**
+     * Tema değişti: sabit renkler ([theme]) yeniden atanır, ardından [render] durum rengi taşıyan her şeyi (ikon, yazı,
+     * düğme zemini, çizim) yeni renklerle yeniden kurar; bekleyen iyimser hedef ve okuma korunur.
+     */
+    override fun applyTheme() {
+        theme.reapply()
+        render()
+    }
 
     override fun onVisible() {
         render()
@@ -132,9 +144,9 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 internal class SunshadeTile(context: Context) : ComfortTile(context) {
 
     private val roof = RoofView(context)
-    private val title = text(context, LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val stateText = text(context, VALUE_SP, LauncherTheme.TEXT, medium = true)
-    private val iconView: ImageView = icon(context, R.drawable.ic_mdi_car_sunroof, ICON_DP, LauncherTheme.TEXT_SECONDARY)
+    private val title = text(context, LABEL_SP).apply { theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val stateText = text(context, VALUE_SP, medium = true).apply { theme.bind { setTextColor(LauncherTheme.TEXT) } }
+    private val iconView: ImageView = icon(context, R.drawable.ic_mdi_car_sunroof, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
 
     private val runner = ComfortWriter.SunshadeRunner(main, io)
 
@@ -153,6 +165,7 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     private val bottomGap = gap(context, 8, vertical = true)
 
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
+        theme.bind { background = cardSurface(context) }
         addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         addView(gap(context, 8, vertical = true))
         addView(roof, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -164,6 +177,8 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
     init {
         title.setText(R.string.launcher_widget_sunshade)
         installTouch()
+        // Çatı çizimi renkleri çizimde okur; tema değişince yalnızca yeniden çizilir.
+        theme.bind { roof.invalidate() }
     }
 
     override val view: View get() = root
@@ -438,6 +453,7 @@ internal class DefrostTile(context: Context) : ComfortTile(context) {
 
     private val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, PADDING_DP).apply {
         gravity = Gravity.CENTER
+        theme.bind { background = cardSurface(context) }
         addView(front.view, weightLp(1f))
         addView(gap(context, GAP_DP))
         addView(rear.view, weightLp(1f))

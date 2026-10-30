@@ -150,6 +150,11 @@ fun icon(context: Context, @DrawableRes res: Int, sizeDp: Int, tint: Int = Launc
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
+/** İkonun rengini (tint) verir; kurucu ve tema yenilemesi aynı çağrıyı kullanır. */
+fun ImageView.setTint(color: Int) {
+    imageTintList = ColorStateList.valueOf(color)
+}
+
 /**
  * Yuvarlak ya da köşeli ikon düğmesi. Boyut sürüş için en az [LauncherTheme.TOUCH_MIN_DP].
  * [label] erişilebilirlik ve gerektiğinde ikonun altındaki metin içindir.

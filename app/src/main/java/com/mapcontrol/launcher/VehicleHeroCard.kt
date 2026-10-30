@@ -42,7 +42,7 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
  *
  * Yalnızca okur: kilit durumu dinleyiciden, kapılar ve menzil anlık görüntüden, lastik bayrağı 10 sn'de bir.
  */
-class VehicleHeroCard(private val context: Context) : SizedWidget {
+class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
 
     private val appContext = context.applicationContext
     private val metrics = VehicleMetricsRepository.getInstance(appContext)
@@ -184,6 +184,17 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     }
 
     override fun applySpan(span: Span) = render()
+
+    /**
+     * Tema değişti: kart yüzeyi yeniden verilir; menzil, yakıt, durum satırı, uyarı hapları ve şema [render] ile yeni
+     * renklerle yeniden atanır (özet önbelleği sıfırlanır; çizim boyaları zaten çizimde okunur).
+     */
+    override fun applyTheme() {
+        view.background = cardSurface(context)
+        fuelBar.invalidate()
+        lastUi = null
+        render()
+    }
 
     override fun onVisible() {
         snapshot = if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot()

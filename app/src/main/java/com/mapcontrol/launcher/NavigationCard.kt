@@ -32,13 +32,16 @@ import com.mapcontrol.R
  * (hap | Ev | İş), daha darsa üst üste (hap, altında Ev | İş). Zamanlayıcı ya da sürekli dinleyici yok;
  * GPS yalnızca uzun basmada tek seferlik ve zaman aşımlıdır.
  */
-class NavigationCard(private val context: Context) : SizedWidget {
+class NavigationCard(private val context: Context) : SizedWidget, Themeable {
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val store = NavShortcutStore(context)
     private val main = Handler(Looper.getMainLooper())
 
-    private val homeIcon = icon(context, R.drawable.ic_mdi_home, ICON_DP)
-    private val workIcon = icon(context, R.drawable.ic_mdi_briefcase, ICON_DP)
+    private val homeIcon = icon(context, R.drawable.ic_mdi_home, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT) } }
+    private val workIcon = icon(context, R.drawable.ic_mdi_briefcase, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT) } }
 
     private val pill = searchPill()
     private val homeButton = placeButton(NavPlace.HOME, homeIcon, R.string.launcher_nav_home)
@@ -59,6 +62,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
     }
 
     override val view: View = card(context, paddingDp = LauncherTheme.CARD_PAD_DP).apply {
+        theme.bind { background = cardSurface(context) }
         addView(root, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
     }
 
@@ -66,6 +70,12 @@ class NavigationCard(private val context: Context) : SizedWidget {
         applySpan(Span(4, 2))
         refreshTints()
         active = this
+    }
+
+    /** Tema değişti: yüzey, hap, düğmeler ve ikonlar yeniden atanır; kayıtlı yer tonu [refreshTints] ile. */
+    override fun applyTheme() {
+        theme.reapply()
+        refreshTints()
     }
 
     /** Genişlik >= 4: tek satır (hap iki pay, Ev ve İş birer pay). Daha dar: hap üstte, Ev | İş altta. */
@@ -89,12 +99,15 @@ class NavigationCard(private val context: Context) : SizedWidget {
     private fun searchPill(): View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        background = rounded(context, LauncherTheme.GROUND, 20f)
+        theme.bind { background = rounded(context, LauncherTheme.GROUND, 20f) }
         val pad = context.dp(12)
         setPadding(pad, 0, pad, 0)
-        addView(icon(context, R.drawable.ic_mdi_magnify, ICON_DP, LauncherTheme.TEXT_SECONDARY))
+        addView(icon(context, R.drawable.ic_mdi_magnify, ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } })
         addView(gap(context, 12))
-        addView(text(context, VALUE_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply { setText(R.string.launcher_nav_title) })
+        addView(text(context, VALUE_SP, medium = true).apply {
+            setText(R.string.launcher_nav_title)
+            theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
+        })
         contentDescription = context.getString(R.string.launcher_nav_title)
         isClickable = true
         isFocusable = true
@@ -107,7 +120,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
         LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = rounded(context, LauncherTheme.CONTROL, 20f)
+            theme.bind { background = rounded(context, LauncherTheme.CONTROL, 20f) }
             val pad = context.dp(8)
             setPadding(pad, pad, pad, pad)
             addView(iconView)
@@ -115,6 +128,7 @@ class NavigationCard(private val context: Context) : SizedWidget {
             addView(text(context, VALUE_SP, medium = true).apply {
                 setText(nameRes)
                 gravity = Gravity.CENTER
+                theme.bind { setTextColor(LauncherTheme.TEXT) }
             })
             contentDescription = context.getString(nameRes)
             isClickable = true

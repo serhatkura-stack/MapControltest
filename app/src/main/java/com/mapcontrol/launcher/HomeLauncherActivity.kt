@@ -197,6 +197,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         swapView(editBar, newEditBar)
         editBar = newEditBar
         val oldFixed = ArrayList<LauncherWidget>()
+        val newFixed = ArrayList<LauncherWidget>()
         dock?.let { oldDock ->
             val oldClimate = climateBar
             val newDock = AppDock(this)
@@ -204,24 +205,22 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             swapView(oldDock.view, newDock.view)
             oldClimate?.let { swapView(it.view, newClimate.view) }
             oldFixed += oldDock; oldClimate?.let { oldFixed += it }
+            newFixed += newDock; newFixed += newClimate
             dock = newDock; climateBar = newClimate
         }
-        ourBar?.let { old ->
-            val fresh = OurBottomBar(this)
-            swapView(old.view, fresh.view)
-            oldFixed += old
-            ourBar = fresh
-        }
+        // Bizim alt çubuk (ClimateControl ve DockSurface dahil) yerinde yenilenir; yeniden kurulmaz.
+        ourBar?.applyTheme()
         mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
         fixedWidgets = listOfNotNull(header, dock, climateBar, ourBar)
         oldFixed.forEach { if (started) it.onHidden(); it.release() }
-        fixedWidgets.filter { it !== header }.forEach { showWidget(it) }
+        newFixed.forEach { showWidget(it) }
 
         // Izgara: Themeable widget yerinde, diğerleri yeniden kurulur; düzen aynı kalır.
         val fresh = LinkedHashMap<String, View>()
+        var themed = 0
         layout.forEach { placed ->
             val old = gridWidgets[placed.id] ?: return@forEach
-            if (old is Themeable) { old.applyTheme(); return@forEach }
+            if (old is Themeable) { old.applyTheme(); themed++; return@forEach }
             if (started) old.onHidden()
             old.release()
             val created = WidgetFactory.create(this, placed)
@@ -232,6 +231,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         grid.swapContents(fresh)
         grid.applyTheme()
+        android.util.Log.i("ThemeTiming", "yerinde: ızgara $themed widget yerinde, ${fresh.size} yeniden kuruldu")
         header.setLayoutMode(activeMode)
         window.decorView.invalidate()
     }

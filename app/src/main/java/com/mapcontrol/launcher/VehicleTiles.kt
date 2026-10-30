@@ -196,9 +196,12 @@ internal abstract class VehicleTile(
  * Merkezi kilit düğmesi (1×2, uygulama kutucuğuyla aynı ayak izi): yolcunun da kolayca uzanacağı net bir düğme.
  * Büyük, ortalanmış kilit ikonu; altında küçük durum etiketi ("Kilitli" / "Kilit açık"). Dokununca kilidi açar/kapatır.
  */
-internal class LockTile(private val context: Context) : SizedWidget {
+internal class LockTile(private val context: Context) : SizedWidget, Themeable {
 
     private val appContext = context.applicationContext
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     /**
      * Her seferinde yeniden alınır: MapControl'ün ana ekranı kapanırken bu paylaşılan nesneyi release() ediyor;
@@ -220,12 +223,14 @@ internal class LockTile(private val context: Context) : SizedWidget {
     private val lockIcon: ImageView = icon(context, R.drawable.ic_mdi_lock, ICON_DP, LauncherTheme.TEXT).apply {
         layoutParams = LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP))
     }
-    private val stateText: TextView = text(context, STATE_SP, LauncherTheme.TEXT_SECONDARY).apply {
+    private val stateText: TextView = text(context, STATE_SP).apply {
         gravity = android.view.Gravity.CENTER
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
 
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
         gravity = android.view.Gravity.CENTER
+        theme.bind { background = cardSurface(context) }
         addView(lockIcon)
         addView(gap(context, 8, vertical = true))
         addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -235,6 +240,12 @@ internal class LockTile(private val context: Context) : SizedWidget {
 
     /** Tek boyut var (1×2); yerleşim değişmez. */
     override fun applySpan(span: Span) = Unit
+
+    /** Tema değişti: yüzey ve durum yazısı varsayılana döner, kilit ikonu/yazısı [bind] ile yeniden atanır. */
+    override fun applyTheme() {
+        theme.reapply()
+        bind()
+    }
 
     init {
         root.isClickable = true

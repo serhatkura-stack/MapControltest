@@ -23,16 +23,26 @@ internal abstract class CenteredTile(
     protected val context: Context,
     @DrawableRes iconRes: Int,
     @StringRes labelRes: Int,
-) : SizedWidget {
+) : SizedWidget, Themeable {
 
-    protected val headerIcon: ImageView = icon(context, iconRes, HEADER_ICON_DP, LauncherTheme.TEXT_SECONDARY)
-    private val labelText: TextView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) }
-    private val heroIcon: ImageView = icon(context, iconRes, HERO_ICON_DP, LauncherTheme.TEXT_SECONDARY).apply {
-        visibility = View.GONE
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    protected val theme = ThemeBindings()
+
+    protected val headerIcon: ImageView = icon(context, iconRes, HEADER_ICON_DP).also { v -> theme.bind { v.setTint(LauncherTheme.TEXT_SECONDARY) } }
+    private val labelText: TextView = text(context, LauncherTheme.LABEL_SP).apply {
+        setText(labelRes)
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
-    protected val valueText: TextView = text(context, VALUE_SP, medium = true)
-    protected val detailText: TextView = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+    private val heroIcon: ImageView = icon(context, iconRes, HERO_ICON_DP).apply {
         visibility = View.GONE
+        theme.bind { setTint(LauncherTheme.TEXT_SECONDARY) }
+    }
+    protected val valueText: TextView = text(context, VALUE_SP, medium = true).apply {
+        theme.bind { setTextColor(LauncherTheme.TEXT) }
+    }
+    protected val detailText: TextView = text(context, LauncherTheme.BODY_SP, maxLines = 2).apply {
+        visibility = View.GONE
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
     private val segmentRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -40,7 +50,7 @@ internal abstract class CenteredTile(
     }
     private var segmentCount = 0
     private val divider = View(context).apply {
-        setBackgroundColor(LauncherTheme.TRACK)
+        theme.bind { setBackgroundColor(LauncherTheme.TRACK) }
         visibility = View.GONE
     }
 
@@ -56,9 +66,23 @@ internal abstract class CenteredTile(
 
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        theme.bind { background = cardSurface(context) }
     }
 
     override val view: View get() = root
+
+    /**
+     * Tema değişti: sabit renkler varsayılana döner ([theme]), alt sınıf durumu sıfırlanır ([resetThemeState]) ve
+     * değer, ikon, detay, dilimler yeni renklerle [bindDetail] ile yeniden atanır; yeni kutucukla birebir aynı sonuç.
+     */
+    override fun applyTheme() {
+        theme.reapply()
+        resetThemeState()
+        bindDetail()
+    }
+
+    /** [applyTheme]'de, yeniden bağlamadan önce çağrılır; verinin yeniden kuramadığı renk durumunu (ör. uyarı zemini) sıfırlar. */
+    protected open fun resetThemeState() {}
 
     /** 0 = dar, 1 = orta (3 sütun), 2 = geniş (>= 4 sütun). */
     protected var tier = 0

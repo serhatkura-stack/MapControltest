@@ -27,9 +27,12 @@ import com.mapcontrol.media.LauncherMediaController.MediaState
  * 1 satırsa (2×1) kapaksız, ilerlemesiz kompakt yatay yerleşim. [applySpan] ikisi arasında
  * kartı yeniden yaratmadan görünürlük değiştirir; kontrol satırı tek örnektir ve taşınır.
  */
-class MediaCard(private val context: Context) : SizedWidget {
+class MediaCard(private val context: Context) : SizedWidget, Themeable {
 
     private enum class Mode { NO_ACCESS, IDLE, SESSION }
+
+    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    private val theme = ThemeBindings()
 
     private val controller = LauncherMediaController(context)
     private val handler = Handler(Looper.getMainLooper())
@@ -40,9 +43,9 @@ class MediaCard(private val context: Context) : SizedWidget {
         visibility = View.GONE
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-    private val placeholderIcon = icon(context, R.drawable.ic_mdi_music_note, 40, LauncherTheme.TEXT_SECONDARY)
+    private val placeholderIcon = icon(context, R.drawable.ic_mdi_music_note, 40).also { ic -> theme.bind { ic.setTint(LauncherTheme.TEXT_SECONDARY) } }
     private val artworkBox = FrameLayout(context).apply {
-        background = oval(LauncherTheme.CONTROL).let { rounded(context, LauncherTheme.CONTROL) }
+        theme.bind { background = rounded(context, LauncherTheme.CONTROL) }
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) {
                 outline.setRoundRect(0, 0, v.width, v.height, context.dpF(LauncherTheme.CARD_RADIUS_DP))
@@ -55,25 +58,25 @@ class MediaCard(private val context: Context) : SizedWidget {
     private val artworkGap = gap(context, 32)
 
     // --- Metinler ---
-    private val sourceLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val titleView = text(context, LauncherTheme.TITLE_SP, bold = true)
-    private val artistView = text(context, 28f, LauncherTheme.TEXT_SECONDARY)
+    private val sourceLabel = text(context, LauncherTheme.LABEL_SP).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val titleView = text(context, LauncherTheme.TITLE_SP, bold = true).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT) } }
+    private val artistView = text(context, 28f).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
 
     // --- İlerleme ---
     private val progressFill = View(context).apply {
-        background = rounded(context, LauncherTheme.ACCENT, 4f)
+        theme.bind { background = rounded(context, LauncherTheme.ACCENT, 4f) }
         // Genişlik sabit, ilerleme scaleX ile çizilir: yerleşim turu gerektirmez.
         layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         pivotX = 0f
         scaleX = 0f
     }
     private val progressTrack = FrameLayout(context).apply {
-        background = rounded(context, LauncherTheme.TRACK, 4f)
+        theme.bind { background = rounded(context, LauncherTheme.TRACK, 4f) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(8))
         addView(progressFill)
     }
-    private val elapsedView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
-    private val totalView = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY)
+    private val elapsedView = text(context, LauncherTheme.LABEL_SP).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    private val totalView = text(context, LauncherTheme.LABEL_SP).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
     private val timesGap = gap(context, 8, vertical = true)
     private val timesRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -102,14 +105,29 @@ class MediaCard(private val context: Context) : SizedWidget {
         sizeDp = LauncherTheme.MEDIA_BUTTON_DP, circle = true,
     ) { controller.skipToNext() }
     private val playIcon = playButton.getChildAt(0) as ImageView
+
+    init {
+        // iconButton zemini ve ikon tonunu kurulumda bir kez verir; tema değişince aynı değerler yeniden atanır.
+        theme.bind {
+            prevButton.background = oval(LauncherTheme.CONTROL)
+            nextButton.background = oval(LauncherTheme.CONTROL)
+            playButton.background = oval(LauncherTheme.ACCENT)
+            (prevButton.getChildAt(0) as ImageView).setTint(LauncherTheme.TEXT)
+            (nextButton.getChildAt(0) as ImageView).setTint(LauncherTheme.TEXT)
+            playIcon.setTint(LauncherTheme.ON_ACCENT)
+        }
+    }
     private val controlsGap1 = gap(context, 24)
     private val controlsGap2 = gap(context, 24)
     // --- İzin yok durumu ---
     // Kart iskeleti korunur; kontrol satırının yerine tek, net bir tonal düğme gelir (vurgu rengi değil, sakin).
-    private val grantButton = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
+    private val grantButton = text(context, LauncherTheme.BODY_SP, medium = true).apply {
         setText(R.string.launcher_media_grant_access)
         gravity = Gravity.CENTER
-        background = rounded(context, LauncherTheme.CONTROL, 20f)
+        theme.bind {
+            setTextColor(LauncherTheme.TEXT)
+            background = rounded(context, LauncherTheme.CONTROL, 20f)
+        }
         val h = context.dp(40)
         setPadding(h, 0, h, 0)
         minWidth = context.dp(180)
@@ -134,8 +152,8 @@ class MediaCard(private val context: Context) : SizedWidget {
 
 
     // --- Kompakt (2×1) yerleşim: solda başlık + sanatçı, sağda kontroller ---
-    private val compactTitle = text(context, COMPACT_TITLE_SP, bold = true)
-    private val compactArtist = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY)
+    private val compactTitle = text(context, COMPACT_TITLE_SP, bold = true).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT) } }
+    private val compactArtist = text(context, LauncherTheme.BODY_SP).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
     private val compactBox = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -166,6 +184,7 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
 
     override val view: View = card(context, LinearLayout.HORIZONTAL).apply {
+        theme.bind { background = cardSurface(context) }
         addView(artworkBox, LinearLayout.LayoutParams(0, 0))
         addView(artworkGap)
         addView(FrameLayout(context).apply {
@@ -213,6 +232,12 @@ class MediaCard(private val context: Context) : SizedWidget {
     }
 
     private val listener = LauncherMediaController.Listener { state -> if (!LauncherDemo.enabled) bind(state) }
+
+    /** Tema değişti: yüzeyler, metin/ikon tonları ve düğme zeminleri yeniden atanır; kapak, ilerleme ve oturum korunur. */
+    override fun applyTheme() {
+        theme.reapply()
+        view.invalidate()
+    }
 
     override fun onVisible() {
         if (!listening) {
