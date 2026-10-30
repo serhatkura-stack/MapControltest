@@ -171,6 +171,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         return row(R.drawable.ic_mdi_car_sports, if (on) R.string.launcher_drive_theme_on else R.string.launcher_drive_theme_off) {
             d.dismiss()
             DriveAccent.setEnabled(activity, !on)
+            (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
             if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
             // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
             if (on) ThemeTransition.retheme(activity)
@@ -183,6 +184,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         return row(R.drawable.ic_mdi_view_grid, if (on) R.string.launcher_auto_drive_layout_on else R.string.launcher_auto_drive_layout_off) {
             d.dismiss()
             DriveLayoutPrefs.set(activity, !on)
+            (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
             ThemeTransition.recreate(activity)
         }
     }

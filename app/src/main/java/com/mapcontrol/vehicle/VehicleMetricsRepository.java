@@ -19,7 +19,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -103,7 +102,7 @@ public final class VehicleMetricsRepository {
     private final Context appContext;
     private final Consumer<String> eventLogger;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService ioExecutor = newDaemonSingleThread();
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
     private final VehicleMetricsCache cache = new VehicleMetricsCache();
 
@@ -156,6 +155,20 @@ public final class VehicleMetricsRepository {
             }
         }
     };
+
+    /** Hiç kapatılmayan ortak örnek için: arka plan (daemon) iş parçacığı, boştayken 30 sn sonra kendiliğinden biter. */
+    private static ExecutorService newDaemonSingleThread() {
+        java.util.concurrent.ThreadPoolExecutor ex = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 30L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(),
+                r -> {
+                    Thread t = new Thread(r, "metrics-io");
+                    t.setDaemon(true);
+                    return t;
+                });
+        ex.allowCoreThreadTimeOut(true);
+        return ex;
+    }
 
     public VehicleMetricsRepository(Context context) {
         this(context, message -> { });

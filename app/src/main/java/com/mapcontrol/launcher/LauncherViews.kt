@@ -102,17 +102,32 @@ fun unitStyled(value: CharSequence): CharSequence {
     return sp
 }
 
+/** Sürüş düzeni etkinken (HomeLauncherActivity) true: sürekli akan değerler için solma animasyonu hiç çalışmaz. */
+object LauncherMotion {
+    @Volatile @JvmField var driveLayout = false
+    /** Aynı görünümde art arda solmalar arasındaki en kısa süre; daha sık değişen metin animasyonsuz yazılır. */
+    const val MIN_FADE_GAP_MS = 3_000L
+}
+
+private val lastTextChange = java.util.WeakHashMap<TextView, Long>()
+
 /**
  * Metni yalnızca gerçekten değiştiyse yazar; ekranda görünen bir kutucukta kısa (150ms) alfa geçişiyle.
- * Aynı metinde hiçbir şey yapmaz (her yoklamada animasyon yok); yalnızca alfa, yerleşimi etkilemez.
+ * Aynı metinde hiçbir şey yapmaz. Her alfa geçişi pencerenin yeniden çizilmesine yol açtığı için yalnızca nadir
+ * değişimlerde (görünümün metni son 3 sn içinde değişmediyse) ve Sürüş düzeninde olunmadığında çalışır.
+ * Sürekli akan değerler (hız, tüketim, yolculuk, süre) [animate] = false ile baştan geçişsiz yazılır.
  */
-fun TextView.setTextSmooth(value: CharSequence) {
+fun TextView.setTextSmooth(value: CharSequence, animate: Boolean = true) {
     if (text.toString() == value.toString()) {
-        // Renk aralıkları değişmiş olabilir (tema); metin aynıysa yine de yeni aralıkları ata.
-        text = value
+        // Metin aynı: yalnızca renk aralıkları (tema) değiştiyse yeniden ata, yoksa hiçbir şey yapma.
+        if (spanColors(text) != spanColors(value)) text = value
         return
     }
-    val visible = isAttachedToWindow && width > 0 && alpha == 1f && text.isNotEmpty()
+    val now = android.os.SystemClock.uptimeMillis()
+    val last = lastTextChange.put(this, now)
+    val rare = last == null || now - last >= LauncherMotion.MIN_FADE_GAP_MS
+    val visible = animate && rare && !LauncherMotion.driveLayout &&
+        isAttachedToWindow && width > 0 && alpha == 1f && text.isNotEmpty()
     text = value
     if (visible) {
         animate().cancel()
@@ -120,6 +135,11 @@ fun TextView.setTextSmooth(value: CharSequence) {
         animate().alpha(1f).setDuration(LauncherTheme.CROSSFADE_MS).start()
     }
 }
+
+/** Metindeki ön plan rengi aralıklarının renkleri (tema değişimini fark etmek için); aralıksız metinde boş. */
+private fun spanColors(cs: CharSequence): List<Int> =
+    (cs as? android.text.Spanned)?.getSpans(0, cs.length, android.text.style.ForegroundColorSpan::class.java)
+        ?.map { it.foregroundColor } ?: emptyList()
 
 fun icon(context: Context, @DrawableRes res: Int, sizeDp: Int, tint: Int = LauncherTheme.TEXT): ImageView =
     ImageView(context).apply {

@@ -229,10 +229,10 @@ internal class AwdTile(private val context: Context) : SizedWidget {
         flow.setRear(rearPct)
         flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
         val active = rearPct > 0
-        status.setTextSmooth(context.getString(if (active) R.string.launcher_awd_active else R.string.launcher_awd_front))
+        status.setTextSmooth(context.getString(if (active) R.string.launcher_awd_active else R.string.launcher_awd_front), animate = false)
         status.setTextColor(if (active) LauncherTheme.ACCENT else LauncherTheme.TEXT)
         val front = AwdMath.frontPercent(rearPct)
-        split.setTextSmooth(context.getString(R.string.launcher_awd_split, front, rearPct))
+        split.setTextSmooth(context.getString(R.string.launcher_awd_split, front, rearPct), animate = false)
         root.contentDescription = context.getString(R.string.launcher_awd_split, front, rearPct)
     }
 

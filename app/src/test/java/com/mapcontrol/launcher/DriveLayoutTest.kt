@@ -142,4 +142,53 @@ class ParkOnlyTest {
             assertTrue(defaultDriveLayout(oem, listOf("a", "b", "c", "d")).none { it.type.parkOnly })
         }
     }
+
+    // --- Park sinyali kapılı okuma (layoutTick'i taklit eder; sahte saat, 500 ms tur) ---
+
+    /** Bir tur: sinyal yalnızca politika isterse okunur; [reads] okuma sayısı. */
+    private class Sim(val parkedAt: (Long) -> Boolean) {
+        val p = DriveLayoutPolicy()
+        var reads = 0
+        fun tick(now: Long, moving: Boolean?): LayoutMode? {
+            val parked = if (p.wantsParkSignal(moving)) { reads++; parkedAt(now) } else false
+            return p.update(now, moving, parked, true)
+        }
+    }
+
+    @Test fun noParkSignalReadsInParkMode() {
+        val sim = Sim { true }
+        for (i in 0..40) sim.tick(i * 500L, false)
+        assertEquals(0, sim.reads)
+    }
+
+    @Test fun noParkSignalReadsWhileMovingInDrive() {
+        val sim = Sim { true }
+        for (i in 0..10) sim.tick(i * 500L, true)   // 5 sn hareket -> Sürüş
+        assertEquals(LayoutMode.DRIVE, sim.p.mode)
+        val before = sim.reads
+        for (i in 11..60) sim.tick(i * 500L, true)
+        assertEquals(before, sim.reads)
+    }
+
+    @Test fun returnsToParkTwoSecondsAfterGearPEvenWithGating() {
+        val pAt = 20_000L
+        val sim = Sim { it >= pAt }
+        var t = 0L
+        while (t <= 10_000) { sim.tick(t, true); t += 500 }          // sürüşe geçildi, giderken okunmaz
+        assertEquals(LayoutMode.DRIVE, sim.p.mode)
+        // 12 sn'de durdu (hız 0); vites 20 sn'de P.
+        var switchedAt = -1L
+        while (t <= 40_000 && switchedAt < 0) { if (sim.tick(t, false) == LayoutMode.PARK) switchedAt = t; t += 500 }
+        // P'den 2 sn sonra (+ en çok bir tur) Park'a dönmeli; 4 sn'e çıkmamalı.
+        assertTrue("switchedAt=$switchedAt", switchedAt in (pAt + 2_000)..(pAt + 2_500))
+    }
+
+    @Test fun staleParkSignalDoesNotStartCounterAfterResume() {
+        // Sinyal hareket sırasında okunmadığı için, durunca ilk tur false (önbellek geçersiz) sayılır.
+        val sim = Sim { false }
+        var t = 0L
+        while (t <= 10_000) { sim.tick(t, true); t += 500 }
+        assertNull(sim.tick(t, false))
+        assertEquals(LayoutMode.DRIVE, sim.p.mode)
+    }
 }

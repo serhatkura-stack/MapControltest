@@ -4,6 +4,9 @@ import android.content.Context
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /** Her profilin iki ana ekran düzeni vardır: duran araç için [PARK], giderken için [DRIVE]. */
 enum class LayoutMode { PARK, DRIVE }
@@ -32,6 +35,13 @@ class DriveLayoutPolicy(
         applied = mode
         movingSince = null; stillSince = null; parkedSince = null
     }
+
+    /**
+     * Park sinyali (vites/el freni) bu turda karar için gerekiyor mu? Yalnızca Sürüş'teyken ve hız 0/bilinmiyorken:
+     * Park'ta ve hareket halinde sinyal hiçbir sayacı etkilemez, okunmaz (IPC tasarrufu). Gerekmeyince
+     * [DriveSignals.invalidate] çağrılmalı ki bayat değer yeniden gerektiğinde bir sayaç başlatmasın.
+     */
+    fun wantsParkSignal(moving: Boolean?): Boolean = applied == LayoutMode.DRIVE && moving != true
 
     /** Geçilecek yeni mod, yoksa null. [immediatePark] (demo): sürüşteyken beklemeden Park'a. */
     fun update(now: Long, moving: Boolean?, parked: Boolean, canSwitch: Boolean, immediatePark: Boolean = false): LayoutMode? {
@@ -95,24 +105,36 @@ internal object DriveSignals {
     val HANDBRAKE_ON_VALUE: Int? = 1
 
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
-    private val io = Executors.newSingleThreadExecutor()
+    /** Arka plan (daemon) tek iş parçacığı; boşta kendiliğinden biter (hiç kapatılmayan nesne için). */
+    private val io = ThreadPoolExecutor(1, 1, 20L, TimeUnit.SECONDS, LinkedBlockingQueue()) { r ->
+        Thread(r, "drive-signals").apply { isDaemon = true }
+    }.apply { allowCoreThreadTimeOut(true) }
     @Volatile private var cached = false
     @Volatile private var pending = false
+    /** [invalidate] sayacı: uçuştaki bir okuma, arada geçersiz kılındıysa sonucunu atar. */
+    @Volatile private var generation = 0
 
-    /** Son okunan "park sinyali var" (arka planda tazelenir; ana iş parçacığını bloklamaz). */
+    /** Son okunan "park sinyali var" (arka planda tazelenir; ana iş parçacığını bloklamaz). Her çağrı bir okuma başlatır. */
     fun parked(): Boolean {
         if (PARK_GEAR_VALUE == null && HANDBRAKE_ON_VALUE == null) return false
         if (!pending) {
             pending = true
+            val gen = generation
             io.execute {
                 try {
                     val gear = PARK_GEAR_VALUE?.let { CarSignals.readInt(RO, ReadOnlyID.ID_GEARBOX_STATE) == it } ?: false
                     val brake = HANDBRAKE_ON_VALUE?.let { CarSignals.readInt(RO, ReadOnlyID.ID_HANDBRAKE_STATE) == it } ?: false
-                    cached = gear || brake
+                    if (gen == generation) cached = gear || brake
                 } finally { pending = false }
             }
         }
         return cached
+    }
+
+    /** Sinyal artık gerekmiyor: bayat değeri at (bkz. [DriveLayoutPolicy.wantsParkSignal]). */
+    fun invalidate() {
+        generation++
+        cached = false
     }
 }
 

@@ -126,6 +126,7 @@ object ThemeTransition {
         val w = decor.width
         val h = decor.height
         val finish = {
+            home.endThemeDefer()
             inPlaceBusy = false
             if (inPlaceAgain) { inPlaceAgain = false; decor.post { retheme(activity) } }
         }
@@ -144,9 +145,12 @@ object ThemeTransition {
             } else {
                 val overlay = if (ok) addOverlay(decor as ViewGroup, activity, bmp) else { bmp.recycle(); null }
                 val t1 = SystemClock.uptimeMillis()
+                // Yeni widget'ların onVisible'ı örtü sönene kadar (finish) bekler; görsel geçiş aynı.
+                home.beginThemeDefer()
                 try { home.applyThemeInPlace() } catch (e: Throwable) {
                     Log.e("ThemeTiming", "yerinde tema hatası, yeniden kuruluyor", e)
                     overlay?.let { removeOverlay(decor, it) }
+                    home.endThemeDefer()
                     inPlaceBusy = false
                     activity.recreate(); return
                 }

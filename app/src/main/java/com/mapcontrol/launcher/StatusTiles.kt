@@ -18,7 +18,7 @@ internal abstract class MetricsTile(
     @StringRes labelRes: Int,
 ) : CenteredTile(context, iconRes, labelRes) {
 
-    private val metrics = VehicleMetricsRepository(context)
+    private val metrics = VehicleMetricsRepository.getInstance(context.applicationContext)
     protected var snapshot: VehicleMetricsSnapshot = current()
         private set
     private val listener = VehicleMetricsRepository.Listener {
@@ -40,7 +40,8 @@ internal abstract class MetricsTile(
     }
 
     override fun release() {
-        metrics.release()
+        // Ortak örnek: release() çağrılmaz, yalnızca dinleyici çıkar.
+        metrics.removeListener(listener)
     }
 
     override fun bindDetail() = bind()

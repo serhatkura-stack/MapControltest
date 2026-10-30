@@ -45,7 +45,7 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
 class VehicleHeroCard(private val context: Context) : SizedWidget {
 
     private val appContext = context.applicationContext
-    private val metrics = VehicleMetricsRepository(context)
+    private val metrics = VehicleMetricsRepository.getInstance(appContext)
     private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
 
@@ -210,7 +210,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
     }
 
     override fun release() {
-        metrics.release()
+        // Ortak örnek: release() çağrılmaz, yalnızca dinleyici çıkar.
+        metrics.removeListener(metricsListener)
     }
 
     private fun readTireFlag(): Int? = if (LauncherDemo.enabled) (if (LauncherDemo.TIRE_WARNING) 1 else 0) else try {
@@ -221,32 +222,33 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         null
     }
 
+    /** Kartın çizdiği her şeyin değişmez özeti; eşit ise yeniden çizim yapılmaz ([render]). */
+    private data class Ui(
+        /** Geçerli menzil (km); null = "veri yok". */
+        val range: Int?,
+        /** Gösterilen yakıt yüzdesi (histerezisli); null = bilinmiyor. */
+        val fuel: Int?,
+        val lowFuel: Boolean,
+        /** Açık gövde parçalarının ad kaynakları, uyarı sırasıyla. */
+        val open: List<Int>,
+        val knowsBody: Boolean,
+        val tireWarning: Boolean?,
+        val car: CarSchematicView.State,
+        val locked: Boolean?,
+    )
+
+    private var lastUi: Ui? = null
+
     private fun render() {
         val s = snapshot
-        val range = s.rangeKm
-        if (s.connected && VehicleMetricsSnapshot.isValid(range) && range >= 0) {
-            rangeText.setTextColor(LauncherTheme.TEXT)
-            rangeText.setTextSmooth(unitStyled(context.getString(R.string.launcher_range_value, range)))
-        } else {
-            rangeText.setText(R.string.launcher_unavailable)
-            rangeText.setTextColor(LauncherTheme.TEXT_SECONDARY)
-        }
+        val range = s.rangeKm.takeIf { s.connected && VehicleMetricsSnapshot.isValid(it) && it >= 0 }
         val tenths = s.fuelTenthsOrNull()
-        val hasFuel = tenths != null
         // Tam yüzde ancak onda bir değer gösterilenden 0,6 uzaklaşınca değişir; düşük yakıtta anlık izlenir.
         val fuel = if (tenths == null) null else {
             val shown = shownFuel
             if (shown == null || lowFuel || Math.abs(tenths - shown * 10) >= FUEL_HYSTERESIS_TENTHS) (tenths + 5) / 10 else shown
         }
         shownFuel = fuel
-        fuelText.text = if (fuel != null) context.getString(R.string.launcher_percent, fuel) else context.getString(R.string.launcher_unavailable)
-        fuelText.setTextColor(if (hasFuel && lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
-        fuelText.contentDescription = when {
-            fuel != null && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
-            fuel != null -> context.getString(R.string.launcher_fuel_short, fuel)
-            else -> context.getString(R.string.launcher_waiting_data)
-        }
-        fuelBar.set(fuel, lowFuel)
 
         // Gövde durumu istisna bazlı: açık kapı/bagaj/cam tavan listelenir, hepsi kapalıysa sakin.
         val knowsSunroof = s.connected && s.hasSunroof()
@@ -266,23 +268,10 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
             if (knowsExtra && extra.hoodOpen()) add(R.string.launcher_body_hood)
         }
         val tireAlert = tireWarning == true
-
-        if (open.isEmpty()) doorsPill.hide() else doorsPill.show(
-            R.drawable.ic_mdi_car_door,
-            if (open.size == 1) context.getString(R.string.launcher_part_open, context.getString(open[0]))
-            else context.getString(R.string.launcher_doors_open_count, open.size),
-        )
-        if (!tireAlert) tiresPill.hide() else tiresPill.show(
-            R.drawable.ic_mdi_alert,
-            // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
-            context.getString(if (open.isNotEmpty()) R.string.launcher_tires_warning_short else R.string.launcher_tires_warning),
-        )
-
-        val hasAlert = open.isNotEmpty() || tireAlert
-        alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
-        calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
-        carBox.setState(
-            CarSchematicView.State(
+        val ui = Ui(
+            range = range, fuel = fuel, lowFuel = tenths != null && lowFuel,
+            open = open, knowsBody = knowsDoors || knowsExtra, tireWarning = tireWarning,
+            car = CarSchematicView.State(
                 doorLf = knowsDoors && s.isDoorLfOpen(), doorRf = knowsDoors && s.isDoorRfOpen(),
                 doorLr = knowsDoors && s.isDoorLrOpen(), doorRr = knowsDoors && s.isDoorRrOpen(),
                 trunk = knowsDoors && s.isTrunkOpen(),
@@ -290,11 +279,54 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
                 tireWarning = tireAlert,
                 locked = locked,
             ),
+            locked = locked,
         )
-        carBox.refreshTheme()
+        val prev = lastUi
+        if (ui == prev) return
+        lastUi = ui
+
+        if (prev == null || prev.range != range) {
+            if (range != null) {
+                rangeText.setTextColor(LauncherTheme.TEXT)
+                rangeText.setTextSmooth(unitStyled(context.getString(R.string.launcher_range_value, range)), animate = false)
+            } else {
+                rangeText.setText(R.string.launcher_unavailable)
+                rangeText.setTextColor(LauncherTheme.TEXT_SECONDARY)
+            }
+        }
+        if (prev == null || prev.fuel != fuel || prev.lowFuel != ui.lowFuel) {
+            fuelText.text = if (fuel != null) context.getString(R.string.launcher_percent, fuel) else context.getString(R.string.launcher_unavailable)
+            fuelText.setTextColor(if (ui.lowFuel) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+            fuelText.contentDescription = when {
+                fuel != null && lowFuel -> context.getString(R.string.launcher_fuel_low, fuel)
+                fuel != null -> context.getString(R.string.launcher_fuel_short, fuel)
+                else -> context.getString(R.string.launcher_waiting_data)
+            }
+            fuelBar.set(fuel, lowFuel)
+        }
+
+        val alertChanged = prev == null || prev.open != open || prev.tireWarning != tireWarning
+        if (alertChanged) {
+            if (open.isEmpty()) doorsPill.hide() else doorsPill.show(
+                R.drawable.ic_mdi_car_door,
+                if (open.size == 1) context.getString(R.string.launcher_part_open, context.getString(open[0]))
+                else context.getString(R.string.launcher_doors_open_count, open.size),
+            )
+            if (!tireAlert) tiresPill.hide() else tiresPill.show(
+                R.drawable.ic_mdi_alert,
+                // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
+                context.getString(if (open.isNotEmpty()) R.string.launcher_tires_warning_short else R.string.launcher_tires_warning),
+            )
+            val hasAlert = open.isNotEmpty() || tireAlert
+            alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
+            calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
+        }
+        // Şema yalnızca kendi durumu değişince boyanır (setState eşitse hiçbir şey yapmaz); ilk kurulumda tema okunur.
+        carBox.setState(ui.car)
+        if (prev == null) carBox.refreshTheme()
 
         // Sakin satır: kilit durumu; kilit açıksa da sessiz kalır (uyarı rengi yok).
-        when (locked) {
+        if (prev == null || prev.locked != locked) when (locked) {
             true -> bindCalm(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_locked))
             false -> bindCalm(R.drawable.ic_mdi_lock_open_variant, context.getString(R.string.launcher_unlocked))
             null -> bindCalm(R.drawable.ic_mdi_lock, context.getString(R.string.launcher_unavailable))
@@ -302,7 +334,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget {
         // Ekran okuyucu için tek cümlelik özet: kilit, biliniyorsa kapılar ve lastikler.
         val spoken = buildList {
             add(if (locked == null) context.getString(R.string.launcher_waiting_data) else statusText.text.toString())
-            if ((knowsDoors || knowsExtra) && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
+            if (ui.knowsBody && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
             if (tireWarning == false) add(context.getString(R.string.launcher_tires_ok))
         }.joinToString(", ")
         calmRow.contentDescription = spoken

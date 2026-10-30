@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.content.res.ColorStateList
 import android.view.Gravity
 import android.view.View
@@ -47,6 +48,10 @@ internal object CarSignals {
  * TripB sayfasıyla karşılaştırıldı: mesafe, ortalama tüketim ve ortalama hız onda bir birimdir.
  */
 internal object TripDecode {
+    /** Motor kapalı (devir 0) ve hız 0 iken canlı katman 3 sn'ye seyreltilir; devir okunamazsa seyreltilmez. */
+    fun liveIntervalMs(rpmRaw: Int?, speedKmh: Int?): Long =
+        if (rpmRaw == 0 && speedKmh == 0) 3_000L else 1_000L
+
     /** Anlık tüketim (sinyal 70): ham/10 L/100 km. 0xFFFF (araç duruyor) ve aralık dışı değer geçersizdir. */
     fun instantL100(raw: Int?): Double? = raw?.takeIf { it in 0..999 }?.let { it / 10.0 }
 
@@ -109,10 +114,11 @@ internal data class TripData(
 )
 
 /**
- * Yolculuk sinyallerini 1 sn'de bir, yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur).
- * Tek okuyucu: birden çok widget aynı turu paylaşır. Yalnızca okur.
- * Maliyet: anlık tüketim yaklaşık 2,2 sn'de bir güncellendiği için her saniye yalnızca iki sinyal (anlık tüketim + hız)
- * okunur; tam tur (~15 sinyal) her ikinci turda yapılır.
+ * Yolculuk sinyallerini yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur). Tek okuyucu: birden çok
+ * widget aynı turu paylaşır. Yalnızca okur. Her sinyal kendi hızında okunur ([PollTiers]):
+ *  - canlı (hız + anlık tüketim): 1 sn; motor kapalı ve hız 0 iken 3 sn,
+ *  - yolculuk (mesafe, ortalamalar, akü, soğutma suyu, düşük yakıt, motor devri): 5 sn,
+ *  - bakım ve PM2.5: 60 sn.
  */
 internal object TripSource {
 
@@ -120,16 +126,24 @@ internal object TripSource {
         fun onTrip(data: TripData)
     }
 
-    private const val POLL_MS = 1_000L
+    const val POLL_MS = 1_000L
+    const val TRIP_MS = 5_000L
+    const val SLOW_MS = 60_000L
+    private const val T_LIVE = 1
+    private const val T_TRIP = 2
+    private const val T_SLOW = 4
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
     private val HVAC = VDEventCarInfo.MODULE_HVAC
+
+    internal fun liveIntervalMs(rpmRaw: Int?, speedKmh: Int?): Long = TripDecode.liveIntervalMs(rpmRaw, speedKmh)
 
     private val listeners = CopyOnWriteArraySet<Listener>()
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "TripSource").apply { isDaemon = true } }
     private var task: ScheduledFuture<*>? = null
     private var appContext: Context? = null
-    private var tick = 0
+    private val tiers = PollTiers(longArrayOf(POLL_MS, TRIP_MS, SLOW_MS))
+    @Volatile private var rpmRaw: Int? = null
 
     @Volatile
     var last: TripData = TripData()
@@ -140,7 +154,10 @@ internal object TripSource {
         listeners += listener
         listener.onTrip(if (LauncherDemo.enabled) LauncherDemo.trip() else last)
         synchronized(this) {
-            if (task == null) task = io.scheduleWithFixedDelay({ poll() }, 0, POLL_MS, TimeUnit.MILLISECONDS)
+            if (task == null) {
+                tiers.reset()
+                task = io.scheduleWithFixedDelay({ poll() }, 0, POLL_MS, TimeUnit.MILLISECONDS)
+            }
         }
     }
 
@@ -157,7 +174,7 @@ internal object TripSource {
     private fun poll() {
         // Yakalanmayan hata scheduleWithFixedDelay'i sessizce iptal eder; döngü sürsün.
         try {
-            val data = if (LauncherDemo.enabled) LauncherDemo.trip() else if (tick++ % 2 == 0) readAll() else readLight() ?: return
+            val data = if (LauncherDemo.enabled) LauncherDemo.trip() else readDue() ?: return
             if (data == last && !LauncherDemo.enabled) return
             last = data
             main.post { listeners.forEach { it.onTrip(data) } }
@@ -166,50 +183,51 @@ internal object TripSource {
         }
     }
 
-    /** Hafif tur: yalnızca hız ve anlık tüketim yenilenir, gerisi son tam turdan kalır. Bağlı değilse null (tam tur beklenir). */
-    private fun readLight(): TripData? {
+    /** Süresi dolan katmanları okur, gerisi son turdan kalır. Okunacak bir şey yoksa null. */
+    private fun readDue(): TripData? {
         val prev = last
-        if (!prev.connected) return null
-        val (instant, speed) = readLive()
-        return prev.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant)
-    }
-
-    private fun readLive(): Pair<Double?, Int?> {
-        // Anlık tüketim duruyorken 0xFFFF döner; geçerli geldiğinde araç hareket ediyordur.
-        val instant = TripDecode.instantL100(CarSignals.readInt(RO, ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
-        // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
-        val speed = TripDecode.speed(
-            CarSignals.readInt(RO, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), CarSignals.readInt(RO, ReadOnlyID.ID_CAR_SPEED),
-        )
-        return instant to speed
-    }
-
-    private fun readAll(): TripData {
+        val now = SystemClock.elapsedRealtime()
+        val liveMs = liveIntervalMs(rpmRaw, prev.speedKmh)
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) {
             appContext?.let { proxy.init(it) }
+            tiers.reset()
             return TripData()
         }
+        // Bağlı değilken gelindiyse (ilk bağlantı) hepsi birlikte okunur.
+        val mask = if (prev.connected) tiers.due(now, liveMs) else tiers.all().also { tiers.markAll(now, liveMs) }
+        if (mask == 0) return null
         fun ro(id: Int) = CarSignals.readInt(RO, id)
         fun hvac(id: Int) = CarSignals.readInt(HVAC, id)
-        val (instant, speed) = readLive()
-        return TripData(
-            connected = true,
-            moving = TripDecode.moving(speed, instant),
-            speedKmh = speed,
-            instantL100 = instant,
-            driveAvgL100 = ro(ReadOnlyID.ID_AVERAGE_FUEL_CONS_AFTER_RUNNING)?.takeIf { it in 1..999 }?.let { it / 10.0 },
-            tripKm = TripDecode.tripKm(ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)),
-            avgL100 = TripDecode.avgL100(ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)),
-            avgSpeedKmh = TripDecode.avgSpeedKmh(ro(ReadOnlyID.ID_AVERAGE_SPEED_AFTER_CLEAR)),
-            batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
-            coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
-            lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
-            serviceKm = ro(ReadOnlyID.ID_ICMT_DISTANCE)?.takeIf { it in 0..99_999 },
-            serviceDays = ro(ReadOnlyID.ID_ICMT_DAY)?.takeIf { it in 0..9_999 },
-            pm25In = hvac(HvacID.ID_AC_PM25_INCAR)?.takeIf { it in 0..999 },
-            pm25Out = hvac(HvacID.ID_AC_PM25_OUTCAR)?.takeIf { it in 0..999 },
-        )
+        var d = prev.copy(connected = true)
+        if (mask and T_LIVE != 0) {
+            // Anlık tüketim duruyorken 0xFFFF döner; geçerli geldiğinde araç hareket ediyordur.
+            val instant = TripDecode.instantL100(ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
+            // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
+            val speed = TripDecode.speed(ro(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), ro(ReadOnlyID.ID_CAR_SPEED))
+            d = d.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant)
+        }
+        if (mask and T_TRIP != 0) {
+            rpmRaw = ro(ReadOnlyID.ID_ENGINE_RPM)
+            d = d.copy(
+                driveAvgL100 = ro(ReadOnlyID.ID_AVERAGE_FUEL_CONS_AFTER_RUNNING)?.takeIf { it in 1..999 }?.let { it / 10.0 },
+                tripKm = TripDecode.tripKm(ro(ReadOnlyID.ID_GRAND_TOTAL_KM_AFTER_CLEAR)),
+                avgL100 = TripDecode.avgL100(ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)),
+                avgSpeedKmh = TripDecode.avgSpeedKmh(ro(ReadOnlyID.ID_AVERAGE_SPEED_AFTER_CLEAR)),
+                batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
+                coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
+                lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
+            )
+        }
+        if (mask and T_SLOW != 0) {
+            d = d.copy(
+                serviceKm = ro(ReadOnlyID.ID_ICMT_DISTANCE)?.takeIf { it in 0..99_999 },
+                serviceDays = ro(ReadOnlyID.ID_ICMT_DAY)?.takeIf { it in 0..9_999 },
+                pm25In = hvac(HvacID.ID_AC_PM25_INCAR)?.takeIf { it in 0..999 },
+                pm25Out = hvac(HvacID.ID_AC_PM25_OUTCAR)?.takeIf { it in 0..999 },
+            )
+        }
+        return d
     }
 }
 
@@ -334,7 +352,8 @@ internal abstract class TripCard(
     protected fun setValue(value: CharSequence, color: Int, sizeSp: Float = VALUE_SP) {
         valueText.textSize = sizeSp
         valueText.setTextColor(color)
-        valueText.setTextSmooth(unitStyled(value))
+        // Tüketim, yolculuk ve sağlık değerleri sürüşte sürekli akar: geçişsiz.
+        valueText.setTextSmooth(unitStyled(value), animate = false)
     }
 
     protected fun setSubtitle(subtitle: CharSequence?, color: Int = LauncherTheme.TEXT_SECONDARY) {

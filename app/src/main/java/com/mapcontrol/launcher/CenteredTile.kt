@@ -232,9 +232,9 @@ internal abstract class CenteredTile(
         headerGap.visibility = headerIcon.visibility
     }
 
-    protected fun setValue(value: CharSequence, color: Int) {
+    protected fun setValue(value: CharSequence, color: Int, animate: Boolean = true) {
         valueText.setTextColor(color)
-        valueText.setTextSmooth(unitStyled(value))
+        valueText.setTextSmooth(unitStyled(value), animate)
         root.contentDescription = value
     }
 

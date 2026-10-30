@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -171,8 +172,9 @@ internal data class ExtraData(
 }
 
 /**
- * Salt-okur sinyalleri 4 sn'de bir, yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur).
- * Tek okuyucu: tüm yeni kutucuklar ve araç kartı aynı turu paylaşır. Animasyon döngüsü yok.
+ * Salt-okur sinyalleri yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur). Tek okuyucu: tüm yeni
+ * kutucuklar ve araç kartı aynı turu paylaşır. Animasyon döngüsü yok. Hızlı katman 4 sn'de bir (kapılar, bagaj, kaput,
+ * hız limiti, el freni); yavaş katman 20 sn'de bir (camlar, yakıt kapağı, kablosuz şarj, sürüş süresi, akü, SOC).
  */
 internal object ExtraSource {
 
@@ -180,9 +182,17 @@ internal object ExtraSource {
         fun onExtra(data: ExtraData)
     }
 
-    private const val POLL_MS = 4_000L
+    const val POLL_MS = 4_000L
+    const val SLOW_MS = 20_000L
+    private const val T_FAST = 1
+    private const val T_SLOW = 2
     private val RO = VDEventCarInfo.MODULE_READONLY_INFO
     private val CS = VDEventCarInfo.MODULE_CAR_SETTING
+    private val tiers = PollTiers(longArrayOf(POLL_MS, SLOW_MS))
+    /** Yavaş katmanın son okuduğu gövde parçaları (camlar, yakıt kapağı); hızlı turlarda korunur. */
+    private var slowParts: Map<BodyPart, Boolean> = emptyMap()
+    /** Hızlı katmanın son okuduğu gövde parçaları (kapılar, bagaj, kaput). */
+    private var fastParts: Map<BodyPart, Boolean> = emptyMap()
 
     private val listeners = CopyOnWriteArraySet<Listener>()
     private val main = Handler(Looper.getMainLooper())
@@ -199,7 +209,10 @@ internal object ExtraSource {
         listeners += listener
         listener.onExtra(if (LauncherDemo.enabled) ReadOnlyDemo.extra() else last)
         synchronized(this) {
-            if (task == null) task = io.scheduleWithFixedDelay({ poll() }, 0, POLL_MS, TimeUnit.MILLISECONDS)
+            if (task == null) {
+                tiers.reset()
+                task = io.scheduleWithFixedDelay({ poll() }, 0, POLL_MS, TimeUnit.MILLISECONDS)
+            }
         }
     }
 
@@ -216,7 +229,7 @@ internal object ExtraSource {
     private fun poll() {
         // Yakalanmayan hata scheduleWithFixedDelay'i sessizce iptal eder; döngü sürsün.
         try {
-            val data = if (LauncherDemo.enabled) ReadOnlyDemo.extra() else readAll()
+            val data = if (LauncherDemo.enabled) ReadOnlyDemo.extra() else readDue() ?: return
             if (data == last && !LauncherDemo.enabled) return
             last = data
             main.post { listeners.forEach { it.onExtra(data) } }
@@ -225,41 +238,60 @@ internal object ExtraSource {
         }
     }
 
-    private fun readAll(): ExtraData {
+    private fun readDue(): ExtraData? {
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) {
             appContext?.let { proxy.init(it) }
+            tiers.reset()
+            slowParts = emptyMap(); fastParts = emptyMap()
             return ExtraData()
         }
+        val prev = last
+        val now = SystemClock.elapsedRealtime()
+        // Yeni bağlanıldıysa hepsi birlikte okunur.
+        val mask = if (prev.connected) tiers.due(now) else tiers.all().also { tiers.markAll(now) }
+        if (mask == 0) return null
         fun ro(id: Int) = CarSignals.readInt(RO, id)
         fun cs(id: Int) = CarSignals.readInt(CS, id)
-        val parts = buildMap {
-            fun set(part: BodyPart, open: Boolean?) { if (open != null) this[part] = open }
-            set(BodyPart.DOOR_LF, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_DRIVE_DOOR_STATE)))
-            set(BodyPart.DOOR_RF, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_PASSENGER_DOOR_STATE)))
-            set(BodyPart.DOOR_LR, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_LFFT_BEHIND_DOOR_STATE)))
-            set(BodyPart.DOOR_RR, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_RIGHT_BEHIND_DOOR_STATE)))
-            set(BodyPart.TRUNK, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_TRUNK_STATE)))
-            set(BodyPart.WINDOW_LF, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_FL_WINDOW)))
-            set(BodyPart.WINDOW_RF, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_FR_WINDOW)))
-            set(BodyPart.WINDOW_LR, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_RL_WINDOW)))
-            set(BodyPart.WINDOW_RR, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_RR_WINDOW)))
-            set(BodyPart.HOOD, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_HOOD_STATE)))
-            set(BodyPart.FUEL_CAP, ReadOnlyDecode.fuelCapOpen(cs(CarSettingID.ID_FUEL_FILLER_CAP)))
+        var d = prev.copy(connected = true)
+        if (mask and T_SLOW != 0) {
+            slowParts = buildMap {
+                fun set(part: BodyPart, open: Boolean?) { if (open != null) this[part] = open }
+                set(BodyPart.WINDOW_LF, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_FL_WINDOW)))
+                set(BodyPart.WINDOW_RF, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_FR_WINDOW)))
+                set(BodyPart.WINDOW_LR, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_RL_WINDOW)))
+                set(BodyPart.WINDOW_RR, ReadOnlyDecode.windowOpen(cs(CarSettingID.ID_CAR_RR_WINDOW)))
+                set(BodyPart.FUEL_CAP, ReadOnlyDecode.fuelCapOpen(cs(CarSettingID.ID_FUEL_FILLER_CAP)))
+            }
+            d = d.copy(
+                driveMinutes = ReadOnlyDecode.driveMinutes(CarSignals.read(RO, ReadOnlyID.ID_DRIVE_TIME)),
+                batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
+                batterySoc = ReadOnlyDecode.batterySoc(ro(ReadOnlyID.ID_IBS_SOC)),
+                padState = ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
+                phoneForgotten = ReadOnlyDecode.phoneForgotten(
+                    cs(CarSettingID.ID_CAR_PHONE_FORGOT_ON_WIRLESS_BOARD), cs(CarSettingID.ID_CAR_PHONE_FORGOT),
+                ),
+            )
         }
-        return ExtraData(
-            connected = true,
-            driveMinutes = ReadOnlyDecode.driveMinutes(CarSignals.read(RO, ReadOnlyID.ID_DRIVE_TIME)),
-            speedLimit = ReadOnlyDecode.speedLimit(cs(CarSettingID.ID_NAV_SPEED_LIMIT)),
-            batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
-            batterySoc = ReadOnlyDecode.batterySoc(ro(ReadOnlyID.ID_IBS_SOC)),
-            padState = ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
-            phoneForgotten = ReadOnlyDecode.phoneForgotten(
-                cs(CarSettingID.ID_CAR_PHONE_FORGOT_ON_WIRLESS_BOARD), cs(CarSettingID.ID_CAR_PHONE_FORGOT),
-            ),
-            handbrakeOn = ReadOnlyDecode.handbrakeOn(ro(ReadOnlyID.ID_HANDBRAKE_STATE)),
-            parts = parts,
-        )
+        if (mask and T_FAST != 0) {
+            fastParts = buildMap {
+                fun set(part: BodyPart, open: Boolean?) { if (open != null) this[part] = open }
+                set(BodyPart.DOOR_LF, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_DRIVE_DOOR_STATE)))
+                set(BodyPart.DOOR_RF, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_PASSENGER_DOOR_STATE)))
+                set(BodyPart.DOOR_LR, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_LFFT_BEHIND_DOOR_STATE)))
+                set(BodyPart.DOOR_RR, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_RIGHT_BEHIND_DOOR_STATE)))
+                set(BodyPart.TRUNK, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_TRUNK_STATE)))
+                set(BodyPart.HOOD, ReadOnlyDecode.flagOpen(ro(ReadOnlyID.ID_HOOD_STATE)))
+            }
+            d = d.copy(
+                speedLimit = ReadOnlyDecode.speedLimit(cs(CarSettingID.ID_NAV_SPEED_LIMIT)),
+                handbrakeOn = ReadOnlyDecode.handbrakeOn(ro(ReadOnlyID.ID_HANDBRAKE_STATE)),
+            )
+        }
+        // Parçalar BodyPart sırasıyla birleşir (sıralı harita); yavaş parçalar son okunandan gelir.
+        val merged = LinkedHashMap<BodyPart, Boolean>()
+        BodyPart.values().forEach { part -> (fastParts[part] ?: slowParts[part])?.let { merged[part] = it } }
+        return d.copy(parts = merged)
     }
 }
 
@@ -342,7 +374,7 @@ internal class BreakTile(context: Context) :
         } else {
             setAlertSurface(false)
             setIcon(R.drawable.ic_mdi_timer_sand, LauncherTheme.TEXT_SECONDARY)
-            setValue(duration, LauncherTheme.TEXT)
+            setValue(duration, LauncherTheme.TEXT, animate = false)
             showDetail(context.getString(R.string.launcher_break_driving))
         }
     }

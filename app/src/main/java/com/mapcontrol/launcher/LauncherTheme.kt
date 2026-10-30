@@ -139,12 +139,14 @@ object LauncherTheme {
     /**
      * Otomatik temayı aracın farlarına/ışık sensörüne bağlar. onResume'da çağrılır, onPause'da [stopAutoNight].
      * [canSwitch] false iken (ör. düzenleme modu, ayarlar açık) geçiş ertelenir; [onSwitch] tema değişince
-     * çağrılır (etkinlik `ThemeTransition.recreate` yapmalı). Yalnızca ThemeMode.AUTO iken etkindir.
+     * çağrılır (etkinlik `ThemeTransition.recreate` yapmalı). Yalnızca ThemeMode.AUTO iken kurulur; mod değişince yeniden çağrılmalıdır (bkz. HomeLauncherActivity.syncAutoNight).
      */
     @JvmStatic
     fun startAutoNight(context: Context, canSwitch: () -> Boolean, onSwitch: () -> Unit) {
         stopAutoNight()
         val app = context.applicationContext
+        // Gündüz/Gece sabitken sensör dinleyicisi ve 2 sn'lik döngü hiç kurulmaz; mod değişince çağıran yeniden başlatır.
+        if (ThemeMode.read(app) != ThemeMode.AUTO) return
         val manager = try { VehicleLightSensorManager.getInstance(app) } catch (t: Throwable) { null }
         val listener = VehicleLightSensorManager.Listener { _, _, _ -> }
         manager?.addListener(listener)
@@ -163,7 +165,8 @@ object LauncherTheme {
                         onSwitch()
                     }
                 }
-                autoHandler.postDelayed(this, AUTO_TICK_MS)
+                // Geçiş sırasında yeniden başlatıldıysa (syncAutoNight) bu eski döngü kendini yeniden kurmaz.
+                if (autoRunner === this) autoHandler.postDelayed(this, AUTO_TICK_MS)
             }
         }
         autoRunner = runner
