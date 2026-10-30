@@ -108,3 +108,38 @@ class DriveLayoutTest {
         }
     }
 }
+
+class ParkOnlyTest {
+    private val parkOnlyTypes = setOf(WidgetType.PHOTO, WidgetType.SCREEN_OFF, WidgetType.CLOCK)
+
+    @Test fun parkOnlyFlagsAreExactlyTheDistractingTypes() {
+        assertEquals(parkOnlyTypes, WidgetType.values().filter { it.parkOnly }.toSet())
+    }
+
+    @Test fun pickerHidesParkOnlyInDriveOnly() {
+        val drive = addableWidgetTypes(LayoutMode.DRIVE)
+        val park = addableWidgetTypes(LayoutMode.PARK)
+        assertTrue(drive.none { it in parkOnlyTypes })
+        assertTrue(park.containsAll(parkOnlyTypes))
+        assertTrue(drive.contains(WidgetType.MEDIA))
+        assertTrue(isAllowedIn(WidgetType.PHOTO, LayoutMode.PARK))
+        assertTrue(!isAllowedIn(WidgetType.PHOTO, LayoutMode.DRIVE))
+    }
+
+    @Test fun driveLoadSkipsParkOnlyButKeepsOthers() {
+        val saved = listOf(
+            PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(4, 2)),
+            PlacedWidget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)),
+            PlacedWidget("clock", WidgetType.CLOCK, 6, 0, Span(2, 2)),
+        )
+        assertEquals(listOf("media"), visibleForMode(saved, LayoutMode.DRIVE).map { it.id })
+        assertEquals(saved, visibleForMode(saved, LayoutMode.PARK))
+        assertEquals(3, saved.size) // kaynak liste (depo) değişmez
+    }
+
+    @Test fun defaultDriveLayoutsHaveNoParkOnly() {
+        listOf(false, true).forEach { oem ->
+            assertTrue(defaultDriveLayout(oem, listOf("a", "b", "c", "d")).none { it.type.parkOnly })
+        }
+    }
+}

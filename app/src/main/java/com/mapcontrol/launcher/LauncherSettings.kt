@@ -73,7 +73,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
     /** Satırlar araç ekranının yüksekliğini aşabilir (tema + alt çubuk + 4-5 satır): panel kaydırılır. */
     private fun LinearLayout.addScrollable(d: Dialog) {
-        val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, activity.dp(16)) }
         content.buildPanel(d)
         val maxH = activity.resources.displayMetrics.heightPixels - activity.dp(SCROLL_RESERVED_DP)
         addView(ScrollView(activity).apply { addView(content) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxH))
@@ -322,7 +322,8 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         const val HINT_TAG = "row_hint"
         const val ROW_HEIGHT_DP = 80
         /** Başlık, iç boşluk ve ekran kenarı için ayrılan yükseklik. */
-        const val SCROLL_RESERVED_DP = 190
+        /** Başlık + kart dolgusu + sistem çubuğu (1920x720 ekranda 48 px) düşülür; aksi halde son satır pencere altında kırpılır. */
+        const val SCROLL_RESERVED_DP = 250
         const val SEGMENT_RADIUS_DP = 16f
     }
 }

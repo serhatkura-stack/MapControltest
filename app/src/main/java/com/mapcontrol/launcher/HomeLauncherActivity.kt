@@ -154,7 +154,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             setContentView(root)
         }
         header.setLayoutMode(activeMode)
-        applyLayout(store.load(), persist = false)
+        applyLayout(visibleForMode(store.load(), activeMode), persist = false)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
         LauncherBottomBar.logResult(this)
@@ -275,7 +275,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         activeMode = to
         rememberedMode = to
         header.setLayoutMode(to)
-        val apply = { applyLayout(store.load(), persist = false) }
+        val apply = { applyLayout(visibleForMode(store.load(), activeMode), persist = false) }
         if (!animate || !started) { apply(); return }
         grid.animate().cancel()
         grid.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
@@ -488,8 +488,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private fun addTile(type: WidgetType, dismiss: () -> Unit): View {
-        val onScreen = !isAddable(type, layout)
-        val spot = if (onScreen) null else spotFor(type)
+        val parkOnlyBlocked = !isAllowedIn(type, activeMode)
+        val onScreen = !parkOnlyBlocked && !isAddable(type, layout)
+        val spot = if (onScreen || parkOnlyBlocked) null else spotFor(type)
         val fits = spot != null
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -506,6 +507,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
                 text = when {
                     fits -> type.sizes.joinToString("  ·  ")
+                    parkOnlyBlocked -> getString(R.string.launcher_edit_park_only)
                     onScreen -> getString(R.string.launcher_edit_on_screen)
                     else -> getString(R.string.launcher_edit_no_room)
                 }

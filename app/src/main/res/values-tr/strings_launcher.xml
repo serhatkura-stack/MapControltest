@@ -140,6 +140,7 @@
     <string name="launcher_app_frostnav" translatable="false">FrostNav</string>
     <string name="launcher_app_phone">Telefon</string>
     <string name="launcher_edit_on_screen">Ekranda</string>
+    <string name="launcher_edit_park_only">Sadece Park</string>
     <string name="launcher_trip_since_reset">Sıfırlamadan beri</string>
     <string name="launcher_trip_avg_cons_label">Ort. tüketim</string>
     <string name="launcher_trip_avg_speed_label">Ort. hız</string>

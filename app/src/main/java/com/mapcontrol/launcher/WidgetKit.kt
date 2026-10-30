@@ -54,6 +54,17 @@ fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it
 fun isAddable(type: WidgetType, layout: List<PlacedWidget>): Boolean =
     type == WidgetType.APP || type !in onScreenTypes(layout)
 
+/** Dikkat dağıtan widget'lar ([WidgetType.parkOnly]) Sürüş düzenine eklenemez; Park'ta serbesttir. */
+fun isAllowedIn(type: WidgetType, mode: LayoutMode): Boolean = !(type.parkOnly && mode == LayoutMode.DRIVE)
+
+/** Seçici için: [mode] düzenine konabilen türler ([addableWidgetTypes] listesinden). */
+fun addableWidgetTypes(mode: LayoutMode): List<WidgetType> =
+    addableWidgetTypes().filter { isAllowedIn(it, mode) }
+
+/** Düzen yüklenirken: Sürüş'te eski kayıttan gelen parkOnly widget'lar çizilmez (depodan silinmez, boşluk kalır). */
+fun visibleForMode(layout: List<PlacedWidget>, mode: LayoutMode): List<PlacedWidget> =
+    layout.filter { isAllowedIn(it.type, mode) }
+
 /** [layout] verilince "Widget ekle" listesinde seçilebilir türler: ekranda olanlar elenir (APP hariç). */
 fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
     addableWidgetTypes().filter { isAddable(it, layout) }
@@ -64,7 +75,7 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
  * Kural: bir boyut yalnızca anlamlı ölçüde daha fazla bilgi gösteriyorsa vardır. Kayıtlı düzendeki artık
  * geçersiz boyutlar [LayoutStore.snapSpans] ile en yakın izinli boyuta çekilir.
  */
-enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
+enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>, val parkOnly: Boolean = false) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
     NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(4, 2), Span(2, 2), Span(6, 2))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
@@ -82,16 +93,16 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
     SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
     AWD("awd", R.string.launcher_widget_awd, R.drawable.ic_mdi_car_cog, listOf(Span(4, 4), Span(2, 2))),
-    PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
+    PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4)), parkOnly = true),
     SUNSHADE("sunshade", R.string.launcher_widget_sunshade, R.drawable.ic_mdi_car_sunroof, listOf(Span(2, 2), Span(2, 4))),
     DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
     STEERING_HEAT("steering_heat", R.string.launcher_widget_steering_heat, R.drawable.ic_mdi_steering_heat, listOf(Span(2, 2), Span(1, 2))),
-    SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2))),
+    SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2)), parkOnly = true),
     BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
     SPEED_LIMIT("speed_limit", R.string.launcher_widget_speed_limit, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2))),
     BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
-    CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2))),
+    CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
     BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2)));
 
     companion object {
