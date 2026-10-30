@@ -65,9 +65,10 @@ class HudLimitPayloadTest {
     }
 
     @Test fun whitelistIsExactlyTwoCommands() {
-        assertEquals(setOf(Pair(327682, 123), Pair(327682, 125)), HudLimitPayload.ALLOWED.keys)
+        assertEquals(setOf(Pair(327682, 123), Pair(327682, 125), Pair(327682, 112)), HudLimitPayload.ALLOWED.keys)
         assertEquals(8, HudLimitPayload.ALLOWED[Pair(327682, 123)])
         assertEquals(4, HudLimitPayload.ALLOWED[Pair(327682, 125)])
+        assertEquals(listOf(0, 0, 0, 0, 1, 0, 0, 0), HudLimitPayload.unknownLimit().values.toList())
     }
 
     @Test fun otherModulesAndCommandsRejected() {
@@ -75,7 +76,7 @@ class HudLimitPayloadTest {
         rejects(327683, 200, intArrayOf(3, 1, 1))
         rejects(327682, 124, IntArray(8))
         rejects(327682, 200, IntArray(8))
-        for (cmd in 0..300) if (cmd != 123 && cmd != 125) rejects(327682, cmd, IntArray(8))
+        for (cmd in 0..300) if (cmd != 123 && cmd != 125 && cmd != 112) rejects(327682, cmd, IntArray(8))
     }
 
     @Test fun lengthAndRangeChecked() {

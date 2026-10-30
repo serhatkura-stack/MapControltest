@@ -15,9 +15,12 @@ object HudLimitPayload {
 
     const val CMD_LIMIT = 123
     const val CMD_SIGN = 125
+    /** Özgün uygulamanın her 1 sn yinelediği durum komutu; [4] = NavSpeedLimitIsUnknown. */
+    const val CMD_STATE = 112
 
     const val LEN_LIMIT = 8
     const val LEN_SIGN = 4
+    const val LEN_STATE = 8
 
     const val MAX_KMH = 250
     const val MAX_SIGN_INDEX = 43
@@ -39,6 +42,7 @@ object HudLimitPayload {
     val ALLOWED: Map<Pair<Int, Int>, Int> = mapOf(
         Pair(MODULE, CMD_LIMIT) to LEN_LIMIT,
         Pair(MODULE, CMD_SIGN) to LEN_SIGN,
+        Pair(MODULE, CMD_STATE) to LEN_STATE,
     )
 
     fun signIndex(kmh: Int): Int = SIGN_INDEX[kmh] ?: 0
@@ -77,4 +81,7 @@ object HudLimitPayload {
     /** Temizleme: durum 0, limit 0 (komut 123) ve tabela 0 (komut 125). */
     fun clearLimit(): Payload = limit(0, 0)
     fun clearSign(): Payload = sign(0)
+
+    /** Komut 112: [döner kavşak mes. hi, lo, zamanlı limit, kavşakta, LİMİT BİLİNMİYOR, değişken limit, VSL mes., 0]. */
+    fun unknownLimit(): Payload = validate(MODULE, CMD_STATE, intArrayOf(0, 0, 0, 0, 1, 0, 0, 0))
 }

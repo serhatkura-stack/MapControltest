@@ -82,7 +82,7 @@ class HudTestActivity : Activity() {
         val icon = if (intent?.hasExtra(EXTRA_ICON) == true) intent.getIntExtra(EXTRA_ICON, -1) else null
         val dist = intent?.getIntExtra(EXTRA_DIST, DEFAULT_DIST) ?: DEFAULT_DIST
         if (mode == null || mode !in MODES) {
-            show("HUD testi: --es hud demo|alt|icon|clear|info|limit|limit_off|turbodog|amap\n(geçersiz/eksik mod: $mode) hiçbir şey gönderilmedi")
+            show("HUD testi: --es hud demo|alt|icon|clear|info|limit|limit_off|limit_unknown|turbodog|amap\n(geçersiz/eksik mod: $mode) hiçbir şey gönderilmedi")
             Log.w(HudNavSender.TAG, "geçersiz mod: $mode")
             finishSoon(4000)
             return
@@ -122,7 +122,7 @@ class HudTestActivity : Activity() {
             show(sender.clear().message)
             return
         }
-        if (mode == "limit" || mode == "limit_off") {
+        if (mode == "limit" || mode == "limit_off" || mode == "limit_unknown") {
             limitTest(sender, mode)
             return
         }
@@ -187,6 +187,20 @@ class HudTestActivity : Activity() {
      */
     private fun limitTest(nav: HudNavSender, mode: String) {
         val limit = HudLimitSender(nav)
+        if (mode == "limit_unknown") {
+            // ~8 sn: 112 "limit bilinmiyor" + 123 durum 0, özgün uygulama gibi her 1 sn.
+            for (round in 1..LIMIT_ROUNDS) {
+                val a = limit.send(HudLimitPayload.unknownLimit())
+                show(a.message)
+                if (!a.sent) return
+                Thread.sleep(STEP_GAP_MS)
+                val b = limit.send(HudLimitPayload.clearLimit())
+                show(b.message)
+                if (!b.sent) return
+                Thread.sleep(1000L - STEP_GAP_MS)
+            }
+            return
+        }
         if (mode == "limit_off") {
             show(limit.send(HudLimitPayload.clearLimit()).message)
             Thread.sleep(STEP_GAP_MS)
@@ -352,7 +366,7 @@ class HudTestActivity : Activity() {
         private const val HOLD_MS = 5000L
         private const val LIMIT_ROUNDS = 8
         private const val BROADCAST_ROUNDS = 10
-        private val MODES = setOf("demo", "alt", "icon", "clear", "info", "limit", "limit_off", "turbodog", "amap")
+        private val MODES = setOf("demo", "alt", "icon", "clear", "info", "limit", "limit_off", "limit_unknown", "turbodog", "amap")
         private val RUNNING = AtomicBoolean(false)
     }
 }

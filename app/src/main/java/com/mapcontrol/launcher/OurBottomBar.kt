@@ -93,8 +93,8 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
             addView(v, lp)
         }
         fun square() = LinearLayout.LayoutParams(context.dp(HEIGHT_DP), LinearLayout.LayoutParams.MATCH_PARENT)
-        // Ana ekran: zaten ana ekrandayız; dokunuş bir şey yapmaz, vurgu "buradasın" der.
-        add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { }, square())
+        // Ana ekran: sistemin ana ekranına çıkar (launcher varsayılan değilken OEM ana ekranı); varsayılan bizsek bir şey yapmaz.
+        add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, square())
         add(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() }, square())
         add(navButton(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, square())
         add(climateControl.driverView, weightLp(W_TEMP))
@@ -191,6 +191,18 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
     // --- Eylemler ---
 
     /** Uygulamayı varsayılan ekranda açar; kurulu değilse sessizce bir şey yapmaz (emülatör). */
+    private fun leaveToSystemHome() {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val target = context.packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo
+        if (target == null) { activity.moveTaskToBack(true); return }
+        if (target.packageName == context.packageName) return
+        try {
+            context.startActivity(home.setClassName(target.packageName, target.name))
+        } catch (_: ActivityNotFoundException) {
+        } catch (_: SecurityException) {
+        }
+    }
+
     private fun openPackage(packageName: String) {
         io.runSafely { AppLaunchHelper.launchAppOnDisplay(context, packageName, Display.DEFAULT_DISPLAY, 0) }
     }
