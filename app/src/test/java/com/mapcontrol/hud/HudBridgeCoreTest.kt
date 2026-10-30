@@ -90,18 +90,28 @@ class HudBridgeCoreTest {
 
     private class Rig(var icon: Int? = null) {
         val sent = ArrayList<IntArray>()
+        val times = ArrayList<Long>()
+        var now = 0L
         var ok = true
         val engine = HudBridgeEngine(
-            send = { if (ok) { sent.add(it); true } else false },
+            send = { if (ok) { sent.add(it); times.add(now); true } else false },
             iconSource = { icon },
             limiter = HudRateLimiter(1000, 1000), // sınırlayıcıyı ayrı sınıyoruz
         )
         fun subs() = sent.map { it[0] }
+
+        /** Sahte saat: [from]'dan [to]'ya (dahil) [step] ms adımlarla tik atar; durum verilirse her adımda onState. */
+        fun run(to: Long, state: HudState? = null, step: Long = 200L) {
+            while (now <= to) {
+                if (state != null) engine.onState(state, now) else engine.tick(now)
+                now += step
+            }
+        }
     }
 
-    @Test fun startSendsClearThenStartThenRoadManeuverTotal() {
+    @Test fun startSendsClearThenStartThenRoadManeuverTotalPaced() {
         val r = Rig()
-        r.engine.onState(HudState("Ana Cd.", 850, 2900L), 0)
+        r.run(1700, HudState("Ana Cd.", 850, 2900L))
         assertEquals(listOf(3, 52, 48, 50, 53), r.subs())
         assertArrayEquals(HudPayload.clear(), r.sent[0])
         assertArrayEquals(HudPayload.navStarted(), r.sent[1])
@@ -109,70 +119,118 @@ class HudBridgeCoreTest {
         // ikon bilinmiyor -> 0, tahmin yok
         assertArrayEquals(HudPayload.maneuverAlt(0, 850), r.sent[3])
         assertArrayEquals(HudPayload.totalDistanceAlt(2900L), r.sent[4])
+        for (i in 1 until r.times.size) assertTrue(r.times[i] - r.times[i - 1] >= 400)
+        assertTrue(r.times.last() <= 1600)
     }
 
-    @Test fun unchangedStateSendsNothing() {
+    @Test fun neverTwoSendsCloserThan400ms() {
+        val r = Rig()
+        r.engine.onState(HudState("A", 850, 2900L), 0)
+        assertEquals(listOf(3), r.subs())
+        r.engine.onState(HudState("A", 850, 2900L), 399)
+        assertEquals(listOf(3), r.subs())
+        r.now = 400
+        r.engine.onState(HudState("A", 850, 2900L), 400)
+        assertEquals(listOf(3, 52), r.subs())
+    }
+
+    @Test fun roadFallsBackToInstructionThenYandex() {
+        val r = Rig()
+        r.run(1700, HudState(null, 50, null, instruction = "Soldan devam edin"))
+        assertArrayEquals(HudPayload.roadName("Soldan devam edin"), r.sent[2])
+        val r2 = Rig()
+        r2.run(1700, HudState(null, 50, null))
+        assertArrayEquals(HudPayload.roadName("Yandex"), r2.sent[2])
+    }
+
+    @Test fun totalFallsBackToManeuverDistanceWhenUnknown() {
+        val r = Rig()
+        r.run(1700, HudState("A", 50, null))
+        assertEquals(listOf(3, 52, 48, 50, 53), r.subs())
+        assertArrayEquals(HudPayload.totalDistanceAlt(50L), r.sent[4])
+    }
+
+    @Test fun longRoadNameIsTruncatedByPayload() {
+        val r = Rig()
+        r.run(1700, HudState("Ç".repeat(60), 50, 100L))
+        assertTrue(r.sent[2][1] <= HudPayload.ROAD_NAME_MAX_BYTES)
+    }
+
+    @Test fun unchangedStateRefreshesManeuverEvery3sAndRoadTotalEvery10s() {
         val r = Rig()
         val s = HudState("Ana Cd.", 850, 2900L)
-        r.engine.onState(s, 0)
-        r.sent.clear()
-        r.engine.onState(s, 1000)
-        r.engine.onState(s.copy(road = "Ana Cd."), 2000)
-        assertTrue(r.sent.isEmpty())
+        r.run(1700, s)
+        r.sent.clear(); r.times.clear()
+        r.run(2900, s)
+        assertTrue(r.sent.isEmpty())                       // 3 sn dolmadı
+        r.run(4400, s)
+        assertEquals(listOf(50), r.subs())                 // ~3 sn: manevra tazelendi
+        r.sent.clear(); r.times.clear()
+        r.run(12_000, s)
+        assertTrue(r.subs().count { it == 50 } >= 2)
+        assertEquals(1, r.subs().count { it == 48 })
+        assertEquals(1, r.subs().count { it == 53 })
+        assertTrue(r.sent.all { it[0] in HudBridgeWhitelist.ALLOWED })
     }
 
-    @Test fun maneuverThresholdTenMetersAndTwoHertz() {
+    @Test fun maneuverThresholdTenMeters() {
         val r = Rig()
-        r.engine.onState(HudState("A", 850, null), 0)
+        r.run(1700, HudState("A", 850, 2000L))
         r.sent.clear()
-        r.engine.onState(HudState("A", 845, null), 1000)   // 5 m: yok
+        r.now = 2000
+        r.engine.onState(HudState("A", 845, 2000L), r.now)   // 5 m: yok
         assertTrue(r.sent.isEmpty())
-        r.engine.onState(HudState("A", 840, null), 1100)   // 10 m ama 2 Hz içinde değil (son gönderim t=0, 1100 geçti) -> var
-        assertEquals(listOf(50), r.subs())
-        r.sent.clear()
-        r.engine.onState(HudState("A", 820, null), 1300)   // 20 m ama 200 ms: 2 Hz engeli
-        assertTrue(r.sent.isEmpty())
-        r.engine.onState(HudState("A", 820, null), 1700)   // 600 ms geçti -> gider
+        r.now = 2200
+        r.engine.onState(HudState("A", 840, 2000L), r.now)   // 10 m: gider
         assertEquals(listOf(50), r.subs())
     }
 
     @Test fun iconChangeTriggersManeuverSend() {
         val r = Rig(icon = null)
-        r.engine.onState(HudState(null, 500, null), 0)
+        r.run(1700, HudState("A", 500, 1000L))
         r.sent.clear()
         r.icon = 3
-        r.engine.onState(HudState(null, 500, null), 1000)
+        r.now = 2000
+        r.engine.onState(HudState("A", 500, 1000L), r.now)
         assertEquals(1, r.sent.size)
         assertArrayEquals(HudPayload.maneuverAlt(3, 500), r.sent[0])
     }
 
     @Test fun totalThresholdHundredMeters() {
         val r = Rig()
-        r.engine.onState(HudState(null, null, 5000L), 0)
+        r.run(1700, HudState("A", 500, 5000L))
         r.sent.clear()
-        r.engine.onState(HudState(null, null, 4950L), 1000)
+        r.now = 2000
+        r.engine.onState(HudState("A", 500, 4950L), r.now)
         assertTrue(r.sent.isEmpty())
-        r.engine.onState(HudState(null, null, 4900L), 2000)
+        r.now = 2200
+        r.engine.onState(HudState("A", 500, 4900L), r.now)
         assertEquals(listOf(53), r.subs())
     }
 
     @Test fun roadSentOnlyWhenChanged() {
         val r = Rig()
-        r.engine.onState(HudState("A", 500, null), 0)
+        r.run(1700, HudState("A", 500, 1000L))
         r.sent.clear()
-        r.engine.onState(HudState("B", 500, null), 1000)
+        r.now = 2000
+        r.engine.onState(HudState("A", 500, 1000L), r.now)
+        assertTrue(r.sent.isEmpty())
+        r.engine.onState(HudState("B", 500, 1000L), r.now)
         assertEquals(listOf(48), r.subs())
     }
 
     @Test fun guidanceEndClearsOnceAndRestartResends() {
         val r = Rig()
-        r.engine.onState(HudState("A", 500, 1000L), 0)
+        r.run(1700, HudState("A", 500, 1000L))
         r.sent.clear()
-        r.engine.onGuidanceEnded(1000)
-        r.engine.onGuidanceEnded(1100)
+        r.now = 2000
+        r.engine.onGuidanceEnded(r.now)
+        r.now = 2600
+        r.engine.onGuidanceEnded(r.now)
         assertEquals(listOf(3), r.subs())
         r.sent.clear()
-        r.engine.onState(HudState("A", 500, 1000L), 2000)
+        r.now = 3000
+        r.run(5000, HudState("A", 500, 1000L))
         assertEquals(listOf(3, 52, 48, 50, 53), r.subs())
     }
 
@@ -181,8 +239,8 @@ class HudBridgeCoreTest {
         r.engine.onState(HudState("A", 500, 1000L), 0)
         r.sent.clear()
         r.engine.tick(5000)
-        assertTrue(r.sent.isEmpty())
-        r.engine.tick(5001)
+        r.sent.clear()
+        r.engine.tick(5501)
         assertEquals(listOf(3), r.subs())
         r.sent.clear()
         r.engine.tick(9000)
@@ -196,15 +254,14 @@ class HudBridgeCoreTest {
         assertTrue(r.sent.isEmpty())
     }
 
-    @Test fun rateLimitDefersRemainingCommandsInsteadOfDroppingThem() {
+    @Test fun rateLimiterStillCapsAtFivePerSecond() {
         val sent = ArrayList<IntArray>()
-        val e = HudBridgeEngine({ sent.add(it); true }, { null }, HudRateLimiter(5, 1000))
+        val e = HudBridgeEngine({ sent.add(it); true }, { null }, HudRateLimiter(1, 1000))
         e.onState(HudState("A", 500, 3000L), 0)
-        assertEquals(5, sent.size)
-        e.onState(HudState("B", 400, 3000L), 100)   // yeni yol + manevra: limit dolu
-        assertEquals(5, sent.size)
-        e.tick(1000)                                  // pencere açıldı
-        assertEquals(listOf(3, 52, 48, 50, 53, 48, 50), sent.map { it[0] })
+        e.tick(400)
+        assertEquals(1, sent.size)          // sınırlayıcı doldu
+        e.tick(1000)
+        assertEquals(2, sent.size)
         assertTrue(sent.all { it[0] in HudBridgeWhitelist.ALLOWED })
     }
 
@@ -217,8 +274,9 @@ class HudBridgeCoreTest {
         r.ok = true
         r.engine.tick(1000)
         assertTrue(r.sent.isEmpty())
-        r.engine.tick(2100)
-        assertEquals(listOf(3, 52, 48, 50), r.subs())
+        r.now = 2100
+        r.run(5000)
+        assertEquals(listOf(3, 52, 48, 50, 53), r.subs())
     }
 
     @Test fun accessibilityListCheck() {

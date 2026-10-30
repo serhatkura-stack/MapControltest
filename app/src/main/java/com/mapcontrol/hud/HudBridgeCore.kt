@@ -12,7 +12,13 @@ import kotlin.math.roundToLong
  */
 
 /** Yandex okumasından çıkan, HUD'a gidecek durum. Alanlar yoksa null. */
-data class HudState(val road: String?, val maneuverMeters: Int?, val totalMeters: Long?)
+data class HudState(
+    val road: String?,
+    val maneuverMeters: Int?,
+    val totalMeters: Long?,
+    /** Yandex'in o anki talimat metni ("Soldan devam edin"); sokak bilinmiyorsa yol adı yedeği. */
+    val instruction: String? = null,
+)
 
 /** Manevra ikon numarasını (Amap numaralandırması) veren kaynak. Tanıyamazsa null döner; asla tahmin edilmez. */
 fun interface ManeuverIconSource {
@@ -94,7 +100,12 @@ class HudRateLimiter(private val max: Int = 5, private val windowMs: Long = 1000
     }
 }
 
-/** "Ne gönderilecek" kararı. Eşikler: manevra >=10 m ya da ikon değişimi (en çok 2 Hz), toplam >=100 m, yol adı değişince. */
+/**
+ * "Ne gönderilecek" kararı. HUD'da çalışan dizilimi taklit eder: temizle, sonra HER İKİ gönderim arası en az
+ * [MIN_GAP_MS]: navStarted (52), yol adı (48), manevra (50), toplam (53). Yol adı ve toplam mesafe her zaman gönderilir
+ * (yedekli). Eşikler: manevra >=10 m ya da ikon değişimi, toplam >=100 m, yol adı değişince. Değişmese de manevra
+ * [MANEUVER_REFRESH_MS], yol+toplam [SLOW_REFRESH_MS] aralıkla tazelenir (durumu düşüren HUD toparlansın).
+ */
 class HudBridgeEngine(
     private val send: (IntArray) -> Boolean,
     private val iconSource: () -> Int?,
@@ -107,12 +118,15 @@ class HudBridgeEngine(
     private var clearedForStart = false
     private var started = false
     private var blockedUntilMs = 0L
+    private var lastAnySendMs = NEVER
 
     private var sentRoad: String? = null
     private var sentIcon: Int? = null
     private var sentDist: Int? = null
     private var sentTotal: Long? = null
-    private var lastManeuverSendMs = Long.MIN_VALUE / 2
+    private var lastRoadMs = NEVER
+    private var lastManeuverSendMs = NEVER
+    private var lastTotalMs = NEVER
 
     /** Yandex rehberlik verisi geldi. */
     fun onState(state: HudState, nowMs: Long) {
@@ -141,7 +155,9 @@ class HudBridgeEngine(
 
     private fun trySend(values: IntArray, nowMs: Long): Boolean {
         if (nowMs < blockedUntilMs) return false
+        if (nowMs - lastAnySendMs < MIN_GAP_MS) return false
         if (!limiter.tryAcquire(nowMs)) return false
+        lastAnySendMs = nowMs
         val ok = send(values)
         if (!ok) blockedUntilMs = nowMs + FAIL_BACKOFF_MS
         return ok
@@ -154,7 +170,14 @@ class HudBridgeEngine(
         sentIcon = null
         sentDist = null
         sentTotal = null
+        lastRoadMs = NEVER
+        lastManeuverSendMs = NEVER
+        lastTotalMs = NEVER
     }
+
+    /** Yol adı: bilinen sokak, yoksa Yandex talimat metni, yoksa "Yandex". */
+    private fun effectiveRoad(s: HudState): String =
+        s.road?.takeIf { it.isNotBlank() } ?: s.instruction?.trim()?.takeIf { it.isNotEmpty() } ?: FALLBACK_ROAD
 
     private fun pump(nowMs: Long) {
         val s = wanted
@@ -169,43 +192,89 @@ class HudBridgeEngine(
             if (!clearedForStart) {
                 if (!trySend(HudPayload.clear(), nowMs)) return
                 clearedForStart = true
+                return
             }
             if (!trySend(HudPayload.navStarted(), nowMs)) return
             started = true
+            return
         }
-        val road = s.road
-        if (road != null && road != sentRoad) {
-            if (!trySend(HudPayload.roadName(road), nowMs)) return
-            sentRoad = road
-        }
+        val road = effectiveRoad(s)
         val dist = s.maneuverMeters
-        if (dist != null) {
-            val icon = iconSource() ?: ICON_NONE
-            val prevDist = sentDist
-            val changed = prevDist == null || icon != sentIcon || abs(dist - prevDist) >= MANEUVER_STEP_M
-            if (changed && nowMs - lastManeuverSendMs >= MANEUVER_MIN_GAP_MS) {
-                if (!trySend(HudPayload.maneuverAlt(icon, dist), nowMs)) return
-                sentIcon = icon
-                sentDist = dist
-                lastManeuverSendMs = nowMs
-            }
+        // Toplam mesafe bilinmiyorsa manevra mesafesi yer tutucu (erişilebilirlik/ETA gerçek toplamı verene kadar).
+        val total = s.totalMeters ?: dist?.toLong()
+
+        // İlk dizilim sırayla: yol adı, manevra, toplam. Hiçbiri atlanamaz.
+        if (sentRoad == null) {
+            sendRoad(road, nowMs)
+            return
         }
-        val total = s.totalMeters
+        if (dist != null && sentDist == null) {
+            sendManeuver(dist, nowMs)
+            return
+        }
+        if (total != null && sentTotal == null) {
+            sendTotal(total, nowMs)
+            return
+        }
+
+        // Kararlı durum: vadesi gelenlerden en eski gönderileni seç (açlık yok).
+        var bestAge = -1L
+        var best = 0
+        fun consider(kind: Int, due: Boolean, lastMs: Long) {
+            if (!due) return
+            val age = nowMs - lastMs
+            if (age > bestAge) { bestAge = age; best = kind }
+        }
+        consider(1, road != sentRoad || nowMs - lastRoadMs >= SLOW_REFRESH_MS, lastRoadMs)
+        if (dist != null) {
+            val prev = sentDist
+            val icon = iconSource() ?: ICON_NONE
+            val changed = prev == null || icon != sentIcon || abs(dist - prev) >= MANEUVER_STEP_M
+            consider(2, changed || nowMs - lastManeuverSendMs >= MANEUVER_REFRESH_MS, lastManeuverSendMs)
+        }
         if (total != null) {
             val prev = sentTotal
-            if (prev == null || abs(total - prev) >= TOTAL_STEP_M) {
-                if (!trySend(HudPayload.totalDistanceAlt(total), nowMs)) return
-                sentTotal = total
-            }
+            val changed = prev == null || abs(total - prev) >= TOTAL_STEP_M
+            consider(3, changed || nowMs - lastTotalMs >= SLOW_REFRESH_MS, lastTotalMs)
         }
+        when (best) {
+            1 -> sendRoad(road, nowMs)
+            2 -> sendManeuver(dist!!, nowMs)
+            3 -> sendTotal(total!!, nowMs)
+        }
+    }
+
+    private fun sendRoad(road: String, nowMs: Long) {
+        if (!trySend(HudPayload.roadName(road), nowMs)) return
+        sentRoad = road
+        lastRoadMs = nowMs
+    }
+
+    private fun sendManeuver(dist: Int, nowMs: Long) {
+        val icon = iconSource() ?: ICON_NONE
+        if (!trySend(HudPayload.maneuverAlt(icon, dist), nowMs)) return
+        sentIcon = icon
+        sentDist = dist
+        lastManeuverSendMs = nowMs
+    }
+
+    private fun sendTotal(total: Long, nowMs: Long) {
+        if (!trySend(HudPayload.totalDistanceAlt(total), nowMs)) return
+        sentTotal = total
+        lastTotalMs = nowMs
     }
 
     companion object {
         const val GONE_MS = 5000L
         const val MANEUVER_STEP_M = 10
         const val TOTAL_STEP_M = 100L
-        const val MANEUVER_MIN_GAP_MS = 500L
+        /** Herhangi iki ardışık HUD gönderimi arası en az süre (HUD'da çalışan dizilim 400 ms idi). */
+        const val MIN_GAP_MS = 400L
+        const val MANEUVER_REFRESH_MS = 3000L
+        const val SLOW_REFRESH_MS = 10_000L
         const val FAIL_BACKOFF_MS = 2000L
+        const val FALLBACK_ROAD = "Yandex"
+        private const val NEVER = Long.MIN_VALUE / 2
         /** Bilinmeyen/yok ikon. */
         const val ICON_NONE = 0
         /** Hata ayıklama: düz devam (Amap 9). */

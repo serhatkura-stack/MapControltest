@@ -9,13 +9,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Yandex -> HUD köprüsünün TEK motor sahibi. Bildirim kaynağı (ana) ve erişilebilirlik (isteğe bağlı) buraya yazar.
  * Motor ([HudBridgeEngine]) ve birleştirici tek bir arka plan iş parçacığında çalışır; çağıranlar herhangi bir
- * iş parçacığından olabilir. Tercih KAPALIYKEN olaylar hemen atılır. 500 ms'de bir tik: bekleyen gönderimler,
+ * iş parçacığından olabilir. Tercih KAPALIYKEN olaylar hemen atılır. 200 ms'de bir tik: bekleyen gönderimler,
  * 5 sn veri gelmezse HUD temizleme (Yandex önde iken bildirim boşalır).
  */
 internal object HudBridgeController {
 
     private const val TAG = "HudBridge"
-    private const val TICK_MS = 500L
+    private const val TICK_MS = 200L
 
     private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "hud-bridge").apply { isDaemon = true } }
     private val merger = HudNavMerger()

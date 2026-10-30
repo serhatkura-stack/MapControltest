@@ -43,7 +43,7 @@ class HudNavMerger(
         val man = n?.distanceM?.coerceIn(0L, 16_000_000L)?.toInt() ?: a?.maneuverMeters
         val total = a?.totalMeters
         if (man == null && total == null) return null
-        return HudState(n?.street ?: a?.road, man, total)
+        return HudState(n?.street ?: a?.road, man, total, n?.instruction)
     }
 
     /** Geçerli bildirimin HUD ikon numarası; bildirim yoksa/manevra bilinmiyorsa null (HUD'a 0 gider). */

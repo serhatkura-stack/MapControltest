@@ -21,6 +21,8 @@ data class NavUpdate(
     val street: String?,
     val maneuver: Maneuver?,
     val roundaboutExit: Int?,
+    /** Yandex'in son talimat metni (sokak değil); HUD yol adı yedeği. */
+    val instruction: String? = null,
 )
 
 /** Manevra -> HUD (Amap) ikon numarası. HUD'da doğrulanmış değerler. */
@@ -61,6 +63,7 @@ class YandexNotificationParser {
     private var lastManeuver: Maneuver? = null
     private var lastExit: Int? = null
     private var lastDistance: Long? = null
+    private var lastInstruction: String? = null
     private var lastMs = 0L
 
     fun reset() {
@@ -68,6 +71,7 @@ class YandexNotificationParser {
         lastManeuver = null
         lastExit = null
         lastDistance = null
+        lastInstruction = null
     }
 
     /** Mesafe okunamıyorsa (örn. "Navigator başlatıldı" yer tutucusu) null: veri yok. */
@@ -79,8 +83,13 @@ class YandexNotificationParser {
         val iconManeuver = maneuverFromIconName(iconName)
         val street = if (instr == null) streetOrNull(text) else null
         if (street != null) lastStreet = street
+        if (instr != null) text?.trim()?.takeIf { it.isNotEmpty() }?.let { lastInstruction = it }
 
-        var maneuver = iconManeuver ?: instr?.maneuver
+        // Metin "Soldan/Sağdan devam edin" ya da "hafif ..." diyorsa düz sol/sağ ikonunu geçersiz kılar; keskin/U/kavşak ikonları kazanır.
+        val textManeuver = instr?.maneuver
+        val keepOverridesIcon = (iconManeuver == Maneuver.LEFT && textManeuver == Maneuver.SLIGHT_LEFT) ||
+            (iconManeuver == Maneuver.RIGHT && textManeuver == Maneuver.SLIGHT_RIGHT)
+        var maneuver = if (keepOverridesIcon) textManeuver else (iconManeuver ?: textManeuver)
         var exit = instr?.exit
         if (maneuver != null) {
             if (exit == null && isRoundabout(maneuver) && lastManeuver?.let { isRoundabout(it) } == true) exit = lastExit
@@ -98,7 +107,7 @@ class YandexNotificationParser {
         }
         lastDistance = dist
         lastMs = nowMs
-        return NavUpdate(dist, lastStreet, maneuver, if (maneuver != null && isRoundabout(maneuver)) exit else null)
+        return NavUpdate(dist, lastStreet, maneuver, if (maneuver != null && isRoundabout(maneuver)) exit else null, lastInstruction)
     }
 
     private class Instr(val maneuver: Maneuver?, val exit: Int?)

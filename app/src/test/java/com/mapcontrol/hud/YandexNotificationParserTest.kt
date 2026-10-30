@@ -120,6 +120,23 @@ class YandexNotificationParserTest {
         assertEquals(Maneuver.STRAIGHT, p().parse("250 м", "Двигайтесь прямо", null)!!.maneuver)
     }
 
+    @Test fun keepLeftTextOverridesPlainLeftIcon() {
+        val l = p().parse("50 m", "Soldan devam edin", "notification_left_sdl")!!
+        assertEquals(Maneuver.SLIGHT_LEFT, l.maneuver)
+        assertEquals(4, HudManeuverIcons.hudIcon(l.maneuver, l.roundaboutExit))
+        assertEquals("Soldan devam edin", l.instruction)
+        val r = p().parse("50 m", "Sağdan devam edin", "notification_right_sdl")!!
+        assertEquals(Maneuver.SLIGHT_RIGHT, r.maneuver)
+        assertEquals(5, HudManeuverIcons.hudIcon(r.maneuver, r.roundaboutExit))
+        assertEquals(Maneuver.SLIGHT_RIGHT, p().parse("50 m", "Hafif sağa dönün", "notification_right_sdl")!!.maneuver)
+    }
+
+    @Test fun keepTextDoesNotOverrideSharpUturnOrRoundaboutIcons() {
+        assertEquals(Maneuver.SHARP_LEFT, p().parse("50 m", "Soldan devam edin", "notification_hard_left_sdl")!!.maneuver)
+        assertEquals(Maneuver.UTURN, p().parse("50 m", "Soldan devam edin", "notification_uturn_left_sdl")!!.maneuver)
+        assertEquals(Maneuver.ROUNDABOUT_ENTER, p().parse("50 m", "Soldan devam edin", "notification_enter_roundabout_sdl")!!.maneuver)
+    }
+
     @Test fun uppercaseTurkishI() {
         assertEquals(Maneuver.SLIGHT_RIGHT, p().parse("100 m", "SAĞDAN DEVAM EDİN", null)!!.maneuver)
         assertEquals(Maneuver.UTURN, p().parse("100 m", "SOLDAN U DÖNÜŞÜ YAPIN", null)!!.maneuver)
@@ -216,7 +233,7 @@ class YandexNotificationParserTest {
         val m = HudNavMerger()
         val e = HudBridgeEngine({ sent.add(it); true }, { m.icon() }, HudRateLimiter(1000, 1000))
         m.onNotification(NavUpdate(250, "Ana Cd.", Maneuver.UTURN, null), 0)
-        e.onState(m.state(0)!!, 0)
+        for (t in 0..2000 step 200) e.onState(m.state(0)!!, t.toLong())
         assertTrue(sent.any { it[0] == 50 && it[2] == 8 })
     }
 }
