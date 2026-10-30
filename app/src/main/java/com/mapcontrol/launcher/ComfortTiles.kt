@@ -610,8 +610,9 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
     // --- Çizim ---
 
     /**
-     * Yandan stilize araç: gövde, cam bölmesi, tekerlekler ve arkada (sağda) tavandaki menteşeden açılan bagaj kapağı.
-     * [openness] 0 = kapak kapalı, 1 = tam açık.
+     * Arkadan stilize araç, araç kartındaki şema diliyle (CONTROL dolgu, ikincil metin çizgisi, yarı saydam cam):
+     * gövde, cam bölmesi, stop lambaları, tekerlekler ve bagaj kapağı. Kapak açıldıkça tavanın üstüne doğru kalkar ve
+     * arkasındaki bagaj boşluğu görünür. [openness] 0 = kapalı, 1 = tam açık.
      */
     private class TrunkView(context: Context) : View(context) {
         var openness = 0f
@@ -657,40 +658,97 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
             val w = width.toFloat()
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
-            // 100 × 56 birimlik tasarım alanı, orantılı sığdırılıp ortalanır.
+            // 100 × 68 birimlik tasarım alanı (üstteki pay tam açık kapak için), orantılı sığdırılıp ortalanır.
             val u = minOf(w / DESIGN_W, h / DESIGN_H)
+            val dp = resources.displayMetrics.density / u
             canvas.save()
             canvas.translate((w - DESIGN_W * u) / 2f, (h - DESIGN_H * u) / 2f)
             canvas.scale(u, u)
-            val accent = if (known) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY
-            // Cam bölmesi (kabin).
-            path.reset()
-            path.moveTo(12f, 30f); path.lineTo(26f, HINGE_Y); path.lineTo(HINGE_X, HINGE_Y); path.lineTo(REAR_X, 30f); path.close()
+            canvas.translate(0f, TOP_PAD)
+            val outline = LauncherTheme.TEXT_SECONDARY
+            val accent = if (known) LauncherTheme.ACCENT else outline
+            val t = openness
+            val opened = t > 0.02f
+
+            // Tekerlekler (gövdenin altından taşan kısım).
             paint.style = Paint.Style.FILL
-            paint.color = ColorUtils.blendARGB(LauncherTheme.CARD, accent, 0.30f)
-            canvas.drawPath(path, paint)
-            // Alt gövde.
-            rect.set(4f, 30f, 92f, 46f)
+            paint.color = ColorUtils.setAlphaComponent(outline, 150)
+            rect.set(15f, 44f, 27f, 57f); canvas.drawRoundRect(rect, 3f, 3f, paint)
+            rect.set(73f, 44f, 85f, 57f); canvas.drawRoundRect(rect, 3f, 3f, paint)
+
+            // Cam bölmesi ve gövde (tek parça yol).
+            path.reset()
+            path.moveTo(21f, 26f)
+            path.lineTo(28.5f, 9.5f); path.quadTo(30f, 7f, 33f, 7f)
+            path.lineTo(67f, 7f); path.quadTo(70f, 7f, 71.5f, 9.5f)
+            path.lineTo(79f, 26f)
+            path.lineTo(84f, 26f); path.quadTo(90f, 26f, 90f, 32f)
+            path.lineTo(90f, 45f); path.quadTo(90f, 50f, 85f, 50f)
+            path.lineTo(15f, 50f); path.quadTo(10f, 50f, 10f, 45f)
+            path.lineTo(10f, 32f); path.quadTo(10f, 26f, 16f, 26f)
+            path.close()
             paint.color = LauncherTheme.CONTROL
-            canvas.drawRoundRect(rect, 6f, 6f, paint)
-            // Tekerlekler.
-            for (cx in floatArrayOf(24f, 70f)) {
-                paint.color = LauncherTheme.TEXT_SECONDARY
-                canvas.drawCircle(cx, 46f, 7f, paint)
-                paint.color = LauncherTheme.CARD
-                canvas.drawCircle(cx, 46f, 3f, paint)
+            canvas.drawPath(path, paint)
+            // Aynalar.
+            rect.set(7f, 25.5f, 15f, 30f); canvas.drawRoundRect(rect, 2f, 2f, paint)
+            rect.set(85f, 25.5f, 93f, 30f); canvas.drawRoundRect(rect, 2f, 2f, paint)
+
+            // Kapak açıksa altındaki bagaj boşluğu (koyu) ve taban çizgisi.
+            if (opened) {
+                paint.color = ColorUtils.setAlphaComponent(outline, (60 + 70 * t).toInt())
+                rect.set(GATE_L + 1.5f, GATE_TOP, GATE_R - 1.5f, GATE_BOTTOM - 1f)
+                canvas.drawRoundRect(rect, 3f, 3f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.4f * dp
+                paint.color = ColorUtils.setAlphaComponent(accent, 200)
+                canvas.drawLine(GATE_L + 4f, GATE_BOTTOM - 4f, GATE_R - 4f, GATE_BOTTOM - 4f, paint)
+                paint.style = Paint.Style.FILL
             }
-            // Bagaj kapağı: menteşeden, kapalıyken hafif eğik aşağı; açıldıkça arkaya ve yukarı döner.
-            val a = Math.toRadians((CLOSED_DEG + openness * (OPEN_DEG - CLOSED_DEG)).toDouble())
-            val ex = HINGE_X + GATE_LEN * Math.sin(a).toFloat()
-            val ey = HINGE_Y + GATE_LEN * Math.cos(a).toFloat()
+
+            // Stop lambaları.
+            paint.color = ColorUtils.setAlphaComponent(LauncherTheme.ALERT, 210)
+            rect.set(12.5f, 30f, 25f, 34f); canvas.drawRoundRect(rect, 2f, 2f, paint)
+            rect.set(75f, 30f, 87.5f, 34f); canvas.drawRoundRect(rect, 2f, 2f, paint)
+
+            // Bagaj kapağı: alt kenarı açıldıkça yukarı, tavanın üstüne kalkar; üst kenar menteşede hafifçe yükselir.
+            val top = lerp(GATE_TOP, -7f, t)
+            val bottom = lerp(GATE_BOTTOM, -1f, t)
+            val g1 = minOf(top, bottom)
+            val g2 = maxOf(top, bottom)
+            rect.set(GATE_L, g1, GATE_R, g2)
+            paint.color = if (opened) ColorUtils.blendARGB(LauncherTheme.CONTROL, accent, 0.35f) else LauncherTheme.CONTROL
+            canvas.drawRoundRect(rect, 3f, 3f, paint)
+            // Kapaktaki arka cam (kapak kalktıkça incelir) ve kapalıyken plaka.
+            val glassH = (g2 - g1) * 0.42f
+            if (glassH > 1.5f) {
+                paint.color = ColorUtils.setAlphaComponent(outline, 45)
+                rect.set(GATE_L + 3f, g1 + 2.5f, GATE_R - 3f, g1 + 2.5f + glassH)
+                canvas.drawRoundRect(rect, 2f, 2f, paint)
+            }
+            if (!opened) {
+                paint.color = ColorUtils.setAlphaComponent(outline, 70)
+                rect.set(43f, 35.5f, 57f, 40f)
+                canvas.drawRoundRect(rect, 1.5f, 1.5f, paint)
+            }
+
+            // Çizgiler: gövde, tampon ve kapak kenarı.
             paint.style = Paint.Style.STROKE
-            paint.strokeCap = Paint.Cap.ROUND
-            paint.strokeWidth = 4.5f
-            paint.color = if (openness > 0.02f) accent else LauncherTheme.TEXT
-            canvas.drawLine(HINGE_X, HINGE_Y, ex, ey, paint)
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.strokeWidth = 1.5f * dp
+            paint.color = outline
+            canvas.drawPath(path, paint)
+            paint.strokeWidth = 1.1f * dp
+            paint.color = ColorUtils.setAlphaComponent(outline, 90)
+            canvas.drawLine(14f, 44.5f, 86f, 44.5f, paint)
+            paint.strokeWidth = (if (opened) 1.6f else 1.1f) * dp
+            paint.color = if (opened) accent else ColorUtils.setAlphaComponent(outline, 160)
+            rect.set(GATE_L, g1, GATE_R, g2)
+            canvas.drawRoundRect(rect, 3f, 3f, paint)
+            paint.style = Paint.Style.FILL
             canvas.restore()
         }
+
+        private fun lerp(a: Float, b: Float, f: Float) = a + (b - a) * f
     }
 
     private companion object {
@@ -703,14 +761,13 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
         const val ANIM_MS = 450L
         const val FAST_POLL_MS = 500L
         const val DESIGN_W = 100f
-        const val DESIGN_H = 56f
-        // Menteşe tavanın arka ucunda; kapalı kapak arka camı örter ve gövdenin arka ucuna iner.
-        const val HINGE_X = 80f
-        const val HINGE_Y = 12f
-        const val REAR_X = 84f
-        const val GATE_LEN = 18.5f
-        const val CLOSED_DEG = 12f
-        const val OPEN_DEG = 110f
+        const val DESIGN_H = 68f
+        /** Tam açık kapağın tavanın üstüne taştığı pay (tasarım biriminde). */
+        const val TOP_PAD = 9f
+        const val GATE_L = 28f
+        const val GATE_R = 72f
+        const val GATE_TOP = 8.5f
+        const val GATE_BOTTOM = 42f
     }
 }
 
