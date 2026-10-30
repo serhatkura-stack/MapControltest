@@ -119,6 +119,7 @@
     <string name="launcher_air_good">İyi</string>
     <string name="launcher_air_moderate">Orta</string>
     <string name="launcher_air_poor">Kötü</string>
+    <string name="launcher_air_pm" formatted="true">PM2.5 %1$d µg/m³</string>
     <string name="launcher_air_in" formatted="true">İç %1$d µg/m³</string>
     <string name="launcher_air_out" formatted="true">Dışarı %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³ · Kötü</string>
@@ -155,4 +156,6 @@
     <string name="launcher_climate_passenger_short">Yolcu</string>
     <string name="launcher_climate_increase">Artır</string>
     <string name="launcher_climate_decrease">Azalt</string>
+    <string name="launcher_health_row_battery">Akü</string>
+    <string name="launcher_health_row_engine">Motor</string>
 </resources>

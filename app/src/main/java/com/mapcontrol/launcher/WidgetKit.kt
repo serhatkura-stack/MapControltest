@@ -60,16 +60,16 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
     NAVIGATION("navigation", R.string.launcher_widget_navigation, R.drawable.ic_mdi_map_marker, listOf(Span(6, 4), Span(6, 6), Span(6, 2), Span(4, 2))),
-    VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(6, 4), Span(4, 4))),
-    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(2, 2))),
+    VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
+    LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
-    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2), Span(4, 2))),
-    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(4, 2))),
-    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 2))),
+    CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2))),
+    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(3, 2))),
+    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(3, 2))),
     WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(2, 2))),
     SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(3, 2))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2))),
-    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2), Span(2, 2))),
+    APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2))),
     SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
     SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
     SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
@@ -113,7 +113,7 @@ interface SizedWidget : LauncherWidget {
  * Varsayılan yerleşim (12×6). Üst dört satır: medya 6×4 (sol), ortada üst üste tüketim 2×2 ve yolculuk 2×2,
  * sağda araç kartı 4×4 (menzil + durum).
  * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): alt iki satıra sürücü koltuk ısıtma (2) ·
- * dört geniş uygulama kutucuğu (tek şerit, 4×2 = 8) · yolcu koltuk ısıtma (2) gelir: 2+8+2 = 12.
+ * sekiz ince uygulama kutucuğu (tek şerit, 8×1 = 8) · yolcu koltuk ısıtma (2) gelir: 2+8+2 = 12.
  * Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
  * OEM çubuğu yoksa alt iki satır altı adet 2×2 kutucukla dolar: hava durumu, sağlık, kilit, sürüş modu,
  * sürücü ve yolcu koltuk ısıtma.
@@ -121,9 +121,9 @@ interface SizedWidget : LauncherWidget {
  */
 fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
     val nav = NAVIGATION_CARD_ENABLED
-    // Navigasyon yokken uygulama şeridi boşluğu doldurur: 4 kutucuk, her biri 2 hücre; varken 1 hücre ve col 6'dan başlar.
-    val appW = if (nav) 1 else 2
+    // Uygulama kutucuğu yalnızca 1×2'dir. Navigasyon yokken şerit 8 kutucukla (col 2-9) dolar; varken 4 kutucuk ve col 6'dan başlar.
     val appStart = if (nav) 6 else 2
+    val appSlots = if (nav) 4 else DEFAULT_APP_SLOTS
     listOf(
         PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
         PlacedWidget("consumption", WidgetType.CONSUMPTION, 6, 0, Span(2, 2)),
@@ -132,8 +132,8 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
         PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
     ) + (if (nav) listOf(PlacedWidget("navigation", WidgetType.NAVIGATION, 2, 4, Span(4, 2))) else emptyList()) +
         // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
-        (0 until DEFAULT_APP_SLOTS).map { i ->
-            PlacedWidget("app_dock_$i", WidgetType.APP, appStart + i * appW, 4, Span(appW, 2), appPackages.getOrNull(i))
+        (0 until appSlots).map { i ->
+            PlacedWidget("app_dock_$i", WidgetType.APP, appStart + i, 4, Span(1, 2), appPackages.getOrNull(i))
         } +
         PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
 } else listOf(
@@ -144,14 +144,16 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
     // Alt şerit altı adet 2×2 kutucukla dolar (medya yalnızca 4×2 ya da 6×4 olabildiği için sol alt de kutucuk).
     PlacedWidget("weather", WidgetType.WEATHER, 0, 4, Span(2, 2)),
     PlacedWidget("health", WidgetType.HEALTH, 2, 4, Span(2, 2)),
-    PlacedWidget("lock", WidgetType.LOCK, 4, 4, Span(2, 2)),
+    // Kilit ince bir düğmedir (1×2); yanında bir uygulama kutucuğu ile 2 hücre dolar.
+    PlacedWidget("lock", WidgetType.LOCK, 4, 4, Span(1, 2)),
+    PlacedWidget("app_dock_0", WidgetType.APP, 5, 4, Span(1, 2), appPackages.getOrNull(0)),
     PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 6, 4, Span(2, 2)),
     PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 8, 4, Span(2, 2)),
     PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
 )
 
-/** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı. */
-const val DEFAULT_APP_SLOTS = 4
+/** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı (her biri 1×2). */
+const val DEFAULT_APP_SLOTS = 8
 
 /**
  * Eski 6×3 düzeni (sürüm 1) 12×6'ya taşır: konum ve boyut tam iki katı olur. Görünüm aynı kalır;

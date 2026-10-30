@@ -13,7 +13,7 @@ import java.util.Locale
  * Sakin kalır; <= 1000 km ya da <= 30 gün kaldığında uyarı rengi ve simgesine geçer.
  */
 internal class ServiceTile(context: Context) :
-    TripTile(context, R.drawable.ic_mdi_wrench, R.string.launcher_widget_service) {
+    CenteredTripTile(context, R.drawable.ic_mdi_wrench, R.string.launcher_widget_service) {
 
     override fun bind() {
         val km = data.serviceKm
@@ -30,7 +30,8 @@ internal class ServiceTile(context: Context) :
         if (km != null) {
             val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(km)
             setValue(context.getString(R.string.launcher_km_value, grouped), color)
-            showDetail(dayText, if (soon) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+            // Orta kademede gün ikinci sütunda km ile aynı boyutta durur; ana renk, uyarıda uyarı rengi.
+            showDetail(dayText, if (soon) LauncherTheme.ALERT else if (tier == 1) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
         } else {
             setValue(dayText.orEmpty(), color)
             showDetail(null)
@@ -45,10 +46,10 @@ internal class ServiceTile(context: Context) :
 
 /**
  * Hava kalitesi: kabin içi PM2.5'e göre kelime ("İyi" <= 35, "Orta" <= 75, "Kötü" > 75 µg/m³), geniş boyutta
- * sayılar. Dışarısı "Kötü" ve içerisi daha iyiyse yalnızca metin ipucu: "İç sirkülasyon önerilir" (araca bir şey gönderilmez).
+ * sayılar (2x2'de ortalı: kelime büyük, altında "PM2.5" satırı). Dışarısı "Kötü" ve içerisi daha iyiyse yalnızca metin ipucu: "İç sirkülasyon önerilir" (araca bir şey gönderilmez).
  */
 internal class AirQualityTile(context: Context) :
-    TripTile(context, R.drawable.ic_mdi_air_filter, R.string.launcher_widget_air) {
+    CenteredTripTile(context, R.drawable.ic_mdi_air_filter, R.string.launcher_widget_air) {
 
     override fun bind() {
         val inside = data.pm25In
@@ -71,9 +72,9 @@ internal class AirQualityTile(context: Context) :
             },
             if (outPoor) context.getString(R.string.launcher_air_recirc_hint) else null,
         )
-        // Detay en çok 2 satır: dış hava kötüyse içeri satırı ipucuna yer açar. Orta boyutta yalnızca ilk satır.
+        // Geniş: en çok 2 satır (dış hava kötüyse içeri satırı ipucuna yer açar). Dar: ortalı tek küçük satır, yalnızca iç PM2.5.
         val shown = if (outPoor) lines.drop(1) else lines
-        showDetail((if (tier >= 2) shown else shown.take(1)).joinToString("\n"))
+        showDetail(if (tier >= 2) shown.joinToString("\n") else context.getString(R.string.launcher_air_pm, inside))
         // Geniş boyutta kelimenin yanına üç dilimli ölçek: iyi / orta / kötü; dolu dilim sayısı derece + 1.
         showSegments(grade(inside) + 1, GRADES, if (poor) LauncherTheme.ALERT else LauncherTheme.ACCENT)
     }

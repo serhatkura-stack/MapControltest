@@ -54,7 +54,7 @@ class AppIdentityTest {
         assertFalse(isAddable(WidgetType.LOCK, layout))
         assertEquals(setOf(WidgetType.LOCK), onScreenTypes(layout))
         assertTrue(LayoutStore.isValid(listOf(
-            PlacedWidget("a", WidgetType.LOCK, 0, 0, Span(2, 2)),
-            PlacedWidget("b", WidgetType.LOCK, 2, 0, Span(2, 2)))))
+            PlacedWidget("a", WidgetType.LOCK, 0, 0, Span(1, 2)),
+            PlacedWidget("b", WidgetType.LOCK, 2, 0, Span(1, 2)))))
     }
 }

@@ -16,7 +16,7 @@ internal abstract class MetricsTile(
     context: Context,
     @DrawableRes iconRes: Int,
     @StringRes labelRes: Int,
-) : VehicleTile(context, iconRes, labelRes) {
+) : CenteredTile(context, iconRes, labelRes) {
 
     private val metrics = VehicleMetricsRepository(context)
     protected var snapshot: VehicleMetricsSnapshot = current()
@@ -68,6 +68,8 @@ internal class DriveModeTile(context: Context) :
             else -> DriveAccent.accentFor(mode, LauncherTheme.night) ?: LauncherTheme.TEXT_SECONDARY
         }
         setIcon(R.drawable.ic_mdi_car_sports, tint)
+        // 2x2'de ortada büyük mod ikonu (vurgu renginde), altında mod adı.
+        setHeroIcon(R.drawable.ic_mdi_car_sports, tint)
         setValue(label, LauncherTheme.TEXT)
         showDetail(null)
     }

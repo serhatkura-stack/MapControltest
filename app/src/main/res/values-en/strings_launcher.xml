@@ -119,6 +119,7 @@
     <string name="launcher_air_good">Good</string>
     <string name="launcher_air_moderate">Moderate</string>
     <string name="launcher_air_poor">Poor</string>
+    <string name="launcher_air_pm" formatted="true">PM2.5 %1$d µg/m³</string>
     <string name="launcher_air_in" formatted="true">Inside %1$d µg/m³</string>
     <string name="launcher_air_out" formatted="true">Outside %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Outside %1$d µg/m³ · Poor</string>
@@ -155,4 +156,6 @@
     <string name="launcher_climate_passenger_short">Passenger</string>
     <string name="launcher_climate_increase">Increase</string>
     <string name="launcher_climate_decrease">Decrease</string>
+    <string name="launcher_health_row_battery">Battery</string>
+    <string name="launcher_health_row_engine">Engine</string>
 </resources>

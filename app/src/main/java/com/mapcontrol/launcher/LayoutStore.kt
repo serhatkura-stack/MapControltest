@@ -17,7 +17,7 @@ class LayoutStore(context: Context) {
     private val oemBar = LauncherSafeArea.hasOemBar(context)
 
     /** Varsayılan uygulama kutucukları alt çubuktaki uygulama şeridinin varsayılanlarıyla dolar. */
-    private val appPackages = if (oemBar) AppDock.installedDefaults(context, DEFAULT_APP_SLOTS) else emptyList()
+    private val appPackages = AppDock.installedDefaults(context, DEFAULT_APP_SLOTS)
 
     private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(PREFS, Profiles.current(context)), Context.MODE_PRIVATE)
 

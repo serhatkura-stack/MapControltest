@@ -192,8 +192,11 @@ internal abstract class VehicleTile(
     }
 }
 
-/** Merkezi kilit kutucuğu: durumu gösterir, dokununca kilidi açar/kapatır. */
-internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_mdi_lock, R.string.launcher_widget_lock) {
+/**
+ * Merkezi kilit düğmesi (1×2, uygulama kutucuğuyla aynı ayak izi): yolcunun da kolayca uzanacağı net bir düğme.
+ * Büyük, ortalanmış kilit ikonu; altında küçük durum etiketi ("Kilitli" / "Kilit açık"). Dokununca kilidi açar/kapatır.
+ */
+internal class LockTile(private val context: Context) : SizedWidget {
 
     private val appContext = context.applicationContext
 
@@ -213,6 +216,25 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
         locked = if (connected) isLocked else null
         main.post { bind() }
     }
+
+    private val lockIcon: ImageView = icon(context, R.drawable.ic_mdi_lock, ICON_DP, LauncherTheme.TEXT).apply {
+        layoutParams = LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP))
+    }
+    private val stateText: TextView = text(context, STATE_SP, LauncherTheme.TEXT_SECONDARY).apply {
+        gravity = android.view.Gravity.CENTER
+    }
+
+    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, paddingDp = PADDING_DP).apply {
+        gravity = android.view.Gravity.CENTER
+        addView(lockIcon)
+        addView(gap(context, 8, vertical = true))
+        addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+
+    override val view: View get() = root
+
+    /** Tek boyut var (1×2); yerleşim değişmez. */
+    override fun applySpan(span: Span) = Unit
 
     init {
         root.isClickable = true
@@ -237,25 +259,21 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
     /** Paylaşılan [LauncherIo] havuzu kapatılmaz; ayrılacak bir kaynak yok. */
     override fun release() = Unit
 
-    override fun bindDetail() = showDetail(null)
-
     private fun bind() {
         when (locked) {
-            true -> {
-                setIcon(R.drawable.ic_mdi_lock, LauncherTheme.TEXT_SECONDARY)
-                setValue(R.string.launcher_locked, LauncherTheme.TEXT)
-            }
-            false -> {
-                setIcon(R.drawable.ic_mdi_lock_open_variant, LauncherTheme.TEXT_SECONDARY)
-                setValue(R.string.launcher_unlocked, LauncherTheme.TEXT)
-            }
-            null -> {
-                setIcon(R.drawable.ic_mdi_lock, LauncherTheme.TEXT_SECONDARY)
-                showMissing()
-            }
+            true -> show(R.drawable.ic_mdi_lock, LauncherTheme.TEXT, context.getString(R.string.launcher_locked))
+            false -> show(R.drawable.ic_mdi_lock_open_variant, LauncherTheme.TEXT, context.getString(R.string.launcher_unlocked))
+            null -> show(R.drawable.ic_mdi_lock, LauncherTheme.TEXT_SECONDARY, context.getString(R.string.launcher_unavailable))
         }
         // Test sürümünde veri yokken de dokunuş açıklama göstermeli.
         root.isEnabled = locked != null || LauncherEdition.READ_ONLY
+    }
+
+    private fun show(@DrawableRes res: Int, tint: Int, label: String) {
+        lockIcon.setImageResource(res)
+        lockIcon.imageTintList = ColorStateList.valueOf(tint)
+        stateText.setTextSmooth(label)
+        root.contentDescription = context.getString(R.string.launcher_widget_lock) + ", " + label
     }
 
     /** Kilit komutu senkron binder çağrısı; ana thread'i bloklamasın diye arka planda gönderilir. */
@@ -272,5 +290,11 @@ internal class LockTile(context: Context) : VehicleTile(context, R.drawable.ic_m
                 // Komut gitmediyse dinleyici gerçek durumu göstermeye devam eder.
             }
         }
+    }
+
+    private companion object {
+        const val ICON_DP = 64
+        const val STATE_SP = 20f
+        const val PADDING_DP = 6
     }
 }

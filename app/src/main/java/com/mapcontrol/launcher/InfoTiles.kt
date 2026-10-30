@@ -75,17 +75,20 @@ class WeatherTile(private val context: Context) : SizedWidget {
         }
     }
 
+    /** İkon + sıcaklık: dar boyutta (2x2) ikon üstte, sıcaklık altında, ortalı; geniş boyutta yan yana. */
+    private val tempRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(weatherIcon)
+        addView(gap(context, 12))
+        addView(tempText)
+    }
+
     /** Sol sütun: ikon + sıcaklık satırı; dar boyutta altında durum metni. */
     private val leftColumn = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_VERTICAL
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(weatherIcon)
-            addView(gap(context, 12))
-            addView(tempText)
-        })
+        addView(tempRow)
     }
 
     /** Sağ sütun (yalnızca geniş boyutta): durum metni + rüzgâr, sağa yaslı, dikey ortalı. */
@@ -116,14 +119,17 @@ class WeatherTile(private val context: Context) : SizedWidget {
         (conditionText.parent as? android.view.ViewGroup)?.removeView(conditionText)
         if (wide) {
             rightColumn.addView(conditionText, 0)
-            conditionText.gravity = Gravity.END
-            conditionText.textAlignment = View.TEXT_ALIGNMENT_VIEW_END
         } else {
             leftColumn.addView(conditionText)
-            conditionText.gravity = Gravity.START
-            conditionText.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
         }
         rightColumn.visibility = if (wide) View.VISIBLE else View.GONE
+        // Dar (2x2 kutusu geniş ama alçak): ikon + büyük sıcaklık ortalı yan yana, altında küçük durum metni.
+        tempRow.gravity = if (wide) Gravity.CENTER_VERTICAL else Gravity.CENTER
+        leftColumn.gravity = if (wide) Gravity.CENTER_VERTICAL else Gravity.CENTER
+        (view as LinearLayout).gravity = if (wide) Gravity.CENTER_VERTICAL else Gravity.CENTER
+        tempText.gravity = if (wide) Gravity.START else Gravity.CENTER
+        conditionText.gravity = if (wide) Gravity.END else Gravity.CENTER
+        conditionText.textAlignment = if (wide) View.TEXT_ALIGNMENT_VIEW_END else View.TEXT_ALIGNMENT_CENTER
         (leftColumn.layoutParams as LinearLayout.LayoutParams).apply {
             width = if (wide) LinearLayout.LayoutParams.WRAP_CONTENT else 0
             weight = if (wide) 0f else 1f
@@ -193,10 +199,10 @@ class WeatherTile(private val context: Context) : SizedWidget {
     private companion object {
         /** Durum metni ve rüzgâr 3 sütundan itibaren sağ sütuna geçer; büyük sıcaklık 4 sütundan. */
         const val WEATHER_WIDE_MIN_COLS = 3
-        const val TEMP_COMPACT_SP = 36f
+        const val TEMP_COMPACT_SP = 40f
         const val TEMP_WIDE_SP = 44f
-        const val ICON_DP = 36
-        const val PADDING_DP = 20
+        const val ICON_DP = 40
+        const val PADDING_DP = 16
     }
 }
 
