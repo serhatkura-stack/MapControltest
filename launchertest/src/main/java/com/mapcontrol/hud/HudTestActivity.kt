@@ -2,6 +2,7 @@ package com.mapcontrol.hud
 
 import android.app.Activity
 import android.graphics.Color
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.util.Log
@@ -26,6 +27,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - `alt`   : aynısı, 49/51 yerine 50/53 ailesi (isteğe bağlı `--ei icon`, `--ei dist`).
  *  - `icon`  : `--ei icon N [--ei dist M]`: [52], tek [49] (ikon N, mesafe M, öntanımlı 250), 5 sn, temizle.
  *  - `clear` : yalnızca [3,1,1].
+ *  - `limit` : `--ei kmh N [--ei status S] [--ez clear true]`: hız limiti tabelası (modül 327682, komut 123 sonra 125),
+ *              ~8 sn her 1 sn yeniden gönderilir; `--ez clear true` yoksa sonunda temizlenmez.
+ *  - `limit_off` : durum 0 / limit 0 / tabela 0, bir kez.
+ *  - `turbodog` : `[--ei icon N] [--ei dist M] [--ez explicit true]`: araca YAZMAZ; Desay navi uygulamasına
+ *              TurboDog yayınları (202, ~10 sn 201, 203). `amap`: aynısı AMap standart yayınları (10019/10001).
  *  - `info`  : SALT-OKUR; araç yapılandırması (106, 163) ve HUD/hız/vites sinyallerini okur, günlüğe yazar.
  * Yazan modlarda her adımdan önce park kapısı denetlenir; reddedilirse dizi durur. Başlayan her dizi sonunda
  * (istisna olsa da) bir temizleme gönderilir; hiçbir şey gönderilmediyse (ilk adım reddedildi) gönderilmez.
@@ -76,7 +82,7 @@ class HudTestActivity : Activity() {
         val icon = if (intent?.hasExtra(EXTRA_ICON) == true) intent.getIntExtra(EXTRA_ICON, -1) else null
         val dist = intent?.getIntExtra(EXTRA_DIST, DEFAULT_DIST) ?: DEFAULT_DIST
         if (mode == null || mode !in MODES) {
-            show("HUD testi: --es hud demo|alt|icon|clear|info\n(geçersiz/eksik mod: $mode) hiçbir şey gönderilmedi")
+            show("HUD testi: --es hud demo|alt|icon|clear|info|limit|limit_off|turbodog|amap\n(geçersiz/eksik mod: $mode) hiçbir şey gönderilmedi")
             Log.w(HudNavSender.TAG, "geçersiz mod: $mode")
             finishSoon(4000)
             return
@@ -114,6 +120,14 @@ class HudTestActivity : Activity() {
         }
         if (mode == "clear") {
             show(sender.clear().message)
+            return
+        }
+        if (mode == "limit" || mode == "limit_off") {
+            limitTest(sender, mode)
+            return
+        }
+        if (mode == "turbodog" || mode == "amap") {
+            broadcastTest(sender, mode)
             return
         }
 
@@ -166,6 +180,120 @@ class HudTestActivity : Activity() {
         }
     }
 
+    /**
+     * Hız limiti tabelası (modül 327682): 123 sonra 400 ms sonra 125, ~8 sn her 1 sn yeniden gönderilir (özgün uygulama
+     * da yeniden gönderir). Her gönderim park kapısından geçer; reddedilirse dizi durur. `--ez clear true` yoksa
+     * sonunda temizlenmez (tabelanın kalıp kalmadığını görmek için).
+     */
+    private fun limitTest(nav: HudNavSender, mode: String) {
+        val limit = HudLimitSender(nav)
+        if (mode == "limit_off") {
+            show(limit.send(HudLimitPayload.clearLimit()).message)
+            Thread.sleep(STEP_GAP_MS)
+            show(limit.send(HudLimitPayload.clearSign()).message)
+            return
+        }
+        if (intent?.hasExtra(EXTRA_KMH) != true) {
+            show("REDDEDİLDİ: --ei kmh N gerekli; hiçbir şey gönderilmedi")
+            return
+        }
+        val kmh = intent.getIntExtra(EXTRA_KMH, -1)
+        val status = intent.getIntExtra(EXTRA_STATUS, HudLimitPayload.DEFAULT_STATUS)
+        val wantClear = intent.getBooleanExtra(EXTRA_CLEAR, false)
+        val limitPayload: HudLimitPayload.Payload
+        val signPayload: HudLimitPayload.Payload
+        try {
+            limitPayload = HudLimitPayload.limit(kmh, status)
+            signPayload = HudLimitPayload.sign(kmh)
+        } catch (e: IllegalArgumentException) {
+            show("REDDEDİLDİ: ${e.message}")
+            return
+        }
+        var anySent = false
+        try {
+            for (round in 1..LIMIT_ROUNDS) {
+                val a = limit.send(limitPayload)
+                show("[$round/$LIMIT_ROUNDS] ${a.message}")
+                if (!a.sent) return
+                anySent = true
+                Thread.sleep(STEP_GAP_MS)
+                val b = limit.send(signPayload)
+                show("[$round/$LIMIT_ROUNDS] ${b.message}")
+                if (!b.sent) return
+                Thread.sleep(1000 - STEP_GAP_MS)
+            }
+            show("${lines.last()}\n\nHUD/göstergeyi gözle (limit $kmh)")
+        } finally {
+            if (anySent && wantClear) {
+                val a = limit.send(HudLimitPayload.clearLimit())
+                Thread.sleep(STEP_GAP_MS)
+                val b = limit.send(HudLimitPayload.clearSign())
+                show("${a.message} / ${b.message}\n(temizleme)")
+            }
+        }
+    }
+
+    /**
+     * Araca YAZMAZ: Desay navi uygulamasının dinleyebileceği TurboDog (`turbodog`) veya AMap (`amap`) yayınları.
+     * Park kapısı başlamadan ve her saniye denetlenir; reddedilirse dizi durur, başlamış seyir için bitiş yayını gider.
+     */
+    private fun broadcastTest(nav: HudNavSender, mode: String) {
+        val icon = if (intent?.hasExtra(EXTRA_ICON) == true) intent.getIntExtra(EXTRA_ICON, TurboDogPayload.DEFAULT_ICON)
+        else TurboDogPayload.DEFAULT_ICON
+        val dist = if (intent?.hasExtra(EXTRA_DIST) == true) intent.getIntExtra(EXTRA_DIST, TurboDogPayload.DEFAULT_DIST)
+        else TurboDogPayload.DEFAULT_DIST
+        val explicit = intent?.getBooleanExtra(EXTRA_EXPLICIT, false) ?: false
+        val amap = mode == "amap"
+        val action = if (amap) TurboDogPayload.AMAP_ACTION else TurboDogPayload.TURBODOG_ACTION
+        val gate = nav.parkDecision()
+        if (!gate.allowed) {
+            show("REDDEDİLDİ: park kapısı: ${gate.reason}\nhiçbir şey gönderilmedi")
+            return
+        }
+        var started = false
+        try {
+            broadcast(action, if (amap) TurboDogPayload.amapState(TurboDogPayload.AMAP_STATE_START) else TurboDogPayload.turboStart(), explicit)
+            started = true
+            show("$mode: başlangıç yayını gitti${if (explicit) " (paket: ${TurboDogPayload.TARGET_PACKAGE})" else ""}")
+            for (second in 0 until BROADCAST_ROUNDS) {
+                Thread.sleep(1000)
+                val g = nav.parkDecision()
+                if (!g.allowed) {
+                    show("DURDURULDU: park kapısı: ${g.reason}")
+                    return
+                }
+                val d = TurboDogPayload.distAt(dist, second)
+                val extras = if (amap) TurboDogPayload.amapGuide(icon, d)
+                else TurboDogPayload.turboTurn(icon, d, System.currentTimeMillis())
+                broadcast(action, extras, explicit)
+                show("[${second + 1}/$BROADCAST_ROUNDS] $mode ikon=$icon mesafe=$d")
+            }
+            show("${lines.last()}\n\nHUD/göstergeyi gözle")
+        } finally {
+            if (started) {
+                broadcast(action, if (amap) TurboDogPayload.amapState(TurboDogPayload.AMAP_STATE_END) else TurboDogPayload.turboEnd(), explicit)
+                show("${lines.last()}\n(bitiş yayını)")
+            }
+        }
+    }
+
+    /** Tek yayın gönderim noktası; her yayın günlüğe yazılır. [explicit] ise yalnızca Desay navi paketine gider. */
+    private fun broadcast(action: String, extras: Map<String, Any>, explicit: Boolean) {
+        val i = Intent(action)
+        i.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        if (explicit) i.setPackage(TurboDogPayload.TARGET_PACKAGE)
+        for ((k, v) in extras) {
+            when (v) {
+                is Int -> i.putExtra(k, v)
+                is Long -> i.putExtra(k, v)
+                is String -> i.putExtra(k, v)
+                else -> throw IllegalArgumentException("desteklenmeyen ekstra türü: $k")
+            }
+        }
+        Log.i(HudNavSender.TAG, "BROADCAST action=$action explicit=$explicit extras=$extras")
+        sendBroadcast(i)
+    }
+
     /** SALT-OKUR: yazma yok. */
     private fun info(connected: Boolean) {
         val out = ArrayList<String>()
@@ -214,11 +342,17 @@ class HudTestActivity : Activity() {
         const val EXTRA_ICON = "icon"
         const val EXTRA_DIST = "dist"
         const val EXTRA_ACK = "ack"
+        const val EXTRA_KMH = "kmh"
+        const val EXTRA_STATUS = "status"
+        const val EXTRA_CLEAR = "clear"
+        const val EXTRA_EXPLICIT = "explicit"
         const val ACK_VALUE = "PARKED"
         private const val DEFAULT_DIST = 250
         private const val STEP_GAP_MS = 400L
         private const val HOLD_MS = 5000L
-        private val MODES = setOf("demo", "alt", "icon", "clear", "info")
+        private const val LIMIT_ROUNDS = 8
+        private const val BROADCAST_ROUNDS = 10
+        private val MODES = setOf("demo", "alt", "icon", "clear", "info", "limit", "limit_off", "turbodog", "amap")
         private val RUNNING = AtomicBoolean(false)
     }
 }
