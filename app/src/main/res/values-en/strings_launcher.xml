@@ -169,8 +169,4 @@
     <string name="launcher_window_part">Window</string>
     <string name="launcher_auto_drive_layout_on">Auto drive layout: On (tap to turn off)</string>
     <string name="launcher_auto_drive_layout_off">Auto drive layout: Off (tap to turn on)</string>
-    <string name="launcher_seat_style_classic">Seat card: Classic (tap for Stone and lava)</string>
-    <string name="launcher_seat_style_lava">Seat card: Stone and lava, experimental (tap for Classic)</string>
-    <string name="launcher_seat_short_driver">Driver</string>
-    <string name="launcher_seat_short_passenger">Passenger</string>
 </resources>

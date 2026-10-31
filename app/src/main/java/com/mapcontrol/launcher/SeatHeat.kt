@@ -107,8 +107,8 @@ internal class SeatHeatModel(
     private fun read(): SeatHeatState {
         if (LauncherDemo.enabled) return SeatHeatState(
             connected = true,
-            driver = LauncherDemo.seatLevel(vent, driver = true),
-            passenger = LauncherDemo.seatLevel(vent, driver = false),
+            driver = if (vent) LauncherDemo.DRIVER_VENT_LEVEL else LauncherDemo.DRIVER_SEAT_LEVEL,
+            passenger = if (vent) LauncherDemo.PASSENGER_VENT_LEVEL else LauncherDemo.PASSENGER_SEAT_LEVEL,
         )
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return SeatHeatState()

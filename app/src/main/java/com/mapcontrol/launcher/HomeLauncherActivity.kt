@@ -91,7 +91,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyMoving(intent)
-        LauncherDemo.applySeat(this, intent)
         LauncherProbe.applyFrom(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
@@ -183,8 +182,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         setIntent(intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
-        // Koltuk demo/görünüm isteği: kutucuklar kurulumda okunur, değiştiyse ekran yeniden kurulur.
-        if (LauncherDemo.applySeat(this, intent)) ThemeTransition.recreate(this)
     }
 
     /**

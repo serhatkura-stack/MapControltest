@@ -170,8 +170,4 @@
     <string name="launcher_window_part">Cam</string>
     <string name="launcher_auto_drive_layout_on">Otomatik sürüş düzeni: Açık (kapatmak için dokun)</string>
     <string name="launcher_auto_drive_layout_off">Otomatik sürüş düzeni: Kapalı (açmak için dokun)</string>
-    <string name="launcher_seat_style_classic">Koltuk kartı: Klasik (Taş-lav için dokun)</string>
-    <string name="launcher_seat_style_lava">Koltuk kartı: Taş-lav, deneysel (Klasik için dokun)</string>
-    <string name="launcher_seat_short_driver">Sürücü</string>
-    <string name="launcher_seat_short_passenger">Yolcu</string>
 </resources>
