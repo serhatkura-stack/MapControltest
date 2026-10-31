@@ -21,7 +21,7 @@ internal data class SeatHeatState(
 /**
  * Koltuk ısıtma okuma/yazma mantığı; alt çubuk ([ClimateBar]) ve koltuk kutucuğu ([SeatHeatTile]) paylaşır.
  *
- * Durum 3 sn'de bir okunur; dokununca seviye bir artar (3'ten sonra kapanır), ekran hemen güncellenir (iyimser),
+ * Durum 3 sn'de bir okunur; dokununca seviye Kapalı → 3 → 2 → 1 → Kapalı sırasıyla değişir, ekran hemen güncellenir (iyimser),
  * komut arka planda yalnızca [LauncherEdition] üzerinden gider, kısa süre sonra gerçek durum okunur.
  * Yalnızca ClimateAutomationEngine'de kullanılan, değer anlamı bilinen komutlar gönderilir.
  */
@@ -107,8 +107,8 @@ internal class SeatHeatModel(
     private fun read(): SeatHeatState {
         if (LauncherDemo.enabled) return SeatHeatState(
             connected = true,
-            driver = if (vent) LauncherDemo.DRIVER_VENT_LEVEL else LauncherDemo.DRIVER_SEAT_LEVEL,
-            passenger = if (vent) LauncherDemo.PASSENGER_VENT_LEVEL else LauncherDemo.PASSENGER_SEAT_LEVEL,
+            driver = LauncherDemo.seatLevel(vent, driver = true),
+            passenger = LauncherDemo.seatLevel(vent, driver = false),
         )
         val proxy = CarInfoProxy.getInstance()
         if (!proxy.isServiceConnnected) return SeatHeatState()
@@ -142,9 +142,10 @@ internal class SeatHeatModel(
 
         fun levelLabel(level: Int): Int = LEVEL_LABELS[level.coerceIn(0, LEVEL_LABELS.lastIndex)]
 
+        /** Aracın kendi düğmesi gibi: Kapalı → 3 → 2 → 1 → Kapalı (kapalıdan açınca en yüksek seviyeden başlar). */
         fun nextLevel(current: Int?): Int {
             val level = current ?: 0
-            return if (level >= ClimateAutomationStore.LEVEL_MAX) 0 else level + 1
+            return if (level <= 0) ClimateAutomationStore.LEVEL_MAX else level - 1
         }
 
         /**

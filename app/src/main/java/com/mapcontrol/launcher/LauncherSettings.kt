@@ -95,6 +95,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(driveModeToggle(d), fullWidth())
 
         addView(gap(activity, 12, vertical = true))
+        addView(seatStyleToggle(d), fullWidth())
+
+        addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(bottomBarSegments(d), fullWidth())
@@ -175,6 +178,16 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
             // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
             if (on) ThemeTransition.retheme(activity)
+        }
+    }
+
+    /** "Koltuk kartı": Klasik / Taş-lav (deneysel); değişince ekran yeni görünümle kurulur. */
+    private fun seatStyleToggle(d: Dialog): View {
+        val lava = SeatStylePrefs.current(activity) == SeatCardStyle.LAVA
+        return row(R.drawable.ic_mdi_car_seat_heater, if (lava) R.string.launcher_seat_style_lava else R.string.launcher_seat_style_classic) {
+            d.dismiss()
+            SeatStylePrefs.set(activity, if (lava) SeatCardStyle.CLASSIC else SeatCardStyle.LAVA)
+            ThemeTransition.recreate(activity)
         }
     }
 

@@ -80,6 +80,44 @@ internal object LauncherDemo {
     const val DRIVER_VENT_LEVEL = 1
     const val PASSENGER_VENT_LEVEL = 0
 
+    /** Demo koltuk seviyeleri (`--es launcher_demo_seat "3,0"` = sürücü,yolcu); hem ısıtma hem soğutmaya uygulanır. */
+    const val EXTRA_SEAT = "launcher_demo_seat"
+
+    /** Koltuk kartı görünümünü zorlar (`--es launcher_seat_style lava|classic`); yalnızca debug derlemede. */
+    const val EXTRA_SEAT_STYLE = "launcher_seat_style"
+
+    @Volatile
+    private var seatOverride: Pair<Int, Int>? = null
+
+    @Volatile
+    var seatStyleOverride: SeatCardStyle? = null
+        private set
+
+    fun seatLevel(vent: Boolean, driver: Boolean): Int {
+        seatOverride?.let { return if (driver) it.first else it.second }
+        return when {
+            vent -> if (driver) DRIVER_VENT_LEVEL else PASSENGER_VENT_LEVEL
+            else -> if (driver) DRIVER_SEAT_LEVEL else PASSENGER_SEAT_LEVEL
+        }
+    }
+
+    /** Koltuk istekleri uygulanır (yalnızca debug); herhangi bir değer değiştiyse true. */
+    fun applySeat(activity: Activity, intent: Intent?): Boolean {
+        if (intent == null) return false
+        val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!debuggable) return false
+        var changed = false
+        if (intent.hasExtra(EXTRA_SEAT)) {
+            val levels = SeatStone.parseLevels(intent.getStringExtra(EXTRA_SEAT))
+            if (levels != seatOverride) { seatOverride = levels; changed = true }
+        }
+        if (intent.hasExtra(EXTRA_SEAT_STYLE)) {
+            val style = SeatCardStyle.parse(intent.getStringExtra(EXTRA_SEAT_STYLE))
+            if (style != seatStyleOverride) { seatStyleOverride = style; changed = true }
+        }
+        return changed
+    }
+
     /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam kapalı. */
     fun comfort(): ComfortReading = ComfortReading(
         connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true,
