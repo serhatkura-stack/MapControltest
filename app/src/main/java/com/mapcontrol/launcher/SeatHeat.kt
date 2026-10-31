@@ -74,7 +74,10 @@ internal class SeatHeatModel(
             return
         }
         val proxy = CarInfoProxy.getInstance()
-        if (!proxy.isServiceConnnected) return
+        if (!proxy.isServiceConnnected) {
+            android.util.Log.w("WidgetWrite", "widget=Seat id=$id value=? result=refused-no-service")
+            return
+        }
         state = if (driver) state.copy(driver = level) else state.copy(passenger = level)
         onChange(state)
         io.runSafely {

@@ -177,6 +177,8 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         addView(titleView)
         addView(artistGap)
         addView(artistView)
+        // İlerleme çubuğu sanatçı satırına yapışmasın: alçak kartta (1920x720, 4x2) bile en az bu kadar boşluk.
+        addView(gap(context, PROGRESS_GAP_DP, vertical = true))
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(progressBox)
         addView(gap(context, 16, vertical = true))
@@ -363,7 +365,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
             timesGap.visibility = timesVis
         }
         // Düğmeler kalan yüksekliğe sığacak kadar küçülür (en çok tam boy, en az 56dp); kontroller kesilmez.
-        var reserved = titleView.lineHeight + context.dp(16) + context.dp(8)
+        var reserved = titleView.lineHeight + context.dp(16) + context.dp(8) + context.dp(PROGRESS_GAP_DP)
         if (!tiny) reserved += context.dp(8) + elapsedView.lineHeight
         if (showSource) reserved += sourceLabel.lineHeight + context.dp(4)
         if (showArtist) reserved += artistView.lineHeight + context.dp(4)
@@ -584,6 +586,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         const val SHORT_HEIGHT_DP = 250
         /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
         const val TINY_HEIGHT_DP = 190
+        const val PROGRESS_GAP_DP = 12
         const val MIN_PLAY_DP = 56
         /** "Erişim ver" düğmesi yüksekliği (en az 76dp). */
         const val GRANT_BUTTON_DP = 76

@@ -90,7 +90,10 @@ internal object ClimateWriter {
 
     private fun send(id: Int, raw: Int): Boolean {
         val proxy = CarInfoProxy.getInstance()
-        if (!proxy.isServiceConnnected) return false
+        if (!proxy.isServiceConnnected) {
+            android.util.Log.w("WidgetWrite", "widget=Climate id=$id value=$raw result=refused-no-service")
+            return false
+        }
         LauncherEdition.sendItemValue(proxy, VDEventCarInfo.MODULE_HVAC, id, raw)
         return true
     }
