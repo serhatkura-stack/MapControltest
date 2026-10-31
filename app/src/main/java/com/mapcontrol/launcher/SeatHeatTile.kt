@@ -13,7 +13,7 @@ import com.mapcontrol.R
 /**
  * Tek koltuk kutucuğu: yalnızca sürücü ya da yalnızca yolcu koltuğu, ısıtma veya soğutma. Yolcu kendi tarafına
  * koyup doğrudan dokunabilsin diye her koltuk ayrı widget'tır. Dokunmak seviyeyi bir artırır
- * (Kapalı → Düşük → Orta → Yüksek). Etkin seviye vurgu renginde; yazı seviyeyi söyler.
+ * (Kapalı → Düşük → Orta → Yüksek). Etkin seviye ısıtmada turuncu, soğutmada camgöbeği; yazı seviyeyi söyler.
  * Okuma/yazma [SeatHeatModel] ile (alt çubukla aynı kod yolu; test sürümünde yalnızca okur).
  */
 internal class SeatHeatTile(
@@ -27,10 +27,18 @@ internal class SeatHeatTile(
 
     private val model = SeatHeatModel(context, vent) { bind(it) }
 
-    /** Etkin seviye rengi: ısıtmada vurgu, soğutmada sakin bir turkuaz. */
-    private fun activeColor(): Int = if (vent) SeatClimateColors.cool() else LauncherTheme.ACCENT
+    /** Etkin seviye rengi: ısıtma sıcak turuncu, soğutma camgöbeği (sürüş vurgusundan bağımsız). */
+    private fun activeColor(): Int = if (vent) LauncherTheme.COOL else LauncherTheme.HEAT
 
-    private val seat = Seat(if (driverSeat) R.string.launcher_seat_driver else R.string.launcher_seat_passenger, driver = driverSeat)
+    private val seat = Seat(
+        when {
+            vent && driverSeat -> R.string.launcher_seat_title_vent_driver
+            vent -> R.string.launcher_seat_title_vent_passenger
+            driverSeat -> R.string.launcher_seat_title_heat_driver
+            else -> R.string.launcher_seat_title_heat_passenger
+        },
+        driver = driverSeat,
+    )
 
     private val root: LinearLayout = card(context, LinearLayout.HORIZONTAL, paddingDp = PADDING_DP).apply {
         gravity = Gravity.CENTER_VERTICAL
@@ -139,7 +147,7 @@ internal class SeatHeatTile(
             lastKnown = known
             lastLevel = lv
             iconView.imageTintList = ColorStateList.valueOf(if (active) activeColor() else LauncherTheme.TEXT_SECONDARY)
-            value.setTextColor(if (!known) LauncherTheme.TEXT_SECONDARY else if (active) activeColor() else LauncherTheme.TEXT)
+            value.setTextColor(if (active) activeColor() else LauncherTheme.TEXT_SECONDARY)
             val levelText = if (known) context.getString(SeatHeatModel.levelLabel(lv)) else context.getString(R.string.launcher_unavailable)
             value.setTextSmooth(levelText)
             segments.forEachIndexed { i, v ->
@@ -169,9 +177,4 @@ internal class SeatHeatTile(
         const val SEGMENT_GAP_BIG_DP = 8
         const val SEGMENT_RADIUS_BIG_DP = 8f
     }
-}
-
-/** Soğutma vurgusu: [LauncherTheme] tek vurgusunu (mavi) bozmadan ısıtmadan ayrışan turkuaz. */
-internal object SeatClimateColors {
-    fun cool(): Int = if (LauncherTheme.night) 0xFF22D3EE.toInt() else 0xFF0E7490.toInt()
 }

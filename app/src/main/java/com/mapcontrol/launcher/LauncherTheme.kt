@@ -65,6 +65,11 @@ object LauncherTheme {
     private const val DAY_ACCENT = 0xFF2563EB.toInt()
     private const val NIGHT_ALERT = 0xFFEF4444.toInt()
     private const val DAY_ALERT = 0xFFDC2626.toInt()
+    // Koltuk ısıtma (sıcak turuncu) ve soğutma (camgöbeği): ikisi mavi vurgudan ve birbirinden hemen ayrışır.
+    private const val NIGHT_HEAT = 0xFFFF8A3D.toInt()
+    private const val DAY_HEAT = 0xFFE8590C.toInt()
+    private const val NIGHT_COOL = 0xFF22D3EE.toInt()
+    private const val DAY_COOL = 0xFF0891B2.toInt()
     private const val NIGHT_TEXT = 0xFFE5E7EB.toInt()
     private const val DAY_TEXT = 0xFF111827.toInt()
     private const val NIGHT_TEXT_SECONDARY = 0xFF9CA3AF.toInt()
@@ -87,6 +92,10 @@ object LauncherTheme {
     val TRACK: Int get() = if (night) NIGHT_TRACK else DAY_TRACK
     val ACCENT: Int get() = DriveAccent.accentFor(driveMode, night) ?: if (night) NIGHT_ACCENT else DAY_ACCENT
     val ALERT: Int get() = if (night) NIGHT_ALERT else DAY_ALERT
+    /** Isıtma anlamı: sürüş moduna bağlı değil, yalnızca gündüz/gece değişir. */
+    val HEAT: Int get() = if (night) NIGHT_HEAT else DAY_HEAT
+    /** Soğutma/havalandırma anlamı (bkz. [HEAT]). */
+    val COOL: Int get() = if (night) NIGHT_COOL else DAY_COOL
     val TEXT: Int get() = if (night) NIGHT_TEXT else DAY_TEXT
     val TEXT_SECONDARY: Int get() = if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
 

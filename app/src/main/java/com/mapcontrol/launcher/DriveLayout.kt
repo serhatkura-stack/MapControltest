@@ -139,26 +139,16 @@ internal object DriveSignals {
 }
 
 /**
- * Sürüş varsayılan düzeni: sakin ve büyük. Medya 6×4, araç 4×4, sağda tüketim ve yolculuk; alt şerit Park ile aynı
- * türlerden. Uygulama kutucukları Park'takilerle karışmasın diye "drive_app_" kimliği kullanır.
+ * Sürüş varsayılan düzeni: sakin ve büyük. Medya 6×4, araç 4×4, sağda tüketim ve yolculuk; alt şerit koltuklar ve mola
+ * hatırlatıcısı. Uygulama kutucuğu yoktur ([oemBar] ve [appPackages] yalnızca imza uyumu içindir).
  */
-fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> {
-    val top = listOf(
-        PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
-        PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(4, 4)),
-        PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
-        PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
-        PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
-    )
-    val bottom = if (oemBar) {
-        (0 until DEFAULT_APP_SLOTS).map { i -> PlacedWidget("drive_app_$i", WidgetType.APP, 2 + i, 4, Span(1, 2), appPackages.getOrNull(i)) }
-    } else listOf(
-        PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 2, 4, Span(2, 2)),
-        PlacedWidget("lock", WidgetType.LOCK, 4, 4, Span(1, 2)),
-        PlacedWidget("drive_app_0", WidgetType.APP, 5, 4, Span(1, 2), appPackages.getOrNull(0)),
-        PlacedWidget("health", WidgetType.HEALTH, 6, 4, Span(2, 2)),
-        PlacedWidget("weather", WidgetType.WEATHER, 8, 4, Span(2, 2)),
-    )
-    return top + bottom
-}
+@Suppress("UNUSED_PARAMETER")
+fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = listOf(
+    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(4, 4)),
+    PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
+    PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
+    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
+    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 5, 4, Span(2, 2)),
+    PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
+)

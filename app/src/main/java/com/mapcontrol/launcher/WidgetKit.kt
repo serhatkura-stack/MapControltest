@@ -122,45 +122,27 @@ interface SizedWidget : LauncherWidget {
 }
 
 /**
- * Varsayılan yerleşim (12×6). Üst dört satır: medya 6×4 (sol), ortada üst üste tüketim 2×2 ve yolculuk 2×2,
- * sağda araç kartı 4×4 (menzil + durum).
- * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): alt iki satıra sürücü koltuk ısıtma (2) ·
- * sekiz ince uygulama kutucuğu (tek şerit, 8×1 = 8) · yolcu koltuk ısıtma (2) gelir: 2+8+2 = 12.
- * Sol direksiyonlu kabine göre: sürücü solda, yolcu sağda; yolcu kendi tarafındaki kutucuğa doğrudan dokunur.
- * OEM çubuğu yoksa alt iki satır altı adet 2×2 kutucukla dolar: hava durumu, sağlık, kilit, sürüş modu,
- * sürücü ve yolcu koltuk ısıtma.
+ * Varsayılan yerleşim (12×6). Üst dört satır: araç 4×4 (sol), medya 6×4, sağda üst üste hava durumu ve yolculuk 2×2.
+ * Alt iki satır, sol direksiyonlu kabine göre (sürücü solda, yolcu sağda): sürücü koltuk ısıtma 2×2 · dört ince
+ * uygulama kutucuğu (tek şerit) · hava kalitesi 4×2 · yolcu koltuk ısıtma 2×2.
+ * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): üst alan aynı; ortadaki alan sekiz ince
+ * uygulama kutucuğuyla (2+8+2 = 12) dolar.
  */
-fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = if (oemBar) {
-    // Uygulama kutucuğu yalnızca 1×2'dir; şerit 8 kutucukla (col 2-9) dolar.
-    val appStart = 2
-    val appSlots = DEFAULT_APP_SLOTS
-    listOf(
-        PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
-        PlacedWidget("consumption", WidgetType.CONSUMPTION, 6, 0, Span(2, 2)),
-        PlacedWidget("trip", WidgetType.TRIP, 6, 2, Span(2, 2)),
-        PlacedWidget("vehicle", WidgetType.VEHICLE, 8, 0, Span(4, 4)),
+fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> {
+    val top = listOf(
+        PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
+        PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 4)),
+        PlacedWidget("weather", WidgetType.WEATHER, 10, 0, Span(2, 2)),
+        PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
         PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-    ) +
-        // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
-        (0 until appSlots).map { i ->
-            PlacedWidget("app_dock_$i", WidgetType.APP, appStart + i, 4, Span(1, 2), appPackages.getOrNull(i))
-        } +
-        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
-} else listOf(
-    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
-    PlacedWidget("consumption", WidgetType.CONSUMPTION, 6, 0, Span(2, 2)),
-    PlacedWidget("trip", WidgetType.TRIP, 6, 2, Span(2, 2)),
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 8, 0, Span(4, 4)),
-    // Alt şerit altı adet 2×2 kutucukla dolar (medya yalnızca 4×2 ya da 6×4 olabildiği için sol alt de kutucuk).
-    PlacedWidget("weather", WidgetType.WEATHER, 0, 4, Span(2, 2)),
-    PlacedWidget("health", WidgetType.HEALTH, 2, 4, Span(2, 2)),
-    // Kilit ince bir düğmedir (1×2); yanında bir uygulama kutucuğu ile 2 hücre dolar.
-    PlacedWidget("lock", WidgetType.LOCK, 4, 4, Span(1, 2)),
-    PlacedWidget("app_dock_0", WidgetType.APP, 5, 4, Span(1, 2), appPackages.getOrNull(0)),
-    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 6, 4, Span(2, 2)),
-    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 8, 4, Span(2, 2)),
-    PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
-)
+        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
+    )
+    // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
+    fun apps(count: Int) = (0 until count).map { i ->
+        PlacedWidget("app_dock_$i", WidgetType.APP, 2 + i, 4, Span(1, 2), appPackages.getOrNull(i))
+    }
+    return top + if (oemBar) apps(DEFAULT_APP_SLOTS) else apps(4) + PlacedWidget("air", WidgetType.AIR, 6, 4, Span(4, 2))
+}
 
 /** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı (her biri 1×2). */
 const val DEFAULT_APP_SLOTS = 8

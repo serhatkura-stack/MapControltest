@@ -44,6 +44,7 @@
     <string name="launcher_edit_no_space">No free space for this widget</string>
     <string name="launcher_edit_reset_confirm">Restore the default layout?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
+    <string name="launcher_range_label">range</string>
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">—</string>

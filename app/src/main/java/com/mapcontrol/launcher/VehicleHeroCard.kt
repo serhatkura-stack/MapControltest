@@ -69,6 +69,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
     }
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
+    /** Büyük sayının "kalan yakıt menzili" olduğunu söyleyen küçük ikincil etiket. */
+    private val rangeLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_range_label) }
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
     private val fuelBar = FuelBar(context)
     /** Araç şeması: markasız kuşbakışı SUV; açık kapı/bagaj/cam tavan ve lastik uyarısı yerinde gösterilir. */
@@ -103,7 +105,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         // İçerikle boyutlanan satırlar açıkça WRAP_CONTENT, yoksa 1px'lik boşluğa göre daralırlar.
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(rangeText, wrapLp())
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                isBaselineAligned = true
+                addView(rangeText, wrapLp())
+                addView(gap(context, LauncherTheme.GAP_S_DP))
+                addView(rangeLabel, wrapLp())
+            }, wrapLp())
             addView(gap(context, LauncherTheme.GAP_SM_DP, vertical = true))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -192,6 +200,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
     override fun applyTheme() {
         view.background = cardSurface(context)
         fuelBar.invalidate()
+        rangeLabel.setTextColor(LauncherTheme.TEXT_SECONDARY)
         lastUi = null
         render()
     }

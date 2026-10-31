@@ -150,17 +150,34 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun defaultTopAreaIsMediaTwoTilesAndFourByFourVehicle() {
+    fun defaultTopAreaIsVehicleMediaWeatherAndTrip() {
         listOf(defaultLayout(false), defaultLayout(true)).forEach { layout ->
-            fun at(t: WidgetType) = layout.single { it.type == t }
-            assertEquals(Triple(0, 0, Span(6, 4)), at(WidgetType.MEDIA).let { Triple(it.col, it.row, it.span) })
-            assertEquals(Triple(6, 0, Span(2, 2)), at(WidgetType.CONSUMPTION).let { Triple(it.col, it.row, it.span) })
-            assertEquals(Triple(6, 2, Span(2, 2)), at(WidgetType.TRIP).let { Triple(it.col, it.row, it.span) })
-            assertEquals(Triple(8, 0, Span(4, 4)), at(WidgetType.VEHICLE).let { Triple(it.col, it.row, it.span) })
+            fun at(t: WidgetType) = layout.single { it.type == t }.let { Triple(it.col, it.row, it.span) }
+            assertEquals(Triple(0, 0, Span(4, 4)), at(WidgetType.VEHICLE))
+            assertEquals(Triple(4, 0, Span(6, 4)), at(WidgetType.MEDIA))
+            assertEquals(Triple(10, 0, Span(2, 2)), at(WidgetType.WEATHER))
+            assertEquals(Triple(10, 2, Span(2, 2)), at(WidgetType.TRIP))
+            assertEquals(Triple(0, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_DRIVER))
+            assertEquals(Triple(10, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_PASSENGER))
             // APP dışında tür tekrarı yok
             val nonApp = layout.filter { it.type != WidgetType.APP }.map { it.type }
             assertEquals(nonApp.size, nonApp.toSet().size)
         }
+    }
+
+    @Test
+    fun parkDefaultHasExactlyTheExpectedTypes() {
+        val l = defaultLayout(false, List(4) { "p$it" })
+        assertTrue(LayoutStore.isValid(l))
+        assertEquals(
+            listOf(WidgetType.VEHICLE, WidgetType.MEDIA, WidgetType.WEATHER, WidgetType.TRIP, WidgetType.SEAT_HEAT_DRIVER,
+                WidgetType.SEAT_HEAT_PASSENGER, WidgetType.AIR).sortedBy { it.key },
+            l.filter { it.type != WidgetType.APP }.map { it.type }.sortedBy { it.key },
+        )
+        val apps = l.filter { it.type == WidgetType.APP }
+        assertEquals(listOf(2, 3, 4, 5), apps.map { it.col })
+        assertTrue(apps.all { it.row == 4 && it.span == Span(1, 2) })
+        assertEquals(Triple(6, 4, Span(4, 2)), l.single { it.type == WidgetType.AIR }.let { Triple(it.col, it.row, it.span) })
     }
 
     @Test
@@ -303,7 +320,7 @@ class LayoutLogicTest {
         assertTrue(LayoutStore.isValid(moved))
         // Izgara tamamen dolu: yer kalmayan tek widget düşer, diğerleri aynen kalır.
         val base = defaultLayout(false)
-        val out = LayoutStore.snapSpans(base.filter { it.id != "lock" } + widget("y", WidgetType.LOCK, 6, 4, Span(1, 1)))
+        val out = LayoutStore.snapSpans(base.filter { it.id != "air" } + widget("y", WidgetType.LOCK, 6, 4, Span(1, 1)))
         assertEquals(base.size, out.size)
         val full = LayoutStore.snapSpans(base + widget("z", WidgetType.CONSUMPTION, 0, 0, Span(1, 1)))
         assertEquals(base, full)

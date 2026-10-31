@@ -107,6 +107,24 @@ class DriveLayoutTest {
             assertTrue(l.any { it.type == WidgetType.MEDIA && it.span == Span(6, 4) })
         }
     }
+
+    @Test fun defaultDriveLayoutHasExactlyTheExpectedWidgets() {
+        for (oem in listOf(true, false)) {
+            val l = defaultDriveLayout(oem, List(8) { "pkg$it" })
+            assertTrue(LayoutStore.isValid(l))
+            val got = l.map { "${it.type.key}@${it.col},${it.row}:${it.span}" }.sorted()
+            val want = listOf(
+                "media@0,0:6×4",
+                "vehicle@6,0:4×4",
+                "consumption@10,0:2×2",
+                "trip@10,2:2×2",
+                "seat_heat_driver@0,4:2×2",
+                "break_reminder@5,4:2×2",
+                "seat_heat_passenger@10,4:2×2",
+            ).sorted()
+            assertEquals(want, got)
+        }
+    }
 }
 
 class ParkOnlyTest {

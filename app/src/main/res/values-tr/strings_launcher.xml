@@ -44,6 +44,7 @@
     <string name="launcher_edit_no_space">Bu widget için boş yer yok</string>
     <string name="launcher_edit_reset_confirm">Varsayılan düzene dönülsün mü?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
+    <string name="launcher_range_label">menzil</string>
     <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
     <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">—</string>

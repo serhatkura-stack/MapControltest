@@ -29,6 +29,7 @@ P, el freni çekili, kontak açık, USB bağlı, FrostNav Web Yönetimi açık.
 | 6 | Kontak kapat-aç: launcher kendiliğinden geliyor mu, veri geri akıyor mu | 5 dk | Hayır |
 | 7 | Yandex hesap eşitleme denemesi (telefonda Ev kaydet → araçta görünüyor mu) | 5 dk | Hayır |
 | 8 | Kısa sürüş: işlemci/çizim ölçümü + Park/Sürüş geçişi | 15 dk | Hayır |
+| 9 | **Uyarı ışığı taraması:** `../arac-test/olcum.sh tarama` açıkken göstergede uyarı yaktır (kemer takılı değil, kapı açık, el freni, varsa silecek suyu az) → `MeterMalfunction` 0–20 sinyallerinden hangisi değişiyor (şimdiye kadar hepsi [0,0]). Silecek suyu sinyali bulunursa araç kartına uyarı eklenir. | 5 dk | Hayır |
 
 Her adımda: çalışıyor / çalışmıyor / yanlış değer. Fotoğrafları çek, AirDrop'la.
 
