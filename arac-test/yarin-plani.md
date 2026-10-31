@@ -4,7 +4,7 @@ Hedef: akşama "her widget veri alıyor, kontrol widget'ları araca komut gönde
 **Ben** = Mac, **Sen** = araç.
 
 ## 1. Sabah, masada — ✅ 31 Ekim gecesi yapıldı
-APK: `launcher-perf2.apk`, commit `9fa7a61`, SHA-256 `13c25c1131da64b6…`. Fork'a push edildi.
+APK: `launcher-perf2.apk`, commit `d9c3517`, SHA-256 `2f6f06314c9d3a26…`. Fork'a push edildi.
 Büyük ekran: 2560x1440 @160/240/320 emülatörde düzgün (ölçek uyarlaması). Müzik kartı boşluğu düzeltildi.
 **Araçta komutlar:** `arac-test/yarin.sh baglan | yukle | olc once|sonra|surus | gunluk | kontak`. Paylaşım mesaj taslakları: `notlar/paylasim-taslaklari.md`.
 
