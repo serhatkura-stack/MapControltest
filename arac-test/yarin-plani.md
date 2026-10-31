@@ -3,7 +3,10 @@
 Hedef: akşama "her widget veri alıyor, kontrol widget'ları araca komut gönderiyor, Tiggo 8 için hazır" diyebilmek.
 **Ben** = Mac, **Sen** = araç.
 
-## 1. Sabah, masada (Ben, ~1 sa, araç gerekmez)
+## 1. Sabah, masada — ✅ 31 Ekim gecesi yapıldı
+APK: `launcher-perf2.apk`, commit `fa281bc`, SHA-256 `3ed5a20d572ee8fe…`. Fork'a push edildi.
+Büyük ekran: 2560x1440 @160/240/320 emülatörde düzgün (ölçek uyarlaması). Kalan küçük not: 1920x720'de müzik kartında ilerleme çubuğu sanatçı adına çok yakın.
+
 1. **Yedek:** bugünkü commit'leri fork'a push (onayınla).
 2. **Büyük ekran:** emülatörü 2560x1440 (Tiggo 8 tahmini) ve 1920x720'de açıp launcher düzenini düzelt; ekran görüntüsünü sana atarım.
 3. **Tanılama:** açılışta ekran boyutu, yoğunluk, araç modeli, Android ve uygulama sürümü günlüğe ve Veri kontrolü dosyasına yazılsın (Tiggo 8 sahibinden geri bildirim için).
