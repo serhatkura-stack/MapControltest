@@ -38,7 +38,7 @@ Her adımda: çalışıyor / çalışmıyor / yanlış değer. Fotoğrafları ç
 
 ## 4. Akşam: paylaşım hazırlığı
 1. **Tiggo 8 paketi:** APK + kısa kurulum notu (FrostNav paneli → İndirilen dosyalar → Kur) + "Ayarlar → Veri kontrolü → Paylaş" ile geri bildirim isteği.
-2. Önce **tek bir Tiggo 8 sahibine** gönder; düzen ve veri sorunlarını düzelt.
+2. Önce **tek bir Tiggo 8 sahibine** gönder; düzen ve veri sorunlarını düzelt. Ekran fotoğrafına göre karar: uzun kartlarda içerik boş kalıyorsa önce kart içeriğini yüksekliğe göre büyüt (küçük iş); gerekirse sonra uzun ekranlarda daha fazla satır (12x8, büyük iş).
 3. Sorun yoksa **WhatsApp "devs" grubu** mesajı (taslağı ben hazırlarım, sen gönderirsin).
 4. **Berk Bey'e mesaj taslağı:** "Launcher PR olarak hazır, insanlar denesin; beğenirseniz launcher modunuzun yerine koyalım; Tiggo 8'de de çalışıyor; ileride FrostNav tasarım dilini parça parça güncelleyebilirim." Gönderme yalnız senin onayınla.
 
