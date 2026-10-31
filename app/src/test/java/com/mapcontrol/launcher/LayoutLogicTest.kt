@@ -356,4 +356,51 @@ class LayoutLogicTest {
         val again = LayoutStore.resolveRaw(once.map { raw(it.id, it.type.key, it.col, it.row, it.span.w, it.span.h) })
         assertEquals(once, again)
     }
+
+    @Test
+    fun saveKeepsHiddenParkOnlyWidgets() {
+        val saved = listOf(
+            widget("media", WidgetType.MEDIA, 0, 0, Span(4, 2)),
+            widget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)),
+            widget("clock", WidgetType.CLOCK, 6, 0, Span(2, 2)),
+        )
+        val shown = visibleForMode(saved, LayoutMode.DRIVE)
+        val hidden = saved.filter { it !in shown }
+        val edited = listOf(widget("media", WidgetType.MEDIA, 0, 2, Span(4, 2)))
+        val out = LayoutStore.mergeHidden(edited, hidden)
+        assertEquals(setOf("media", "photo", "clock"), out.map { it.id }.toSet())
+        assertEquals(hidden, out.filter { it.id != "media" })
+        assertTrue(LayoutStore.isValid(out))
+    }
+
+    @Test
+    fun saveRelocatesHiddenWidgetWhenEditedLayoutCoversIt() {
+        val hidden = listOf(widget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)))
+        val edited = listOf(widget("media", WidgetType.MEDIA, 4, 0, Span(4, 2)))
+        val out = LayoutStore.mergeHidden(edited, hidden)
+        assertEquals(2, out.size)
+        assertTrue(LayoutStore.isValid(out))
+    }
+
+    @Test
+    fun dedupeKeepsFirstSingleInstanceAndAllApps() {
+        val layout = listOf(
+            widget("a", WidgetType.MEDIA, 0, 0, Span(4, 2)),
+            widget("b", WidgetType.MEDIA, 4, 0, Span(4, 2)),
+            widget("app1", WidgetType.APP, 0, 4, Span(1, 2)),
+            widget("app2", WidgetType.APP, 1, 4, Span(1, 2)),
+            widget("sd", WidgetType.SEAT_HEAT_DRIVER, 8, 0, Span(2, 2)),
+            widget("sp", WidgetType.SEAT_HEAT_PASSENGER, 10, 0, Span(2, 2)),
+        )
+        assertEquals(listOf("a", "app1", "app2", "sd", "sp"), LayoutStore.dedupeSingleInstance(layout).map { it.id })
+    }
+
+    @Test
+    fun addableOffersOnlyAppWhenAlreadyPlaced() {
+        val layout = listOf(widget("m", WidgetType.MEDIA, 0, 0, Span(4, 2)), widget("a", WidgetType.APP, 4, 0, Span(1, 2)))
+        val offered = addableWidgetTypes(layout)
+        assertFalse(WidgetType.MEDIA in offered)
+        assertTrue(WidgetType.APP in offered)
+        assertTrue(WidgetType.SEAT_HEAT_DRIVER in offered)
+    }
 }

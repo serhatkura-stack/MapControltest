@@ -72,6 +72,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var mockBar: View? = null
 
     private var layout: List<PlacedWidget> = emptyList()
+    /** Bu modda gösterilmeyen ama kayıtlı widget'lar (Sürüş'te parkOnly); kaydederken düzene geri eklenir. */
+    private var hiddenWidgets: List<PlacedWidget> = emptyList()
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
     private var resumed = false
@@ -79,8 +81,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** `--ez launcher_data_check true` ile açılan Veri kontrolü paneli (yalnızca debug). */
     private var dataCheckExtra: DataCheckSheet? = null
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        // Farklı ekranlarda (ör. Tiggo 8) yerleşim 1920x720 tasarımına yakın bir dp genişliğine getirilir.
+        super.attachBaseContext(LauncherScale.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         LauncherEdition.init(applicationContext)
+        LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
@@ -98,6 +106,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         activeMode = if (autoLayoutOn) rememberedMode else LayoutMode.PARK
         LauncherMotion.driveLayout = activeMode == LayoutMode.DRIVE
         layoutPolicy.reset(activeMode)
+        LauncherInfo.mode = activeMode
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
@@ -161,7 +170,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             setContentView(root)
         }
         header.setLayoutMode(activeMode)
-        applyLayout(visibleForMode(store.load(), activeMode), persist = false)
+        loadForMode()
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
         LauncherBottomBar.logResult(this)
@@ -307,8 +316,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         activeMode = to
         LauncherMotion.driveLayout = to == LayoutMode.DRIVE
         rememberedMode = to
+        LauncherInfo.mode = to
         header.setLayoutMode(to)
-        val apply = { applyLayout(visibleForMode(store.load(), activeMode), persist = false) }
+        val apply = { loadForMode() }
         if (!animate || !started) { apply(); return }
         grid.animate().cancel()
         grid.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
@@ -421,6 +431,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      * Yeni düzeni uygular: kaldırılan widget'lar durdurulup bırakılır, yenileri üretilir,
      * hepsine yeni boyutu bildirilir. Mevcut widget'lar yeniden yaratılmaz.
      */
+    private fun loadForMode() {
+        val all = store.load()
+        val shown = visibleForMode(all, activeMode)
+        hiddenWidgets = all.filter { it !in shown }
+        applyLayout(shown, persist = false)
+    }
+
     private fun applyLayout(newLayout: List<PlacedWidget>, persist: Boolean = true) {
         val ids = newLayout.map { it.id }.toSet()
         gridWidgets.keys.filter { it !in ids }.forEach { id ->
@@ -439,7 +456,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         layout = newLayout
         grid.setLayout(newLayout, gridWidgets.mapValues { it.value.view })
-        if (persist) store.save(newLayout)
+        if (persist) store.save(LayoutStore.mergeHidden(newLayout, hiddenWidgets))
     }
 
     // --- Düzenleme modu ---
@@ -601,6 +618,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 addView(sheetButton(R.string.launcher_edit_reset, primary = true) {
                     d.dismiss()
                     store.reset()
+                    hiddenWidgets = emptyList()
                     applyLayout(store.defaults())
                 }, weightLp(1f))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.TOUCH_MIN_DP)))

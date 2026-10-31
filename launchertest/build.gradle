@@ -35,9 +35,21 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
     into syncedJava
 }
 
+def gitSha = {
+    try {
+        def proc = ['git', 'rev-parse', '--short', 'HEAD'].execute([], rootProject.projectDir)
+        def out = proc.text.trim()
+        proc.waitFor() == 0 && out ? out : 'unknown'
+    } catch (Exception ignored) { 'unknown' }
+}
+
 android {
     namespace 'com.mapcontrol'
     compileSdk 34
+
+    buildFeatures {
+        buildConfig true
+    }
 
     defaultConfig {
         applicationId 'com.mapcontrol.launchertest'
@@ -45,6 +57,7 @@ android {
         targetSdk 28
         versionCode 1
         versionName '0.1-test'
+        buildConfigField 'String', 'GIT_SHA', groovy.json.JsonOutput.toJson(gitSha())
     }
 
     sourceSets {

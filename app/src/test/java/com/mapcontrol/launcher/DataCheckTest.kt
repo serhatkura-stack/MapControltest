@@ -72,4 +72,8 @@ class DataCheckTest {
         assertEquals("2 dk", ChangeTracker.ageText(125_000))
         assertEquals("1 sa", ChangeTracker.ageText(3_700_000))
     }
+
+    @Test fun launcherInfoFormatsKeyValueLines() {
+        assertEquals("a: 1\nb: x", LauncherInfo.format(listOf("a" to "1", "b" to "x")))
+    }
 }

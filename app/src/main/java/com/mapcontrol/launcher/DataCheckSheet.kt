@@ -119,6 +119,14 @@ class DataCheckSheet(private val activity: Activity) {
         addView(legend(), sheetFullWidth())
         addView(statusLine, sheetFullWidth())
         val list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        list.addView(text(activity, BodySp, LauncherTheme.ACCENT, bold = true).apply {
+            setText(R.string.launcher_data_check_device)
+            setPadding(0, activity.dp(14), 0, activity.dp(4))
+        }, sheetFullWidth())
+        list.addView(text(activity, SubSp, LauncherTheme.TEXT_SECONDARY).apply {
+            typeface = Typeface.MONOSPACE
+            text = LauncherInfo.text(activity)
+        }, sheetFullWidth())
         val groups = DataCheckTable.groups + listOf("GPS", "Medya")
         for (group in groups) {
             list.addView(text(activity, BodySp, LauncherTheme.ACCENT, bold = true).apply {
@@ -304,6 +312,7 @@ class DataCheckSheet(private val activity: Activity) {
     private fun snapshotText(samples: List<Sample>, connected: Boolean): String = buildString {
         append("MapControl veri kontrolü ").append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())).append('\n')
         append("servis bağlı: ").append(connected).append('\n')
+        append("\n[Cihaz]\n").append(LauncherInfo.text(activity)).append('\n')
         var group = ""
         for (s in samples) {
             if (s.row.group != group) {

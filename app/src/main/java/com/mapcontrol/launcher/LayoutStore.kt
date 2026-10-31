@@ -46,12 +46,14 @@ class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PA
             // Sürüm anahtarı yoksa kayıt eski 6×3 biçimindedir: bir kez ×2 taşınır ve yeni biçimde yazılır.
             val oldGrid = mode == LayoutMode.PARK && prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
             val scaled = if (oldGrid) raws.map { it.copy(col = it.col * 2, row = it.row * 2, w = it.w * 2, h = it.h * 2) } else raws
-            val resolved = resolveRaw(scaled)
+            val resolvedAll = resolveRaw(scaled)
+            // Aynı tekil türden ikincisi (eski/hatalı kayıt) atılır; ilki kalır.
+            val resolved = dedupeSingleInstance(resolvedAll)
             // Artık izin verilmeyen boyutlar en yakın izinli boyuta çekilir; yoksa tüm düzen varsayılana düşerdi.
             val migrated = snapSpans(resolved)
             if (migrated.isNotEmpty() && isValid(migrated)) {
                 // Eski ızgara, eski koltuk anahtarları ya da boyut uyarlaması olduysa yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
-                if (oldGrid || migrated != resolved || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
+                if (oldGrid || migrated != resolved || resolved.size != resolvedAll.size || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
                 migrated
             } else fallback()
         } catch (e: org.json.JSONException) {
@@ -112,6 +114,25 @@ class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PA
             // Yolcu eşi yalnız yeri boşsa eklenir; aksi halde sadece sürücü kalır.
             passengers.forEach { p ->
                 if (result.none { it.id == p.id } && canPlace(result, p)) result += p
+            }
+            return result
+        }
+
+        /** Tekil türlerden (APP hariç, bkz. [isAddable]) yalnızca ilki kalır; sıra korunur. */
+        fun dedupeSingleInstance(layout: List<PlacedWidget>): List<PlacedWidget> {
+            val seen = mutableSetOf<WidgetType>()
+            return layout.filter { it.type == WidgetType.APP || seen.add(it.type) }
+        }
+
+        /**
+         * Kaydederken: ekranda gösterilmeyen (Sürüş'te gizli parkOnly) widget'lar düzene aynen eklenir. Görünen
+         * yeni düzenle çakışırsa [findSpot] ile yer aranır, yer yoksa o widget düşer; kimliği çakışan atlanır.
+         */
+        fun mergeHidden(visible: List<PlacedWidget>, hidden: List<PlacedWidget>): List<PlacedWidget> {
+            val result = visible.toMutableList()
+            hidden.forEach { h ->
+                if (result.any { it.id == h.id } || (h.type != WidgetType.APP && result.any { it.type == h.type })) return@forEach
+                (if (canPlace(result, h)) h else findSpot(result, h))?.let { result += it }
             }
             return result
         }

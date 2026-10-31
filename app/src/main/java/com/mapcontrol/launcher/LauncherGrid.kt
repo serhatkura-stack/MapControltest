@@ -239,6 +239,7 @@ class LauncherGrid(context: Context, private val listener: Listener) : ViewGroup
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val cw = cellWidth()
         val ch = cellHeight()
+        LauncherInfo.noteGrid(cw, ch)
         for (row in 0 until GRID_ROWS) for (col in 0 until GRID_COLS) {
             cellRects[row * GRID_COLS + col].set(cellLeft(col), cellTop(row), cellLeft(col) + cw, cellTop(row) + ch)
         }

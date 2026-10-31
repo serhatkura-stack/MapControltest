@@ -12,6 +12,13 @@ def releaseStore = signingProperties.getProperty('RELEASE_STORE_FILE')
 def releaseStorePassword = signingProperties.getProperty('RELEASE_STORE_PASSWORD')
 def releaseKeyPassword = signingProperties.getProperty('RELEASE_KEY_PASSWORD')
 def hasReleaseSigning = releaseStore && releaseStorePassword && releaseKeyPassword
+def gitSha = {
+    try {
+        def proc = ['git', 'rev-parse', '--short', 'HEAD'].execute([], rootProject.projectDir)
+        def out = proc.text.trim()
+        proc.waitFor() == 0 && out ? out : 'unknown'
+    } catch (Exception ignored) { 'unknown' }
+}
 def readSetting = { String name ->
     providers.gradleProperty(name).orNull ?: System.getenv(name) ?: signingProperties.getProperty(name, '')
 }
@@ -36,6 +43,7 @@ android {
         targetSdk 28
         versionCode 6
         versionName "1.3.4"
+        buildConfigField 'String', 'GIT_SHA', groovy.json.JsonOutput.toJson(gitSha())
         buildConfigField 'String', 'GLITCHTIP_DSN', groovy.json.JsonOutput.toJson(readSetting('GLITCHTIP_DSN') ?: '')
         ndk {
             abiFilters 'arm64-v8a'
