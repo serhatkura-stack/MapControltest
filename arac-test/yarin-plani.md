@@ -4,7 +4,7 @@ Hedef: akşama "her widget veri alıyor, kontrol widget'ları araca komut gönde
 **Ben** = Mac, **Sen** = araç.
 
 ## 1. Sabah, masada — ✅ 31 Ekim gecesi yapıldı
-APK: `launcher-perf2.apk`, commit `fa281bc`, SHA-256 `3ed5a20d572ee8fe…`. Fork'a push edildi.
+APK: `launcher-perf2.apk`, commit `9fa7a61`, SHA-256 `13c25c1131da64b6…`. Fork'a push edildi.
 Büyük ekran: 2560x1440 @160/240/320 emülatörde düzgün (ölçek uyarlaması). Kalan küçük not: 1920x720'de müzik kartında ilerleme çubuğu sanatçı adına çok yakın.
 
 1. **Yedek:** bugünkü commit'leri fork'a push (onayınla).
