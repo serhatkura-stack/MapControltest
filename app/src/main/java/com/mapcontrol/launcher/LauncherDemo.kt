@@ -46,8 +46,28 @@ internal object LauncherDemo {
         if (intent?.hasExtra(EXTRA) != true) return
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
+        if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
         if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
     }
+
+    /** Wi-Fi paneli önizlemesi: `--ez launcher_demo_wifi true` listeye örnek ağlar ekler (emülatörde tek sanal ağ var). */
+    const val EXTRA_WIFI = "launcher_demo_wifi"
+
+    @Volatile
+    private var wifi = false
+
+    internal fun wifiScans(): List<WifiScan> = if (!enabled || !wifi) emptyList() else listOf(
+        WifiScan("Ev_5G", 4, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("Kafe Misafir", 3, "[ESS]"),
+        WifiScan("TurkNet_A1B2", 3, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("Ofis", 2, "[WPA3-SAE][ESS]"),
+        WifiScan("iPhone (Serhat)", 2, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("Komşu_2.4", 1, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("DIRECT-roku", 1, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("Kitap Cafe", 1, "[ESS]"),
+        WifiScan("Ev_5G", 2, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("", 3, "[ESS]"),
+    )
 
     /** Demo arka hoparlör durumu (`--ez launcher_demo_rear_off true`): fader ön uçta, arka kapalı. Verilmezse açık. */
     const val EXTRA_REAR_OFF = "launcher_demo_rear_off"

@@ -3,10 +3,17 @@ package com.mapcontrol.launcher
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.wifi.SupplicantState
+import android.net.wifi.WifiManager
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.ui.activity.MainActivity
+import com.mapcontrol.util.WifiController
 import com.mapcontrol.vehicle.VehicleQuickControls
 
 /**
@@ -84,5 +91,62 @@ internal object LauncherEdition {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_WIFI),
         )
+    }
+
+    /** Wi-Fi paneli arka ucu: FrostNav'ın Wi-Fi sekmesiyle paylaşılan [WifiController] (tara, bağlan, kes, aç/kapa). */
+    fun wifiBackend(context: Context): WifiBackend = AppWifiBackend(context.applicationContext)
+}
+
+private class AppWifiBackend(private val context: Context) : WifiBackend {
+    private val controller = WifiController(context)
+    private val main = Handler(Looper.getMainLooper())
+
+    override val canList = true
+
+    override fun isEnabled() = controller.isEnabled()
+
+    override fun setEnabled(on: Boolean, done: () -> Unit) {
+        Thread({
+            try {
+                controller.setEnabledBlocking(on) { Log.d(TAG, it) }
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "setEnabled: ${e.message}")
+            }
+            main.postDelayed(done, SETTLE_MS)
+        }, "wifi-radio").start()
+    }
+
+    override fun hasLocationPermission() =
+        context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    override fun startScan() = try { controller.startScan() } catch (e: RuntimeException) { false }
+
+    override fun scanResults(): List<WifiScan> = controller.scanResults().map {
+        WifiScan(it.SSID.orEmpty(), WifiManager.calculateSignalLevel(it.level, WifiStateMap.MAX_LEVEL + 1), it.capabilities)
+    }
+
+    override fun current(): Pair<String?, Int>? {
+        val info = controller.connectionInfo() ?: return null
+        if (info.supplicantState != SupplicantState.COMPLETED) return null
+        return WifiListShaper.cleanSsid(info.ssid) to WifiManager.calculateSignalLevel(info.rssi, WifiStateMap.MAX_LEVEL + 1)
+    }
+
+    override fun isSaved(ssid: String) = controller.savedNetworkId(ssid) != -1
+
+    override fun connect(scan: WifiScan, password: String?): Boolean {
+        val out = when {
+            controller.savedNetworkId(scan.ssid) != -1 && password == null -> controller.connectSaved(scan.ssid)
+            !scan.secured -> controller.connectOpen(scan.ssid)
+            password != null -> controller.connectSecure(scan.ssid, scan.capabilities.orEmpty(), password)
+            else -> return false
+        }
+        return out.result == WifiController.Result.STARTED
+    }
+
+    override fun disconnect() = controller.disconnect().result == WifiController.Result.DISCONNECTED
+
+    private companion object {
+        const val TAG = "WifiPanel"
+        const val SETTLE_MS = 800L
     }
 }

@@ -175,4 +175,21 @@
     <string name="launcher_wifi_connected">Wi-Fi connected</string>
     <string name="launcher_wifi_off">Wi-Fi not connected</string>
     <string name="launcher_wifi_hotspot">Hotspot on</string>
+    <string name="launcher_wifi_title">Wi-Fi</string>
+    <string name="launcher_wifi_off_state">Wi-Fi is off</string>
+    <string name="launcher_wifi_disconnect">Disconnect</string>
+    <string name="launcher_wifi_networks">Networks</string>
+    <string name="launcher_wifi_scanning">Scanning…</string>
+    <string name="launcher_wifi_none">No networks found</string>
+    <string name="launcher_wifi_need_location">Location permission is needed to see networks</string>
+    <string name="launcher_wifi_grant">Allow</string>
+    <string name="launcher_wifi_settings">Wi-Fi settings…</string>
+    <string name="launcher_wifi_park_for_password">Stop the car to enter a password</string>
+    <string name="launcher_wifi_password_title">Wi-Fi password</string>
+    <string name="launcher_wifi_password_hint">Password</string>
+    <string name="launcher_wifi_show_password">Show password</string>
+    <string name="launcher_wifi_connect">Connect</string>
+    <string name="launcher_wifi_connecting">Connecting to %1$s…</string>
+    <string name="launcher_wifi_connect_failed">Could not connect</string>
+    <string name="launcher_wifi_list_in_settings">Open Wi-Fi settings to see networks</string>
 </resources>

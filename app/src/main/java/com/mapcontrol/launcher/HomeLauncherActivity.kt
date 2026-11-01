@@ -44,6 +44,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     /** Park/Sürüş düzeni: etkin düzen, geçiş kararı ve başlıktaki düzenleme başlığı. */
     private var activeMode = LayoutMode.PARK
+    private var wifiPanel: WifiPanel? = null
     private val layoutPolicy = DriveLayoutPolicy()
     /** Tercihler her turda SharedPreferences'tan okunmasın diye alanlarda tutulur; onCreate/onStart/ayar değişiminde tazelenir. */
     private var driveAccentOn = true
@@ -123,7 +124,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.retheme(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout, onWifi = { LauncherEdition.openWifi(this) })
+        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.retheme(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout, onWifi = ::toggleWifiPanel)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
         ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
@@ -239,6 +240,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (isFinishing || isDestroyed || !::grid.isInitialized) return
         sheet?.dismiss()
         sheet = null
+        wifiPanel?.dismiss()
         exitEditMode()
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
@@ -437,6 +439,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         driveHandler.removeCallbacks(driveTick)
         sheet?.dismiss()
         sheet = null
+        wifiPanel?.dismiss()
         exitEditMode()
         metrics.removeListener(metricsListener)
         fixedWidgets.forEach { it.onHidden() }
@@ -461,6 +464,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!granted) return
         when (requestCode) {
+            WifiPanel.REQ_LOCATION -> wifiPanel?.refresh()
             PhotoTile.REQ_STORAGE -> PhotoTile.pickerRefresh?.invoke()
         }
     }
@@ -696,6 +700,17 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
 
     // --- Diğer ---
+
+    /** Wi-Fi simgesine dokunma: simgenin altında açılır panel (ikinci dokunuş kapatır). */
+    private fun toggleWifiPanel(anchor: View) {
+        if (grid.editMode) return
+        val panel = wifiPanel ?: WifiPanel(
+            this, LauncherEdition.wifiBackend(this),
+            driving = { activeMode == LayoutMode.DRIVE || LauncherSafeArea.isMoving(metrics.currentSnapshot()) },
+            onSettings = { LauncherEdition.openWifi(this) },
+        ).also { wifiPanel = it }
+        panel.show(anchor)
+    }
 
     private fun openProfiles() {
         // Düzenleme sırasında profil değişmez (başlık zaten gizli); sürüşte serbest, tek dokunuş.

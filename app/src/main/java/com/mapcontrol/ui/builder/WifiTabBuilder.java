@@ -26,7 +26,7 @@ import androidx.core.content.ContextCompat;
 import com.mapcontrol.R;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.util.NetworkWifiHelper;
-import com.mapcontrol.util.PhoneLinkSession;
+import com.mapcontrol.util.WifiController;
 
 public class WifiTabBuilder {
     public interface WifiCallback {
@@ -37,6 +37,7 @@ public class WifiTabBuilder {
     private final WifiCallback callback;
 
     private WifiManager wifiManager;
+    private final WifiController controller;
     private LinearLayout wifiTabContent;
     private LinearLayout wifiListContainer;
     private Button btnWifiToggle;
@@ -48,6 +49,7 @@ public class WifiTabBuilder {
         this.context = context;
         this.callback = callback;
         wifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        controller = new WifiController(context);
         build();
     }
 
@@ -209,31 +211,9 @@ public class WifiTabBuilder {
         if (btnWifiToggle != null) {
             btnWifiToggle.setEnabled(false);
         }
-        final boolean keepProjection = NetworkWifiHelper.keepWirelessProjection(context);
         new Thread(() -> {
             try {
-                if (keepProjection) {
-                    Boolean concurrent = NetworkWifiHelper.staApConcurrencyOrNull(context);
-                    handler.post(() -> callback.log(
-                            "Telefon bağlantısı korunuyor. STA+AP: " + concurrent));
-                } else {
-                    PhoneLinkSession.Release phone = PhoneLinkSession.releaseWireless(context);
-                    boolean apDown = NetworkWifiHelper.releaseAccessPoint(context);
-                    handler.post(() -> {
-                        if (phone == PhoneLinkSession.Release.INACTIVE) {
-                            callback.log("Telefon oturumu kapandı");
-                        } else if (phone == PhoneLinkSession.Release.UNREACHABLE) {
-                            callback.log("Telefon servisine ulaşılamadı");
-                        } else {
-                            callback.log("Telefon oturumu kapanmadı");
-                        }
-                        callback.log(apDown
-                                ? "Erişim noktası kapandı"
-                                : "Erişim noktası kapanışı doğrulanamadı; Wi-Fi yine de değiştiriliyor");
-                    });
-                }
-                boolean result = wifiManager.setWifiEnabled(newState);
-                handler.post(() -> callback.log("setWifiEnabled(" + newState + ") sonucu: " + result));
+                controller.setEnabledBlocking(newState, msg -> handler.post(() -> callback.log(msg)));
             } catch (Exception e) {
                 handler.post(() -> callback.log("Wi-Fi toggle hatası: " + e.getMessage()));
             } finally {
@@ -620,132 +600,32 @@ public class WifiTabBuilder {
     }
 
     private void connectToOpenNetwork(ScanResult result) {
-        try {
-            WifiConfiguration config = new WifiConfiguration();
-            config.SSID = "\"" + result.SSID + "\"";
-            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-            config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
-            config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
-            config.allowedAuthAlgorithms.clear();
-            config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
-            config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
-            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
-            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-
-            int networkId = wifiManager.addNetwork(config);
-            if (networkId == -1) {
-                List<WifiConfiguration> existingConfigs = wifiManager.getConfiguredNetworks();
-                if (existingConfigs != null) {
-                    for (WifiConfiguration existingConfig : existingConfigs) {
-                        if (existingConfig.SSID != null && existingConfig.SSID.equals("\"" + result.SSID + "\"")) {
-                            networkId = existingConfig.networkId;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (networkId != -1) {
-                boolean enabled = wifiManager.enableNetwork(networkId, true);
-                if (enabled) {
-                    callback.log("Açık ağa bağlanılıyor: " + result.SSID);
-                    Toast.makeText(context, context.getString(R.string.wifi_connecting_to, result.SSID), Toast.LENGTH_SHORT).show();
-                    handler.postDelayed(this::scanWifiNetworks, 2000);
-                } else {
-                    callback.log("Ağ etkinleştirilemedi: " + result.SSID);
-                    Toast.makeText(context, R.string.wifi_connection_error, Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                callback.log("Ağ eklenemedi: " + result.SSID);
-                Toast.makeText(context, R.string.wifi_network_add_failed, Toast.LENGTH_SHORT).show();
-            }
-        } catch (Exception e) {
-            callback.log("Açık ağ bağlantı hatası: " + e.getMessage());
-            Toast.makeText(context, context.getString(R.string.common_error_prefix, e.getMessage()), Toast.LENGTH_SHORT).show();
-        }
+        reportConnect(controller.connectOpen(result.SSID), "Açık ağa bağlanılıyor: ", "Açık ağ bağlantı hatası: ");
     }
 
     private void connectToSecureNetwork(ScanResult result, String password) {
-        try {
-            String capabilities = result.capabilities;
-            WifiConfiguration config = new WifiConfiguration();
-            config.SSID = "\"" + result.SSID + "\"";
+        reportConnect(controller.connectSecure(result.SSID, result.capabilities, password),
+                "Şifreli ağa bağlanılıyor: ", "Şifreli ağ bağlantı hatası: ");
+    }
 
-            if (capabilities.contains("WPA3")) {
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SAE);
-                config.preSharedKey = "\"" + password + "\"";
-            } else if (capabilities.contains("WPA2")) {
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-                config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
-                config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
-                config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
-                config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-                config.preSharedKey = "\"" + password + "\"";
-            } else if (capabilities.contains("WPA")) {
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-                config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
-                config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-                config.preSharedKey = "\"" + password + "\"";
-            } else if (capabilities.contains("WEP")) {
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-                config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
-                config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
-                config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.NONE);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
-                if (password.length() == 10 || password.length() == 26 || password.length() == 58) {
-                    config.wepKeys[0] = password;
-                } else {
-                    config.wepKeys[0] = "\"" + password + "\"";
-                }
-                config.wepTxKeyIndex = 0;
-            }
-
-            int networkId = wifiManager.addNetwork(config);
-            if (networkId == -1) {
-                List<WifiConfiguration> existingConfigs = wifiManager.getConfiguredNetworks();
-                if (existingConfigs != null) {
-                    for (WifiConfiguration existingConfig : existingConfigs) {
-                        if (existingConfig.SSID != null && existingConfig.SSID.equals("\"" + result.SSID + "\"")) {
-                            networkId = existingConfig.networkId;
-                            if (capabilities.contains("WEP")) {
-                                if (password.length() == 10 || password.length() == 26 || password.length() == 58) {
-                                    existingConfig.wepKeys[0] = password;
-                                } else {
-                                    existingConfig.wepKeys[0] = "\"" + password + "\"";
-                                }
-                            } else {
-                                existingConfig.preSharedKey = "\"" + password + "\"";
-                            }
-                            wifiManager.updateNetwork(existingConfig);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (networkId != -1) {
-                boolean enabled = wifiManager.enableNetwork(networkId, true);
-                if (enabled) {
-                    callback.log("Şifreli ağa bağlanılıyor: " + result.SSID);
-                    Toast.makeText(context, context.getString(R.string.wifi_connecting_to, result.SSID), Toast.LENGTH_SHORT).show();
-                    handler.postDelayed(this::scanWifiNetworks, 2000);
-                } else {
-                    callback.log("Ağ etkinleştirilemedi: " + result.SSID);
-                    Toast.makeText(context, R.string.wifi_connection_error, Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                callback.log("Ağ eklenemedi: " + result.SSID);
+    private void reportConnect(WifiController.Outcome out, String okLog, String errLog) {
+        switch (out.result) {
+            case STARTED:
+                callback.log(okLog + out.ssid);
+                Toast.makeText(context, context.getString(R.string.wifi_connecting_to, out.ssid), Toast.LENGTH_SHORT).show();
+                handler.postDelayed(this::scanWifiNetworks, 2000);
+                break;
+            case ENABLE_FAILED:
+                callback.log("Ağ etkinleştirilemedi: " + out.ssid);
+                Toast.makeText(context, R.string.wifi_connection_error, Toast.LENGTH_SHORT).show();
+                break;
+            case ADD_FAILED:
+                callback.log("Ağ eklenemedi: " + out.ssid);
                 Toast.makeText(context, R.string.wifi_network_add_failed, Toast.LENGTH_SHORT).show();
-            }
-        } catch (Exception e) {
-            callback.log("Şifreli ağ bağlantı hatası: " + e.getMessage());
-            Toast.makeText(context, context.getString(R.string.common_error_prefix, e.getMessage()), Toast.LENGTH_SHORT).show();
+                break;
+            default:
+                callback.log(errLog + out.error);
+                Toast.makeText(context, context.getString(R.string.common_error_prefix, out.error), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -754,34 +634,24 @@ public class WifiTabBuilder {
             callback.log("WifiManager bulunamadı");
             return;
         }
-
-        try {
-            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-            if (wifiInfo != null && wifiInfo.getNetworkId() != -1) {
-                String rawSsid = wifiInfo.getSSID();
-                if (rawSsid == null) {
-                    callback.log("SSID alınamadı");
-                    Toast.makeText(context, R.string.wifi_no_active, Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                String ssid = rawSsid.replace("\"", "");
-                boolean disconnected = wifiManager.disconnect();
-                if (disconnected) {
-                    callback.log("Bağlantı kesildi: " + ssid);
-                    Toast.makeText(context, context.getString(R.string.wifi_disconnected, ssid), Toast.LENGTH_SHORT).show();
-                    handler.postDelayed(this::scanWifiNetworks, 1000);
-                } else {
-                    callback.log("Bağlantı kesilemedi");
-                    Toast.makeText(context, R.string.wifi_disconnect_failed, Toast.LENGTH_SHORT).show();
-                }
-            } else {
+        WifiController.Outcome out = controller.disconnect();
+        switch (out.result) {
+            case DISCONNECTED:
+                callback.log("Bağlantı kesildi: " + out.ssid);
+                Toast.makeText(context, context.getString(R.string.wifi_disconnected, out.ssid), Toast.LENGTH_SHORT).show();
+                handler.postDelayed(this::scanWifiNetworks, 1000);
+                break;
+            case DISCONNECT_FAILED:
+                callback.log("Bağlantı kesilemedi");
+                Toast.makeText(context, R.string.wifi_disconnect_failed, Toast.LENGTH_SHORT).show();
+                break;
+            case NO_ACTIVE:
                 callback.log("Aktif bağlantı yok");
                 Toast.makeText(context, R.string.wifi_no_active, Toast.LENGTH_SHORT).show();
-            }
-        } catch (Exception e) {
-            callback.log("Bağlantı kesme hatası: " + e.getMessage());
-            Toast.makeText(context, context.getString(R.string.common_error_prefix, e.getMessage()), Toast.LENGTH_SHORT).show();
+                break;
+            default:
+                callback.log("Bağlantı kesme hatası: " + out.error);
+                Toast.makeText(context, context.getString(R.string.common_error_prefix, out.error), Toast.LENGTH_SHORT).show();
         }
     }
 }
-

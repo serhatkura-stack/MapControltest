@@ -79,4 +79,37 @@ internal object LauncherEdition {
     fun openWifi(activity: Activity) {
         activity.startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    /** Bu derlemede ağ listesi/bağlanma yok: panel yalnızca aç/kapa ve geçerli ağı gösterir. */
+    fun wifiBackend(context: Context): WifiBackend = TestWifiBackend(context.applicationContext)
+}
+
+@Suppress("DEPRECATION")
+private class TestWifiBackend(context: Context) : WifiBackend {
+    private val wifi = context.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    override val canList = false
+    override fun isEnabled() = try { wifi?.isWifiEnabled == true } catch (e: RuntimeException) { false }
+
+    override fun setEnabled(on: Boolean, done: () -> Unit) {
+        Thread({
+            try { wifi?.setWifiEnabled(on) } catch (e: RuntimeException) { }
+            main.postDelayed(done, 800L)
+        }, "wifi-radio").start()
+    }
+
+    override fun hasLocationPermission() = true
+    override fun startScan() = false
+    override fun scanResults(): List<WifiScan> = emptyList()
+
+    override fun current(): Pair<String?, Int>? {
+        val info = try { wifi?.connectionInfo } catch (e: RuntimeException) { null } ?: return null
+        if (info.supplicantState != android.net.wifi.SupplicantState.COMPLETED) return null
+        return WifiListShaper.cleanSsid(info.ssid) to android.net.wifi.WifiManager.calculateSignalLevel(info.rssi, WifiStateMap.MAX_LEVEL + 1)
+    }
+
+    override fun isSaved(ssid: String) = false
+    override fun connect(scan: WifiScan, password: String?) = false
+    override fun disconnect() = try { wifi?.disconnect() == true } catch (e: RuntimeException) { false }
 }

@@ -28,7 +28,7 @@ class HeaderBar(
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
     private val onLayoutPill: () -> Unit = {},
-    private val onWifi: () -> Unit = {},
+    private val onWifi: (View) -> Unit = {},
 ) : LauncherWidget, Themeable {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -69,7 +69,7 @@ class HeaderBar(
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true
-        setOnClickListener { onWifi() }
+        setOnClickListener { onWifi(this) }
         pressFeedback()
     }
 
@@ -147,7 +147,8 @@ class HeaderBar(
     private fun bindWifi(ui: WifiUi) {
         wifiUi = ui
         wifiGlyph.bind(ui)
-        val name = if (ui.kind == WifiUi.Kind.CONNECTED) ui.ssid else null
+        // Ağ adı başlıkta gösterilmez (yalnızca simge durumu); ad Wi-Fi panelindeki bağlı ağ satırındadır.
+        val name: String? = null
         wifiName.text = name
         wifiName.setTextColor(LauncherTheme.TEXT_SECONDARY)
         wifiName.visibility = if (name == null) View.GONE else View.VISIBLE
