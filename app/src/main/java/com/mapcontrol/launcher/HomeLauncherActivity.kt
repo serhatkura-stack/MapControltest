@@ -49,7 +49,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Tercihler her turda SharedPreferences'tan okunmasın diye alanlarda tutulur; onCreate/onStart/ayar değişiminde tazelenir. */
     private var driveAccentOn = true
     private var autoLayoutOn = true
-    private lateinit var editTitle: android.widget.TextView
+    private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
     private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val driveTick = object : Runnable {
@@ -253,6 +253,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val newEditBar = buildEditBar().also { it.visibility = editBar.visibility }
         swapView(editBar, newEditBar)
         editBar = newEditBar
+        refreshEditLayoutUi()
         val oldFixed = ArrayList<LauncherWidget>()
         val newFixed = ArrayList<LauncherWidget>()
         dock?.let { oldDock ->
@@ -405,43 +406,58 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Düzenleme çubuğundaki Park | Sürüş seçici: düzenlenen/etkin düzeni elle değiştirir. */
     private fun selectEditLayout(to: LayoutMode) {
         if (!grid.editMode || to == activeMode) return
-        grid.animate().cancel(); grid.alpha = 1f
-        switchMode(to, animate = false)
-        refreshEditLayoutUi()
+        grid.animate().cancel()
+        grid.animate().alpha(0f).setDuration(EDIT_SWAP_OUT_MS).withEndAction {
+            switchMode(to, animate = false)
+            refreshEditLayoutUi()
+            grid.animate().alpha(1f).setDuration(EDIT_SWAP_IN_MS).start()
+        }.start()
+        // Seçici hemen yanıt verir; ızgara kısa geçişle ardından değişir.
     }
 
     private fun refreshEditLayoutUi() {
-        editTitle.text = getString(R.string.launcher_edit_title_short) + " · " + getString(
-            if (activeMode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
-        editSegments.forEach { (mode, tv) ->
+        editHelper.setText(if (activeMode == LayoutMode.DRIVE) R.string.launcher_edit_helper_drive else R.string.launcher_edit_helper_park)
+        editSegments.forEach { (mode, seg) ->
             val on = mode == activeMode
-            tv.background = if (on) rounded(this, DriveAccent.buttonFill(LauncherTheme.ACCENT), 999f) else null
-            tv.setTextColor(if (on) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT_SECONDARY)
-            tv.isSelected = on
+            seg.view.background = if (on) rounded(this, DriveAccent.buttonFill(LauncherTheme.ACCENT), 999f) else null
+            val c = if (on) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT_SECONDARY
+            seg.label.setTextColor(c)
+            seg.icon.imageTintList = android.content.res.ColorStateList.valueOf(c)
+            seg.view.isSelected = on
         }
     }
 
-    private val editSegments = LinkedHashMap<LayoutMode, android.widget.TextView>()
+    private class EditSegment(val view: View, val label: android.widget.TextView, val icon: android.widget.ImageView)
+
+    private val editSegments = LinkedHashMap<LayoutMode, EditSegment>()
 
     private fun layoutSegmented(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
-        setPadding(dp(4), dp(4), dp(4), dp(4))
+        setPadding(dp(5), dp(5), dp(5), dp(5))
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(LauncherTheme.TOUCH_MIN_DP))
         editSegments.clear()
-        listOf(LayoutMode.PARK to R.string.launcher_layout_park, LayoutMode.DRIVE to R.string.launcher_layout_drive).forEach { (mode, label) ->
-            val tv = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
-                setText(label)
+        listOf(
+            Triple(LayoutMode.PARK, R.string.launcher_layout_park, R.drawable.ic_mdi_car),
+            Triple(LayoutMode.DRIVE, R.string.launcher_layout_drive, R.drawable.ic_mdi_steering),
+        ).forEach { (mode, label, iconRes) ->
+            val ic = icon(context, iconRes, 32, LauncherTheme.TEXT_SECONDARY)
+            val tv = text(context, LauncherTheme.BODY_SP + 4f, LauncherTheme.TEXT_SECONDARY, medium = true).apply { setText(label) }
+            val seg = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                setPadding(dp(22), 0, dp(22), 0)
+                setPadding(dp(26), 0, dp(30), 0)
                 contentDescription = getString(if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
                 isClickable = true
                 setOnClickListener { selectEditLayout(mode) }
                 pressFeedback()
+                addView(ic)
+                addView(gap(context, 10))
+                addView(tv)
             }
-            editSegments[mode] = tv
-            addView(tv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
+            editSegments[mode] = EditSegment(seg, tv, ic)
+            addView(seg, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
         }
     }
 
@@ -617,13 +633,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         gravity = Gravity.CENTER_VERTICAL
         visibility = View.GONE
 
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(text(context, LauncherTheme.SECTION_SP, bold = true).apply { setText(R.string.launcher_edit_title); editTitle = this })
-            addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_edit_hint) })
-        })
-        addView(View(context), weightLp(1f))
         addView(layoutSegmented())
+        addView(gap(context, 20))
+        addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            editHelper = this
+            gravity = Gravity.CENTER_VERTICAL
+            setText(R.string.launcher_edit_helper_park)
+        }, weightLp(1f))
         addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_plus, R.string.launcher_edit_add, LauncherTheme.CARD) { showAddDialog() })
         addView(gap(context, 16))
@@ -733,7 +749,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet?.dismiss()
         sheet = showLauncherSheet(this, R.string.launcher_edit_reset, RESET_SHEET_WIDTH_DP) { d ->
             addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply {
-                setText(R.string.launcher_edit_reset_confirm)
+                setText(if (activeMode == LayoutMode.DRIVE) R.string.launcher_edit_reset_confirm_drive else R.string.launcher_edit_reset_confirm_park)
             }, sheetFullWidth())
             addView(gap(context, 32, vertical = true))
             addView(LinearLayout(context).apply {
@@ -812,6 +828,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         @Volatile var rememberedMode = LayoutMode.PARK
         private const val NOTICE_SHOW_MS = 1800L
         private const val NOTICE_FADE_MS = 250L
+        private const val EDIT_SWAP_OUT_MS = 80L
+        private const val EDIT_SWAP_IN_MS = 120L
         /** FrostNav'dan gelen "düzenleme modunda aç" isteği; yeniden kurulma arasında kaybolmasın diye statik. */
         @Volatile var pendingEdit = false
         const val DRIVE_STABLE_MS = 2_000L

@@ -36,15 +36,16 @@
     <string name="launcher_trunk">Trunk</string>
     <string name="launcher_widget_app">App shortcut</string>
     <string name="launcher_edit">Edit</string>
-    <string name="launcher_edit_title_short">Edit</string>
     <string name="launcher_edit_title">Edit home screen</string>
-    <string name="launcher_edit_hint">Drag to move, choose a size, or remove</string>
+    <string name="launcher_edit_helper_park">Park screen · shown when the car is parked</string>
+    <string name="launcher_edit_helper_drive">Drive screen · shown when the car is moving</string>
+    <string name="launcher_edit_reset_confirm_park">Restore the Park screen to its default?</string>
+    <string name="launcher_edit_reset_confirm_drive">Restore the Drive screen to its default?</string>
     <string name="launcher_edit_add">Add widget</string>
     <string name="launcher_edit_reset">Default</string>
     <string name="launcher_edit_done">Done</string>
     <string name="launcher_edit_remove">Remove</string>
     <string name="launcher_edit_no_space">No free space for this widget</string>
-    <string name="launcher_edit_reset_confirm">Restore the default layout?</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_range_label">range</string>
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
