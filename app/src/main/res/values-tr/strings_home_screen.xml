@@ -5,8 +5,8 @@
     <string name="home_screen_off_hint">Ana ekran ayarlarını değiştirmek için Tam ekran ana sayfa\'yı aç.</string>
     <string name="home_screen_appearance_title">Görünüm</string>
     <string name="home_screen_theme_help_auto">Aracın ışık sensörünü izler.</string>
-    <string name="home_screen_theme_help_day">Hep gündüz görünümü.</string>
-    <string name="home_screen_theme_help_night">Hep gece görünümü.</string>
+    <string name="home_screen_theme_help_day">Hep aydınlık görünüm.</string>
+    <string name="home_screen_theme_help_night">Hep karanlık görünüm.</string>
     <string name="home_screen_bottom_bar_help_original">Aracın kendi alt çubuğu görünür kalır.</string>
     <string name="home_screen_bottom_bar_help_ours">Aracın çubuğu gizlenir, ana ekranın kendi çubuğu gelir.</string>
     <string name="home_screen_bottom_bar_help_hidden">Alt çubuk yok; widget\'lar tüm yüksekliği kullanır.</string>

@@ -93,6 +93,7 @@ internal abstract class CenteredTile(
 
     private var heroShown = false
     private var detailSet: CharSequence? = null
+    private var missingNote = false
 
     override fun applySpan(span: Span) {
         tier = when {
@@ -198,6 +199,12 @@ internal abstract class CenteredTile(
     private fun applyDetail() {
         val has = !detailSet.isNullOrEmpty()
         detailText.text = detailSet
+        // "Araç verisi bekleniyor" her kademede aynı boyutta; aksi halde kademenin kendi detay boyutu.
+        detailText.textSize = if (missingNote) LauncherTheme.WAITING_SP else when (tier) {
+            0 -> LauncherTheme.LABEL_SP
+            1 -> VALUE_SP
+            else -> LauncherTheme.BODY_SP
+        }
         // Dar kademede detay ("Bakıma" gibi) da gösterilir; orta/geniş kademede yalnızca doluysa.
         detailText.visibility = if (has) View.VISIBLE else View.GONE
         divider.visibility = if (tier == 1 && has) View.VISIBLE else View.GONE
@@ -208,6 +215,7 @@ internal abstract class CenteredTile(
 
     /** İkinci satırı günceller; dar kademede değerin altında, orta kademede ikinci sütunda. */
     protected fun showDetail(detail: CharSequence?, color: Int = LauncherTheme.TEXT_SECONDARY) {
+        missingNote = false
         detailSet = detail
         detailText.setTextColor(color)
         applyDetail()
@@ -267,6 +275,8 @@ internal abstract class CenteredTile(
         setHeroIcon(null)
         setValue(context.getString(R.string.launcher_unavailable), LauncherTheme.TEXT_SECONDARY)
         showDetail(context.getString(reason))
+        missingNote = true
+        applyDetail()
         showSegments(0, 0, 0)
         root.contentDescription = context.getString(reason)
     }

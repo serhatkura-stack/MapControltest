@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -83,6 +84,10 @@ internal object AwdMath {
         return (100.0 * c / total).roundToInt().coerceIn(0, 100)
     }
 
+    /** Arka aks payı; motor torku ya da kaplin torku bilinmiyorsa null ("veri yok", ön çekiş değil). */
+    fun rearPercentOrNull(engineNm: Int?, couplingNm: Int?): Int? =
+        if (engineNm == null || couplingNm == null) null else rearPercent(engineNm, couplingNm)
+
     /** Ön aks payı: arka payın tamamlayanı. */
     fun frontPercent(rear: Int): Int = 100 - rear.coerceIn(0, 100)
 }
@@ -138,7 +143,7 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
     }
 
     private var compact = false
-    private var rear = 0
+    private var rear: Int? = null
     private var executor: ScheduledExecutorService? = null
 
     // Okuma kaçırılırsa son geçerli değer kısa süre tutulur; sürekli kaçırılırsa bilinmiyor (0) olur.
@@ -148,11 +153,11 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
     private var missCoupling = 0
 
     init {
-        title.text = "4x4"
+        title.setText(R.string.launcher_widget_awd)
         split.gravity = Gravity.CENTER_HORIZONTAL
         status.gravity = Gravity.CENTER_HORIZONTAL
         applySpan(Span(4, 4))
-        bind(0)
+        bind(null)
     }
 
     /** 4x4 ve üstü şema; daha küçükte yalnızca çubuk. */
@@ -214,7 +219,7 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
             } else {
                 readCar() ?: return
             }
-            val pct = AwdMath.rearPercent(engine, coupling)
+            val pct = AwdMath.rearPercentOrNull(engine, coupling)
             main.post { bind(pct) }
         } catch (t: Throwable) {
             Log.w("AwdTile", "poll başarısız", t)
@@ -236,8 +241,24 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
         return heldEngine to heldCoupling
     }
 
-    private fun bind(rearPct: Int) {
+    /** [rearPct] null: araç verisi yok; diğer kutular gibi "Araç verisi bekleniyor" ve "—" gösterilir (sahte ön çekiş değil). */
+    private fun bind(rearPct: Int?) {
         rear = rearPct
+        flow.hasData = rearPct != null
+        if (rearPct == null) {
+            flow.setRear(0)
+            flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
+            status.textSize = LauncherTheme.WAITING_SP
+            status.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            status.setTextSmooth(context.getString(R.string.launcher_waiting_data), animate = false)
+            status.setTextColor(LauncherTheme.TEXT_SECONDARY)
+            val none = "—"
+            split.setTextSmooth(none, animate = false)
+            root.contentDescription = context.getString(R.string.launcher_waiting_data)
+            return
+        }
+        status.textSize = STATUS_SP
+        status.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         flow.setRear(rearPct)
         flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
         val active = rearPct > 0
@@ -286,6 +307,14 @@ internal class AwdFlowView(context: Context) : View(context) {
         textSize = PCT_SP * context.resources.displayMetrics.scaledDensity
     }
     private val capPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = CAP_SP * context.resources.displayMetrics.scaledDensity }
+
+    /** false iken (araç verisi yok) yüzdeler "—" çizilir ve hiçbir aks vurgulanmaz. */
+    var hasData = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
 
     /** Ekran görünürken true; false iken nokta animasyonu durur. */
     var running = false
@@ -348,10 +377,10 @@ internal class AwdFlowView(context: Context) : View(context) {
         val r = h / 2f
         val rearW = width * shown
         // Zemin: ön aks (silik vurgu); üstüne arka payı (tam vurgu) sağdan.
-        fill.color = withAlpha(LauncherTheme.ACCENT, 90)
+        fill.color = if (hasData) withAlpha(LauncherTheme.ACCENT, 90) else LauncherTheme.TRACK
         rect.set(0f, top, width.toFloat(), top + h)
         c.drawRoundRect(rect, r, r, fill)
-        if (rearW > 0f) {
+        if (hasData && rearW > 0f) {
             fill.color = LauncherTheme.ACCENT
             rect.set(max(0f, width - max(rearW, h)), top, width.toFloat(), top + h)
             c.drawRoundRect(rect, r, r, fill)
@@ -370,8 +399,8 @@ internal class AwdFlowView(context: Context) : View(context) {
         val frontY = carH * 0.24f
         val rearY = carH * 0.76f
         val hubY = carH * 0.5f
-        val rearShare = shown
-        val frontShare = 1f - shown
+        val rearShare = if (hasData) shown else 0f
+        val frontShare = if (hasData) 1f - shown else 0f
 
         // Gövde: yuvarlak köşeli gövde ve iki cam çizgisi (burun yukarıda).
         val bodyR = bodyHalf * 0.7f
@@ -400,8 +429,8 @@ internal class AwdFlowView(context: Context) : View(context) {
         if (cx - gutter > context.dpF(70f)) {
             val front = (frontShare * 100f).roundToInt()
             val rearPctV = (rearShare * 100f).roundToInt()
-            sideLabel(c, cx - gutter, frontY, Paint.Align.RIGHT, labels.first, front)
-            sideLabel(c, cx + gutter, rearY, Paint.Align.LEFT, labels.second, rearPctV)
+            sideLabel(c, cx - gutter, frontY, Paint.Align.RIGHT, labels.first, if (hasData) "%$front" else "—")
+            sideLabel(c, cx + gutter, rearY, Paint.Align.LEFT, labels.second, if (hasData) "%$rearPctV" else "—")
         }
 
         // Merkez (şanzıman / transfer): vurgu noktası.
@@ -410,7 +439,7 @@ internal class AwdFlowView(context: Context) : View(context) {
     }
 
     /** Küçük ad üstte, büyük yüzde altta; ikisi [y] çevresinde dikey ortalı. */
-    private fun sideLabel(c: Canvas, x: Float, y: Float, align: Paint.Align, name: String, pct: Int) {
+    private fun sideLabel(c: Canvas, x: Float, y: Float, align: Paint.Align, name: String, pct: String) {
         pctPaint.textAlign = align
         capPaint.textAlign = align
         pctPaint.color = LauncherTheme.TEXT
@@ -420,7 +449,7 @@ internal class AwdFlowView(context: Context) : View(context) {
         val total = capH + context.dpF(6f) + pctH
         val top = y - total / 2f
         c.drawText(name, x, top + capH, capPaint)
-        c.drawText("%$pct", x, top + total, pctPaint)
+        c.drawText(pct, x, top + total, pctPaint)
     }
 
     private fun wheel(c: Canvas, x: Float, y: Float, w: Float, h: Float, share: Float) {

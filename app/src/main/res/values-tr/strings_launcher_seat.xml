@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="launcher_seat_vent_later">Araç testinden sonra açılacak</string>
-    <string name="launcher_widget_seat_heat_driver">Sürücü ısıtma</string>
-    <string name="launcher_widget_seat_heat_passenger">Yolcu ısıtma</string>
-    <string name="launcher_widget_seat_vent_driver">Sürücü soğutma</string>
-    <string name="launcher_widget_seat_vent_passenger">Yolcu soğutma</string>
+    <string name="launcher_widget_seat_heat_driver">Isıtma · Sürücü</string>
+    <string name="launcher_widget_seat_heat_passenger">Isıtma · Yolcu</string>
+    <string name="launcher_widget_seat_vent_driver">Soğutma · Sürücü</string>
+    <string name="launcher_widget_seat_vent_passenger">Soğutma · Yolcu</string>
     <string name="launcher_read_only_seat">Test sürümü: koltuk araçtan değiştirilir</string>
     <string name="launcher_read_only_lock">Test sürümü: kilit araçtan değiştirilir</string>
     <string name="launcher_seat_title_heat_driver">Isıtma · Sürücü</string>

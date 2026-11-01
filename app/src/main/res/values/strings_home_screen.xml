@@ -5,8 +5,8 @@
     <string name="home_screen_off_hint">Turn on full-screen home to change the home screen settings.</string>
     <string name="home_screen_appearance_title">Appearance</string>
     <string name="home_screen_theme_help_auto">Follows the car\'s light sensor.</string>
-    <string name="home_screen_theme_help_day">Always the day look.</string>
-    <string name="home_screen_theme_help_night">Always the night look.</string>
+    <string name="home_screen_theme_help_day">Always the light look.</string>
+    <string name="home_screen_theme_help_night">Always the dark look.</string>
     <string name="home_screen_bottom_bar_help_original">The car\'s own bottom bar stays visible.</string>
     <string name="home_screen_bottom_bar_help_ours">The car\'s bar is hidden; the launcher\'s own bar is shown.</string>
     <string name="home_screen_bottom_bar_help_hidden">No bottom bar; the widgets use the full height.</string>
