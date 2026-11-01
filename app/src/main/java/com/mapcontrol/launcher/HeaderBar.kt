@@ -17,7 +17,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Üst şerit: solda saat ve tarih; sağda Park/Sürüş hapı, hava durumu, Wi-Fi, düzenle ve ayarlar (dişli).
+ * Üst şerit: solda saat ve tarih; sağda hava durumu, Wi-Fi, düzenle ve ayarlar (dişli).
  * Saat sistemin dakika yayınıyla (ACTION_TIME_TICK) güncellenir; kendi zamanlayıcısı yok.
  */
 class HeaderBar(
@@ -25,7 +25,6 @@ class HeaderBar(
     private val onSettings: () -> Unit,
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
-    private val onLayoutPill: () -> Unit = {},
     private val onWifi: (View) -> Unit = {},
 ) : LauncherWidget, Themeable {
 
@@ -71,30 +70,6 @@ class HeaderBar(
         pressFeedback()
     }
 
-    /** Park / Sürüş göstergesi: sakin bir hap; dokununca Sürüş düzeni düzenlenir. */
-    private val layoutPill = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
-        setText(R.string.launcher_layout_park)
-        gravity = Gravity.CENTER
-        background = pillBackground()
-        setPadding(context.dp(16), context.dp(6), context.dp(16), context.dp(6))
-        isClickable = true
-        setOnClickListener { onLayoutPill() }
-        pressFeedback()
-    }
-
-    /** Kümede hap kendi zeminini taşımaz (kapsül tek yüzey); ayrı görünümde eski sakin hap. */
-    private fun pillBackground() =
-        if (HEADER_STATUS_CLUSTER) null else rounded(context, LauncherTheme.CONTROL, 999f)
-
-    /** Etkin düzene göre hap yazısı; yeniden kurulmadan güncellenir. */
-    fun setLayoutMode(mode: LayoutMode) {
-        lastMode = mode
-        val label = if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive else R.string.launcher_layout_park
-        layoutPill.setText(label)
-        layoutPill.contentDescription = context.getString(R.string.launcher_layout_drive_edit)
-        layoutPill.setTextColor(if (mode == LayoutMode.DRIVE) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
-    }
-
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -122,8 +97,6 @@ class HeaderBar(
 
     /** Eski görünüm: hap, hava ve Wi-Fi ayrı ayrı. */
     private fun LinearLayout.addSeparateStatus() {
-        addView(layoutPill)
-        addView(gap(context, 24))
         weatherBox.addView(weatherIcon)
         weatherBox.addView(gap(context, 12))
         weatherBox.addView(weatherTemp)
@@ -136,7 +109,7 @@ class HeaderBar(
     }
 
     /**
-     * Durum kümesi (macOS menü çubuğu gibi): Park/Sürüş, hava ve Wi-Fi tek sakin kapsülde; öğeler arası ince çizgi.
+     * Durum kümesi (macOS menü çubuğu gibi): hava ve Wi-Fi tek sakin kapsülde; öğeler arası ince çizgi.
      * Her öğe kendi dokunuşunu korur; Wi-Fi paneli Wi-Fi öğesinin altında açılır.
      */
     private fun statusCluster(): View {
@@ -154,11 +127,6 @@ class HeaderBar(
             alpha = 0.3f
             layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
         }
-        layoutPill.textSize = CLUSTER_TEXT_SP
-        (layoutPill.parent as? android.view.ViewGroup)?.removeView(layoutPill)
-        capsule.addView(layoutPill, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
-        capsule.addView(divider())
-
         weatherTemp.textSize = CLUSTER_TEXT_SP
         weatherLabel.textSize = CLUSTER_TEXT_SP
         weatherBox.setPadding(context.dp(16), 0, context.dp(16), 0)
@@ -168,7 +136,11 @@ class HeaderBar(
         weatherBox.addView(gap(context, 8))
         weatherBox.addView(weatherLabel)
         capsule.addView(weatherBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
-        capsule.addView(divider())
+        // Hava verisi gelene kadar hava kutusu gizlidir; ayırıcı da onunla birlikte görünür.
+        weatherDivider = divider().also {
+            it.visibility = weatherBox.visibility
+            capsule.addView(it)
+        }
 
         buildWifiButton()
         capsule.addView(wifiButton)
@@ -217,7 +189,7 @@ class HeaderBar(
         }) + (name?.let { ": $it" } ?: "")
     }
 
-    private var lastMode = LayoutMode.PARK
+    private var weatherDivider: View? = null
     private var lastWeather: OpenMeteoWeatherSnapshot? = null
 
     /** Tema değişti: metin renkleri, hap, hava ikonu ve düğmeler yeni renkle; etkinlik yeniden kurulmaz. */
@@ -227,8 +199,6 @@ class HeaderBar(
         weatherLabel.setTextColor(LauncherTheme.TEXT_SECONDARY)
         weatherTemp.setTextColor(LauncherTheme.TEXT)
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(LauncherTheme.TEXT)
-        layoutPill.background = pillBackground()
-        setLayoutMode(lastMode)
         lastWeather?.let { bindWeather(it) }
         val row = view as LinearLayout
         weatherBox.removeAllViews()
@@ -355,6 +325,7 @@ class HeaderBar(
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(
             if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherBox.visibility = View.VISIBLE
+        weatherDivider?.visibility = View.VISIBLE
     }
 }
 
@@ -365,7 +336,7 @@ class HeaderBar(
 private const val SHOW_PROFILE_IN_HEADER = false
 
 /**
- * Park/Sürüş hapı, hava ve Wi-Fi tek kapsülde (macOS menü çubuğu gibi). false: eski ayrı görünüm; karşılaştırma için.
+ * Hava ve Wi-Fi tek kapsülde (macOS menü çubuğu gibi). false: eski ayrı görünüm; karşılaştırma için.
  */
 private const val HEADER_STATUS_CLUSTER = true
 private const val CLUSTER_ICON_DP = 28

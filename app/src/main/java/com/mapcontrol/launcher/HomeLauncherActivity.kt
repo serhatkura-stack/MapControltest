@@ -124,7 +124,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout, onWifi = ::toggleWifiPanel)
+        header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onWifi = ::toggleWifiPanel)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
         ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
@@ -182,7 +182,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         } else {
             setContentView(root)
         }
-        header.setLayoutMode(activeMode)
         loadForMode()
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
@@ -290,7 +289,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         grid.swapContents(fresh)
         grid.applyTheme()
         android.util.Log.i("ThemeTiming", "yerinde: ızgara $themed widget yerinde, ${fresh.size} yeniden kuruldu")
-        header.setLayoutMode(activeMode)
         window.decorView.invalidate()
         appliedSignature = HomeScreenPrefs.signature(this)
     }
@@ -346,7 +344,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun layoutTick() {
         val idle = !grid.editMode && sheet == null
         if (!autoLayoutOn) {
-            if (activeMode == LayoutMode.DRIVE && idle) { layoutPolicy.reset(LayoutMode.PARK); switchMode(LayoutMode.PARK, true) }
+            if (activeMode == LayoutMode.DRIVE && idle) { layoutPolicy.reset(LayoutMode.PARK); switchMode(LayoutMode.PARK, true, automatic = true) }
             return
         }
         val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
@@ -356,17 +354,18 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             System.currentTimeMillis(), moving, parked, idle,
             immediatePark = LauncherDemo.enabled && moving == false,
         )
-        if (to != null) switchMode(to, true)
+        if (to != null) switchMode(to, true, automatic = true)
     }
 
     /** Düzeni değiştirir: ızgara kısa süre kararır, yeni düzen kurulur, geri açılır (etkinlik yeniden yaratılmaz). */
-    private fun switchMode(to: LayoutMode, animate: Boolean) {
+    private fun switchMode(to: LayoutMode, animate: Boolean, automatic: Boolean = false) {
         if (to == activeMode) return
+        val notice = layoutNoticeFor(activeMode, to, automatic, started)
         activeMode = to
         LauncherMotion.driveLayout = to == LayoutMode.DRIVE
         rememberedMode = to
         LauncherInfo.mode = to
-        header.setLayoutMode(to)
+        notice?.let { showLayoutNotice(it) }
         val apply = { loadForMode() }
         if (!animate || !started) { apply(); return }
         grid.animate().cancel()
@@ -376,12 +375,74 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }.start()
     }
 
-    /** Başlıktaki Park/Sürüş hapı: Sürüş düzenini açar ve düzenleme moduna girer. */
-    private fun editDriveLayout() {
-        if (grid.editMode || editLocked()) return
+    private var noticeView: android.widget.TextView? = null
+    private val noticeHide = Runnable { noticeView?.animate()?.alpha(0f)?.setDuration(NOTICE_FADE_MS)?.start() }
+
+    /** Otomatik düzen geçişinde kısa, sessiz, dokunmayı engellemeyen bilgi: üst ortada küçük hap. */
+    private fun showLayoutNotice(mode: LayoutMode) {
+        val v = noticeView ?: text(this, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
+            background = rounded(this@HomeLauncherActivity, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+            setPadding(dp(28), dp(12), dp(28), dp(12))
+            elevation = dpF(4f)
+            alpha = 0f
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            addContentView(this, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(28) })
+            noticeView = this
+        }
+        v.background = rounded(this, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+        v.setTextColor(LauncherTheme.TEXT)
+        v.setText(if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
+        v.removeCallbacks(noticeHide)
+        v.animate().cancel()
+        v.animate().alpha(1f).setDuration(NOTICE_FADE_MS).start()
+        v.postDelayed(noticeHide, NOTICE_SHOW_MS)
+    }
+
+    /** Düzenleme çubuğundaki Park | Sürüş seçici: düzenlenen/etkin düzeni elle değiştirir. */
+    private fun selectEditLayout(to: LayoutMode) {
+        if (!grid.editMode || to == activeMode) return
         grid.animate().cancel(); grid.alpha = 1f
-        switchMode(LayoutMode.DRIVE, animate = false)
-        enterEditMode()
+        switchMode(to, animate = false)
+        refreshEditLayoutUi()
+    }
+
+    private fun refreshEditLayoutUi() {
+        editTitle.text = getString(R.string.launcher_edit_title_short) + " · " + getString(
+            if (activeMode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
+        editSegments.forEach { (mode, tv) ->
+            val on = mode == activeMode
+            tv.background = if (on) rounded(this, DriveAccent.buttonFill(LauncherTheme.ACCENT), 999f) else null
+            tv.setTextColor(if (on) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT_SECONDARY)
+            tv.isSelected = on
+        }
+    }
+
+    private val editSegments = LinkedHashMap<LayoutMode, android.widget.TextView>()
+
+    private fun layoutSegmented(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+        setPadding(dp(4), dp(4), dp(4), dp(4))
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(LauncherTheme.TOUCH_MIN_DP))
+        editSegments.clear()
+        listOf(LayoutMode.PARK to R.string.launcher_layout_park, LayoutMode.DRIVE to R.string.launcher_layout_drive).forEach { (mode, label) ->
+            val tv = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+                setText(label)
+                gravity = Gravity.CENTER
+                setPadding(dp(22), 0, dp(22), 0)
+                contentDescription = getString(if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
+                isClickable = true
+                setOnClickListener { selectEditLayout(mode) }
+                pressFeedback()
+            }
+            editSegments[mode] = tv
+            addView(tv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
+        }
     }
 
     /** Sürüş vurgusu ve otomatik düzen seçeneklerini bir kez okur (ayarlar bunları değiştirince çağrılır). */
@@ -525,8 +586,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (grid.editMode) return
         if (editLocked()) return
         grid.editMode = true
-        editTitle.text = getString(R.string.launcher_edit_title_short) + " · " + getString(
-            if (activeMode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
+        refreshEditLayoutUi()
         dock?.setEditMode(true)
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
@@ -563,6 +623,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_edit_hint) })
         })
         addView(View(context), weightLp(1f))
+        addView(layoutSegmented())
+        addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_plus, R.string.launcher_edit_add, LauncherTheme.CARD) { showAddDialog() })
         addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_theme_light_dark, R.string.launcher_appearance, LauncherTheme.CARD) { settings.show(appearanceOnly = true) })
@@ -748,6 +810,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         const val FADE_IN_MS = 200L
         /** Tema geçişiyle yeniden kurulmada etkin düzeni korur. */
         @Volatile var rememberedMode = LayoutMode.PARK
+        private const val NOTICE_SHOW_MS = 1800L
+        private const val NOTICE_FADE_MS = 250L
         /** FrostNav'dan gelen "düzenleme modunda aç" isteği; yeniden kurulma arasında kaybolmasın diye statik. */
         @Volatile var pendingEdit = false
         const val DRIVE_STABLE_MS = 2_000L

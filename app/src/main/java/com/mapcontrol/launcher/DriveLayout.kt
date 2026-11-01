@@ -69,6 +69,13 @@ class DriveLayoutPolicy(
     }
 }
 
+/**
+ * Düzen geçişinde gösterilecek bilgi: yalnızca otomatik geçişte, gerçekten mod değiştiyse ve ekran kurulduktan
+ * (ilk açılış değil) sonra; elle geçişte null. Gösterilecek yeni modu döndürür.
+ */
+fun layoutNoticeFor(from: LayoutMode, to: LayoutMode, automatic: Boolean, started: Boolean): LayoutMode? =
+    if (automatic && started && from != to) to else null
+
 /** Kayıt anahtarları: Park mevcut anahtarı aynen korur (hiçbir şey kaybolmaz). Profil son eki dosya adındadır ([Profiles.key]). */
 object LayoutKeys {
     const val PREFS = "launcher_layout"

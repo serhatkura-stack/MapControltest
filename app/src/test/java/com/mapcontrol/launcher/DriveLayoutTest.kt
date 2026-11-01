@@ -210,4 +210,14 @@ class ParkOnlyTest {
         assertNull(sim.tick(t, false))
         assertEquals(LayoutMode.DRIVE, sim.p.mode)
     }
+
+    @Test fun noticeOnlyOnAutomaticSwitch() {
+        assertEquals(LayoutMode.DRIVE, layoutNoticeFor(LayoutMode.PARK, LayoutMode.DRIVE, automatic = true, started = true))
+        assertEquals(LayoutMode.PARK, layoutNoticeFor(LayoutMode.DRIVE, LayoutMode.PARK, automatic = true, started = true))
+        // Elle geçiş (düzenleme seçicisi, çıkışta dönüş) bildirim göstermez.
+        assertNull(layoutNoticeFor(LayoutMode.PARK, LayoutMode.DRIVE, automatic = false, started = true))
+        // İlk açılış / mod değişmedi: bildirim yok.
+        assertNull(layoutNoticeFor(LayoutMode.PARK, LayoutMode.DRIVE, automatic = true, started = false))
+        assertNull(layoutNoticeFor(LayoutMode.DRIVE, LayoutMode.DRIVE, automatic = true, started = true))
+    }
 }
