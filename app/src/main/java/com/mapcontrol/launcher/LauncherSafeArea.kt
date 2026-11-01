@@ -10,7 +10,7 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 
 /**
  * Chery Tiggo 7 Desay ünitesinde OEM alt çubuğu (ana ekran/uygulamalar/araç/sıcaklık/fan/ayar/telefon)
- * yaklaşık 105 px yüksekliğindedir. Araç fotoğrafı (2026-10-30): launcher penceresi bu çubuğun ÜSTÜNDE
+ * penceresi 1920x110 px'tir (y 610–720; görünen gövde y 631–708). Araç fotoğrafı (2026-10-30): launcher penceresi bu çubuğun ÜSTÜNDE
  * bitiyor; Android pencereyi kendisi kısaltıyor/inset bildiriyor, bizim alt çubuğumuz OEM çubuğunun hemen
  * üstüne oturuyor. Bu yüzden gerçek cihazda ek bir yedek boşluk UYGULANMAZ (yalnızca sistemin bildirdiği inset).
  *
@@ -22,7 +22,7 @@ object LauncherSafeArea {
     private const val DESAY_PACKAGE = "com.desaysv.vehiclesetting"
     private const val EXTRA_OEM_INSET = "launcher_oem_inset"
 
-    /** Yalnızca debug yapıda, emülatörde OEM çubuğunu taklit etmek için (`--ei launcher_oem_inset 120`). */
+    /** Yalnızca debug yapıda, emülatörde OEM çubuğunu taklit etmek için (`--ei launcher_oem_inset 110`). */
     private var debugOverridePx: Int? = null
 
     fun applyFrom(activity: Activity, intent: Intent?) {
