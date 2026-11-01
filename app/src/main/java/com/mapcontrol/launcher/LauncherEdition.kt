@@ -84,4 +84,13 @@ internal object LauncherEdition {
                 .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_HOME_SCREEN),
         )
     }
+
+    /** FrostNav'ı doğrudan "Wi-Fi" sekmesinde açar (yakındaki ağları tarar, listeler ve bağlanır). */
+    fun openWifi(activity: Activity) {
+        activity.startActivity(
+            Intent(activity, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_WIFI),
+        )
+    }
 }

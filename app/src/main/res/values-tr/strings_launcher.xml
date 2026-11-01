@@ -173,4 +173,7 @@
     <string name="launcher_auto_drive_layout">Otomatik sürüş düzeni</string>
     <string name="launcher_toggle_on">Açık</string>
     <string name="launcher_toggle_off">Kapalı</string>
+    <string name="launcher_wifi_connected">Wi-Fi bağlı</string>
+    <string name="launcher_wifi_off">Wi-Fi bağlı değil</string>
+    <string name="launcher_wifi_hotspot">Hotspot açık</string>
 </resources>

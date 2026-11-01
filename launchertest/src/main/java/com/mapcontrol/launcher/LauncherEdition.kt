@@ -1,6 +1,7 @@
 package com.mapcontrol.launcher
 
 import android.app.Activity
+import android.content.Intent
 import android.content.Context
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
@@ -77,4 +78,9 @@ internal object LauncherEdition {
     /** Bu derlemede MapControl yok. */
     @Suppress("UNUSED_PARAMETER")
     fun openMain(activity: Activity, camera360: Boolean) = Unit
+
+    /** Bu derlemede FrostNav yok: sistemin Wi-Fi ayarları açılır. */
+    fun openWifi(activity: Activity) {
+        activity.startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 }

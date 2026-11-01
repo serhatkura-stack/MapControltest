@@ -28,6 +28,7 @@ class HeaderBar(
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
     private val onLayoutPill: () -> Unit = {},
+    private val onWifi: () -> Unit = {},
 ) : LauncherWidget, Themeable {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -56,6 +57,20 @@ class HeaderBar(
         override fun onWeatherFailed() {
             // Son bilinen hava durumu kalır; hiç yoksa alan gizli kalır.
         }
+    }
+
+    /** Wi-Fi durumu (bağlı + seviye, bağlı değil, hotspot); dokununca Wi-Fi sekmesi. Olaylarla güncellenir, polling yok. */
+    private val wifiGlyph = WifiGlyph(context)
+    private val wifiName = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
+    private var wifiUi = WifiUi(WifiUi.Kind.OFF)
+    private val wifiStatus = WifiStatus(context) { bindWifi(it) }
+    private val wifiButton = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onWifi() }
+        pressFeedback()
     }
 
     /** Park / Sürüş göstergesi: sakin bir hap; dokununca Sürüş düzeni düzenlenir. */
@@ -101,6 +116,9 @@ class HeaderBar(
         weatherBox.addView(gap(context, 10))
         weatherBox.addView(weatherLabel)
         addView(weatherBox)
+        addView(gap(context, 24))
+        buildWifiButton()
+        addView(wifiButton)
         addView(gap(context, 32))
         addView(profileButton())
         addView(gap(context, 16))
@@ -109,6 +127,39 @@ class HeaderBar(
         addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
         addView(gap(context, 16))
         addView(settingsButton())
+    }
+
+    /** Wi-Fi düğmesi kare ya da (ağ adı sığıyorsa) yatay hap; en az 72 px dokunma alanı. */
+    private fun buildWifiButton() {
+        (wifiGlyph.parent as? android.view.ViewGroup)?.removeView(wifiGlyph)
+        (wifiName.parent as? android.view.ViewGroup)?.removeView(wifiName)
+        wifiButton.removeAllViews()
+        wifiButton.background = cardSurface(context)
+        val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
+        wifiButton.minimumWidth = size
+        wifiButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size)
+        val glyph = context.dp(LauncherTheme.ICON_M_DP + 4)
+        wifiButton.addView(wifiGlyph, LinearLayout.LayoutParams(glyph, glyph))
+        wifiButton.addView(wifiName)
+        bindWifi(wifiUi)
+    }
+
+    private fun bindWifi(ui: WifiUi) {
+        wifiUi = ui
+        wifiGlyph.bind(ui)
+        val name = if (ui.kind == WifiUi.Kind.CONNECTED) ui.ssid else null
+        wifiName.text = name
+        wifiName.setTextColor(LauncherTheme.TEXT_SECONDARY)
+        wifiName.visibility = if (name == null) View.GONE else View.VISIBLE
+        (wifiName.layoutParams as? LinearLayout.LayoutParams)?.marginStart = context.dp(8)
+        val h = if (name == null) 0 else context.dp(LauncherTheme.GAP_L_DP)
+        wifiButton.setPadding(if (name == null) 0 else context.dp(LauncherTheme.GAP_SM_DP + 4), 0, h, 0)
+        wifiButton.alpha = if (ui.kind == WifiUi.Kind.OFF) 0.85f else 1f
+        wifiButton.contentDescription = context.getString(when (ui.kind) {
+            WifiUi.Kind.OFF -> R.string.launcher_wifi_off
+            WifiUi.Kind.HOTSPOT -> R.string.launcher_wifi_hotspot
+            WifiUi.Kind.CONNECTED -> R.string.launcher_wifi_connected
+        }) + (name?.let { ": $it" } ?: "")
     }
 
     private var lastMode = LayoutMode.PARK
@@ -243,6 +294,7 @@ class HeaderBar(
         weatherClient.setListener(weatherListener)
         weatherStart?.cancel()
         weatherStart = LauncherStartup.later { weatherClient.start() }
+        wifiStatus.start()
     }
 
     override fun onHidden() {
@@ -253,9 +305,13 @@ class HeaderBar(
         weatherStart?.cancel()
         weatherClient.stop()
         weatherClient.setListener(null)
+        wifiStatus.stop()
     }
 
-    override fun release() = weatherClient.destroy()
+    override fun release() {
+        wifiStatus.stop()
+        weatherClient.destroy()
+    }
 
     private fun updateClock() {
         val now = Date()

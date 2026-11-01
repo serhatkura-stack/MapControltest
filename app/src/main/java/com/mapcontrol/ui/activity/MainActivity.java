@@ -124,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_OPEN_PROJECTION_TARGET_PICKER = "com.mapcontrol.extra.OPEN_PROJECTION_TARGET_PICKER";
     /** Açılışta seçilecek sekme indeksi (int extra); yoksa Wi-Fi sekmesi. Yeni launcher "Ayarlar" için kullanır. */
     public static final String EXTRA_OPEN_TAB = "com.mapcontrol.extra.OPEN_TAB";
+    public static final int TAB_WIFI = 0;
     public static final int TAB_SETTINGS = 7;
     public static final int TAB_HOME_SCREEN = 17;
     private static final int TAB_EQUALIZER = 11;
