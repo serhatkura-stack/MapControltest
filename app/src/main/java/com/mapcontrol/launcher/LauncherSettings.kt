@@ -81,7 +81,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, activity.dp(16)) }
         content.buildPanel(d, appearanceOnly)
         val maxH = activity.resources.displayMetrics.heightPixels - activity.dp(SCROLL_RESERVED_DP)
-        addView(ScrollView(activity).apply { addView(content) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxH))
+        // Yükseklik = min(içerik, kullanılabilir): kısa panel kaydırmadan sığar, uzun panel kaydırılır.
+        val scroll = object : ScrollView(activity) {
+            override fun onMeasure(widthSpec: Int, heightSpec: Int) {
+                super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST))
+            }
+        }.apply { addView(content) }
+        addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun LinearLayout.buildPanel(d: Dialog, appearanceOnly: Boolean) {
@@ -171,18 +177,50 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Sürüş moduna göre renk": açık/kapalı satırı; değişince ekran yeni vurguyla kurulur. */
+    /** "Sürüş moduna göre renk": etiket + Açık | Kapalı; değişince ekran yeni vurguyla kurulur. */
     private fun driveModeToggle(d: Dialog): View {
         val on = DriveAccent.enabled(activity)
-        return row(R.drawable.ic_mdi_car_sports, if (on) R.string.launcher_drive_theme_on else R.string.launcher_drive_theme_off) {
+        return onOffControl(R.string.launcher_drive_theme, on) { value ->
             d.dismiss()
-            DriveAccent.setEnabled(activity, !on)
+            DriveAccent.setEnabled(activity, value)
             (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
-            if (on) LauncherTheme.driveMode = DriveAccent.NORMAL
+            if (!value) LauncherTheme.driveMode = DriveAccent.NORMAL
             // Kapatınca vurgu hemen varsayılana döner; açınca mod araçtan okunup ~2 sn sonra uygulanır.
-            if (on) ThemeTransition.retheme(activity)
+            if (!value) ThemeTransition.retheme(activity)
         }
     }
+
+    /** Etiket (küçük, ikincil) + iki parçalı Açık | Kapalı; seçili olan vurgu renginde. Değişmeyen seçime dokunmak bir şey yapmaz. */
+    private fun onOffControl(@StringRes labelRes: Int, on: Boolean, onChange: (Boolean) -> Unit): View =
+        LinearLayout(activity).apply {
+            // Etiket solda, Açık | Kapalı sağda: iki satırlık sürüş ayarı panele kaydırmadan sığsın.
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
+                val p = activity.dp(6)
+                setPadding(p, p, p, p)
+                listOf(true to R.string.launcher_toggle_on, false to R.string.launcher_toggle_off).forEachIndexed { i, (value, label) ->
+                    if (i > 0) addView(gap(activity, 6))
+                    val selected = value == on
+                    addView(text(activity, LauncherTheme.BODY_SP,
+                        if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+                        setText(label)
+                        gravity = Gravity.CENTER
+                        if (selected) background = rounded(activity, LauncherTheme.ACCENT, SEGMENT_RADIUS_DP - 4)
+                        isClickable = true
+                        isFocusable = true
+                        isSelected = selected
+                        contentDescription = activity.getString(labelRes) + ": " + activity.getString(label)
+                        setOnClickListener { if (value != on) onChange(value) }
+                        pressFeedback()
+                    }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
+                }
+            }, LinearLayout.LayoutParams(activity.dp(TOGGLE_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
 
     /** Yalnızca test sürümü: widget'lardan araca yazma anahtarı. Değişince ekran yeniden kurulur (kapılar yeniden okunur). */
     private fun writeTestToggle(d: Dialog): View {
@@ -194,12 +232,12 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Otomatik sürüş düzeni": açık/kapalı satırı; değişince ekran yeni seçimle kurulur. */
+    /** "Otomatik sürüş düzeni": etiket + Açık | Kapalı; değişince ekran yeni seçimle kurulur. */
     private fun autoDriveLayoutToggle(d: Dialog): View {
         val on = DriveLayoutPrefs.get(activity)
-        return row(R.drawable.ic_mdi_view_grid, if (on) R.string.launcher_auto_drive_layout_on else R.string.launcher_auto_drive_layout_off) {
+        return onOffControl(R.string.launcher_auto_drive_layout, on) { value ->
             d.dismiss()
-            DriveLayoutPrefs.set(activity, !on)
+            DriveLayoutPrefs.set(activity, value)
             (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
             ThemeTransition.recreate(activity)
         }
@@ -318,9 +356,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         /** Aracın kendi araç ayarları uygulaması (Desay SV). */
         const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
         const val ROW_HEIGHT_DP = 80
+        /** Açık | Kapalı parçasının genişliği (etiket kalan alanı alır). */
+        const val TOGGLE_WIDTH_DP = 300
         /** Başlık, iç boşluk ve ekran kenarı için ayrılan yükseklik. */
         /** Başlık + kart dolgusu + sistem çubuğu (1920x720 ekranda 48 px) düşülür; aksi halde son satır pencere altında kırpılır. */
-        const val SCROLL_RESERVED_DP = 250
+        const val SCROLL_RESERVED_DP = 212
         const val SEGMENT_RADIUS_DP = 16f
     }
 }
