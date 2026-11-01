@@ -89,6 +89,7 @@ import com.mapcontrol.ui.builder.FileUploadTabBuilder;
 import com.mapcontrol.ui.builder.LogTabBuilder;
 import com.mapcontrol.ui.builder.ProfileTabBuilder;
 import com.mapcontrol.ui.builder.ProjectionTabBuilder;
+import com.mapcontrol.ui.builder.HomeScreenTabBuilder;
 import com.mapcontrol.ui.builder.SettingsTabBuilder;
 import com.mapcontrol.ui.builder.SplitScreenTabBuilder;
 import com.mapcontrol.ui.builder.SideRailBuilder;
@@ -124,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
     /** Açılışta seçilecek sekme indeksi (int extra); yoksa Wi-Fi sekmesi. Yeni launcher "Ayarlar" için kullanır. */
     public static final String EXTRA_OPEN_TAB = "com.mapcontrol.extra.OPEN_TAB";
     public static final int TAB_SETTINGS = 7;
+    public static final int TAB_HOME_SCREEN = 17;
     private static final int TAB_EQUALIZER = 11;
     public static final int TAB_CLIMATE_AUTOMATION = 12;
     public static final int TAB_FACE_RECOGNITION = 13;
@@ -182,6 +184,7 @@ public class MainActivity extends AppCompatActivity {
     private VehicleMetricsRepository vehicleMetricsRepository;
     private ScrollView vehicleInfoScrollView;
     private SettingsTabBuilder settingsTabBuilder;
+    private HomeScreenTabBuilder homeScreenTabBuilder;
     private ProfileTabBuilder profileTabBuilder;
     private DriveModeTabBuilder driveModeTabBuilder;
     private AssistTabBuilder assistTabBuilder;
@@ -213,7 +216,7 @@ public class MainActivity extends AppCompatActivity {
     private FrameLayout mainRootContainer;
     /** Gece/gündüz uiMode — Activity recreate etmeden soft tema yenilemek için. */
     private int lastNightModeUiBits = -1;
-    private final boolean[] tabNeedsUiModeRebuild = new boolean[TAB_SUNROOF_AUTOMATION + 1];
+    private final boolean[] tabNeedsUiModeRebuild = new boolean[TAB_HOME_SCREEN + 1];
     /** Son uygulanan yön; configChanges orientation activity'yi yeniden kurmaz. */
     private int lastOrientation = -1;
     private LinearLayout shellHost;
@@ -959,6 +962,11 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     @Override
+                    public void onOpenHomeScreenTab() {
+                        switchTab(TAB_HOME_SCREEN);
+                    }
+
+                    @Override
                     public void onLocaleChanged() {
                         MainActivity.this.recreate();
                     }
@@ -974,6 +982,22 @@ public class MainActivity extends AppCompatActivity {
                 });
         settingsScrollView = settingsTabBuilder.getScrollView();
         settingsTabContent = settingsTabBuilder.getSettingsTabContent();
+
+        homeScreenTabBuilder = new HomeScreenTabBuilder(this, new HomeScreenTabBuilder.Callback() {
+            @Override
+            public void log(String msg) {
+                MainActivity.this.log(msg);
+            }
+
+            @Override
+            public void onLauncherModeChanged(boolean enabled) {
+                if (enabled) {
+                    enterLauncherMode();
+                } else {
+                    exitLauncherMode();
+                }
+            }
+        });
 
         lastOrientation = getResources().getConfiguration().orientation;
         lastNightModeUiBits = getResources().getConfiguration().uiMode
@@ -1289,6 +1313,10 @@ public class MainActivity extends AppCompatActivity {
                 addTabChild(parent, splitScreenTabBuilder.getScrollView(), matchParent);
                 splitScreenTabBuilder.onTabVisible();
             }
+        } else if (tabIndex == TAB_HOME_SCREEN && homeScreenTabBuilder != null) {
+            // Değerler launcher'dan da değişebilir: her açılışta tercihlerden yeniden kurulur.
+            homeScreenTabBuilder.rebuild();
+            addTabChild(parent, homeScreenTabBuilder.getScrollView(), matchParent);
         }
     }
 
@@ -1321,6 +1349,7 @@ public class MainActivity extends AppCompatActivity {
             case TAB_CLIMATE_AUTOMATION: return R.string.side_rail_climate_automation;
             case TAB_FACE_RECOGNITION: return R.string.side_rail_face_recognition;
             case TAB_SUNROOF_AUTOMATION: return R.string.side_rail_sunroof_automation;
+            case TAB_HOME_SCREEN: return R.string.side_rail_home_screen;
             default: return R.string.topbar_vehicle_home;
         }
     }
@@ -1543,6 +1572,9 @@ public class MainActivity extends AppCompatActivity {
     private void syncLauncherModeSettingsUi() {
         if (settingsTabBuilder != null) {
             settingsTabBuilder.syncLauncherModeFromPrefs();
+        }
+        if (homeScreenTabBuilder != null) {
+            homeScreenTabBuilder.rebuild();
         }
     }
 
@@ -1998,6 +2030,11 @@ public class MainActivity extends AppCompatActivity {
             case TAB_SUNROOF_AUTOMATION:
                 if (sunroofAutomationTabBuilder != null) {
                     rebuildSunroofAutomationTab();
+                }
+                break;
+            case TAB_HOME_SCREEN:
+                if (homeScreenTabBuilder != null) {
+                    homeScreenTabBuilder.rebuild();
                 }
                 break;
         }

@@ -77,6 +77,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
     private var resumed = false
+    /** Kurulumda/tema uygulanırken geçerli olan tercih özeti ([HomeScreenPrefs.signature]). */
+    private var appliedSignature = ""
+    /** Öne gelirken tercih değiştiği için yeniden kurulma bekleniyor; bu kopya düzenleme moduna girmez. */
+    private var recreating = false
     private var sheet: android.app.Dialog? = null
     /** `--ez launcher_data_check true` ile açılan Veri kontrolü paneli (yalnızca debug). */
     private var dataCheckExtra: DataCheckSheet? = null
@@ -108,7 +112,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         layoutPolicy.reset(activeMode)
         LauncherInfo.mode = activeMode
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) consumeAppearanceExtra(intent)
+        if (savedInstanceState == null) { consumeAppearanceExtra(intent); consumeEditExtra(intent) }
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
@@ -175,6 +179,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
         LauncherBottomBar.logResult(this)
+        appliedSignature = HomeScreenPrefs.signature(this)
+        if (pendingEdit) openPendingEdit()
     }
 
     /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */
@@ -182,6 +188,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeAppearanceExtra(intent)
+        consumeEditExtra(intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
     }
@@ -191,6 +198,25 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (intent?.getBooleanExtra(EXTRA_OPEN_APPEARANCE, false) != true) return
         intent.removeExtra(EXTRA_OPEN_APPEARANCE)
         window.decorView.post { if (!isFinishing && !isDestroyed) settings.show(appearanceOnly = true) }
+    }
+
+    /**
+     * FrostNav "Ana ekran" sekmesindeki "Ana ekranı düzenle": [HomeScreenPrefs.EXTRA_OPEN_EDIT] ile gelince düzenleme moduna girer.
+     * İstek [pendingEdit] ile tutulur: öne gelirken tercih değişikliği yüzünden etkinlik yeniden kurulursa yeni kopya girer.
+     */
+    private fun consumeEditExtra(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(HomeScreenPrefs.EXTRA_OPEN_EDIT, false) != true) return
+        intent.removeExtra(HomeScreenPrefs.EXTRA_OPEN_EDIT)
+        pendingEdit = true
+        openPendingEdit()
+    }
+
+    private fun openPendingEdit() {
+        window.decorView.post {
+            if (isFinishing || isDestroyed || !::grid.isInitialized || recreating || !pendingEdit) return@post
+            pendingEdit = false
+            enterEditMode()
+        }
     }
 
     /**
@@ -253,6 +279,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         android.util.Log.i("ThemeTiming", "yerinde: ızgara $themed widget yerinde, ${fresh.size} yeniden kuruldu")
         header.setLayoutMode(activeMode)
         window.decorView.invalidate()
+        appliedSignature = HomeScreenPrefs.signature(this)
     }
 
     /** Tema geçişi örtüsü açıkken yeni kurulan widget'ların onVisible'ı bekletilir (yoklama/metrik patlamaları ilk karede çıkmasın). */
@@ -367,6 +394,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         hideSystemBars()
         resumed = true
         syncAutoNight()
+        // FrostNav "Ana ekran" sekmesinde tema/alt çubuk/düzen tercihleri değiştiyse (renkler ve çubuklar kurulumda okunur) yeniden kur.
+        val sig = HomeScreenPrefs.signature(this)
+        if (appliedSignature.isNotEmpty() && sig != appliedSignature) {
+            appliedSignature = sig
+            recreating = true
+            if (grid.editMode) pendingEdit = true
+            ThemeTransition.recreate(this)
+        }
     }
 
     /**
@@ -685,6 +720,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         const val FADE_IN_MS = 200L
         /** Tema geçişiyle yeniden kurulmada etkin düzeni korur. */
         @Volatile var rememberedMode = LayoutMode.PARK
+        /** FrostNav'dan gelen "düzenleme modunda aç" isteği; yeniden kurulma arasında kaybolmasın diye statik. */
+        @Volatile var pendingEdit = false
         const val DRIVE_STABLE_MS = 2_000L
         const val DRIVE_TICK_MS = 500L
         const val ADD_COLUMNS = 5

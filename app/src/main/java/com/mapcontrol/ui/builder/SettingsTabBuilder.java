@@ -23,7 +23,6 @@ import java.net.URL;
 import androidx.core.content.ContextCompat;
 
 import com.mapcontrol.R;
-import com.mapcontrol.launcher.HomeLauncherActivity;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.ui.theme.FeatureGridLayout;
 import com.mapcontrol.manager.FloatingBackButtonManager;
@@ -41,6 +40,8 @@ public class SettingsTabBuilder {
         void onLocaleChanged();
         void onNightModeChanged(int mode);
         default void onHeaderPositionChanged(boolean isBottom) {}
+        /** "Ana ekran ayarları" bağlantısı: FrostNav'ın Ana ekran sekmesini açar. */
+        default void onOpenHomeScreenTab() {}
     }
 
     private final Context context;
@@ -52,8 +53,7 @@ public class SettingsTabBuilder {
     private FloatingBackButtonManager floatingBackButtonManager;
     private UiStyles.BinarySegmentHandle launcherModeSegmentHandle;
     private UiStyles.BinarySegmentHandle languageSegmentHandle;
-    private TextView launcherHomeSettingsLink;
-    private TextView launcherAppearanceLink;
+    private TextView launcherHomeScreenLink;
 
     public SettingsTabBuilder(Context context, SharedPreferences prefs, SettingsCallback callback) {
         this.context = context;
@@ -545,42 +545,21 @@ public class SettingsTabBuilder {
                     updateLauncherHomeSettingsLinkVisibility(enabled);
                 });
 
-        launcherHomeSettingsLink = new TextView(context);
-        launcherHomeSettingsLink.setText(R.string.settings_launcher_home_link);
-        UiStyles.setTextSize(launcherHomeSettingsLink, R.dimen.text_size_small);
-        launcherHomeSettingsLink.setTextColor(UiStyles.color(context, R.color.accentHighlight));
-        launcherHomeSettingsLink.setPadding(16, 4, 16, 16);
-        launcherHomeSettingsLink.setOnClickListener(v -> {
-            LauncherModeManager.logHomeResolutionState(context, callback::log);
-            LauncherModeManager.openHomeChooser(context);
-        });
-        container.addView(launcherHomeSettingsLink, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        launcherAppearanceLink = new TextView(context);
-        launcherAppearanceLink.setText(R.string.settings_launcher_appearance_link);
-        UiStyles.setTextSize(launcherAppearanceLink, R.dimen.text_size_small);
-        launcherAppearanceLink.setTextColor(UiStyles.color(context, R.color.accentHighlight));
-        launcherAppearanceLink.setPadding(16, 4, 16, 16);
-        launcherAppearanceLink.setOnClickListener(v -> {
-            Intent intent = new Intent(context, HomeLauncherActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    .putExtra("launcher_open_appearance", true);
-            context.startActivity(intent);
-        });
-        container.addView(launcherAppearanceLink, new LinearLayout.LayoutParams(
+        launcherHomeScreenLink = new TextView(context);
+        launcherHomeScreenLink.setText(R.string.settings_home_screen_link);
+        UiStyles.setTextSize(launcherHomeScreenLink, R.dimen.text_size_small);
+        launcherHomeScreenLink.setTextColor(UiStyles.color(context, R.color.accentHighlight));
+        launcherHomeScreenLink.setPadding(16, 4, 16, 16);
+        launcherHomeScreenLink.setOnClickListener(v -> callback.onOpenHomeScreenTab());
+        container.addView(launcherHomeScreenLink, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         updateLauncherHomeSettingsLinkVisibility(launcherModeOn);
     }
 
     private void updateLauncherHomeSettingsLinkVisibility(boolean enabled) {
-        if (launcherHomeSettingsLink != null) {
-            launcherHomeSettingsLink.setVisibility(enabled ? View.VISIBLE : View.GONE);
-        }
-        if (launcherAppearanceLink != null) {
-            launcherAppearanceLink.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        if (launcherHomeScreenLink != null) {
+            launcherHomeScreenLink.setVisibility(enabled ? View.VISIBLE : View.GONE);
         }
     }
 

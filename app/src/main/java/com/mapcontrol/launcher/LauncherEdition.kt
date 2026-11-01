@@ -60,12 +60,15 @@ internal object LauncherEdition {
         VehicleQuickControls.getInstance(context).setCentralLock(locked)
     }
 
-    /** FrostNav'ı doğrudan Ayarlar sekmesinde açar. */
+    /**
+     * FrostNav'ı doğrudan "Ana ekran" sekmesinde açar. Launcher kendi görev ilişkisinde (taskAffinity) çalışır;
+     * CLEAR_TOP|SINGLE_TOP FrostNav'ı açıksa öne getirip onNewIntent ile sekmeyi iletir.
+     */
     fun openSettings(activity: Activity) {
         activity.startActivity(
             Intent(activity, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_SETTINGS),
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_HOME_SCREEN),
         )
     }
 }

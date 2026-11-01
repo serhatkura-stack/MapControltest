@@ -180,6 +180,7 @@
             android:exported="true"
             android:label="Ana Ekran"
             android:launchMode="singleTask"
+            android:taskAffinity="com.mapcontrol.home"
             android:stateNotNeeded="true"
             android:excludeFromRecents="true"
             android:screenOrientation="landscape"

@@ -48,6 +48,7 @@ public class SideRailBuilder {
     private static final int TAB_CAMERA_360 = 14;
     private static final int TAB_SPLIT_SCREEN = 15;
     private static final int TAB_SUNROOF_AUTOMATION = 16;
+    private static final int TAB_HOME_SCREEN = 17;
 
     private final Context context;
     private final SharedPreferences prefs;
@@ -66,6 +67,7 @@ public class SideRailBuilder {
     private LinearLayout menuClimateAutomation;
     private LinearLayout menuFaceRecognition;
     private LinearLayout menuSunroofAutomation;
+    private LinearLayout menuHomeScreen;
     private LinearLayout menuProfile;
     private LinearLayout menuVehicleInfo;
     private LinearLayout menuSplitScreen;
@@ -137,6 +139,7 @@ public class SideRailBuilder {
         menuSplitScreen = createRailMenuItemView(R.drawable.ic_mdi_view_split,
                 t(R.string.side_rail_split_screen));
         menuSettings = createRailMenuItemView(R.drawable.ic_mdi_cog, t(R.string.side_rail_settings));
+        menuHomeScreen = createRailMenuItemView(R.drawable.ic_mdi_view_grid, t(R.string.side_rail_home_screen));
 
         menuContainer.addView(menuWifi);
         menuContainer.addView(menuApps);
@@ -156,6 +159,7 @@ public class SideRailBuilder {
         menuContainer.addView(menuProjection);
         menuContainer.addView(menuVehicleInfo);
         menuContainer.addView(menuSettings);
+        menuContainer.addView(menuHomeScreen);
 
         float density = context.getResources().getDisplayMetrics().density;
         updateRailBottomInset();
@@ -218,6 +222,7 @@ public class SideRailBuilder {
         menuSplitScreen = createPortraitRailItem(R.drawable.ic_mdi_view_split,
                 t(R.string.side_rail_split_screen));
         menuSettings = createPortraitRailItem(R.drawable.ic_mdi_cog, t(R.string.side_rail_settings));
+        menuHomeScreen = createPortraitRailItem(R.drawable.ic_mdi_view_grid, t(R.string.side_rail_home_screen));
 
         menuContainer.addView(menuWifi);
         menuContainer.addView(menuApps);
@@ -237,6 +242,7 @@ public class SideRailBuilder {
         menuContainer.addView(menuProjection);
         menuContainer.addView(menuVehicleInfo);
         menuContainer.addView(menuSettings);
+        menuContainer.addView(menuHomeScreen);
 
         // Let the final destination travel all the way to the left edge.
         menuContainer.setPaddingRelative(0, 0,
@@ -318,6 +324,11 @@ public class SideRailBuilder {
                     callback.onTabSelected(TAB_CLIMATE_AUTOMATION, t(R.string.side_rail_climate_automation));
                     updateMenuSelection(menuClimateAutomation);
                 }));
+
+        menuHomeScreen.setOnClickListener(v -> {
+            callback.onTabSelected(TAB_HOME_SCREEN, t(R.string.side_rail_home_screen));
+            updateMenuSelection(menuHomeScreen);
+        });
 
         menuSunroofAutomation.setOnClickListener(v -> {
             callback.onTabSelected(TAB_SUNROOF_AUTOMATION, t(R.string.side_rail_sunroof_automation));
@@ -534,7 +545,7 @@ public class SideRailBuilder {
         for (int i = 0; i < goldenDockItems.size(); i++) {
             View item = goldenDockItems.get(i);
             boolean isActive = (i == 2 && tabIndex == TAB_DRIVE_MODE)
-                    || (i == 3 && tabIndex == TAB_SETTINGS);
+                    || (i == 3 && (tabIndex == TAB_SETTINGS || tabIndex == TAB_HOME_SCREEN));
 
             int mode = prefs.getInt("driveModeSetting", -1);
             boolean themedMemory = i == 2 && com.mapcontrol.vehicle.DriveModeStyle.isThemed(mode);
@@ -635,6 +646,9 @@ public class SideRailBuilder {
                 break;
             case TAB_SPLIT_SCREEN:
                 updateMenuSelection(menuSplitScreen);
+                break;
+            case TAB_HOME_SCREEN:
+                updateMenuSelection(menuHomeScreen);
                 break;
             default:
                 break;
@@ -778,7 +792,7 @@ public class SideRailBuilder {
     private LinearLayout[] menuRows() {
         return new LinearLayout[]{
                 menuWifi, menuFileUpload, menuProfile, menuProjection, menuVehicleInfo,
-                menuSettings, menuApps, menuDriveMode, menuTest, menuWelcomeSound, menuEqualizer, menuClimateAutomation, menuSunroofAutomation, menuFaceRecognition, menuCamera360, menuSplitScreen
+                menuSettings, menuApps, menuDriveMode, menuTest, menuWelcomeSound, menuEqualizer, menuClimateAutomation, menuSunroofAutomation, menuFaceRecognition, menuCamera360, menuSplitScreen, menuHomeScreen
         };
     }
 
