@@ -6,6 +6,10 @@
     <string name="launcher_trunk_stale">Trunk state changed, tap again</string>
     <string name="launcher_widget_trip_totals">Totals</string>
     <string name="launcher_widget_rear_speaker">Rear speakers</string>
+    <string name="launcher_rear_on">On</string>
+    <string name="launcher_rear_off">Off · sound in front</string>
+    <string name="launcher_rear_tap_on">Tap: turn on</string>
+    <string name="launcher_rear_tap_off">Tap: turn off</string>
     <string name="launcher_keys_ac">A/C</string>
     <string name="launcher_keys_auto">Auto</string>
     <string name="launcher_keys_recirc">Recirc</string>

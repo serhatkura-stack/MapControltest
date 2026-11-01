@@ -1,9 +1,13 @@
 package com.mapcontrol.launcher
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import com.desaysv.ivi.vdb.client.VDBus
 import com.desaysv.ivi.vdb.event.VDEvent
@@ -111,7 +115,7 @@ internal fun ComfortReader.readSound(): ComfortReading {
 
 /**
  * Arka hoparlör: tek dokunuşla arka hoparlörleri kapatır (fader ön uca), tekrar dokununca eski değeri geri verir. Yazma yalnızca
- * [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi mesajı).
+ * [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi mesajı). 2x2'de şema üstte, durum altta; 2x1'de yanda.
  */
 internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
@@ -119,37 +123,80 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
     /** İyimser durum: true arka kapalı. */
     private var pendingMuted: Boolean? = null
+    private var compact = false
 
+    private val diagram = SpeakerDiagramView(context)
     private val iconView = icon(context, R.drawable.ic_mdi_volume_high, ICON_DP, LauncherTheme.TEXT_SECONDARY)
     private val title = text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY).apply {
         setText(R.string.launcher_widget_rear_speaker)
         theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
     }
-    private val stateText = text(context, STATE_SP, LauncherTheme.TEXT, medium = true).apply { gravity = Gravity.CENTER }
+    private val titleRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(iconView)
+        addView(gap(context, 8))
+        addView(title)
+    }
+    private val stateText = text(context, STATE_SP, LauncherTheme.TEXT, medium = true, maxLines = 2).apply { gravity = Gravity.CENTER }
+    /** Dokunma ipucu: yuvarlak bir hap; "Dokun: aç/kapat". */
+    private val hint = text(context, HINT_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+        gravity = Gravity.CENTER
+        val h = context.dp(12)
+        val v = context.dp(5)
+        setPadding(h, v, h, v)
+        theme.bind { background = rounded(context, LauncherTheme.CONTROL, HINT_RADIUS_DP) }
+    }
 
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
         gravity = Gravity.CENTER
         theme.bind { background = cardSurface(context) }
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            addView(iconView)
-            addView(gap(context, 8))
-            addView(title)
-        })
-        addView(gap(context, 6, vertical = true))
-        addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         isClickable = true
         isFocusable = true
         setOnClickListener { onTap() }
         pressFeedback()
     }
 
+    init {
+        theme.bind { diagram.invalidate() }
+        arrange(false)
+    }
+
     override val view: View get() = root
 
     override fun readNow(): ComfortReading = ComfortReader.readSound()
 
-    override fun applySpan(span: Span) = Unit
+    override fun applySpan(span: Span) {
+        val c = span.h < 2
+        if (c != compact) arrange(c)
+    }
+
+    /** 2x2: başlık, şema, durum ve ipucu alt alta. 2x1: şema solda, metinler sağda. Görünümler yeniden bağlanır. */
+    private fun arrange(c: Boolean) {
+        compact = c
+        listOf(titleRow, diagram, stateText, hint).forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        root.removeAllViews()
+        stateText.textSize = if (c) STATE_COMPACT_SP else STATE_SP
+        stateText.gravity = if (c) Gravity.START else Gravity.CENTER
+        hint.gravity = if (c) Gravity.START else Gravity.CENTER
+        if (!c) {
+            root.orientation = LinearLayout.VERTICAL
+            root.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            root.addView(diagram, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            root.addView(gap(context, 6, vertical = true))
+            root.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            root.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        } else {
+            root.orientation = LinearLayout.HORIZONTAL
+            root.addView(diagram, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.8f))
+            root.addView(gap(context, 8))
+            val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+            column.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            root.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.2f))
+        }
+    }
 
     override fun clearPending() { pendingMuted = null }
 
@@ -161,13 +208,15 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         val state = context.getString(
             when (muted) {
                 null -> R.string.launcher_unavailable
-                true -> R.string.launcher_comfort_off
-                false -> R.string.launcher_comfort_on
+                true -> R.string.launcher_rear_off
+                false -> R.string.launcher_rear_on
             },
         )
         stateText.setTextSmooth(state)
         stateText.setTextColor(if (muted == true) LauncherTheme.ACCENT else if (muted == false) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
-        iconView.setTint(if (muted == true) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY)
+        hint.visibility = if (muted == null) View.GONE else View.VISIBLE
+        hint.text = if (muted == true) context.getString(R.string.launcher_rear_tap_on) else context.getString(R.string.launcher_rear_tap_off)
+        diagram.setRearOn(muted?.not())
         root.contentDescription = context.getString(R.string.launcher_widget_rear_speaker) + ": " + state
         root.isEnabled = muted != null || LauncherEdition.READ_ONLY
     }
@@ -189,8 +238,88 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
     private companion object {
         const val PADDING_DP = 12
-        const val ICON_DP = 24
-        const val TITLE_SP = 18f
-        const val STATE_SP = 40f
+        const val ICON_DP = 22
+        const val TITLE_SP = 17f
+        const val STATE_SP = 24f
+        const val STATE_COMPACT_SP = 18f
+        const val HINT_SP = 14f
+        const val HINT_RADIUS_DP = 14f
+    }
+}
+
+/**
+ * Üstten görünüş: gövde, ön ve arka cam, dört hoparlör. Ön iki hoparlör her zaman yanar. Arka iki [rearOn] true iken yanar;
+ * false iken sönük ve çizgili (kapalı); null (okunamadı) iken sönük ama çizgisiz.
+ */
+internal class SpeakerDiagramView(context: Context) : View(context) {
+    private var rearOn: Boolean? = null
+    private val body = RectF()
+    private val cell = RectF()
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = context.dpF(1.6f)
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    fun setRearOn(v: Boolean?) {
+        if (v == rearOn) return
+        rearOn = v
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        // Araç gövdesi 1:2 oranında, kutuya sığacak en büyük boyutta ortalanır.
+        var bh = h * 0.92f
+        var bw = bh / 2f
+        if (bw > w * 0.56f) {
+            bw = w * 0.56f
+            bh = bw * 2f
+        }
+        val left = (w - bw) / 2f
+        val top = (h - bh) / 2f
+        body.set(left, top, left + bw, top + bh)
+        val radius = bw * 0.30f
+        fill.color = LauncherTheme.CONTROL
+        canvas.drawRoundRect(body, radius, radius, fill)
+        line.color = LauncherTheme.TEXT_SECONDARY
+        line.alpha = 150
+        canvas.drawRoundRect(body, radius, radius, line)
+        // Ön ve arka cam.
+        fill.color = LauncherTheme.TRACK
+        cell.set(left + bw * 0.20f, top + bh * 0.11f, left + bw * 0.80f, top + bh * 0.22f)
+        canvas.drawRoundRect(cell, bw * 0.10f, bw * 0.10f, fill)
+        cell.set(left + bw * 0.20f, top + bh * 0.84f, left + bw * 0.80f, top + bh * 0.91f)
+        canvas.drawRoundRect(cell, bw * 0.10f, bw * 0.10f, fill)
+
+        val rad = bw * 0.12f
+        spot(canvas, left + bw * 0.24f, top + bh * 0.36f, rad, lit = true, slashed = false)
+        spot(canvas, left + bw * 0.76f, top + bh * 0.36f, rad, lit = true, slashed = false)
+        val rear = rearOn
+        spot(canvas, left + bw * 0.24f, top + bh * 0.68f, rad, lit = rear == true, slashed = rear == false)
+        spot(canvas, left + bw * 0.76f, top + bh * 0.68f, rad, lit = rear == true, slashed = rear == false)
+    }
+
+    private fun spot(canvas: Canvas, cx: Float, cy: Float, r: Float, lit: Boolean, slashed: Boolean) {
+        if (lit) {
+            fill.color = LauncherTheme.ACCENT
+            fill.alpha = 70
+            canvas.drawCircle(cx, cy, r * 1.9f, fill)
+            fill.alpha = 255
+            canvas.drawCircle(cx, cy, r, fill)
+            return
+        }
+        line.color = LauncherTheme.TEXT_SECONDARY
+        line.alpha = 120
+        canvas.drawCircle(cx, cy, r, line)
+        if (slashed) {
+            line.color = LauncherTheme.TEXT_SECONDARY
+            line.alpha = 220
+            val d = r * 0.7f
+            canvas.drawLine(cx - d, cy - d, cx + d, cy + d, line)
+        }
     }
 }

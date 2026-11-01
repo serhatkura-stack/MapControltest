@@ -5,7 +5,11 @@
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Bagaj durumu değişti, tekrar dokunun</string>
     <string name="launcher_widget_trip_totals">Toplam</string>
-    <string name="launcher_widget_rear_speaker">Arka hoparlör</string>
+    <string name="launcher_widget_rear_speaker">Arka hoparlörler</string>
+    <string name="launcher_rear_on">Açık</string>
+    <string name="launcher_rear_off">Kapalı · ses önde</string>
+    <string name="launcher_rear_tap_on">Dokun: aç</string>
+    <string name="launcher_rear_tap_off">Dokun: kapat</string>
     <string name="launcher_keys_ac">A/C</string>
     <string name="launcher_keys_auto">Oto</string>
     <string name="launcher_keys_recirc">İç hava</string>
