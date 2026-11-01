@@ -44,6 +44,7 @@ android {
         versionCode 12
         versionName "1.4.3"
         buildConfigField 'String', 'GIT_SHA', groovy.json.JsonOutput.toJson(gitSha())
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField 'String', 'GLITCHTIP_DSN', groovy.json.JsonOutput.toJson(readSetting('GLITCHTIP_DSN') ?: '')
         ndk {
             abiFilters 'arm64-v8a'
@@ -113,6 +114,8 @@ dependencies {
         exclude group: 'io.sentry', module: 'sentry-android-replay'
     }
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'

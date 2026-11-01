@@ -21,6 +21,7 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         include 'com/mapcontrol/vehicle/VehicleLightSensorManager.java'
         include 'com/mapcontrol/vehicle/DriveModeStyle.java'
         include 'com/mapcontrol/ui/theme/UiStyles.java'
+        include 'com/mapcontrol/ui/theme/FeatureGridLayout.java'
         include 'com/mapcontrol/vehicle/VehicleQuickControls.java'
         include 'com/mapcontrol/vehicle/ClimateAutomationStore.java'
         include 'com/mapcontrol/util/ProjectionTargetApps.java'

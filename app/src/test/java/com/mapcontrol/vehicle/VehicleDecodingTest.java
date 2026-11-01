@@ -64,9 +64,11 @@ public class VehicleDecodingTest {
         assertEquals("SPORT", DriveModeStyle.shortLabel(2));
         assertEquals("SNOW", DriveModeStyle.shortLabel(3));
         assertEquals("MUD", DriveModeStyle.shortLabel(4));
-        assertEquals("SAND", DriveModeStyle.shortLabel(5));
-        assertEquals("OFFROAD", DriveModeStyle.shortLabel(6));
-        assertNull(DriveModeStyle.shortLabel(7));
+        // FrostNav (Furkan) eşlemesi: Offroad=5, Sand=7. Kendi launcher'ımız araçta ölçülen
+        // Sand=5 / Offroad=6 değerlerini StatusTiles.kt içinde ayrıca kullanır.
+        assertEquals("OFFROAD", DriveModeStyle.shortLabel(5));
+        assertNull(DriveModeStyle.shortLabel(6));
+        assertEquals("SAND", DriveModeStyle.shortLabel(7));
         assertNull(DriveModeStyle.shortLabel(-1));
     }
 }
