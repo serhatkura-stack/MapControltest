@@ -91,6 +91,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Çökme döngüsü bekçisi: 60 sn içinde iki çökmede uygulama HOME'u aracın launcher'ına geri verir.
+        LauncherCrashGuard.onLauncherStart(this)
+        if (LauncherCrashGuard.isDebuggable(this) && intent?.getBooleanExtra(LauncherCrashGuard.EXTRA_DEBUG_CRASH, false) == true) {
+            throw RuntimeException("launcher_debug_crash (yalnızca debug)")
+        }
+        window.decorView.postDelayed({ LauncherCrashGuard.onHealthy(this) }, LauncherCrashGuard.HEALTHY_MS)
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
@@ -191,6 +197,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     override fun onNewIntent(intent: android.content.Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (LauncherCrashGuard.isDebuggable(this) && intent?.getBooleanExtra(LauncherCrashGuard.EXTRA_DEBUG_CRASH, false) == true) {
+            throw RuntimeException("launcher_debug_crash (yalnızca debug)")
+        }
         consumeAppearanceExtra(intent)
         consumeEditExtra(intent)
         LauncherDemo.applyDriveMode(intent)

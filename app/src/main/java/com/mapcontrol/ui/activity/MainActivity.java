@@ -2126,6 +2126,13 @@ public class MainActivity extends AppCompatActivity {
         com.mapcontrol.util.BootSession.markUiLaunched(this);
         // Görev zaten varken am start onCreate'i çalıştırmaz; güncelleme sonrası launcher modunu her
         // öne gelişte eşitle (alias + cihaz sahibi sabitlemesi), rol düştüyse sürüm başına bir kez iste.
+        android.content.SharedPreferences guardPrefs = getSharedPreferences(
+                com.mapcontrol.launcher.LauncherCrashGuard.PREFS, MODE_PRIVATE);
+        if (guardPrefs.getBoolean(com.mapcontrol.launcher.LauncherCrashGuard.KEY_NOTICE, false)) {
+            guardPrefs.edit().remove(com.mapcontrol.launcher.LauncherCrashGuard.KEY_NOTICE).apply();
+            Toast.makeText(this, "Ana ekran hata verdi, aracın kendi ana ekranına dönüldü",
+                    Toast.LENGTH_LONG).show();
+        }
         LauncherModeManager.restoreIfEnabled(this);
         LauncherModeManager.requestHomeRoleOncePerVersion(this, REQUEST_HOME_ROLE);
         SunroofGestureOverlayManager.getInstance(this).onActivityResumed();

@@ -19,6 +19,7 @@ public final class MapControlApplication extends Application {
     public void onCreate() {
         super.onCreate();
         GlitchTip.start(this);
+        guardLauncherCrashLoop();
         AppLocaleManager.applyStoredLocale(this);
         ClusterTrackRelay.install(this);
         int nightPref = getSharedPreferences("MapControlPrefs", MODE_PRIVATE)
@@ -42,5 +43,26 @@ public final class MapControlApplication extends Application {
             public void onLowMemory() {
             }
         });
+    }
+
+    /**
+     * Launcher çökme döngüsüne girdiyse (bkz. LauncherCrashGuard) HOME sabitlemesini kaldırır, alias'ı
+     * kapatır ve Launcher Modu'nu kapatır; böylece HOME aracın kendi ana ekranına döner. Bildirimi
+     * MainActivity bir kez gösterir.
+     */
+    private void guardLauncherCrashLoop() {
+        // Süreç çökerken hemen kapat (yeniden başlatma beklenmez); aşağıdaki kontrol yedektir.
+        com.mapcontrol.launcher.LauncherCrashGuard.INSTANCE.setOnTripped(() ->
+                com.mapcontrol.util.LauncherModeManager.setEnabled(this, false));
+        try {
+            android.content.SharedPreferences sp = getSharedPreferences(
+                    com.mapcontrol.launcher.LauncherCrashGuard.PREFS, MODE_PRIVATE);
+            if (sp.getBoolean(com.mapcontrol.launcher.LauncherCrashGuard.KEY_TRIPPED, false)) {
+                com.mapcontrol.util.LauncherModeManager.setEnabled(this, false);
+                sp.edit().remove(com.mapcontrol.launcher.LauncherCrashGuard.KEY_TRIPPED)
+                        .remove("crashTimes").remove("startMs").apply();
+            }
+        } catch (Exception ignored) {
+        }
     }
 }
