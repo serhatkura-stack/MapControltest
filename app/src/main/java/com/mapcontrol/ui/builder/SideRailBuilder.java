@@ -71,7 +71,6 @@ public class SideRailBuilder {
     private LinearLayout sideRail;
     private TextView appTitleText;
     private LinearLayout selectedMenuRow;
-    private boolean launcherModeActive;
     private boolean contentWide;
     private boolean premiumTitle;
 
@@ -340,14 +339,6 @@ public class SideRailBuilder {
                 }));
     }
 
-    /**
-     * Launcher modu aktifken sol menüyü tamamen gizler; kapalıyken normal görünüme döner.
-     */
-    public void setLauncherModeActive(boolean active) {
-        launcherModeActive = active;
-        applyRailVisibility();
-    }
-
     /** Icerik tam genislik istedi (or. Kamera 360 izleme ekrani); launcher modundan bagimsiz. */
     public void setContentWide(boolean wide) {
         contentWide = wide;
@@ -355,17 +346,13 @@ public class SideRailBuilder {
     }
 
     public boolean isRailHidden() {
-        return launcherModeActive || contentWide;
+        return contentWide;
     }
 
     private void applyRailVisibility() {
         if (sideRail != null) {
             sideRail.setVisibility(isRailHidden() ? View.GONE : View.VISIBLE);
         }
-    }
-
-    public boolean isLauncherModeActive() {
-        return launcherModeActive;
     }
 
     /** Premium üyelikte MapControl (sürüm) başlığını camgöbeğinden altına boyar. */

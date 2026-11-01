@@ -29,9 +29,6 @@ import com.mapcontrol.service.BootReceiver;
 import com.mapcontrol.util.AppLocaleManager;
 import com.mapcontrol.util.LauncherModeManager;
 import com.mapcontrol.util.PermissionProbeDialog;
-import com.mapcontrol.vehicle.material.MaterialVehiclePreferences;
-import com.mapcontrol.vehicle.material.MaterialVehicleResources;
-import com.mapcontrol.vehicle.material.VehicleMaterialPickerDialog;
 
 public class SettingsTabBuilder {
     public interface SettingsCallback {
@@ -92,7 +89,6 @@ public class SettingsTabBuilder {
         createPermissionsSection(settingsTabContent);
         createFloatingBackButtonSection(settingsTabContent);
         createLauncherModeSection(settingsTabContent);
-        createVehicleModelSection(settingsTabContent);
         return scrollView;
     }
 
@@ -589,88 +585,6 @@ public class SettingsTabBuilder {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         updateLauncherHomeSettingsLinkVisibility(launcherModeOn);
-    }
-
-    private void createVehicleModelSection(LinearLayout parentContainer) {
-        TextView sectionTitle = new TextView(context);
-        sectionTitle.setText(R.string.settings_vehicle_image_title);
-        sectionTitle.setTextSize(18);
-        sectionTitle.setTextColor(UiStyles.color(context, R.color.textPrimary));
-        sectionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        sectionTitle.setPadding(16, 24, 16, 8);
-        parentContainer.addView(sectionTitle, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView sectionDesc = new TextView(context);
-        sectionDesc.setText(R.string.settings_vehicle_image_desc);
-        sectionDesc.setTextSize(13);
-        sectionDesc.setTextColor(UiStyles.color(context, R.color.textHint));
-        sectionDesc.setLineSpacing(3, 1.05f);
-        sectionDesc.setPadding(16, 0, 16, 12);
-        parentContainer.addView(sectionDesc, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView currentLabel = new TextView(context);
-        currentLabel.setTextSize(14);
-        currentLabel.setTextColor(UiStyles.color(context, R.color.textSecondary));
-        currentLabel.setPadding(16, 0, 16, 8);
-        refreshVehicleModelStatusLabel(currentLabel);
-        parentContainer.addView(currentLabel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        Button pickButton = new Button(context);
-        pickButton.setText(R.string.settings_vehicle_image_pick);
-        UiStyles.styleOemButton(pickButton, UiStyles.color(context, R.color.accentHighlight));
-        LinearLayout.LayoutParams pickLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        pickLp.setMargins(16, 0, 16, 16);
-        pickButton.setOnClickListener(v -> {
-            if (context instanceof android.app.Activity) {
-                VehicleMaterialPickerDialog.show((android.app.Activity) context,
-                        new VehicleMaterialPickerDialog.OnSelectedListener() {
-                            @Override
-                            public void onManualSelected(
-                                    com.mapcontrol.vehicle.material.MaterialVehicleCatalog.Entry entry) {
-                                MaterialVehicleResources.getInstance().init(context);
-                                refreshVehicleModelStatusLabel(currentLabel);
-                                callback.log("Araç görseli seçildi: " + entry.label
-                                        + " (" + entry.packageName + ")");
-                            }
-
-                            @Override
-                            public void onAutoDetectionSelected() {
-                                refreshVehicleModelStatusLabel(currentLabel);
-                                callback.log("Araç görseli: otomatik algılama etkin");
-                            }
-                        });
-            }
-        });
-        parentContainer.addView(pickButton, pickLp);
-    }
-
-    private void refreshVehicleModelStatusLabel(TextView label) {
-        MaterialVehicleResources resources = MaterialVehicleResources.getInstance();
-        resources.init(context);
-        MaterialVehiclePreferences.Selection manual = MaterialVehiclePreferences.getSelection(context);
-        if (manual != null) {
-            label.setText(context.getString(R.string.settings_vehicle_selected, manual.label, manual.packageName));
-            return;
-        }
-        if (MaterialVehiclePreferences.isAutoDetectionEnabled(context)) {
-            String pkg = resources.getPackageName();
-            String source = resources.getSourceLabel();
-            if (pkg != null) {
-                label.setText(context.getString(R.string.settings_vehicle_auto_detect, source, pkg));
-            } else {
-                label.setText(R.string.settings_vehicle_auto_no_pkg);
-            }
-            return;
-        }
-        label.setText(R.string.settings_vehicle_no_selection);
     }
 
     private void updateLauncherHomeSettingsLinkVisibility(boolean enabled) {

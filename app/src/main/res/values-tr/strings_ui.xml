@@ -49,18 +49,11 @@
     <string name="settings_changelog_version_prefix">Versiyon </string>
 
     <string name="settings_launcher_mode_title">Araç Launcher Modu</string>
-    <string name="settings_launcher_mode_desc">Etkinleştirildiğinde MapControl tam ekran araç paneli olarak açılır (sol menü gizlenir, durum çubuğu saklanır, araç göstergeleri ve uygulama kısayolları gösterilir). Kapatıldığında uygulama normal sekme görünümünde çalışır.</string>
-    <string name="settings_launcher_mode_help_on">Tam ekran araç paneli açık.</string>
-    <string name="settings_launcher_mode_help_off">Normal sekme görünümü.</string>
+    <string name="settings_launcher_mode_desc">Açıldığında Ana ekran tuşu MapControl\'ün widget\'lı ana ekranını açar (araç bilgisi, müzik, klima, koltuklar, uygulamalar; Park ve Sürüş düzeni). Kapatıldığında aracın kendi ana ekranı geri gelir.</string>
+    <string name="settings_launcher_mode_help_on">Widget\'lı ana ekran açık.</string>
+    <string name="settings_launcher_mode_help_off">Aracın kendi ana ekranı.</string>
     <string name="settings_launcher_home_link">Varsayılan ana ekran uygulamasını sistem ayarlarından değiştir</string>
 
-    <string name="settings_vehicle_image_title">Araç görseli</string>
-    <string name="settings_vehicle_image_desc">Launcher panelindeki araç görseline dokunarak listeden model seçin. Listede otomatik algılama veya yüklü OEM paketleri bulunur.</string>
-    <string name="settings_vehicle_image_pick">Araç görseli seç</string>
-    <string name="settings_vehicle_selected">Seçili: %1$s (%2$s)</string>
-    <string name="settings_vehicle_auto_detect">Otomatik algılama: %1$s — %2$s</string>
-    <string name="settings_vehicle_auto_no_pkg">Otomatik algılama etkin; paket bulunamadı — listeden elle seçin.</string>
-    <string name="settings_vehicle_no_selection">Seçim yok — launcher\'daki araca dokunarak seçin.</string>
 
     <string name="topbar_wifi_management">Wi-Fi Yönetimi</string>
     <string name="topbar_app_management">Uygulama Yönetimi</string>
@@ -255,8 +248,6 @@
     <string name="splash_preparing_sub">Lütfen bekleyin</string>
     <string name="splash_map_waiting">Harita bekleniyor</string>
 
-    <string name="vehicle_material_eol">EOL</string>
-    <string name="vehicle_material_pick_title">Araç görseli seçin</string>
     <string name="camera_test_title">Kamera Test</string>
 
     <string name="floating_back_permission_settings">İzin ayarlarına gidilemedi: %1$s</string>
@@ -288,9 +279,6 @@
     <string name="wifi_projection_drop_help">Wi-Fi radyosu değişmeden önce araç erişim noktası kapanır.</string>
     <string name="wifi_projection_keep_help">Telefon bağlı kalır. Bazı araçlar Wi-Fi değişikliğini reddeder.</string>
 
-    <string name="vehicle_material_no_packages">Yüklü araç paketi bulunamadı; yalnızca otomatik algılama kullanılabilir.</string>
-    <string name="vehicle_material_auto_on">Otomatik algılama etkin</string>
-    <string name="vehicle_material_selected">Seçildi: %1$s</string>
 
     <string name="log_system_logs">Sistem Kayıtları</string>
     <string name="log_camera_test">Kamera Test</string>
