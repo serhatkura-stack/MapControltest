@@ -139,7 +139,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val root = LinearLayout(this).apply {
             rootLayout = this
             orientation = LinearLayout.VERTICAL
-            clipToPadding = false
             setBackgroundColor(LauncherTheme.GROUND)
             setPadding(dp(24), dp(20), dp(24), dp(20))
 
@@ -155,17 +154,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
             }
             if (ourBar != null) {
-                // Araç çubuğu gibi ekranın tüm genişliği ve alt 110 px'lik bant: ızgara bandın başladığı yerde biter
-                // (üstte gövdeye kadar ~21 px saydam pay bandın içindedir); kenar boşlukları kadar dışarı taşar.
+                addView(gap(context, 16, vertical = true))
                 addView(ourBar.view, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, OurBottomBar.bandPx(context)).apply {
-                    setMargins(-dp(24), 0, -dp(24), 0)
-                })
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.HEIGHT_DP)))
             }
 
             // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın. Bizimki'nde en altta
             // dar bir boşluk kalır: alttan kaydırma hareketi (OEM çubuğunu geçici çağırır) çubuğumuza takılmaz.
-            val baseBottom = if (ourBar != null) 0 else dp(20)
+            val baseBottom = dp(if (ourBar != null) OurBottomBar.BOTTOM_GAP_DP else 20)
             setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom, LauncherSafeArea.oemInsetPx(context)))
             setOnApplyWindowInsetsListener { v, insets ->
                 val bottom = maxOf(baseBottom, LauncherSafeArea.bottomInsetPx(context, insets))
@@ -179,7 +175,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             setContentView(FrameLayout(this).apply {
                 addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
                 addView(OemBarMock.build(this@HomeLauncherActivity).also { mockBar = it }, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, band, Gravity.BOTTOM))
+                    FrameLayout.LayoutParams.MATCH_PARENT, band - dp(12), Gravity.BOTTOM
+                ).apply { setMargins(dp(24), 0, dp(24), dp(6)) })
             })
         } else {
             setContentView(root)

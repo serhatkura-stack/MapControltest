@@ -83,11 +83,6 @@ object LauncherTheme {
     private const val DAY_DOCK_BORDER = 0xFFC9D1DC.toInt()
     private const val NIGHT_DOCK_TOP = 0xFF232938.toInt()
     private const val NIGHT_DOCK_BOTTOM = 0xFF1D2331.toInt()
-    // Bizim alt çubuk ([DockShape] silueti): tek düz gövde, ortadaki sıcaklık·fan yamuğu bir ton açık; gölge ve gradyan yok.
-    private const val NIGHT_DOCK_BODY = 0xFF1B1F27.toInt()
-    private const val NIGHT_DOCK_WELL = 0xFF252A35.toInt()
-    private const val DAY_DOCK_BODY = 0xFFF3F5F8.toInt()
-    private const val DAY_DOCK_WELL = 0xFFFFFFFF.toInt()
 
     val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD
@@ -107,11 +102,6 @@ object LauncherTheme {
     /** Alt çubuk yüzeyi, üst ve alt gradyan uçları (gece koyu, gündüz açık buzlu). */
     val DOCK_TOP: Int get() = if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
     val DOCK_BOTTOM: Int get() = if (night) NIGHT_DOCK_BOTTOM else DAY_DOCK_BOTTOM
-    /** Siluetli alt çubuk: gövde ve bir ton açık orta bölüm (sıcaklık·fan). */
-    val DOCK_BODY: Int get() = if (night) NIGHT_DOCK_BODY else DAY_DOCK_BODY
-    val DOCK_WELL: Int get() = if (night) NIGHT_DOCK_WELL else DAY_DOCK_WELL
-    /** Siluetin ve orta bölümün ince (1dp) kenarı: gece %7 beyaz, gündüz kart kenarı tonu. */
-    val DOCK_EDGE: Int get() = if (night) 0x12FFFFFF else DAY_BORDER
     /** Alt çubuk kenar çizgisi (1dp); gecede 0 (çizgi yok), gündüz koyu ince çizgi. */
     val DOCK_BORDER: Int get() = if (night) 0 else DAY_DOCK_BORDER
     /** Gündüz dock'u kendi bölgesi gibi okunsun diye yükselti (dp); gecede 0. */
@@ -128,6 +118,11 @@ object LauncherTheme {
     val DOCK_TRACK: Int get() = if (night) 0x40FFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x33000000
     /** Üst kenar parıltısı (%8 beyaz); yalnızca gecede, gündüz 0. */
     val DOCK_HIGHLIGHT: Int get() = if (night) 0x14FFFFFF else 0
+    /** Klima sürükleme tonları: serin mavi, sıcak turuncu, fan mavisi; gündüz açık yüzeyde biraz daha doygun. */
+    val DOCK_TINT_COOL: Int get() = if (night) 0x403B82F6 else 0x382563EB
+    val DOCK_TINT_WARM: Int get() = if (night) 0x3DFB923C else 0x40F97316
+    val DOCK_TINT_FAN: Int get() = if (night) 0x333B82F6 else 0x2E2563EB
+
     /** Vurgu rengi üstündeki yazı/ikon; iki görünümde de beyaz. */
     val ON_ACCENT: Int get() = 0xFFFFFFFF.toInt()
 
