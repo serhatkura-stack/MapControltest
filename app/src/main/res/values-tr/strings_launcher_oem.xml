@@ -1,7 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Desay OEM komutlarından türetilen widget'lar (klima tuşları, ısıtmalar, lastik, yolculuk eklentileri, arka hoparlör). -->
+<!-- Desay OEM komutlarindan turetilen widget'lar (klima tuslari, isitmalar, lastik, toplamlar, arka hoparlor). -->
 <resources>
     <string name="launcher_climate_lo">LO</string>
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Bagaj durumu değişti, tekrar dokunun</string>
+    <string name="launcher_widget_climate_keys">Klima tuşları</string>
+    <string name="launcher_widget_heats">Isıtmalar</string>
+    <string name="launcher_widget_tires">Lastik basıncı</string>
+    <string name="launcher_widget_trip_totals">Toplam</string>
+    <string name="launcher_widget_rear_speaker">Arka hoparlör</string>
+    <string name="launcher_keys_ac">A/C</string>
+    <string name="launcher_keys_auto">Oto</string>
+    <string name="launcher_keys_recirc">İç hava</string>
+    <string name="launcher_keys_fresh">Dış hava</string>
+    <string name="launcher_keys_recirc_state">Devridaim</string>
+    <string name="launcher_keys_fresh_state">Taze hava</string>
+    <string name="launcher_keys_power">Klima</string>
+    <string name="launcher_heat_steering">Direksiyon</string>
+    <string name="launcher_heat_windshield">Ön cam</string>
+    <string name="launcher_tires_unit">bar</string>
+    <string name="launcher_tire_fl">Ön sol</string>
+    <string name="launcher_tire_fr">Ön sağ</string>
+    <string name="launcher_tire_rl">Arka sol</string>
+    <string name="launcher_tire_rr">Arka sağ</string>
+    <string name="launcher_liter_value" formatted="true">%1$s L</string>
+    <string name="launcher_totals_fuel_label">Toplam yakıt</string>
+    <string name="launcher_totals_time_label">Sürüş süresi</string>
+    <string name="launcher_totals_fuel_suffix">yakıt</string>
+    <string name="launcher_totals_time_suffix">sürüş</string>
+    <string name="launcher_totals_since_reset" formatted="true">sıfırlamadan beri sürüş %1$s</string>
+    <string name="launcher_totals_odometer">Toplam yol</string>
 </resources>

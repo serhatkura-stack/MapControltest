@@ -85,7 +85,12 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
     CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
-    BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2)));
+    BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2))),
+    CLIMATE_KEYS("climate_keys", R.string.launcher_widget_climate_keys, R.drawable.ic_mdi_snowflake, listOf(Span(4, 2), Span(4, 4))),
+    HEATS("heats", R.string.launcher_widget_heats, R.drawable.ic_mdi_steering, listOf(Span(2, 2))),
+    TIRES("tire_pressure", R.string.launcher_widget_tires, R.drawable.ic_mdi_car, listOf(Span(2, 4), Span(4, 4))),
+    TRIP_TOTALS("trip_totals", R.string.launcher_widget_trip_totals, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(3, 2))),
+    REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -184,5 +189,10 @@ object WidgetFactory {
         WidgetType.PHONE_REMINDER -> PhoneTile(activity)
         WidgetType.CLOCK -> ClockTile(activity)
         WidgetType.BODY -> BodyTile(activity)
+        WidgetType.CLIMATE_KEYS -> ClimateKeysTile(activity)
+        WidgetType.HEATS -> HeatTile(activity)
+        WidgetType.TIRES -> TireTile(activity)
+        WidgetType.TRIP_TOTALS -> TripTotalsTile(activity)
+        WidgetType.REAR_SPEAKER -> RearSpeakerTile(activity)
     }
 }

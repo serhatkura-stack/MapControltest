@@ -4,6 +4,7 @@ import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
+import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
 import com.mapcontrol.comfort.ComfortPlan
 import com.mapcontrol.comfort.ParkGate
 
@@ -70,6 +71,17 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac80_rear_defrost", HV, HvacID.ID_AC_REAR_DEFROST))),
         // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
         Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),
+        // Klima tuşları (HVAC 1 A/C, 4 Oto, 8 devridaim): 1 aç / 2 kapat; devridaimde 1 iç hava / 2 dış hava (OEM HvacModel, SVVrControl a/b.java).
+        Entry("ClimateAc", HV, HvacID.ID_AC_STATE, setOf(1, 2), listOf(sig("hvac1_ac", HV, HvacID.ID_AC_STATE))),
+        Entry("ClimateAuto", HV, HvacID.ID_AC_AUTO_STATE, setOf(1, 2), listOf(sig("hvac4_auto", HV, HvacID.ID_AC_AUTO_STATE))),
+        Entry("ClimateRecirc", HV, HvacID.ID_AC_CIRCULATION_MODE, setOf(1, 2), listOf(sig("hvac8_circulation", HV, HvacID.ID_AC_CIRCULATION_MODE))),
+        // Isıtmalar: direksiyon anahtarı (HVAC 9 ← 1, ardından CarSetting 160 ← 1) ve ön cam ısıtma (HVAC 65: 1 aç / 2 kapat).
+        Entry("SteerHeatDisplay", HV, HvacID.ID_AC_DISPLAY_ACTIVE, setOf(1), listOf(sig("hvac9_display_active", HV, HvacID.ID_AC_DISPLAY_ACTIVE))),
+        Entry("SteerHeat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, setOf(1), listOf(sig("cs160_steer_wheel_heat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT))),
+        Entry("WindshieldHeat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT, setOf(1, 2), listOf(sig("hvac65_front_glass_heat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT))),
+        // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik = tür 2 ön-arka denge); değer 0..20. Tür/uç değeri doğrulanmadı.
+        Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER, (0..SoundFieldMath.MAX).toSet(),
+            listOf(sig("dsp_sound_field_fader", VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER))),
         // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç.
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK))),

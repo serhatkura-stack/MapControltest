@@ -84,6 +84,25 @@ internal object TripDecode {
     /** Sıfırlamadan beri ortalama tüketim (sinyal 37): ham/10 L/100 km. */
     fun avgL100(raw: Int?): Double? = raw?.takeIf { it in 1..999 }?.let { it / 10.0 }
 
+    /**
+     * Toplam km (ReadOnly 150 `ID_TOTAL_MILEAGE`, yoksa 71 `ID_GRAND_TOTAL_KM`): tam km. 71 araçta gösterge ile eşleşti (4 bayt
+     * [0,0,43,24] = 11032 km); 150'nin aynı birimde olduğu varsayıldı (yeni yazılımın ID'si, OEM uygulamalarında kullanımı yok). Doğrulanmadı.
+     */
+    fun totalKm(raw: Int?): Int? = raw?.takeIf { it in 1..9_999_999 }
+
+    /** Toplam yakıt (ReadOnly 153 `ID_TOTAL_FUEL`): birim OEM kodunda yok; ham/10 litre varsayıldı (SUM_FUEL gibi). Doğrulanmadı. */
+    fun totalFuelL(raw: Int?): Double? = raw?.takeIf { it in 1..9_999_999 }?.let { it / 10.0 }
+
+    /**
+     * Sürüş süresi (151 çalışmadan beri / 152 sıfırlamadan beri): `ID_DRIVE_TIME` (29) gibi 4 bayt [saat üst, saat alt, dk, sn]
+     * ise onun çözümü; 1-2 elemanlı ise doğrudan dakika varsayılır. Doğrulanmadı.
+     */
+    fun drivingMinutes(raw: IntArray?): Int? = when (raw?.size) {
+        4 -> ReadOnlyDecode.driveMinutes(raw)
+        1, 2 -> raw.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }.takeIf { it in 0..99_999 }
+        else -> null
+    }
+
     /** Sıfırlamadan beri ortalama hız (sinyal 41): ham/10, gösterge gibi tam sayıya yuvarlanmadan kırpılır (456 -> 45). */
     fun avgSpeedKmh(raw: Int?): Int? = raw?.takeIf { it in 1..3000 }?.let { it / 10 }
 }
@@ -111,6 +130,11 @@ internal data class TripData(
     /** Kabin içi / dışı PM2.5 (µg/m³). */
     val pm25In: Int? = null,
     val pm25Out: Int? = null,
+    /** Toplam km (150, yoksa 71), toplam yakıt L (153), sürüş süresi dk: çalışmadan beri (151) ve sıfırlamadan beri (152). */
+    val totalKm: Int? = null,
+    val totalFuelL: Double? = null,
+    val drivingRunMin: Int? = null,
+    val drivingResetMin: Int? = null,
 )
 
 /**
@@ -118,7 +142,7 @@ internal data class TripData(
  * widget aynı turu paylaşır. Yalnızca okur. Her sinyal kendi hızında okunur ([PollTiers]):
  *  - canlı (hız + anlık tüketim): 1 sn; motor kapalı ve hız 0 iken 3 sn,
  *  - yolculuk (mesafe, ortalamalar, akü, soğutma suyu, düşük yakıt, motor devri): 5 sn,
- *  - bakım ve PM2.5: 60 sn.
+ *  - bakım, PM2.5 ve toplamlar (toplam km, toplam yakıt, sürüş süreleri): 60 sn.
  */
 internal object TripSource {
 
@@ -225,6 +249,10 @@ internal object TripSource {
                 serviceDays = ro(ReadOnlyID.ID_ICMT_DAY)?.takeIf { it in 0..9_999 },
                 pm25In = hvac(HvacID.ID_AC_PM25_INCAR)?.takeIf { it in 0..999 },
                 pm25Out = hvac(HvacID.ID_AC_PM25_OUTCAR)?.takeIf { it in 0..999 },
+                totalKm = TripDecode.totalKm(ro(ReadOnlyIds.TOTAL_MILEAGE) ?: ro(ReadOnlyID.ID_GRAND_TOTAL_KM)),
+                totalFuelL = TripDecode.totalFuelL(ro(ReadOnlyIds.TOTAL_FUEL)),
+                drivingRunMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RUNNING)),
+                drivingResetMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RESET)),
             )
         }
         return d
@@ -591,5 +619,61 @@ internal class HealthTile(context: Context) :
         const val BATTERY_MIN_V = 12.0
         const val BATTERY_MAX_V = 15.0
         const val COOLANT_MAX_C = 110
+    }
+}
+
+/**
+ * ReadOnly kimlikleri: FrostNav'ın `ReadOnlyID` jar'ında bulunmayan, yeni Desay yazılımının eklediği sinyaller (SVVDSCarInfo
+ * `ReadOnlyID`, root dökümü, katalog/root-dump-envanter.md bölüm 3). Eski yazılımlı araçta okunamaz: bütün çağıranlar null'u kaldırır.
+ */
+internal object ReadOnlyIds {
+    const val TIRE_PRESSURE = 140
+    const val TOTAL_MILEAGE = 150
+    const val DRIVING_TIME_AFTER_RUNNING = 151
+    const val DRIVING_TIME_AFTER_RESET = 152
+    const val TOTAL_FUEL = 153
+}
+
+/**
+ * Toplamlar (yolculuk kartının eşi): toplam km büyük, solda toplam yakıt ve sürüş süresi. "Sıfırlamadan beri" yolculuk kartından ayrı
+ * bir kutucuktur çünkü bunlar ömür boyu sayaçlardır; aynı kartta karışırdı. 2×2'de alt satırlar yazı olarak, 3×2'de sağ blokta.
+ * Eksik sinyaller satırdan düşer (eski yazılımda 150-153 olmayabilir).
+ */
+internal class TripTotalsTile(context: Context) :
+    TripCard(context, R.drawable.ic_mdi_speedometer, R.string.launcher_widget_trip_totals) {
+
+    private fun duration(min: Int): String =
+        if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
+
+    override fun bind() {
+        val d = data
+        val km = d.totalKm
+        // Bu sürüş (151); yoksa sıfırlamadan beri (152). İkisi de erişilebilirlik metninde.
+        val time = d.drivingRunMin ?: d.drivingResetMin
+        val rows = listOfNotNull(
+            d.totalFuelL?.let { context.getString(R.string.launcher_totals_fuel_label) to context.getString(R.string.launcher_liter_value, one(it)) },
+            time?.let { context.getString(R.string.launcher_totals_time_label) to duration(it) },
+        )
+        if (!d.connected || (km == null && rows.isEmpty())) {
+            showMissing()
+            return
+        }
+        val value = if (km != null) context.getString(R.string.launcher_km_value, String.format(java.util.Locale.getDefault(), "%,d", km))
+        else context.getString(R.string.launcher_unavailable)
+        setValue(value, if (km != null) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, if (value.length > 8) VALUE_NARROW_SP else VALUE_SP)
+        // 2×2'de satırlar sağ blok yerine alt başlıkta ve ne olduklarını söyler ("1284,6 L yakıt", "47 dk sürüş").
+        val lines = listOfNotNull(
+            d.totalFuelL?.let { context.getString(R.string.launcher_liter_value, one(it)) + " " + context.getString(R.string.launcher_totals_fuel_suffix) },
+            time?.let { duration(it) + " " + context.getString(R.string.launcher_totals_time_suffix) },
+        )
+        setSubtitle(if (wide) context.getString(R.string.launcher_totals_odometer) else lines.joinToString("\n"))
+        showRows(rows)
+        val both = if (d.drivingRunMin != null && d.drivingResetMin != null) context.getString(R.string.launcher_totals_since_reset, duration(d.drivingResetMin)) else null
+        describe(context.getString(R.string.launcher_widget_trip_totals), value, *rows.map { "${it.first} ${it.second}" }.toTypedArray(), both)
+    }
+
+    private companion object {
+        /** "11.032 km" 2×2'de 44 sp'te sığmaz. */
+        const val VALUE_NARROW_SP = 34f
     }
 }

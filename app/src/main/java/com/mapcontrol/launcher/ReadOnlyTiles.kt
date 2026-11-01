@@ -157,6 +157,8 @@ internal data class ExtraData(
     val phoneForgotten: Boolean? = null,
     val handbrakeOn: Boolean? = null,
     val parts: Map<BodyPart, Boolean> = emptyMap(),
+    /** Lastik basıncı (ReadOnly 140, uyarı 95); eski yazılımda ya da çözülemezse null. */
+    val tires: TireReading? = null,
 ) {
     /** Gövde hakkında en az bir parça okunabildi mi. */
     val bodyKnown: Boolean get() = parts.isNotEmpty()
@@ -266,6 +268,7 @@ internal object ExtraSource {
                 batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
                 batterySoc = ReadOnlyDecode.batterySoc(ro(ReadOnlyID.ID_IBS_SOC)),
                 padState = ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
+                tires = TireDecode.parse(CarSignals.read(RO, ReadOnlyIds.TIRE_PRESSURE), ro(ReadOnlyID.ID_TIRE_PRESSURE_WARNING)),
                 phoneForgotten = ReadOnlyDecode.phoneForgotten(
                     cs(CarSettingID.ID_CAR_PHONE_FORGOT_ON_WIRLESS_BOARD), cs(CarSettingID.ID_CAR_PHONE_FORGOT),
                 ),
@@ -303,6 +306,7 @@ internal object ReadOnlyDemo {
         phoneForgotten = false,
         handbrakeOn = true,
         parts = BodyPart.values().associateWith { false },
+        tires = TireReading(listOf(2.4, 2.4, 2.3, 2.2), warning = false),
     )
 }
 

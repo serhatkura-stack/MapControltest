@@ -84,6 +84,9 @@ internal object LauncherDemo {
     fun comfort(): ComfortReading = ComfortReading(
         connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true,
         trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
+        keys = ClimateKeysReading(ac = true, auto = true, recirc = false, power = true),
+        heat = HeatReading(steering = false, windshield = false),
+        sound = SoundFieldReading(balance = SoundFieldMath.CENTER, fade = SoundFieldMath.CENTER),
     )
 
     /**
@@ -111,6 +114,7 @@ internal object LauncherDemo {
         connected = true, moving = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 53.8,
         avgL100 = 7.9, avgSpeedKmh = 45, batteryV = 14.1, coolantC = 89, lowFuel = false,
         serviceKm = 3978, serviceDays = 155, pm25In = 1, pm25Out = 4,
+        totalKm = 18_420, totalFuelL = 1_284.6, drivingRunMin = 47, drivingResetMin = 3_552,
     )
 
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */

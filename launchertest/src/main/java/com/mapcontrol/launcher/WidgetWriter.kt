@@ -30,6 +30,13 @@ internal object WidgetWriter {
         }
     }
 
+    /** Ses alanı (DSP): beyaz listede modül = SOUND_FIELD olay kimliği, kimlik = tür (1 sol-sağ, 2 ön-arka). */
+    fun sendSoundField(type: Int, value: Int) {
+        attempt(com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD, type, value, isConnected = { true }) {
+            SoundFieldIo.write(type, value)
+        }
+    }
+
     /** Merkezi kilit: komut VehicleQuickControls içinde gider; değer aynı formülle ([VehicleQuickControls.centralLockValue]) denetlenir. */
     fun sendLock(context: Context, locked: Boolean) {
         val controls = VehicleQuickControls.getInstance(context.applicationContext)
@@ -67,7 +74,9 @@ internal object WidgetWriter {
         )
     }
 
-    private fun describe(s: ComfortPlan.Signal): String = CarSignals.read(s.module, s.id)?.joinToString(",", "[", "]") ?: "null"
+    private fun describe(s: ComfortPlan.Signal): String =
+        if (s.module == com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD) SoundFieldIo.read(s.id)?.let { "[$it]" } ?: "null"
+        else CarSignals.read(s.module, s.id)?.joinToString(",", "[", "]") ?: "null"
 
     /** 3 sn boyunca sinyalleri 250 ms'de bir okur; yalnızca değişimleri günlüğe yazar. */
     private fun watch(entry: WidgetWritePolicy.Entry, before: List<Pair<ComfortPlan.Signal, String>>) {

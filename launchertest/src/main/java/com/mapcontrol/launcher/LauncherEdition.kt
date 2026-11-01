@@ -60,6 +60,12 @@ internal object LauncherEdition {
         WidgetWriter.send(proxy, module, id, value)
     }
 
+    /** Ses alanı (arka hoparlör): anahtar kapalıysa hiçbir şey olmaz; açıkken park + beyaz liste kapısından geçer. */
+    fun sendSoundField(type: Int, value: Int) {
+        if (!on) return
+        WidgetWriter.sendSoundField(type, value)
+    }
+
     fun setCentralLock(context: Context, locked: Boolean) {
         if (!on) return
         WidgetWriter.sendLock(context, locked)

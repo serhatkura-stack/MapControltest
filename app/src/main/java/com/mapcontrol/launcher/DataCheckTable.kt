@@ -119,9 +119,14 @@ internal object DataCheckTable {
     /** Isıtma/soğutma kademesi 0..3. */
     val seatLevel: (Int) -> String? = { v -> if (v in 0..3) (if (v == 0) "Kapalı" else "Kademe $v") else null }
 
-    /** Klima sıcaklığı: 15,5 + ham/2 (OurBottomBar ile aynı), 32 °C'ye kadar. */
+    /** Klima sıcaklığı: 15,5 + ham/2 (OurBottomBar ile aynı); ham 0 = LO, 30 = HI, üstü geçersiz. */
     val climateTemp: (Int) -> String? = { v ->
-        if (v < 0) null else (15.5 + v / 2.0).takeIf { it <= 32.0 }?.let { String.format(java.util.Locale.US, "%.1f °C", it) }
+        when {
+            v == ClimateMath.RAW_LO -> "LO"
+            v == ClimateMath.RAW_HI -> "HI"
+            v in 1 until ClimateMath.RAW_HI -> String.format(java.util.Locale.US, "%.1f °C", 15.5 + v / 2.0)
+            else -> null
+        }
     }
 
     val fuel: (Int) -> String? = { v ->
@@ -255,6 +260,18 @@ internal object DataCheckTable {
         s(body, "Yakıt kapağı", SET, CarSettingID.ID_FUEL_FILLER_CAP, unverified)
 
         s("Vites", "Vites", RO, ReadOnlyID.ID_GEARBOX_STATE, gear)
+
+        // Root dökümünden gelen yeni sinyaller (Tiggo 8 yazılımı): ham değer görülsün diye anlamı doğrulanmadı sayılır.
+        val oem = "Yeni sinyaller"
+        s(oem, "Lastik basıncı (140)", RO, ReadOnlyIds.TIRE_PRESSURE, unverified)
+        s(oem, "Toplam km (150)", RO, ReadOnlyIds.TOTAL_MILEAGE, unverified)
+        s(oem, "Toplam yakıt (153)", RO, ReadOnlyIds.TOTAL_FUEL, unverified)
+        s(oem, "Sürüş süresi, çalışma (151)", RO, ReadOnlyIds.DRIVING_TIME_AFTER_RUNNING, unverified)
+        s(oem, "Sürüş süresi, sıfırlama (152)", RO, ReadOnlyIds.DRIVING_TIME_AFTER_RESET, unverified)
+        s(oem, "Klima Oto (HVAC 4)", HVAC, HvacID.ID_AC_AUTO_STATE, unverified)
+        s(oem, "Klima gücü (HVAC 18)", HVAC, HvacID.ID_AC_WORKING, unverified)
+        s(oem, "Devridaim (HVAC 8)", HVAC, HvacID.ID_AC_CIRCULATION_MODE, unverified)
+        s(oem, "Devridaim (HVAC 111)", HVAC, ClimateKeysMath.ID_CIRCULATION_MODE_NEW, unverified)
     }
 
     /** Grup sırası, tablodaki ilk görünüşe göre. */
