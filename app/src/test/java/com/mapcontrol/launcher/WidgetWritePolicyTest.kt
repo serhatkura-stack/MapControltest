@@ -133,4 +133,13 @@ class WidgetWritePolicyTest {
         assertEquals(10, OurBottomBar.decodeFan(10))
         assertNull(OurBottomBar.decodeFan(11))
     }
+
+    @Test fun rearSpeakerIsAllowedWhileMovingWithoutAskingParkGate() {
+        var asked = false
+        val v = WidgetWritePolicy.evaluate(
+            com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, SoundFieldMath.FRONT_EXTREME,
+        ) { asked = true; com.mapcontrol.comfort.ParkGate.Decision(false, "moving") }
+        assertTrue(v is WidgetWritePolicy.Verdict.Allowed)
+        assertFalse(asked)
+    }
 }

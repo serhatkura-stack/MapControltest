@@ -114,7 +114,8 @@ internal fun ComfortReader.readSound(): ComfortReading {
 }
 
 /**
- * Arka hoparlör: tek dokunuşla arka hoparlörleri kapatır (fader ön uca), tekrar dokununca eski değeri geri verir. Yazma yalnızca
+ * Uyku modu (arka hoparlör): arkada uyuyan çocuk uyanmasın diye sürücü SÜRERKEN dokunur; park kapısı ve onay penceresi yoktur
+ * ([WidgetWritePolicy.ALLOWED_WHILE_MOVING]). Tek dokunuşla arka hoparlörleri kapatır (fader ön uca), tekrar dokununca eski değeri geri verir. Yazma yalnızca
  * [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi mesajı). Şema solda, yazılar sağda.
  */
 internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
@@ -126,7 +127,7 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
     private var compact = false
 
     private val diagram = SpeakerDiagramView(context)
-    private val iconView = icon(context, R.drawable.ic_mdi_volume_high, ICON_DP, LauncherTheme.TEXT_SECONDARY)
+    private val iconView = icon(context, R.drawable.ic_mdi_weather_night, ICON_DP, LauncherTheme.TEXT_SECONDARY)
     private val title = text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY).apply {
         setText(R.string.launcher_widget_rear_speaker)
         theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
@@ -138,15 +139,17 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         addView(gap(context, 8))
         addView(title)
     }
-    private val stateText = text(context, STATE_SP, LauncherTheme.TEXT, medium = true, maxLines = 2).apply { gravity = Gravity.CENTER }
-    /** Dokunma ipucu: yuvarlak bir hap; "Dokun: aç/kapat". */
-    private val hint = text(context, HINT_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+    /** Açık/Kapalı: anahtar görünümlü hap; uyku modu açıkken sakin gece vurgusu, kapalıyken nötr. */
+    private val stateText = text(context, STATE_SP, LauncherTheme.TEXT, medium = true).apply {
         gravity = Gravity.CENTER
-        val h = context.dp(12)
-        val v = context.dp(5)
-        setPadding(h, v, h, v)
-        theme.bind { background = rounded(context, LauncherTheme.CONTROL, HINT_RADIUS_DP) }
+        setPadding(context.dp(20), context.dp(4), context.dp(20), context.dp(4))
     }
+    private val detail = text(context, DETAIL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+        theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
+    }
+
+    /** Gece vurgusu (alarm kırmızısı değil): sakin çivit. */
+    private fun sleepAccent(): Int = if (LauncherTheme.night) 0xFF7C83F5.toInt() else 0xFF4F46E5.toInt()
 
     private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
         gravity = Gravity.CENTER
@@ -171,24 +174,26 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         if (c != compact) arrange(c)
     }
 
-    /** Yatay düzen: şema solda, başlık/durum/ipucu sağda. 2x1'de yazılar küçülür. Görünümler yeniden bağlanır. */
+    /** Yatay düzen: şema solda; sağda (2x2) başlık, büyük durum hapı ve açıklama, (2x1) yalnızca durum hapı. */
     private fun arrange(c: Boolean) {
         compact = c
-        listOf(titleRow, diagram, stateText, hint).forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        listOf(titleRow, diagram, stateText, detail).forEach { (it.parent as? ViewGroup)?.removeView(it) }
         root.removeAllViews()
-        stateText.textSize = if (c) STATE_COMPACT_SP else STATE_SP
-        stateText.gravity = Gravity.START
-        hint.gravity = Gravity.START
+        stateText.textSize = STATE_SP
         root.orientation = LinearLayout.HORIZONTAL
-        root.addView(diagram, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.8f))
-        root.addView(gap(context, 10))
-        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-        column.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        column.addView(gap(context, 4, vertical = true))
-        column.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        column.addView(gap(context, 6, vertical = true))
-        column.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.2f))
+        root.addView(diagram, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.7f))
+        root.addView(gap(context, 8))
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        if (!c) {
+            column.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            column.addView(gap(context, 4, vertical = true))
+        }
+        column.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        if (!c) {
+            column.addView(gap(context, 4, vertical = true))
+            column.addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        root.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.3f))
     }
 
     override fun clearPending() { pendingMuted = null }
@@ -197,21 +202,27 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         pendingMuted ?: SoundFieldMath.rearMuted(reading.sound?.fade).takeIf { reading.connected }
 
     override fun render() {
-        val muted = muted()
+        // Uyku modu = arka hoparlör kapalı (fader ön uçta).
+        val sleep = muted()
         val state = context.getString(
-            when (muted) {
+            when (sleep) {
                 null -> R.string.launcher_unavailable
-                true -> R.string.launcher_rear_off
-                false -> R.string.launcher_rear_on
+                true -> R.string.launcher_rear_on
+                false -> R.string.launcher_rear_off
             },
         )
         stateText.setTextSmooth(state)
-        stateText.setTextColor(if (muted == true) LauncherTheme.ACCENT else if (muted == false) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY)
-        hint.visibility = if (muted == null) View.GONE else View.VISIBLE
-        hint.text = if (muted == true) context.getString(R.string.launcher_rear_tap_on) else context.getString(R.string.launcher_rear_tap_off)
-        diagram.setRearOn(muted?.not())
+        stateText.setTextColor(if (sleep == true) 0xFFFFFFFF.toInt() else LauncherTheme.TEXT_SECONDARY)
+        stateText.background = rounded(context, if (sleep == true) sleepAccent() else LauncherTheme.CONTROL, 999f)
+        detail.text = when (sleep) {
+            true -> context.getString(R.string.launcher_sleep_on_detail)
+            false -> context.getString(R.string.launcher_sleep_off_detail)
+            null -> null
+        }
+        iconView.imageTintList = android.content.res.ColorStateList.valueOf(if (sleep == true) sleepAccent() else LauncherTheme.TEXT_SECONDARY)
+        diagram.setRearOn(sleep?.not())
         root.contentDescription = context.getString(R.string.launcher_widget_rear_speaker) + ": " + state
-        root.isEnabled = muted != null || LauncherEdition.READ_ONLY
+        root.isEnabled = sleep != null || LauncherEdition.READ_ONLY
     }
 
     private fun onTap() {
@@ -230,13 +241,12 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
     }
 
     private companion object {
-        const val PADDING_DP = 12
-        const val ICON_DP = 22
-        const val TITLE_SP = 17f
-        const val STATE_SP = 24f
-        const val STATE_COMPACT_SP = 18f
-        const val HINT_SP = 14f
-        const val HINT_RADIUS_DP = 14f
+        const val PADDING_DP = 8
+        const val ICON_DP = 24
+        const val TITLE_SP = 20f
+        /** Bir bakışta okunur: durum en az 32 sp. */
+        const val STATE_SP = 32f
+        const val DETAIL_SP = 17f
     }
 }
 

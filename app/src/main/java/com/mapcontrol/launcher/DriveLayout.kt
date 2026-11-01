@@ -150,5 +150,7 @@ fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = empt
     PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
     PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
     PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 5, 4, Span(2, 2)),
+    // Uyku modu (arka hoparlör): sürerken ulaşılabilsin diye yolcu koltuğunun yanında; boşluk açmaz.
+    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 8, 4, Span(2, 2)),
     PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
 )

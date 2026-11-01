@@ -5,11 +5,9 @@
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Trunk state changed, tap again</string>
     <string name="launcher_widget_trip_totals">Totals</string>
-    <string name="launcher_widget_rear_speaker">Rear speakers</string>
+    <string name="launcher_widget_rear_speaker">Sleep mode</string>
     <string name="launcher_rear_on">On</string>
-    <string name="launcher_rear_off">Off · sound in front</string>
-    <string name="launcher_rear_tap_on">Tap: turn on</string>
-    <string name="launcher_rear_tap_off">Tap: turn off</string>
+    <string name="launcher_rear_off">Off</string>
     <string name="launcher_keys_ac">A/C</string>
     <string name="launcher_keys_auto">Auto</string>
     <string name="launcher_keys_recirc">Recirc</string>
@@ -28,4 +26,7 @@
     <string name="launcher_totals_time_suffix">driving</string>
     <string name="launcher_totals_since_reset" formatted="true">driving since reset %1$s</string>
     <string name="launcher_totals_odometer">Odometer</string>
+    <string name="launcher_sleep_sub">Rear speakers</string>
+    <string name="launcher_sleep_on_detail">Rear silent, music up front</string>
+    <string name="launcher_sleep_off_detail">All speakers</string>
 </resources>

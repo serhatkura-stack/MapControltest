@@ -90,6 +90,14 @@ internal object WidgetWritePolicy {
     private fun seat(widget: String, id: Int) =
         Entry(widget, CS, id, SEAT_VALUES, listOf(sig("cs${id}_${widget.lowercase()}", CS, id)))
 
+    /**
+     * Park kapısından MUAF widget'lar: "Uyku modu" (arka hoparlör) yalnızca ses fader'ıdır, her hızda güvenlidir ve sürücü onu
+     * sürerken dokunur (arkada uyuyan çocuk). Onay penceresi de yoktur. Gerçek sürümde yazma yine
+     * [ComfortWriter.REAR_SPEAKER_WRITE_VERIFIED] ile kapalıdır (fader yönü araç testinde doğrulanana dek "Araç testinden sonra
+     * açılacak" mesajı); doğrulanınca true yapılır ve tek dokunuşla, sürüşte de çalışır.
+     */
+    val ALLOWED_WHILE_MOVING: Set<String> = setOf("RearSpeaker")
+
     /** Girdi beyaz listede mi; değilse null. */
     fun find(module: Int, id: Int, value: Int): Entry? = ENTRIES.firstOrNull { it.matches(module, id, value) }
 
@@ -104,6 +112,8 @@ internal object WidgetWritePolicy {
      */
     fun evaluate(module: Int, id: Int, value: Int, park: () -> ParkGate.Decision): Verdict {
         val entry = find(module, id, value) ?: return Verdict.NotWhitelisted
+        // Yalnızca ses dengesi olan widget'lar sürüş sırasında da çalışır: park kapısına hiç sorulmaz.
+        if (entry.widget in ALLOWED_WHILE_MOVING) return Verdict.Allowed(entry)
         val decision = park()
         return if (decision.allowed) Verdict.Allowed(entry) else Verdict.NotParked(decision.reason)
     }

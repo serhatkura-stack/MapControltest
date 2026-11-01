@@ -120,6 +120,7 @@ class DriveLayoutTest {
                 "trip@10,2:2×2",
                 "seat_heat_driver@0,4:2×2",
                 "break_reminder@5,4:2×2",
+                "rear_speaker@8,4:2×2",
                 "seat_heat_passenger@10,4:2×2",
             ).sorted()
             assertEquals(want, got)
