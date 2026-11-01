@@ -303,6 +303,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         handler = new Handler(Looper.getMainLooper());
+        // Güncelleme/yeniden kurulum alias'ı manifest varsayılanına (kapalı) döndürür; tercihle eşitle.
+        LauncherModeManager.syncAliasWithPreference(this);
         if (savedInstanceState == null && getIntent() != null
                 && getIntent().getBooleanExtra(EXTRA_OPEN_PROJECTION_TARGET_PICKER, false)) {
             deferredOpenProjectionTargetPicker = true;
@@ -1557,16 +1559,38 @@ public class MainActivity extends AppCompatActivity {
         target.setAlpha(1f);
     }
 
+    private static final int REQUEST_HOME_ROLE = 4711;
+
     private void enterLauncherMode() {
         LauncherModeManager.setEnabled(this, true);
         applyLauncherChrome(true);
         syncLauncherModeSettingsUi();
+        // Alias kapatılınca Android HOME rolünü düşürür; yeniden açınca rol kendiliğinden gelmez.
+        // PackageManager alias değişikliğini yayınlayınca rol isteği gösterilir (bkz. LauncherModeManager).
+        handler.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed() && LauncherModeManager.isEnabled(this)) {
+                LauncherModeManager.requestHomeRoleIfNeeded(this, REQUEST_HOME_ROLE);
+            }
+        }, 600L);
     }
 
     private void exitLauncherMode() {
+        final int tabToKeep = currentTab;
+        final Context appContext = getApplicationContext();
         LauncherModeManager.setEnabled(this, false);
         applyLauncherChrome(false);
         syncLauncherModeSettingsUi();
+        // Alias devre dışı kalınca sistem, kökü bu alias olan görevi (launcher görevi) kapatır. FrostNav
+        // ekranı o görevin içinde açılmışsa (bazı cihazlarda) onunla birlikte kapanır ve kullanıcı sistem
+        // launcher'ına düşer. Kapanmışsa aynı sekmede ayrı görevde yeniden aç.
+        handler.postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) {
+                appContext.startActivity(new Intent(appContext, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(EXTRA_OPEN_TAB, tabToKeep));
+            }
+        }, 1200L);
     }
 
     private void syncLauncherModeSettingsUi() {
