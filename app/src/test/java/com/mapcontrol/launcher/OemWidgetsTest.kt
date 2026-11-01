@@ -54,7 +54,7 @@ class OemWidgetsTest {
         for (key in HeatKey.values()) for (on in listOf(true, false)) {
             HeatMath.commands(key, on).forEach { assertTrue("$key $on", allowed(it.module, it.id, it.value)) }
         }
-        for (fade in 0..SoundFieldMath.MAX) assertTrue("fade $fade", allowed(VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER, fade))
+        for (fade in 0..SoundFieldMath.MAX) assertTrue("fade $fade", allowed(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, fade))
     }
 
     @Test fun newWritesStayGatedAndRefuseOtherValues() {
@@ -66,15 +66,15 @@ class OemWidgetsTest {
         assertFalse(ComfortWriter.rearSpeakerEnabled)
         assertFalse(ComfortWriter.setClimateKey(ClimateKey.AC, true))
         assertFalse(ComfortWriter.setHeat(HeatKey.STEERING, true))
-        assertFalse(ComfortWriter.setFader(0))
+        assertFalse(ComfortWriter.setFader(10, 0))
         assertNull(WidgetWritePolicy.find(hv, 1, 0))
         assertNull(WidgetWritePolicy.find(hv, 4, 3))
         assertNull(WidgetWritePolicy.find(hv, 8, 0))
         assertNull(WidgetWritePolicy.find(hv, 9, 2))        // HVAC 9 yalnızca ← 1
         assertNull(WidgetWritePolicy.find(cs, 160, 0))
         assertNull(WidgetWritePolicy.find(cs, 160, 2))
-        assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER, SoundFieldMath.MAX + 1))
-        assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER, -1))
+        assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, SoundFieldMath.MAX + 1))
+        assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, -1))
         assertNotNull(WidgetWritePolicy.find(hv, 18, 1))
     }
 

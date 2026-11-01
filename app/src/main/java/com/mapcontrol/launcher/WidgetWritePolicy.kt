@@ -79,9 +79,9 @@ internal object WidgetWritePolicy {
         Entry("SteerHeatDisplay", HV, HvacID.ID_AC_DISPLAY_ACTIVE, setOf(1), listOf(sig("hvac9_display_active", HV, HvacID.ID_AC_DISPLAY_ACTIVE))),
         Entry("SteerHeat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, setOf(1), listOf(sig("cs160_steer_wheel_heat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT))),
         Entry("WindshieldHeat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT, setOf(1, 2), listOf(sig("hvac65_front_glass_heat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT))),
-        // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik = tür 2 ön-arka denge); değer 0..20. Tür/uç değeri doğrulanmadı.
-        Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER, (0..SoundFieldMath.MAX).toSet(),
-            listOf(sig("dsp_sound_field_fader", VDEventDsp.SOUND_FIELD, SoundFieldMath.TYPE_FADER))),
+        // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik sabit; değer = fade 0..20, balance gönderirken korunur). Uç değeri doğrulanmadı.
+        Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, (0..SoundFieldMath.MAX).toSet(),
+            listOf(sig("dsp_sound_field", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID))),
         // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç.
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK))),

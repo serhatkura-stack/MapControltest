@@ -393,12 +393,12 @@ internal object ComfortWriter {
         writeAll(climateKeysEnabled, ClimateKeysMath.commands(key, on), ::sendToCar)
 
     /**
-     * Arka hoparlör: ön-arka dengesini (fader) yazar (0..[SoundFieldMath.MAX]). Kapalıyken false döner ve araca dokunmaz.
+     * Arka hoparlör: ses alanını yazar; [balance] korunur, [fade] ön-arka dengesidir (0..[SoundFieldMath.MAX]). Kapalıyken false döner ve araca dokunmaz.
      * Gönderim `LauncherEdition.sendSoundField` üzerindendir (test sürümünde park + beyaz liste kapısından geçer).
      */
-    fun setFader(value: Int): Boolean {
+    fun setFader(balance: Int, fade: Int): Boolean {
         if (!rearSpeakerEnabled) return false
-        LauncherEdition.sendSoundField(SoundFieldMath.TYPE_FADER, value.coerceIn(0, SoundFieldMath.MAX))
+        LauncherEdition.sendSoundField(balance.coerceIn(0, SoundFieldMath.MAX), fade.coerceIn(0, SoundFieldMath.MAX))
         return true
     }
 

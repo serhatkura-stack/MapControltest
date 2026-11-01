@@ -56,9 +56,9 @@ internal object LauncherEdition {
         proxy.sendItemValue(module, id, value)
     }
 
-    /** Ses alanı (arka hoparlör): [type] 1 sol-sağ / 2 ön-arka, [value] 0..20. Çağıran kapıyı ([ComfortWriter.rearSpeakerEnabled]) zaten denetledi. */
-    fun sendSoundField(type: Int, value: Int) {
-        SoundFieldIo.write(type, value)
+    /** Ses alanı (arka hoparlör): [balance] sol-sağ, [fade] ön-arka, 0..20. Çağıran kapıyı ([ComfortWriter.rearSpeakerEnabled]) zaten denetledi. */
+    fun sendSoundField(balance: Int, fade: Int) {
+        SoundFieldIo.write(balance, fade)
     }
 
     fun setCentralLock(context: Context, locked: Boolean) {

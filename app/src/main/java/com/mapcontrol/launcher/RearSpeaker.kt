@@ -6,9 +6,8 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import com.desaysv.ivi.vdb.client.VDBus
-import com.desaysv.ivi.vdb.client.bind.VDServiceDef
+import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
-import com.desaysv.ivi.vdb.event.id.dsp.bean.VDDspSoundField
 import com.mapcontrol.R
 
 /** Ses alanı: sol-sağ dengesi ve ön-arka dengesi (fader); okunamayan alan null. */
@@ -18,16 +17,17 @@ internal data class SoundFieldReading(val balance: Int? = null, val fade: Int? =
  * Arka hoparlör kapatmanın saf kuralları (JVM'de sınanır). Arka hoparlör doğrudan kapatılamaz: ön-arka dengesi (fader) ön uca
  * çekilir, eski değer saklanır ve ikinci dokunuşta geri verilir.
  *
- * Kanıt (katalog/oem-komut-kodlamalari.md, root dökümü): DSP HAL günlüğü `translateFunc: name BalanceFader, id 1 / id 2`,
- * `setSoundField: balance index 10, fader index 10` (orta = 10/10). Olay `VDEventDsp.SOUND_FIELD` (983242); yükü Desay vdbus.jar'daki
- * `VDDspSoundField` (Parcelable "data": tür, değer; `VDDspBmt` kalıbı: tür = hangi parametre, değer = o parametrenin değeri).
- * Tür numaraları ([TYPE_BALANCE], [TYPE_FADER]) HAL kimliklerinden varsayıldı. HEPSİ ARAÇTA DOĞRULANMADI.
+ * Kanıt: aracın kendi Ayarlar uygulaması (SVSetting `SoundSettingModel`): `setSoundFiled(balance, fade)` düz bir Bundle'a
+ * `"type"` = balance, `"value"` = fade yazar ve `VDBus.set(VDEvent(VDEventDsp.SOUND_FIELD, bundle))` gönderir; `getBalance()` /
+ * `getFade()` düz `getOnce(SOUND_FIELD)` payload'ından `getInt("type")` / `getInt("value")` okur (yedek: sistem özellikleri,
+ * varsayılan 10). Orta 10/10, OEM sıfırla (10,10), sürücü ön ayarı (7,7). Her yazma İKİ değeri birlikte taşır: dengeyi korumak için
+ * okunan balance aynen geri yazılır. Ön uç değeri ([FRONT_EXTREME]) ARAÇTA DOĞRULANMADI.
+ * Gelecekte denenecek: `VDEventDsp.REAR_MUTE` (983045) doğrudan arka sessize alma olabilir; anlamı bilinmiyor, kullanılmıyor.
  */
 internal object SoundFieldMath {
 
-    /** SOUND_FIELD türü: 1 = sol-sağ dengesi, 2 = ön-arka dengesi (HAL `BalanceFader` id 1 / id 2'den; doğrulanmadı). */
-    const val TYPE_BALANCE = 1
-    const val TYPE_FADER = 2
+    /** Beyaz liste kimliği: SOUND_FIELD tek olaydır; kimlik yalnızca "fader yazması" kaydı için sabit 0'dır. */
+    const val WRITE_ID = 0
 
     /** Orta konum (HAL günlüğü: 10/10) ve olası üst sınır (`soundFieldMax` 20 olabilir; doğrulanmadı). */
     const val CENTER = 10
@@ -39,7 +39,7 @@ internal object SoundFieldMath {
      */
     const val FRONT_EXTREME = 0
 
-    /** Aralık dışı ve geçersiz (-10000) değerler null. */
+    /** Aralık dışı ve geçersiz değerler null. */
     fun valid(v: Int?): Int? = v?.takeIf { it in 0..MAX }
 
     /** true: arka hoparlör kapalı (fader ön uçta); okunamadıysa null. */
@@ -55,29 +55,36 @@ internal object SoundFieldMath {
     }
 }
 
-/** DSP servisinden ses alanı okuma/yazma (VDBus). Hatalarda null / sessiz; çökmez. */
+/** DSP servisinden ses alanı okuma/yazma (VDBus, düz Bundle: "type" = balance, "value" = fade). Hatalarda null / sessiz; çökmez. */
 internal object SoundFieldIo {
 
-    private var lastLogged = HashMap<Int, Int?>()
+    private var lastLogged: Pair<Int?, Int?>? = null
 
-    /** Tür [type] için güncel değer; DSP yoksa (emülatör) ya da değer geçersizse null. */
-    fun read(type: Int): Int? = try {
-        VDBus.getDefault().bindService(VDServiceDef.ServiceType.DSP)
-        val field = VDDspSoundField.getValue(VDBus.getDefault().getOnce(VDDspSoundField.createGetParam(VDEventDsp.SOUND_FIELD, type)))
-        val v = field?.value?.takeIf { it > com.desaysv.ivi.vdb.event.base.VDValue.INVALID_INT }
-        if (lastLogged[type] != v) {
-            lastLogged[type] = v
-            Log.i("RearSpeaker", "SOUND_FIELD type=$type value=$v")
+    /** Güncel (balance, fade); DSP yoksa (emülatör) ya da payload boşsa null. */
+    fun read(): SoundFieldReading? = try {
+        val payload = VDBus.getDefault().getOnce(VDEventDsp.SOUND_FIELD)?.payload
+        val balance = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_BALANCE) }?.getInt(KEY_BALANCE))
+        val fade = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_FADE) }?.getInt(KEY_FADE))
+        if (lastLogged != balance to fade) {
+            lastLogged = balance to fade
+            Log.i("RearSpeaker", "SOUND_FIELD read balance=$balance fade=$fade")
         }
-        v
+        if (balance == null && fade == null) null else SoundFieldReading(balance, fade)
     } catch (e: RuntimeException) {
         null
     }
 
-    fun write(type: Int, value: Int) {
-        val field = VDDspSoundField().apply { putType(type); putValue(value) }
-        VDBus.getDefault().set(VDDspSoundField.createEvent(VDEventDsp.SOUND_FIELD, field))
+    fun write(balance: Int, fade: Int) {
+        Log.i("RearSpeaker", "SOUND_FIELD write balance=$balance fade=$fade")
+        val bundle = android.os.Bundle().apply {
+            putInt(KEY_BALANCE, balance)
+            putInt(KEY_FADE, fade)
+        }
+        VDBus.getDefault().set(VDEvent(VDEventDsp.SOUND_FIELD, bundle))
     }
+
+    private const val KEY_BALANCE = "type"
+    private const val KEY_FADE = "value"
 }
 
 /** Arka hoparlör kutucuğunun saklanan "eski fader" değeri (araç yeniden başlasa da kalır). */
@@ -98,8 +105,8 @@ internal class RearSpeakerStore(context: Context) {
 /** Ses alanını okur (yalnızca okuma; arka plan thread'inde). */
 internal fun ComfortReader.readSound(): ComfortReading {
     if (LauncherDemo.enabled) return LauncherDemo.comfort()
-    val fade = SoundFieldMath.valid(SoundFieldIo.read(SoundFieldMath.TYPE_FADER)) ?: return ComfortReading()
-    return ComfortReading(connected = true, sound = SoundFieldReading(SoundFieldMath.valid(SoundFieldIo.read(SoundFieldMath.TYPE_BALANCE)), fade))
+    val sound = SoundFieldIo.read()?.takeIf { it.fade != null } ?: return ComfortReading()
+    return ComfortReading(connected = true, sound = sound)
 }
 
 /**
@@ -175,7 +182,7 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
             val nowMuted = muted() == true
             if (!nowMuted && fade != null) store.restoreFade = fade
             pendingMuted = !nowMuted
-            io.runSafely { ComfortWriter.setFader(target) }
+            io.runSafely { ComfortWriter.setFader(SoundFieldMath.valid(reading.sound?.balance) ?: SoundFieldMath.CENTER, target) }
         }
         afterCommit(enabled)
     }

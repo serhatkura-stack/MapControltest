@@ -30,10 +30,10 @@ internal object WidgetWriter {
         }
     }
 
-    /** Ses alanı (DSP): beyaz listede modül = SOUND_FIELD olay kimliği, kimlik = tür (1 sol-sağ, 2 ön-arka). */
-    fun sendSoundField(type: Int, value: Int) {
-        attempt(com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD, type, value, isConnected = { true }) {
-            SoundFieldIo.write(type, value)
+    /** Ses alanı (DSP): beyaz listede modül = SOUND_FIELD olay kimliği, kimlik sabit, değer = fade; balance korunarak yazılır. */
+    fun sendSoundField(balance: Int, fade: Int) {
+        attempt(com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, fade, isConnected = { true }) {
+            SoundFieldIo.write(balance, fade)
         }
     }
 
@@ -75,7 +75,7 @@ internal object WidgetWriter {
     }
 
     private fun describe(s: ComfortPlan.Signal): String =
-        if (s.module == com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD) SoundFieldIo.read(s.id)?.let { "[$it]" } ?: "null"
+        if (s.module == com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD) SoundFieldIo.read()?.let { "[balance=${it.balance},fade=${it.fade}]" } ?: "null"
         else CarSignals.read(s.module, s.id)?.joinToString(",", "[", "]") ?: "null"
 
     /** 3 sn boyunca sinyalleri 250 ms'de bir okur; yalnızca değişimleri günlüğe yazar. */

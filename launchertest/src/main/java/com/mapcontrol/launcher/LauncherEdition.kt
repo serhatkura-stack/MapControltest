@@ -61,9 +61,9 @@ internal object LauncherEdition {
     }
 
     /** Ses alanı (arka hoparlör): anahtar kapalıysa hiçbir şey olmaz; açıkken park + beyaz liste kapısından geçer. */
-    fun sendSoundField(type: Int, value: Int) {
+    fun sendSoundField(balance: Int, fade: Int) {
         if (!on) return
-        WidgetWriter.sendSoundField(type, value)
+        WidgetWriter.sendSoundField(balance, fade)
     }
 
     fun setCentralLock(context: Context, locked: Boolean) {
