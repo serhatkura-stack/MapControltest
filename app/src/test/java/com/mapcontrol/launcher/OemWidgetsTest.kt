@@ -175,10 +175,9 @@ class OemWidgetsTest {
 
     @Test fun newWidgetsAreRegisteredWithSizes() {
         assertEquals(listOf(Span(4, 2), Span(4, 4)), WidgetType.CLIMATE_KEYS.sizes)
-        assertEquals(listOf(Span(2, 2)), WidgetType.HEATS.sizes)
         assertEquals(listOf(Span(2, 4), Span(4, 4)), WidgetType.TIRES.sizes)
         assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.TRIP_TOTALS.sizes)
         assertEquals(listOf(Span(2, 2)), WidgetType.REAR_SPEAKER.sizes)
-        for (t in listOf("climate_keys", "heats", "tire_pressure", "trip_totals", "rear_speaker")) assertNotNull(WidgetType.fromKey(t))
+        for (t in listOf("climate_keys", "tire_pressure", "trip_totals", "rear_speaker")) assertNotNull(WidgetType.fromKey(t))
     }
 }

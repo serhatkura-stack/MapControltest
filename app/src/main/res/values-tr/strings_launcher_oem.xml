@@ -5,7 +5,6 @@
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Bagaj durumu değişti, tekrar dokunun</string>
     <string name="launcher_widget_climate_keys">Klima tuşları</string>
-    <string name="launcher_widget_heats">Isıtmalar</string>
     <string name="launcher_widget_tires">Lastik basıncı</string>
     <string name="launcher_widget_trip_totals">Toplam</string>
     <string name="launcher_widget_rear_speaker">Arka hoparlör</string>
@@ -16,8 +15,6 @@
     <string name="launcher_keys_recirc_state">Devridaim</string>
     <string name="launcher_keys_fresh_state">Taze hava</string>
     <string name="launcher_keys_power">Klima</string>
-    <string name="launcher_heat_steering">Direksiyon</string>
-    <string name="launcher_heat_windshield">Ön cam</string>
     <string name="launcher_tires_unit">bar</string>
     <string name="launcher_tire_fl">Ön sol</string>
     <string name="launcher_tire_fr">Ön sağ</string>
