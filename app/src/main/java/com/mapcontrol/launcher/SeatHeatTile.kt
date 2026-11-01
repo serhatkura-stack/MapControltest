@@ -25,6 +25,8 @@ internal class SeatHeatTile(
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
 
+    private val art = SeatSideView(context, vent)
+
     private val model = SeatHeatModel(context, vent) { bind(it) }
 
     /** Etkin seviye rengi: ısıtma sıcak turuncu, soğutma camgöbeği (sürüş vurgusundan bağımsız). */
@@ -52,6 +54,7 @@ internal class SeatHeatTile(
     override fun applyTheme() {
         theme.reapply()
         seat.applyTheme()
+        art.refreshTheme()
     }
 
     /** 3 sütun ve üstünde seviye yazısı ve dilimler büyür; yalnızca boyut değişince çalışır. */
@@ -99,6 +102,8 @@ internal class SeatHeatTile(
                         if (i > 0) marginStart = context.dp(SEGMENT_GAP_DP)
                     })
                 }
+                // Koltuk silüeti ve parıltı: seviye çubuklarının yanında, seviyeyle yoğunlaşır (bkz. SeatGlow).
+                addView(art, LinearLayout.LayoutParams(context.dp(ART_DP), context.dp(ART_DP)).apply { marginStart = context.dp(10) })
             })
             setOnClickListener { model.cycle(driver) }
             pressFeedback()
@@ -143,6 +148,7 @@ internal class SeatHeatTile(
             lastRaw = level
             val known = connected && (level != null || vent)
             val lv = if (known) level ?: 0 else 0
+            art.setLevel(lv)
             val active = lv > 0
             lastKnown = known
             lastLevel = lv
@@ -161,6 +167,7 @@ internal class SeatHeatTile(
 
     private companion object {
         const val PADDING_DP = 20
+        const val ART_DP = 62
         const val ICON_DP = 28
         const val VALUE_SP = 32f
         const val SEGMENTS = 3

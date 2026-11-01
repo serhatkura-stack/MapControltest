@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_widget_cabin">Cabin</string>
+    <string name="launcher_cabin_driver">Driver</string>
+    <string name="launcher_cabin_passenger">Passenger</string>
+    <string name="launcher_cabin_heat">Heat %1$d</string>
+    <string name="launcher_cabin_vent">Cooling %1$d</string>
+    <string name="launcher_cabin_both">Heat %1$d · Cool %2$d</string>
+</resources>

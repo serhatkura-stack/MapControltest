@@ -127,11 +127,17 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         addView(gap(context, LauncherTheme.GAP_S_DP))
         // Genişliği görselin kendisi yükseklikten türetir; sağa yaslı, kartın tüm iç yüksekliğinde.
         addView(carBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
+        // Yalnızca demo önizlemesi: yandan çizim (R.drawable.ic_car_side_clay) üstten görünüşün yerine geçer.
+        if (LauncherDemo.sidePreview) {
+            carBox.visibility = View.GONE
+            addView(android.widget.ImageView(context).apply { setImageResource(R.drawable.ic_car_side_clay) },
+                LinearLayout.LayoutParams(context.dp(190), context.dp(80)))
+        }
         addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
             fitRange(v)
             if (r - l != or_ - ol) {
                 // Çok dar kartta (2×2) görsel sığmaz; menzil ve durum yeter. Eşik kartın genişliğine göredir.
-                carBox.visibility = if (r - l >= v.context.dp(MIN_WIDTH_FOR_CAR_DP)) View.VISIBLE else View.GONE
+                carBox.visibility = if (!LauncherDemo.sidePreview && r - l >= v.context.dp(MIN_WIDTH_FOR_CAR_DP)) View.VISIBLE else View.GONE
             }
         }
     }
@@ -207,7 +213,10 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
 
     override fun onVisible() {
         snapshot = if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot()
-        if (LauncherDemo.enabled) locked = LauncherDemo.LOCKED
+        if (LauncherDemo.enabled) {
+            locked = LauncherDemo.LOCKED
+            LauncherDemo.onBodyChanged = Runnable { snapshot = LauncherDemo.vehicle(); render() }
+        }
         render()
         metrics.addListener(metricsListener)
         controls().addListener(lockListener)
@@ -221,6 +230,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
     }
 
     override fun onHidden() {
+        LauncherDemo.onBodyChanged = null
         metrics.removeListener(metricsListener)
         controls().removeListener(lockListener)
         startup.forEach { it.cancel() }
@@ -296,6 +306,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
                 doorLr = knowsDoors && s.isDoorLrOpen(), doorRr = knowsDoors && s.isDoorRrOpen(),
                 trunk = knowsDoors && s.isTrunkOpen(),
                 sunroof = knowsSunroof && s.sunroofOpenOrNull() == true,
+                hood = (knowsExtra && extra.hoodOpen()) || (LauncherDemo.enabled && "hood" in LauncherDemo.openParts),
                 tireWarning = tireAlert,
                 locked = locked,
             ),

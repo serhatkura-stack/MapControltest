@@ -85,7 +85,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
     CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
-    BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2)));
+    BODY("body", R.string.launcher_widget_body, R.drawable.ic_mdi_car_door, listOf(Span(2, 2))),
+    CABIN("cabin", R.string.launcher_widget_cabin, R.drawable.ic_mdi_car_seat, listOf(Span(2, 2), Span(2, 4)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -184,5 +185,6 @@ object WidgetFactory {
         WidgetType.PHONE_REMINDER -> PhoneTile(activity)
         WidgetType.CLOCK -> ClockTile(activity)
         WidgetType.BODY -> BodyTile(activity)
+        WidgetType.CABIN -> CabinTile(activity)
     }
 }

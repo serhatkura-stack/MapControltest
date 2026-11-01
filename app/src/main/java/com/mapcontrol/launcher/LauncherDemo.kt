@@ -55,6 +55,46 @@ internal object LauncherDemo {
         return driveMode
     }
 
+    /**
+     * Gövde animasyonu önizlemesi: `--es launcher_demo_open "lf,rf,lr,rr,trunk,sunroof,hood"` (virgülle; boş = hepsi kapalı).
+     * Çalışırken yeni istekle de değiştirilebilir; araç kartı anında yeniden çizer.
+     */
+    const val EXTRA_OPEN = "launcher_demo_open"
+
+    @Volatile
+    var openParts: Set<String> = emptySet()
+        private set
+
+    /** Yandan "kil beyazı" araç çiziminin önizlemesi: `--ez launcher_demo_side true` (varsayılan değil, yalnızca demo). */
+    const val EXTRA_SIDE = "launcher_demo_side"
+
+    @Volatile
+    var sidePreview = false
+        private set
+
+    /** Koltuk seviyesi önizlemesi: `--ei launcher_demo_seat N` (0..3) tüm ısıtma/soğutma koltuklarını N yapar. */
+    const val EXTRA_SEAT = "launcher_demo_seat"
+
+    @Volatile
+    var seatOverride: Int? = null
+        private set
+
+    /** Araç kartı bunu atar; demo isteği değişince ana iş parçacığında çağrılır. */
+    @Volatile
+    var onBodyChanged: Runnable? = null
+
+    fun applyPreview(intent: Intent?) {
+        if (!enabled || intent == null) return
+        if (intent.hasExtra(EXTRA_OPEN)) {
+            openParts = intent.getStringExtra(EXTRA_OPEN).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            onBodyChanged?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
+        }
+        if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
+        if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
+    }
+
+    private fun open(key: String) = if (key in openParts) 1 else 0
+
     /** Park halinde, kapılar kapalı, Normal mod, tavan kapalı bir Tiggo 7. */
     fun vehicle(): VehicleMetricsSnapshot = VehicleMetricsSnapshot(
         true,   // connected
@@ -63,8 +103,8 @@ internal object LauncherDemo {
         620,    // yakıt, onda bir (%62,0) — araçtaki gibi
         540,    // menzil km
         0, 2, 0,
-        0, 0, 0, 0, 0, // kapılar ve bagaj kapalı
-        2, 1, 1,       // tavan: kapalı
+        open("lf"), open("rf"), open("lr"), open("rr"), open("trunk"), // kapılar ve bagaj (varsayılan kapalı)
+        if ("sunroof" in openParts) 3 else 2, if ("sunroof" in openParts) 5 else 1, 1,       // tavan (varsayılan kapalı)
         0, 0, 0,
         driveMode,     // sürüş modu (varsayılan Normal)
     )
@@ -72,13 +112,13 @@ internal object LauncherDemo {
     const val LOCKED = true
     const val TIRE_WARNING = false
 
-    const val DRIVER_SEAT_LEVEL = 2
-    const val PASSENGER_SEAT_LEVEL = 0
+    val DRIVER_SEAT_LEVEL get() = seatOverride ?: 2
+    val PASSENGER_SEAT_LEVEL get() = seatOverride ?: 0
     const val DRIVER_TEMP = 22.0
     const val PASSENGER_TEMP = 24.5
     const val FAN_LEVEL = 3
-    const val DRIVER_VENT_LEVEL = 1
-    const val PASSENGER_VENT_LEVEL = 0
+    val DRIVER_VENT_LEVEL get() = seatOverride ?: 1
+    val PASSENGER_VENT_LEVEL get() = seatOverride ?: 0
 
     /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam kapalı. */
     fun comfort(): ComfortReading = ComfortReading(

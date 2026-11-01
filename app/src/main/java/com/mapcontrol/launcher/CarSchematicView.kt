@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.animation.ValueAnimator
+import android.view.animation.DecelerateInterpolator
 import android.graphics.drawable.Drawable
 import android.view.View
 import com.mapcontrol.R
@@ -14,7 +16,7 @@ import com.mapcontrol.R
  * doğrudan yerinde gösterir. Logo, ızgara ya da rozet yoktur.
  *
  * Çizim yaklaşık 100×230 birimlik dikey sabit bir uzayda yapılır; yollar yalnızca bir kez kurulur, boyut değişince yalnızca
- * tuval ölçeklenir. Görünüm yüksekliğe göre en-boy oranını kendisi belirler (bkz. [onMeasure]). Animasyon yok: durum değişince bir kez yeniden çizilir. Renkler yalnızca [LauncherTheme]
+ * tuval ölçeklenir. Görünüm yüksekliğe göre en-boy oranını kendisi belirler (bkz. [onMeasure]). Parça durumu değişince kısa (≤300 ms) bir hareketle geçilir. Renkler yalnızca [LauncherTheme]
  * belirteçlerinden okunur (gece/gündüz kendiliğinden).
  */
 class CarSchematicView(context: Context) : View(context) {
@@ -27,6 +29,7 @@ class CarSchematicView(context: Context) : View(context) {
         val doorRr: Boolean = false,
         val trunk: Boolean = false,
         val sunroof: Boolean = false,
+        val hood: Boolean = false,
         val tireWarning: Boolean = false,
         /** true kilitli, false açık, null bilinmiyor (kilit simgesi çizilmez). */
         val locked: Boolean? = null,
@@ -38,10 +41,50 @@ class CarSchematicView(context: Context) : View(context) {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
+    /**
+     * Açık/kapalı geçişleri kısa bir hareketle gösterilir (kapı dışa sallanır, bagaj/kaput kalkar, cam tavan kayar).
+     * [prog] parça başına 0 (kapalı) .. 1 (açık) ilerlemedir; sıra: 4 kapı, bagaj, cam tavan, kaput.
+     * İlk durum ve görünür olmayan görünüm hareketsiz atlar. Sistem animasyon ölçeği 0 ise süre sıfırdır.
+     */
+    private val prog = FloatArray(PARTS)
+    private var animFrom = FloatArray(PARTS)
+    private var animTo = FloatArray(PARTS)
+    private var hasState = false
+    private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = MOTION_MS
+        interpolator = DecelerateInterpolator(1.6f)
+        addUpdateListener { a ->
+            val t = a.animatedValue as Float
+            for (i in 0 until PARTS) prog[i] = animFrom[i] + (animTo[i] - animFrom[i]) * t
+            invalidate()
+        }
+    }
+
     fun setState(next: State) {
-        if (next == state) return
+        if (next == state && hasState) return
         state = next
-        invalidate()
+        val target = floatArrayOf(
+            b(next.doorLf), b(next.doorRf), b(next.doorLr), b(next.doorRr), b(next.trunk), b(next.sunroof), b(next.hood),
+        )
+        val animate = hasState && isAttachedToWindow && width > 0
+        hasState = true
+        animator.cancel()
+        if (!animate || target.contentEquals(prog)) {
+            target.copyInto(prog)
+            invalidate()
+            return
+        }
+        prog.copyInto(animFrom)
+        animTo = target
+        animator.start()
+    }
+
+    private fun b(v: Boolean) = if (v) 1f else 0f
+
+    override fun onDetachedFromWindow() {
+        // Yarım kalan hareket bitmiş say: yeniden eklenince doğru durumla başlasın.
+        if (animator.isRunning) { animator.cancel(); animTo.copyInto(prog) }
+        super.onDetachedFromWindow()
     }
 
     /** Tema (gece/gündüz, sürüş modu) değişince renkleri yeniden okutmak için. */
@@ -190,18 +233,28 @@ class CarSchematicView(context: Context) : View(context) {
         fill.color = LauncherTheme.CONTROL
         canvas.drawPath(body, fill)
         // Kapalı bagaj bölgesi sadece çizgiyle; açıkken ALERT dolgu gövde içinde kırpılır.
-        if (st.trunk) {
+        if (prog[P_TRUNK] > 0.01f) {
             canvas.save()
             canvas.clipPath(body)
-            fill.color = alert
+            fill.color = withAlpha(alert, (255 * prog[P_TRUNK]).toInt())
             canvas.drawPath(trunkPanel, fill)
             canvas.restore()
         }
-        for (i in doorStrips.indices) {
-            if (!doorOpen(st, i)) continue
+        if (prog[P_HOOD] > 0.01f) {
+            val p = prog[P_HOOD]
             canvas.save()
             canvas.clipPath(body)
-            fill.color = alert
+            fill.color = withAlpha(alert, (150 * p).toInt())
+            // Kalkan kaput yukarıdan bakınca menteşeye (ön cam tabanı) doğru kısalır.
+            canvas.drawRect(-60f, hoodEdge(p), 60f, WINDSHIELD_BASE - 4f, fill)
+            canvas.restore()
+        }
+        for (i in doorStrips.indices) {
+            val p = prog[i]
+            if (p < 0.01f) continue
+            canvas.save()
+            canvas.clipPath(body)
+            fill.color = withAlpha(alert, (255 * p).toInt())
             canvas.drawRect(doorStrips[i], fill)
             canvas.restore()
         }
@@ -228,14 +281,23 @@ class CarSchematicView(context: Context) : View(context) {
         canvas.drawPath(roofRails, stroke)
         canvas.drawPath(hood, stroke)
 
-        // Cam tavan.
-        if (st.sunroof) {
-            fill.color = alert
+        // Cam tavan: açılırken cam panel arkaya kayar, açıklık ALERT ile belirir.
+        val sp = prog[P_SUNROOF]
+        if (sp > 0.01f) {
+            fill.color = withAlpha(alert, (255 * sp).toInt())
             canvas.drawRoundRect(sunroofRect, 5f, 5f, fill)
-        } else {
-            fill.color = withAlpha(outline, 55)
-            canvas.drawRoundRect(sunroofRect, 5f, 5f, fill)
-            stroke.color = withAlpha(outline, 150)
+        }
+        canvas.save()
+        canvas.clipPath(roof)
+        val slide = (SUN_B - SUN_T) * SUN_SLIDE * sp
+        sunPanel.set(sunroofRect.left, sunroofRect.top + slide, sunroofRect.right, sunroofRect.bottom + slide)
+        fill.color = withAlpha(outline, 55)
+        canvas.drawRoundRect(sunPanel, 5f, 5f, fill)
+        stroke.color = withAlpha(outline, 150)
+        canvas.drawRoundRect(sunPanel, 5f, 5f, stroke)
+        canvas.restore()
+        if (sp > 0.01f) {
+            stroke.color = withAlpha(alert, (255 * sp).toInt())
             canvas.drawRoundRect(sunroofRect, 5f, 5f, stroke)
         }
 
@@ -247,17 +309,29 @@ class CarSchematicView(context: Context) : View(context) {
             canvas.drawRoundRect(m, 3f, 3f, stroke)
         }
 
-        // Açık kapılar dışa doğru sallanmış kalın çizgi (menteşe ön kenarda).
+        // Açık kapılar dışa doğru sallanmış kalın çizgi (menteşe ön kenarda); açıya göre kapalıdan açığa döner.
         stroke.color = alert
         stroke.strokeWidth = 6f * dp
         for (i in doorStrips.indices) {
-            if (doorOpen(st, i)) drawDoorSwing(canvas, doorStrips[i], i % 2 == 0)
+            if (prog[i] > 0.01f) drawDoorSwing(canvas, doorStrips[i], i % 2 == 0, prog[i])
         }
-        // Açık bagaj: kapak arkaya doğru kalkmış (iki yan çizgi + arka kenar).
-        if (st.trunk) {
+        // Açık bagaj: kapak arkaya doğru kalkar (iki yan çizgi + arka kenar).
+        val tp = prog[P_TRUNK]
+        if (tp > 0.01f) {
             stroke.strokeWidth = 6f * dp
+            val lift = 16f * tp
             swing.reset()
-            swing.moveTo(-28f, TAIL_Y); swing.lineTo(-22f, TAIL_Y + 16f); swing.lineTo(22f, TAIL_Y + 16f); swing.lineTo(28f, TAIL_Y)
+            swing.moveTo(-28f, TAIL_Y); swing.lineTo(-28f + 6f * tp, TAIL_Y + lift)
+            swing.lineTo(28f - 6f * tp, TAIL_Y + lift); swing.lineTo(28f, TAIL_Y)
+            canvas.drawPath(swing, stroke)
+        }
+        // Açık kaput: ön kenar menteşeye doğru çekilen kalın çizgi.
+        val hp = prog[P_HOOD]
+        if (hp > 0.01f) {
+            stroke.strokeWidth = 6f * dp
+            val y = hoodEdge(hp)
+            swing.reset()
+            swing.moveTo(-26f + 4f * hp, y); swing.lineTo(26f - 4f * hp, y)
             canvas.drawPath(swing, stroke)
         }
         // Lastik uyarısında tekerlek çerçevesi.
@@ -283,18 +357,18 @@ class CarSchematicView(context: Context) : View(context) {
         }
     }
 
-    /** İndeks: 0 sol ön, 1 sağ ön, 2 sol arka, 3 sağ arka. */
-    private fun doorOpen(s: State, i: Int) = when (i) {
-        0 -> s.doorLf; 1 -> s.doorRf; 2 -> s.doorLr; else -> s.doorRr
-    }
+    private val sunPanel = RectF()
+
+    /** Kaputun ön kenarı: kapalıyken burunda, açıkken menteşeye [HOOD_LIFT] kadar yaklaşmış. */
+    private fun hoodEdge(p: Float) = (-NOSE_Y + 12f) + ((WINDSHIELD_BASE - 4f - HOOD_LIFT) - (-NOSE_Y + 12f)) * p
 
     /** Kapı ön kenarındaki menteşeden dışa doğru açılır; [left] true ise sol (sürücü) taraf. */
-    private fun drawDoorSwing(canvas: Canvas, strip: RectF, left: Boolean) {
+    private fun drawDoorSwing(canvas: Canvas, strip: RectF, left: Boolean, p: Float) {
         val side = if (left) -1f else 1f
         val hingeX = side * BODY_HALF_W
         val hingeY = strip.top
         val len = strip.height()
-        val a = Math.toRadians(SWING_DEG.toDouble())
+        val a = Math.toRadians((SWING_DEG * p).toDouble())
         val ex = hingeX + side * len * Math.sin(a).toFloat()
         val ey = hingeY + len * Math.cos(a).toFloat()
         swing.reset()
@@ -328,6 +402,15 @@ class CarSchematicView(context: Context) : View(context) {
         const val LOCK_Y = -9f
         const val LOCK_SIZE = 20f
         const val SWING_DEG = 26f
+        const val PARTS = 7
+        const val P_TRUNK = 4
+        const val P_SUNROOF = 5
+        const val P_HOOD = 6
+        /** Açılma/kapanma hareketi süresi (ms); kısa ve sakin. */
+        const val MOTION_MS = 280L
+        /** Cam tavan paneli en çok açıklığın bu kadarı kadar arkaya kayar. */
+        const val SUN_SLIDE = 0.64f
+        const val HOOD_LIFT = 26f
         // Birim uzayındaki en uç değerler (sallanan kapı ve kalkık bagaj dahil).
         const val EXT_X = 77f
         const val EXT_T = -NOSE_Y - 2f
