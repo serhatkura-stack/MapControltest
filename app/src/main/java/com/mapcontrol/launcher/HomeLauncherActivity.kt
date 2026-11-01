@@ -124,7 +124,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.retheme(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout, onWifi = ::toggleWifiPanel)
+        header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout, onWifi = ::toggleWifiPanel)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
         ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null

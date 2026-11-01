@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.Gravity
 import android.view.View
-import android.widget.ImageView
 import android.widget.LinearLayout
 import com.mapcontrol.R
 import com.mapcontrol.weather.OpenMeteoWeatherClient
@@ -18,13 +17,12 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Üst şerit: solda saat ve tarih, sağda hava durumu ve "Ayarlar".
+ * Üst şerit: solda saat ve tarih; sağda Park/Sürüş hapı, hava durumu, Wi-Fi, düzenle ve ayarlar (dişli).
  * Saat sistemin dakika yayınıyla (ACTION_TIME_TICK) güncellenir; kendi zamanlayıcısı yok.
  */
 class HeaderBar(
     private val context: Context,
     private val onSettings: () -> Unit,
-    private val onThemeChanged: () -> Unit,
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
     private val onLayoutPill: () -> Unit = {},
@@ -119,11 +117,11 @@ class HeaderBar(
         addView(gap(context, 24))
         buildWifiButton()
         addView(wifiButton)
-        addView(gap(context, 32))
-        addView(profileButton())
         addView(gap(context, 16))
-        addView(themeButton())
-        addView(gap(context, 16))
+        if (SHOW_PROFILE_IN_HEADER) {
+            addView(profileButton())
+            addView(gap(context, 16))
+        }
         addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
         addView(gap(context, 16))
         addView(settingsButton())
@@ -227,29 +225,6 @@ class HeaderBar(
         pressFeedback()
     }
 
-    /** Tema düğmesi: Otomatik → Gündüz → Gece → Otomatik; ikon geçerli modu gösterir. */
-    private fun themeButton(): View {
-        lateinit var button: LinearLayout
-        button = squareButton(themeIcon(ThemeMode.read(context)), themeLabel(ThemeMode.read(context))) {
-            // Kayıtlı modu tıklama anında okur; hızlı ikinci dokunuş da bir sonrakine geçer.
-            val mode = ThemeMode.next(context)
-            // Yeniden kurulum gelene kadar (ya da gecikirse) açıklama kayıtlı modla tutarlı kalır.
-            button.contentDescription = themeLabel(mode)
-            (button.getChildAt(0) as? ImageView)?.setImageResource(themeIcon(mode))
-            onThemeChanged()
-        }
-        return button
-    }
-
-    private fun themeIcon(mode: ThemeMode): Int = when (mode) {
-        ThemeMode.AUTO -> R.drawable.ic_mdi_theme_light_dark
-        ThemeMode.DAY -> R.drawable.ic_mdi_weather_sunny
-        ThemeMode.NIGHT -> R.drawable.ic_mdi_weather_night
-    }
-
-    private fun themeLabel(mode: ThemeMode): String =
-        context.getString(R.string.launcher_theme) + ": " + context.getString(mode.label)
-
     /** Yalnızca ikonlu kare düğme; ayarlar düğmesiyle aynı yükseklik, zemin ve basma geri bildirimi. */
     private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): LinearLayout =
         LinearLayout(context).apply {
@@ -265,22 +240,9 @@ class HeaderBar(
             pressFeedback()
         }
 
-    private fun settingsButton(): View = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        background = cardSurface(context)
-        val h = context.dp(LauncherTheme.GAP_L_DP)
-        setPadding(h, 0, h, 0)
-        minimumWidth = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP))
-        addView(icon(context, R.drawable.ic_mdi_cog, LauncherTheme.ICON_M_DP))
-        addView(gap(context, LauncherTheme.GAP_SM_DP))
-        addView(text(context, LauncherTheme.BODY_SP, medium = true).apply { setText(R.string.launcher_settings) })
-        contentDescription = context.getString(R.string.launcher_settings)
-        isClickable = true
-        setOnClickListener { onSettings() }
-        pressFeedback()
-    }
+    /** Yalnızca dişli simgesi; diğer düğmelerle aynı kare boyut (en az 72 px dokunma alanı). */
+    private fun settingsButton(): View =
+        squareButton(R.drawable.ic_mdi_cog, context.getString(R.string.launcher_settings), onSettings)
 
     override fun onVisible() {
         updateClock()
@@ -338,3 +300,9 @@ class HeaderBar(
         weatherBox.visibility = View.VISIBLE
     }
 }
+
+/**
+ * Profil düğmesi başlıkta şimdilik gizli (başlık sadeleştirildi). Profil özelliği ([Profiles], [showProfileSheet])
+ * yerinde duruyor; geri getirmek için true yapın.
+ */
+private const val SHOW_PROFILE_IN_HEADER = false
