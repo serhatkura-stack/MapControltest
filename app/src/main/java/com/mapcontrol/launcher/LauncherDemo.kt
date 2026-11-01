@@ -46,7 +46,15 @@ internal object LauncherDemo {
         if (intent?.hasExtra(EXTRA) != true) return
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
+        if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
     }
+
+    /** Demo arka hoparlör durumu (`--ez launcher_demo_rear_off true`): fader ön uçta, arka kapalı. Verilmezse açık. */
+    const val EXTRA_REAR_OFF = "launcher_demo_rear_off"
+
+    @Volatile
+    var rearOff = false
+        private set
 
     /** İstek sürüş modu içeriyorsa (yalnızca demo açıkken) alır; uygulanacak mod döner, yoksa null. */
     fun applyDriveMode(intent: Intent?): Int? {
@@ -139,7 +147,7 @@ internal object LauncherDemo {
         trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
         keys = ClimateKeysReading(ac = true, auto = true, recirc = false, power = true),
         heat = HeatReading(steering = false, windshield = false),
-        sound = SoundFieldReading(balance = SoundFieldMath.CENTER, fade = SoundFieldMath.CENTER),
+        sound = SoundFieldReading(balance = SoundFieldMath.CENTER, fade = if (rearOff) SoundFieldMath.FRONT_EXTREME else SoundFieldMath.CENTER),
     )
 
     /**

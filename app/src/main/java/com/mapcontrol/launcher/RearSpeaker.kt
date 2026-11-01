@@ -115,7 +115,7 @@ internal fun ComfortReader.readSound(): ComfortReading {
 
 /**
  * Arka hoparlör: tek dokunuşla arka hoparlörleri kapatır (fader ön uca), tekrar dokununca eski değeri geri verir. Yazma yalnızca
- * [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi mesajı). 2x2'de şema üstte, durum altta; 2x1'de yanda.
+ * [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi mesajı). Şema solda, yazılar sağda.
  */
 internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
@@ -171,31 +171,24 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         if (c != compact) arrange(c)
     }
 
-    /** 2x2: başlık, şema, durum ve ipucu alt alta. 2x1: şema solda, metinler sağda. Görünümler yeniden bağlanır. */
+    /** Yatay düzen: şema solda, başlık/durum/ipucu sağda. 2x1'de yazılar küçülür. Görünümler yeniden bağlanır. */
     private fun arrange(c: Boolean) {
         compact = c
         listOf(titleRow, diagram, stateText, hint).forEach { (it.parent as? ViewGroup)?.removeView(it) }
         root.removeAllViews()
         stateText.textSize = if (c) STATE_COMPACT_SP else STATE_SP
-        stateText.gravity = if (c) Gravity.START else Gravity.CENTER
-        hint.gravity = if (c) Gravity.START else Gravity.CENTER
-        if (!c) {
-            root.orientation = LinearLayout.VERTICAL
-            root.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            root.addView(diagram, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-            root.addView(gap(context, 6, vertical = true))
-            root.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            root.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        } else {
-            root.orientation = LinearLayout.HORIZONTAL
-            root.addView(diagram, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.8f))
-            root.addView(gap(context, 8))
-            val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-            column.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            column.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            column.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            root.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.2f))
-        }
+        stateText.gravity = Gravity.START
+        hint.gravity = Gravity.START
+        root.orientation = LinearLayout.HORIZONTAL
+        root.addView(diagram, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.8f))
+        root.addView(gap(context, 10))
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+        column.addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        column.addView(gap(context, 4, vertical = true))
+        column.addView(stateText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        column.addView(gap(context, 6, vertical = true))
+        column.addView(hint, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.2f))
     }
 
     override fun clearPending() { pendingMuted = null }
