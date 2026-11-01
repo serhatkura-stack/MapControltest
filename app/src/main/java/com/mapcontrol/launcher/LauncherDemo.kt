@@ -98,17 +98,11 @@ internal object LauncherDemo {
     @Volatile
     var onBodyChanged: Runnable? = null
 
-    /** Alt çubuk (stil B) için ikinci dinleyici; araç kartınınkini ezmemek için ayrı. */
-    @Volatile
-    var onBodyChangedBar: Runnable? = null
-
     fun applyPreview(intent: Intent?) {
         if (!enabled || intent == null) return
         if (intent.hasExtra(EXTRA_OPEN)) {
             openParts = intent.getStringExtra(EXTRA_OPEN).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            val h = android.os.Handler(android.os.Looper.getMainLooper())
-            onBodyChanged?.let { h.post(it) }
-            onBodyChangedBar?.let { h.post(it) }
+            onBodyChanged?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
         }
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)

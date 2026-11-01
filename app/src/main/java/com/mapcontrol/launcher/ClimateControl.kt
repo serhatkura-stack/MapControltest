@@ -1,20 +1,20 @@
 package com.mapcontrol.launcher
 
-import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
-import android.os.Handler
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -25,15 +25,14 @@ import java.util.concurrent.Executor
 import kotlin.math.abs
 
 /**
- * "Bizimki" alt çubuğunun klima bölümleri: sürücü sıcaklığı, fan, yolcu sıcaklığı. Her biri ayrı bir kart yüzeyidir
- * (çubuk üçünü ayrı yerleştirir) ve etkileşimlidir:
- *  - sıcaklık: dikey sürükleme (her 40dp = 0,5 °C, yukarı = sıcak), dokunuşta sağ yarı +0,5 / sol yarı −0,5,
- *    uzun basış diğer tarafı bu değere eşitler;
- *  - fan: yatay sürükleme 1..10, dokunuş kapat/aç, altında ince 10 noktalı kademe göstergesi.
+ * "Bizimki" alt çubuğunun klima bölümleri: sürücü sıcaklığı, fan, yolcu sıcaklığı. Zeminsiz; çubuğun orta yamuğunda
+ * durur ([OurBottomBar] yerleştirir). Yazı öncelikli: ince, sabit genişlikli rakamlar; renk yalnızca fan kademesinde.
+ *  - sıcaklık: dokunuşta sağ yarı +0,5 / sol yarı −0,5 (basılan yarı hafifçe aydınlanır), dikey sürükleme
+ *    (her 40dp = 0,5 °C, yukarı = sıcak), uzun basış diğer tarafı bu değere eşitler;
+ *  - fan: dokunuş kapat/aç, yatay sürükleme 1..10; altında ince kademe çizgisi.
  *
  * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
- * aracın gerçek değerine döner ve sakin bir bilgi mesajı çıkar; araca hiçbir şey gitmez. Sürekli animasyon yok;
- * yalnızca kısa (≤200 ms) renk/alfa geçişleri.
+ * aracın gerçek değerine döner ve sakin bir bilgi mesajı çıkar; araca hiçbir şey gitmez. Sürekli animasyon yok.
  */
 internal class ClimateControl(
     private val context: Context,
@@ -51,36 +50,13 @@ internal class ClimateControl(
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
     private val bubble = ValueBubble()
-    /** Klasik hücreler (stil B ve eski çubuk); stil A kendi hücrelerini ([RichClimate]) kurar, bunlar hiç oluşturulmaz. */
-    private val driver by lazy { classicUsed = true; TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short) }
-    private val passenger by lazy { classicUsed = true; TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short) }
-    private val fan by lazy { classicUsed = true; FanCell() }
-    private var classicUsed = false
+    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver)
+    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger)
+    private val fan = FanCell()
 
-    /** Zengin hücreler her çizimde ([render]) bunu çağırır; sürükleme sırasında çağrılmaz. */
-    var onRender: (() -> Unit)? = null
-
-    /** Dock bölümleri (zeminsiz, koyu dock üstünde); yerleşimi ([OurBottomBar]) belirler. */
     val driverView: View get() = driver.view
     val fanView: View get() = fan.view
     val passengerView: View get() = passenger.view
-
-    // --- Zengin hücrelerin ([RichClimate]) kullandığı ortak durum ve onay yolu ---
-
-    internal fun shownTempFor(side: ClimateSide): Double? = shownTemp(side)
-    internal fun shownFanLevel(): Int? = shownFan()
-    internal fun commitTempFor(side: ClimateSide, celsius: Double) = commitTemp(side, celsius)
-    internal fun commitFanLevel(level: Int) = commitFan(level)
-    internal fun lastOnFanLevel(): Int = lastOnFan
-    internal fun rememberOnFan(level: Int) { if (level > 0) lastOnFan = level }
-    internal fun formatTemp(c: Double): String = format(c)
-    internal fun styledTemp(c: Double): CharSequence = styled(c)
-
-    /** Sürükleme başladı/bitti: işlenmemiş geri dönüş durur, çizim sürükleme boyunca araca dönmez. */
-    internal fun setDragging(on: Boolean) {
-        dragging = on
-        if (on) main.removeCallbacks(revert)
-    }
 
     private val revert = Runnable {
         pendingDriver = null
@@ -95,13 +71,12 @@ internal class ClimateControl(
         render()
     }
 
-    /** Tema değişti: hücrelerin renkleri, yüzey katmanları ve değer yazıları yeniden atanır (görünümler korunur). */
+    /** Tema değişti: renkler jetonlardan yeniden alınır, değerler yeniden yazılır (görünümler korunur). */
     fun applyTheme() {
         theme.reapply()
-        if (classicUsed) {
-            driver.resetTint(); passenger.resetTint(); fan.resetTint()
-            fan.invalidateLevel()
-        }
+        fan.invalidateLevel()
+        driver.invalidate()
+        passenger.invalidate()
         render()
     }
 
@@ -123,12 +98,9 @@ internal class ClimateControl(
 
     private fun render() {
         if (dragging) return
-        if (classicUsed) {
-            driver.show(shownTemp(ClimateSide.DRIVER))
-            passenger.show(shownTemp(ClimateSide.PASSENGER))
-            fan.show(shownFan())
-        }
-        onRender?.invoke()
+        driver.show(shownTemp(ClimateSide.DRIVER))
+        passenger.show(shownTemp(ClimateSide.PASSENGER))
+        fan.show(shownFan())
     }
 
     // --- Onay ("commit") ---
@@ -165,38 +137,40 @@ internal class ClimateControl(
 
     // --- Sıcaklık hücresi ---
 
-    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, TEMP_SP, bold = true).apply {
+    /**
+     * Ortada büyük ince rakam, iki yanda ince ‹ › (OEM x'inde: hücre kenarından 31). Derece işareti ikincil tonda ve
+     * rakamların dışına asılır: rakamlar hücrenin tam ortasında kalır. Değer yoksa "—" ve oklar sönük.
+     */
+    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int) {
+        private val label = text(context, TEMP_SP).apply {
+            typeface = NUMERAL_FACE
             gravity = Gravity.CENTER
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
-        private val tint = GradientDrawable().apply { alpha = 0 }
-        private var tintAnim: ValueAnimator? = null
-
-        /** Tema değişti: gesture ortasında kalmış bir ton varsa sönük başlar (renk jetonlardan yeniden alınır). */
-        fun resetTint() {
-            tintAnim?.cancel()
-            tint.alpha = 0
+        private val chevLeft = chevron(R.drawable.ic_bar_chevron_left)
+        private val chevRight = chevron(R.drawable.ic_bar_chevron_right)
+        /** Basılan yarının yumuşak örtüsü (sol yarı −, sağ yarı +). */
+        private val halfPress = View(context).apply {
+            visibility = View.INVISIBLE
+            theme.bind { background = rounded(context, LauncherTheme.DOCK_PRESS, PRESS_RADIUS_DP) }
         }
+        private var shown: Double? = null
+        private var hasValue = false
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = tint
-            theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
-            // Sürücü/Yolcu etiketi yok (araç çubuğunda da yok; yan kenar dokunma ve erişilebilirlik adı yeterli).
+            val inset = context.dp(PRESS_INSET_DP)
+            addView(halfPress, FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT).apply { setMargins(inset, inset, inset, inset) })
             addView(label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-            // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
             val chev = context.dp(CHEVRON_DP)
-            val edge = context.dp(CHEVRON_EDGE_DP)
-            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP).apply {
-                alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT) }
-            }, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
-            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP).apply {
-                alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT) }
-            }, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
+            val edge = context.dp(CHEVRON_CENTER_DP - CHEVRON_DP / 2)
+            addView(chevLeft, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
+            addView(chevRight, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
+        }
+
+        private fun chevron(res: Int): ImageView = icon(context, res, CHEVRON_DP).apply {
+            theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
         }
 
         private var start = 0.0
@@ -208,8 +182,9 @@ internal class ClimateControl(
         private var longFired = false
         private val longPress = Runnable {
             longFired = true
+            showHalf(null)
             val other = if (side == ClimateSide.DRIVER) ClimateSide.PASSENGER else ClimateSide.DRIVER
-            bubble.show(view, format(start), context.getString(R.string.launcher_climate_sync), 0)
+            bubble.show(view, format(start), context.getString(R.string.launcher_climate_sync))
             commitTemp(side, start)
             commitTemp(other, start)
             main.postDelayed({ if (!dragging) bubble.dismiss() }, SYNC_SHOW_MS)
@@ -235,16 +210,48 @@ internal class ClimateControl(
             }
         }
 
+        /** Tema değişti: önbellekli değer bırakılır ki bir sonraki [show] renkli derece işaretini yeniden kursun. */
+        fun invalidate() { hasValue = false }
+
         fun show(c: Double?) {
-            label.setTextSmooth(if (c == null) DASH else styled(c))
+            if (hasValue && c == shown) return
+            hasValue = true
+            shown = c
+            setLabel(c)
+            val chevAlpha = if (c == null) EMPTY_ALPHA else 1f
+            chevLeft.alpha = chevAlpha
+            chevRight.alpha = chevAlpha
             view.contentDescription = context.getString(labelRes) + ", " + (if (c == null) DASH else format(c))
+        }
+
+        private fun setLabel(c: Double?) {
+            if (c == null) {
+                label.text = DASH
+                label.setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY)
+                label.translationX = 0f
+                return
+            }
+            label.setTextColor(LauncherTheme.DOCK_TEXT)
+            val end = endLabel(c)
+            label.text = end ?: styled(c)
+            // Derece işareti asılı: rakam grubu hücre ortasında kalsın diye yarı genişliği kadar sağa kayar.
+            label.translationX = if (end == null) label.paint.measureText(DEGREE) / 2f else 0f
+        }
+
+        /** Basılan yarıyı gösterir (−1 sol, +1 sağ) ya da gizler (null). */
+        private fun showHalf(dir: Int?) {
+            if (dir == null) { halfPress.visibility = View.INVISIBLE; return }
+            val lp = halfPress.layoutParams as FrameLayout.LayoutParams
+            lp.width = view.width / 2 - context.dp(PRESS_INSET_DP) * 2
+            lp.gravity = if (dir < 0) Gravity.START else Gravity.END
+            halfPress.layoutParams = lp
+            halfPress.visibility = View.VISIBLE
         }
 
         @SuppressLint("ClickableViewAccessibility")
         private fun touch(e: MotionEvent): Boolean {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    view.isPressed = true
                     view.parent?.requestDisallowInterceptTouchEvent(true)
                     val base = shownTemp(side)
                     active = base != null
@@ -255,6 +262,7 @@ internal class ClimateControl(
                         target = base
                         downX = e.rawX
                         downY = e.rawY
+                        showHalf(if (e.x < view.width / 2f) -1 else 1)
                         main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                     }
                 }
@@ -263,7 +271,7 @@ internal class ClimateControl(
                     val slop = ViewConfiguration.get(context).scaledTouchSlop
                     if (!moved && abs(dy) > slop && abs(dy) > abs(e.rawX - downX)) {
                         moved = true
-                        view.isPressed = false
+                        showHalf(null)
                         dragging = true
                         main.removeCallbacks(longPress)
                         main.removeCallbacks(revert)
@@ -271,38 +279,31 @@ internal class ClimateControl(
                     if (moved) {
                         val steps = ClimateMath.stepsForDrag(dy, context.resources.displayMetrics.density, ClimateMath.TEMP_DRAG_DP_PER_STEP)
                         target = ClimateMath.targetTemp(start, steps)
-                        label.text = styled(target)
-                        val color = tintFor(target - start)
-                        showTint(color)
-                        bubble.show(view, format(target), null, color)
+                        setLabel(target)
+                        bubble.show(view, format(target), null)
                     }
                 }
                 MotionEvent.ACTION_UP -> {
-                    view.isPressed = false
                     main.removeCallbacks(longPress)
+                    showHalf(null)
                     when {
                         !active || longFired -> Unit
                         moved -> {
                             dragging = false
                             bubble.dismiss()
-                            fadeTint()
+                            hasValue = false
                             commitTemp(side, target)
                         }
-                        else -> {
-                            val dir = if (e.x < view.width / 2f) -1 else 1
-                            showTint(tintFor(dir.toDouble()))
-                            fadeTint()
-                            commitTemp(side, ClimateMath.targetTemp(start, dir))
-                        }
+                        else -> commitTemp(side, ClimateMath.targetTemp(start, if (e.x < view.width / 2f) -1 else 1))
                     }
                     endGesture()
                 }
                 MotionEvent.ACTION_CANCEL -> {
-                    view.isPressed = false
                     main.removeCallbacks(longPress)
+                    showHalf(null)
                     bubble.dismiss()
-                    fadeTint()
                     endGesture()
+                    hasValue = false
                     render()
                 }
             }
@@ -314,71 +315,50 @@ internal class ClimateControl(
             active = false
             moved = false
         }
-
-        private fun showTint(color: Int) {
-            tintAnim?.cancel()
-            tint.setColor(color)
-            tint.alpha = 255
-        }
-
-        private fun fadeTint() {
-            tintAnim?.cancel()
-            tintAnim = ValueAnimator.ofInt(tint.alpha, 0).setDuration(TINT_FADE_MS).apply {
-                addUpdateListener { tint.alpha = it.animatedValue as Int }
-                start()
-            }
-        }
     }
 
     // --- Fan hücresi ---
 
+    /**
+     * Fan simgesi ve kademe rakamı yan yana (grup x 960'ta ortalı), altında ince kademe çizgisi: dolu kısım
+     * vurgu renginde. Çubuktaki tek renk budur ve yalnızca fan çalışırken görünür.
+     */
     private inner class FanCell {
-        private val number = text(context, FAN_SP, medium = true).apply {
+        private val number = text(context, FAN_SP).apply {
+            typeface = NUMERAL_FACE
             gravity = Gravity.CENTER
-            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
-        private val segments = List(ClimateMath.FAN_MAX) {
-            View(context).apply { background = rounded(context, inactiveSegment(), SEGMENT_RADIUS_DP) }
+        private val fanIcon = icon(context, R.drawable.ic_bar_fan, FAN_ICON_DP)
+        private val fill = View(context)
+        private val track = FrameLayout(context).apply {
+            theme.bind { background = rounded(context, LauncherTheme.DOCK_TRACK, LEVEL_H_DP / 2f) }
+            addView(fill, FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT))
         }
-        private val tint = GradientDrawable().apply { alpha = 0 }
-        private var tintAnim: ValueAnimator? = null
         private var level = -1
+        private var hasValue = true
 
-        init {
-            theme.bind { tint.setColor(TINT_FAN) }
-        }
-
-        /** Tema değişti: kademe noktaları yeni renklerle yeniden boyanır (önbellekli düzey sıfırlanır). */
+        /** Tema değişti: kademe çizgisi ve renkler yeniden boyanır (önbellekli düzey sıfırlanır). */
         fun invalidateLevel() {
             val l = level
             level = -1
-            if (l >= 0) setLevel(l)
-        }
-
-        fun resetTint() {
-            tintAnim?.cancel()
-            tint.alpha = 0
+            if (l >= 0) setLevel(l, hasValue)
         }
 
         val view: FrameLayout = FrameLayout(context).apply {
-            background = tint
-            theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
-            // OEM düzeni: simge merkezde (görünüm içi y 39), altında 84x5 kademe çubuğu (y 67), sayı simgenin sağında.
-            addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP).also { ic -> theme.bind { ic.setTint(LauncherTheme.DOCK_TEXT) } },
-                FrameLayout.LayoutParams(context.dp(FAN_ICON_DP), context.dp(FAN_ICON_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
-                    .apply { topMargin = context.dp(39 - FAN_ICON_DP / 2) })
-            addView(number, FrameLayout.LayoutParams(context.dp(FAN_NUMBER_DP), context.dp(FAN_ICON_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
-                .apply { topMargin = context.dp(39 - FAN_ICON_DP / 2); marginStart = context.dp(FAN_ICON_DP / 2 + 5 + FAN_NUMBER_DP / 2) })
+            theme.bind { foreground = dockPress(context) }
+            // Simge + rakam tek grup olarak hücre ortasında (OEM fan merkezi x 960); ince çizgi grubun altında.
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                segments.forEachIndexed { i, v ->
-                    if (i > 0) addView(gap(context, SEGMENT_GAP_DP))
-                    addView(v, LinearLayout.LayoutParams(context.dp(SEGMENT_W_DP), context.dp(SEGMENT_H_DP)))
-                }
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
-                .apply { topMargin = context.dp(65) })
+                gravity = Gravity.CENTER_VERTICAL
+                addView(fanIcon, LinearLayout.LayoutParams(context.dp(FAN_ICON_DP), context.dp(FAN_ICON_DP)))
+                addView(number, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { marginStart = context.dp(FAN_GAP_DP) })
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(FAN_ICON_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                .apply { topMargin = context.dp(CONTENT_CY_DP - FAN_ICON_DP / 2) })
+            addView(track, FrameLayout.LayoutParams(context.dp(LEVEL_W_DP), context.dp(LEVEL_H_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                .apply { topMargin = context.dp(LEVEL_TOP_DP) })
         }
 
         private var start = 0
@@ -409,19 +389,26 @@ internal class ClimateControl(
         }
 
         fun show(l: Int?) {
-            number.setTextSmooth(l?.toString() ?: DASH)
-            setLevel(l ?: 0)
+            number.text = l?.toString() ?: DASH
+            setLevel(l ?: 0, l != null)
             view.contentDescription = context.getString(R.string.launcher_climate_fan) + ", " + (l?.toString() ?: DASH)
         }
 
-        /** Kademe kadar nokta vurgu renginde, kalanı iz renginde; animasyonsuz, yalnızca değişince. */
-        private fun setLevel(l: Int) {
+        /** Rakam/simge rengi (kapalı ya da veri yok: ikincil) ve dolu çizgi oranı; yalnızca değişince. */
+        private fun setLevel(l: Int, known: Boolean) {
             val n = l.coerceIn(0, ClimateMath.FAN_MAX)
-            if (n == level) return
+            if (n == level && known == hasValue) return
             level = n
-            segments.forEachIndexed { i, v ->
-                (v.background as GradientDrawable).setColor(if (i < n) LauncherTheme.ACCENT else inactiveSegment())
-            }
+            hasValue = known
+            val on = known && n > 0
+            val fg = if (on) LauncherTheme.DOCK_TEXT else LauncherTheme.DOCK_TEXT_SECONDARY
+            number.setTextColor(fg)
+            fanIcon.setTint(fg)
+            fanIcon.alpha = if (known) 1f else EMPTY_ALPHA
+            fill.background = rounded(context, LauncherTheme.ACCENT, LEVEL_H_DP / 2f)
+            val lp = fill.layoutParams
+            lp.width = context.dp(LEVEL_W_DP) * n / ClimateMath.FAN_MAX
+            fill.layoutParams = lp
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -453,9 +440,8 @@ internal class ClimateControl(
                         val steps = ClimateMath.stepsForDrag(dx, context.resources.displayMetrics.density, ClimateMath.FAN_DRAG_DP_PER_STEP)
                         target = ClimateMath.targetFan(start, steps)
                         number.text = target.toString()
-                        setLevel(target)
-                        showTint()
-                        bubble.show(view, target.toString(), null, TINT_FAN)
+                        setLevel(target, true)
+                        bubble.show(view, target.toString(), null)
                     }
                 }
                 MotionEvent.ACTION_UP -> {
@@ -465,12 +451,9 @@ internal class ClimateControl(
                         moved -> {
                             dragging = false
                             bubble.dismiss()
-                            fadeTint()
                             commitFan(target)
                         }
                         else -> {
-                            showTint()
-                            fadeTint()
                             // Dokunuş: açıksa kapat (0), kapalıysa son açık kademeye dön.
                             if (start > 0) lastOnFan = start
                             commitFan(if (start > 0) 0 else lastOnFan)
@@ -483,7 +466,6 @@ internal class ClimateControl(
                 MotionEvent.ACTION_CANCEL -> {
                     view.isPressed = false
                     bubble.dismiss()
-                    fadeTint()
                     if (moved) dragging = false
                     active = false
                     moved = false
@@ -492,30 +474,18 @@ internal class ClimateControl(
             }
             return true
         }
-
-        private fun showTint() {
-            tintAnim?.cancel()
-            tint.alpha = 255
-        }
-
-        private fun fadeTint() {
-            tintAnim?.cancel()
-            tintAnim = ValueAnimator.ofInt(tint.alpha, 0).setDuration(TINT_FADE_MS).apply {
-                addUpdateListener { tint.alpha = it.animatedValue as Int }
-                start()
-            }
-        }
     }
 
     // --- Değer baloncuğu ---
 
-    /** Kapsülün üstünde büyük değer; ayrı bir pencere (dokunmayı geçirir), çubuğun kırpmasına takılmaz. */
+    /** Sürüklerken parmağın kapattığı değer, hücrenin üstünde büyük yazılır; ayrı pencere, dokunmayı geçirir. */
     private inner class ValueBubble {
-        private val value = text(context, BUBBLE_SP, bold = true).apply {
+        private val value = text(context, BUBBLE_SP).apply {
+            typeface = NUMERAL_FACE
             gravity = Gravity.CENTER
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
-        private val caption = text(context, LauncherTheme.LABEL_SP).apply {
+        private val caption = text(context, LauncherTheme.BODY_SP).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
@@ -535,11 +505,11 @@ internal class ClimateControl(
             elevation = context.dpF(8f)
         }
 
-        fun show(anchor: View, text: String, captionText: String?, tintColor: Int) {
+        fun show(anchor: View, text: String, captionText: String?) {
             value.text = text
             caption.text = captionText
             caption.visibility = if (captionText == null) View.GONE else View.VISIBLE
-            panel.background = rounded(context, LauncherTheme.DOCK_BOTTOM, BUBBLE_RADIUS_DP, tintColor)
+            panel.background = rounded(context, LauncherTheme.DOCK_WELL, BUBBLE_RADIUS_DP, LauncherTheme.DOCK_EDGE)
             panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val w = maxOf(panel.measuredWidth, context.dp(BUBBLE_MIN_WIDTH_DP))
             val h = panel.measuredHeight
@@ -569,41 +539,37 @@ internal class ClimateControl(
         else -> null
     }
 
-    /** Etkin olmayan kademe noktası: dock yüzeyine göre gece %25 beyaz, gündüz %20 koyu. */
-    private fun inactiveSegment(): Int = LauncherTheme.DOCK_TRACK
-
-    /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
+    /** Ekran değeri: rakamlar tam ton, derece işareti ikincil tonda (aynı boyda; glif zaten üstte durur). */
     private fun styled(c: Double): CharSequence {
-        endLabel(c)?.let { return it }
         val num = String.format(Locale.US, "%.1f", c)
-        return SpannableStringBuilder(num).append('°').apply {
-            setSpan(RelativeSizeSpan(DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return SpannableStringBuilder(num).append(DEGREE).apply {
             setSpan(ForegroundColorSpan(LauncherTheme.DOCK_TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 
-    private fun tintFor(delta: Double): Int = when {
-        delta > 0 -> TINT_WARM
-        delta < 0 -> TINT_COOL
-        else -> 0
-    }
-
     companion object {
         private const val DASH = "—"
-        private const val TEMP_SP = 38f
+        private const val DEGREE = "°"
+        /** Çubuk rakamları: Roboto Light, sabit genişlikli (tnum, [text]). */
+        private val NUMERAL_FACE: Typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        private const val TEMP_SP = 40f
+        private const val FAN_SP = 30f
         private const val BUBBLE_SP = 56f
-        private const val DEGREE_SCALE = 0.8f
-        private const val CHEVRON_DP = 34
-        /** Ok merkezi OEM x'inde: görünüm kenarından 31 → kenar payı 31 − 17. */
-        private const val CHEVRON_EDGE_DP = 14
-        private const val CHEVRON_ALPHA = 1f
-        private const val FAN_SP = 26f
-        private const val FAN_ICON_DP = 38
-        private const val FAN_NUMBER_DP = 40
-        private const val SEGMENT_W_DP = 6
-        private const val SEGMENT_H_DP = 5
-        private const val SEGMENT_GAP_DP = 3
-        private const val SEGMENT_RADIUS_DP = 2f
+        private const val CHEVRON_DP = 28
+        /** Ok merkezi hücre kenarından 31 (OEM x 661/838 ve 1082/1260). */
+        private const val CHEVRON_CENTER_DP = 31
+        private const val PRESS_INSET_DP = 6
+        private const val PRESS_RADIUS_DP = 14f
+        /** Sönük öğe (değer yok): oklar ve fan simgesi. */
+        private const val EMPTY_ALPHA = 0.4f
+        /** Hücre içi içerik merkezi (OEM simge/yazı merkezi y 670 → gövde içinde 39). */
+        private const val CONTENT_CY_DP = 37
+        private const val FAN_ICON_DP = 32
+        private const val FAN_GAP_DP = 8
+        /** Kademe çizgisi: OEM'deki 84x5 çizginin yerinde, daha ince. */
+        private const val LEVEL_W_DP = 72
+        private const val LEVEL_H_DP = 3
+        private const val LEVEL_TOP_DP = 64
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140
         private const val BUBBLE_GAP_DP = 12
@@ -613,15 +579,9 @@ internal class ClimateControl(
         /** Yazma açıkken hedefin, araç okuması yetişene kadar gösterileceği en uzun süre. */
         private const val CONFIRM_MS = 4_000L
         private const val SYNC_SHOW_MS = 900L
-        private const val TINT_FADE_MS = 200L
         private const val FAN_DEFAULT_ON = 2
 
         private const val ACTION_INCREASE = 0x1C01
         private const val ACTION_DECREASE = 0x1C02
-
-        // Düşük alfalı renk tonları (aşağı serin mavi, yukarı sıcak turuncu, fan mavi) temadan gelir: LauncherTheme.DOCK_TINT_*.
-        private val TINT_COOL get() = LauncherTheme.DOCK_TINT_COOL
-        private val TINT_WARM get() = LauncherTheme.DOCK_TINT_WARM
-        private val TINT_FAN get() = LauncherTheme.DOCK_TINT_FAN
     }
 }
