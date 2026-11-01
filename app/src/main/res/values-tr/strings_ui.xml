@@ -53,6 +53,7 @@
     <string name="settings_launcher_mode_help_on">Widget\'lı ana ekran açık.</string>
     <string name="settings_launcher_mode_help_off">Aracın kendi ana ekranı.</string>
     <string name="settings_launcher_home_link">Varsayılan ana ekran uygulamasını sistem ayarlarından değiştir</string>
+    <string name="settings_launcher_appearance_link">Ana ekran görünümü</string>
 
 
     <string name="topbar_wifi_management">Wi-Fi Yönetimi</string>

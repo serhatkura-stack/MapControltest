@@ -119,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
 
     /** Yüzen yansıtma çubuğundan hedef uygulama seçiciyi açmak için {@link Intent} extra anahtarı. */
     public static final String EXTRA_OPEN_PROJECTION_TARGET_PICKER = "com.mapcontrol.extra.OPEN_PROJECTION_TARGET_PICKER";
+    /** Açılışta seçilecek sekme indeksi (int extra); yoksa Wi-Fi sekmesi. Yeni launcher "Ayarlar" için kullanır. */
+    public static final String EXTRA_OPEN_TAB = "com.mapcontrol.extra.OPEN_TAB";
+    public static final int TAB_SETTINGS = 7;
     private static final int TAB_EQUALIZER = 11;
     public static final int TAB_CLIMATE_AUTOMATION = 12;
     public static final int TAB_FACE_RECOGNITION = 13;
@@ -934,6 +937,7 @@ public class MainActivity extends AppCompatActivity {
 
         applyLauncherChrome(LauncherModeManager.isEnabled(this));
         switchTab(0);
+        applyOpenTabExtra(getIntent());
         
         // Uygulamaları yükle
         if (appsTabBuilder != null) appsTabBuilder.loadAppsFromServer();
@@ -1344,6 +1348,22 @@ public class MainActivity extends AppCompatActivity {
         openHomeLauncher();
     }
 
+    /** {@link #EXTRA_OPEN_TAB} varsa o sekmeyi açar ve extra'yı tüketir (yeniden kurulumda tekrar açılmasın). */
+    private void applyOpenTabExtra(Intent intent) {
+        if (intent == null || !intent.hasExtra(EXTRA_OPEN_TAB)) {
+            return;
+        }
+        int tab = intent.getIntExtra(EXTRA_OPEN_TAB, 0);
+        intent.removeExtra(EXTRA_OPEN_TAB);
+        switchTab(tab);
+        if (tab == TAB_SETTINGS && topBarTitle != null) {
+            topBarTitle.setText(R.string.side_rail_settings);
+        }
+        if (sideRailBuilder != null) {
+            sideRailBuilder.setSelectionForTabIndex(tab);
+        }
+    }
+
     private void openHomeLauncher() {
         startActivity(new Intent(this, HomeLauncherActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
@@ -1557,6 +1577,7 @@ public class MainActivity extends AppCompatActivity {
         if (LauncherModeManager.isHomeIntent(intent)) {
             openHomeLauncher();
         }
+        applyOpenTabExtra(intent);
     }
 
     @Override

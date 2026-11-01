@@ -23,6 +23,7 @@ import java.net.URL;
 import androidx.core.content.ContextCompat;
 
 import com.mapcontrol.R;
+import com.mapcontrol.launcher.HomeLauncherActivity;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.manager.FloatingBackButtonManager;
 import com.mapcontrol.service.BootReceiver;
@@ -49,6 +50,7 @@ public class SettingsTabBuilder {
     private UiStyles.BinarySegmentHandle launcherModeSegmentHandle;
     private UiStyles.BinarySegmentHandle languageSegmentHandle;
     private TextView launcherHomeSettingsLink;
+    private TextView launcherAppearanceLink;
 
     public SettingsTabBuilder(Context context, SharedPreferences prefs, SettingsCallback callback) {
         this.context = context;
@@ -584,12 +586,30 @@ public class SettingsTabBuilder {
         parentContainer.addView(launcherHomeSettingsLink, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        launcherAppearanceLink = new TextView(context);
+        launcherAppearanceLink.setText(R.string.settings_launcher_appearance_link);
+        launcherAppearanceLink.setTextSize(13);
+        launcherAppearanceLink.setTextColor(UiStyles.color(context, R.color.accentHighlight));
+        launcherAppearanceLink.setPadding(16, 4, 16, 16);
+        launcherAppearanceLink.setOnClickListener(v -> {
+            Intent intent = new Intent(context, HomeLauncherActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .putExtra("launcher_open_appearance", true);
+            context.startActivity(intent);
+        });
+        parentContainer.addView(launcherAppearanceLink, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
         updateLauncherHomeSettingsLinkVisibility(launcherModeOn);
     }
 
     private void updateLauncherHomeSettingsLinkVisibility(boolean enabled) {
         if (launcherHomeSettingsLink != null) {
             launcherHomeSettingsLink.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        }
+        if (launcherAppearanceLink != null) {
+            launcherAppearanceLink.setVisibility(enabled ? View.VISIBLE : View.GONE);
         }
     }
 

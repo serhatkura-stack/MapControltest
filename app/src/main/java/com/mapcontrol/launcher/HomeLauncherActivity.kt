@@ -108,6 +108,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         layoutPolicy.reset(activeMode)
         LauncherInfo.mode = activeMode
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) consumeAppearanceExtra(intent)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
@@ -180,8 +181,16 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     override fun onNewIntent(intent: android.content.Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        consumeAppearanceExtra(intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
+    }
+
+    /** FrostNav Ayarlar'daki "Ana ekran görünümü" bağlantısı: [EXTRA_OPEN_APPEARANCE] ile gelince Görünüm panelini açar. */
+    private fun consumeAppearanceExtra(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_APPEARANCE, false) != true) return
+        intent.removeExtra(EXTRA_OPEN_APPEARANCE)
+        window.decorView.post { if (!isFinishing && !isDestroyed) settings.show(appearanceOnly = true) }
     }
 
     /**
@@ -506,6 +515,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         addView(View(context), weightLp(1f))
         addView(barButton(R.drawable.ic_mdi_plus, R.string.launcher_edit_add, LauncherTheme.CARD) { showAddDialog() })
         addView(gap(context, 16))
+        addView(barButton(R.drawable.ic_mdi_theme_light_dark, R.string.launcher_appearance, LauncherTheme.CARD) { settings.show(appearanceOnly = true) })
+        addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_restart, R.string.launcher_edit_reset, LauncherTheme.CARD) { confirmReset() })
         addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_check, R.string.launcher_edit_done, DriveAccent.buttonFill(LauncherTheme.ACCENT), onFill = true) { exitEditMode() })
@@ -668,6 +679,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private companion object {
         const val EDIT_EXIT_KMH = 5
+        /** FrostNav Ayarlar'dan gelir (bkz. SettingsTabBuilder): açılışta Görünüm panelini gösterir. */
+        const val EXTRA_OPEN_APPEARANCE = "launcher_open_appearance"
         const val FADE_OUT_MS = 120L
         const val FADE_IN_MS = 200L
         /** Tema geçişiyle yeniden kurulmada etkin düzeni korur. */

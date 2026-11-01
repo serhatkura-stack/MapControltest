@@ -60,7 +60,12 @@ internal object LauncherEdition {
         VehicleQuickControls.getInstance(context).setCentralLock(locked)
     }
 
+    /** FrostNav'ı doğrudan Ayarlar sekmesinde açar. */
     fun openSettings(activity: Activity) {
-        activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        activity.startActivity(
+            Intent(activity, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TAB_SETTINGS),
+        )
     }
 }

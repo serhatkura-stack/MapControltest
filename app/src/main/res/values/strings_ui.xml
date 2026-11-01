@@ -48,6 +48,7 @@
     <string name="settings_launcher_mode_help_on">Widget home screen on.</string>
     <string name="settings_launcher_mode_help_off">The car\'s own home screen.</string>
     <string name="settings_launcher_home_link">Change default home app in system settings</string>
+    <string name="settings_launcher_appearance_link">Home screen appearance</string>
     <string name="topbar_wifi_management">Wi‑Fi management</string>
     <string name="topbar_app_management">App management</string>
     <string name="topbar_system_logs">System logs</string>

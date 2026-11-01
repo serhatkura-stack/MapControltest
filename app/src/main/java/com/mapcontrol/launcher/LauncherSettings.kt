@@ -59,9 +59,14 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     private var dialog: Dialog? = null
     private var dataCheck: DataCheckSheet? = null
 
-    fun show() {
+    /**
+     * [appearanceOnly]: "Görünüm" paneli (düzenleme modundaki düğme ve FrostNav'daki bağlantı); yalnızca tema, sürüş rengi,
+     * alt çubuk ve otomatik sürüş düzeni. Tam panel yalnızca test sürümünün başlık düğmesinde açılır.
+     */
+    fun show(appearanceOnly: Boolean = false) {
         if (dialog?.isShowing == true) return
-        dialog = showLauncherSheet(activity, R.string.launcher_settings) { d -> addScrollable(d) }.apply {
+        val title = if (appearanceOnly) R.string.launcher_appearance else R.string.launcher_settings
+        dialog = showLauncherSheet(activity, title) { d -> addScrollable(d, appearanceOnly) }.apply {
             setOnDismissListener { dialog = null }
         }
     }
@@ -72,15 +77,15 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     }
 
     /** Satırlar araç ekranının yüksekliğini aşabilir (tema + alt çubuk + 4-5 satır): panel kaydırılır. */
-    private fun LinearLayout.addScrollable(d: Dialog) {
+    private fun LinearLayout.addScrollable(d: Dialog, appearanceOnly: Boolean) {
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, activity.dp(16)) }
-        content.buildPanel(d)
+        content.buildPanel(d, appearanceOnly)
         val maxH = activity.resources.displayMetrics.heightPixels - activity.dp(SCROLL_RESERVED_DP)
         addView(ScrollView(activity).apply { addView(content) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxH))
     }
 
-    private fun LinearLayout.buildPanel(d: Dialog) {
-        frostNavPackage()?.let { pkg ->
+    private fun LinearLayout.buildPanel(d: Dialog, appearanceOnly: Boolean) {
+        frostNavPackage()?.takeIf { !appearanceOnly }?.let { pkg ->
             addView(row(R.drawable.ic_mdi_open_in_new, R.string.launcher_open_frostnav, R.string.launcher_open_frostnav_hint) {
                 d.dismiss()
                 openFrostNav(pkg)
@@ -102,6 +107,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(autoDriveLayoutToggle(d), fullWidth())
 
+        if (appearanceOnly) return
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
