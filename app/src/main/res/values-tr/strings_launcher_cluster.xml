@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cluster_card_media">Çalıyor</string>
+    <string name="cluster_card_empty">Veri yok</string>
+    <string name="cluster_card_range_label">Menzil</string>
+    <string name="cluster_card_unit_km">km</string>
+</resources>

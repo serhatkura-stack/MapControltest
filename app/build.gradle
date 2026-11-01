@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 def signingProperties = new Properties()
@@ -11,6 +12,13 @@ def releaseStore = signingProperties.getProperty('RELEASE_STORE_FILE')
 def releaseStorePassword = signingProperties.getProperty('RELEASE_STORE_PASSWORD')
 def releaseKeyPassword = signingProperties.getProperty('RELEASE_KEY_PASSWORD')
 def hasReleaseSigning = releaseStore && releaseStorePassword && releaseKeyPassword
+def gitSha = {
+    try {
+        def proc = ['git', 'rev-parse', '--short', 'HEAD'].execute([], rootProject.projectDir)
+        def out = proc.text.trim()
+        proc.waitFor() == 0 && out ? out : 'unknown'
+    } catch (Exception ignored) { 'unknown' }
+}
 def readSetting = { String name ->
     providers.gradleProperty(name).orNull ?: System.getenv(name) ?: signingProperties.getProperty(name, '')
 }
@@ -35,6 +43,7 @@ android {
         targetSdk 28
         versionCode 12
         versionName "1.4.3"
+        buildConfigField 'String', 'GIT_SHA', groovy.json.JsonOutput.toJson(gitSha())
         buildConfigField 'String', 'GLITCHTIP_DSN', groovy.json.JsonOutput.toJson(readSetting('GLITCHTIP_DSN') ?: '')
         ndk {
             abiFilters 'arm64-v8a'
@@ -83,6 +92,10 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
     packaging {
         jniLibs {
             pickFirsts += ['**/libc++_shared.so']
@@ -91,15 +104,15 @@ android {
 }
 
 dependencies {
+    // Yeni launcher (Kotlin)
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
     implementation('io.sentry:sentry-android:8.24.0') {
         exclude group: 'io.sentry', module: 'sentry-android-ndk'
         exclude group: 'io.sentry', module: 'sentry-android-replay'
     }
     testImplementation 'junit:junit:4.13.2'
-    def filamentVersion = '1.53.4'
-    implementation "com.google.android.filament:filament-android:${filamentVersion}"
-    implementation "com.google.android.filament:gltfio-android:${filamentVersion}"
-    implementation "com.google.android.filament:filament-utils-android:${filamentVersion}"
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'

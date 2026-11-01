@@ -256,7 +256,7 @@ public class VehicleInfoTabBuilder implements VehicleMetricsRepository.Listener 
         addRow(uiContext.getString(R.string.vehicle_info_col_tmp),
                 formatter.formatTemperature(repository.getCombined(ReadOnlyID.ID_WATER_TEMPERATURE)));
         addRow(uiContext.getString(R.string.vehicle_info_battery),
-                formatter.formatVoltage(repository.getCombined(ReadOnlyID.ID_IBS_VOLTAGE)));
+                formatter.formatVoltage(repository.getCombined(ReadOnlyID.ID_BATTERY_LEVEL)));
         addRow(uiContext.getString(R.string.vehicle_info_act_speed),
                 formatter.formatSpeed(repository.getCombined(ReadOnlyID.ID_CAR_SPEED)));
         addRow(uiContext.getString(R.string.vehicle_info_dis_speed),

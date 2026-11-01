@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Hava durumu (Open-Meteo). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Araç verisini okumak için araç veri servisine bağlanma. -->
+    <uses-permission android:name="ivi.vds.permission.SERVICE" />
+    <!-- Alt şeritteki uygulama seçicisi. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Fotoğraf widget'ı: İndirilenler klasöründeki resimleri listeler. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Veri kontrolü: son GPS konumu. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="Launcher Test"
+        android:supportsRtl="true">
+
+        <!-- HOME kategorisi yok: aracın kendi ana ekranı değişmez; uygulama listesinden açılır. -->
+        <activity
+            android:name=".launcher.HomeLauncherActivity"
+            android:exported="true"
+            android:label="Launcher Test"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Konfor yazma testi (perde, buğu, direksiyon ısıtma): Koruma deseni
+             (intent-filter yok, exported=true, ack + shell başlatan denetimi + park kapısı kodda). -->
+        <activity
+            android:name="com.mapcontrol.comfort.ComfortTestActivity"
+            android:exported="true"
+            android:label="Konfor Test"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <!-- Ekranı karart: tam siyah, en düşük parlaklık; dokununca kapanır. -->
+        <activity
+            android:name=".launcher.ScreenOffActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Medya kartı: çalan şarkıyı okumak için bildirim erişimi (kullanıcı ayarlardan verir). -->
+        <service
+            android:name=".media.LauncherMediaNotificationListener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

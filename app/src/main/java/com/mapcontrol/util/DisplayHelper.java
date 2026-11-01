@@ -46,7 +46,12 @@ public final class DisplayHelper {
     private static Context bootSplashDisplayContext = null;
     /** {@link Display#INVALID_DISPLAY} when splash kapalı. */
     private static int bootSplashDisplayId = Display.INVALID_DISPLAY;
+    /** Cluster ekranındaki boot splash animasyonları. */
     private static final List<android.animation.Animator> bootSplashAnimators = new ArrayList<>();
+    /** Uygulama içi açılış/onboarding splash animasyonları (cluster'dan ayrı tutulur). */
+    /** Splash animasyonlarının en fazla oynayacağı süre; sonrasında son karede sabit kalır. */
+    private static final long SPLASH_ANIMATION_MAX_MS = 8_000L;
+    private static final List<android.animation.Animator> appSplashAnimators = new ArrayList<>();
 
     private DisplayHelper() {}
 
@@ -205,7 +210,8 @@ public final class DisplayHelper {
     }
 
     private static void startPreparingAnimations(View root) {
-        preparingAnimators.clear();
+        // Önceki animasyonlar durdurulmadan liste temizlenirse sahipsiz kalıp sonsuza dek çalışırlar.
+        cancelPreparingAnimations();
 
         View card = root.findViewById(R.id.preparing_card);
         View spinner = root.findViewById(R.id.preparing_spinner);
@@ -386,7 +392,7 @@ public final class DisplayHelper {
             bootSplashView = overlay;
             bootSplashWindowManager.addView(bootSplashView, bootSplashParams);
 
-            startBootSplashAnimations(overlay);
+            startBootSplashAnimations(overlay, bootSplashAnimators);
         } catch (Exception ignored) {
         }
     }
@@ -484,7 +490,7 @@ public final class DisplayHelper {
             View overlay = buildBootSplashOverlay(bootSplashDisplayContext);
             bootSplashView = overlay;
             bootSplashWindowManager.addView(bootSplashView, bootSplashParams);
-            startBootSplashAnimations(overlay);
+            startBootSplashAnimations(overlay, bootSplashAnimators);
         } catch (Exception ignored) {
             bootSplashDisplayId = Display.INVALID_DISPLAY;
             bootSplashParams = null;
@@ -508,13 +514,13 @@ public final class DisplayHelper {
         if (tagline != null) {
             tagline.setText(R.string.launch_splash_loading);
         }
-        startBootSplashAnimations(overlay);
+        startBootSplashAnimations(overlay, appSplashAnimators);
         return overlay;
     }
 
     /** Uygulama splash animasyonlarını durdurur (cluster splash ayrı kalabilir). */
     public static void stopAppLaunchSplashAnimations() {
-        cancelBootSplashAnimations();
+        cancelAll(appSplashAnimators);
     }
 
     private static View buildBootSplashOverlay(Context ctx) {
@@ -623,8 +629,14 @@ public final class DisplayHelper {
         return root;
     }
 
-    private static void startBootSplashAnimations(View root) {
-        bootSplashAnimators.clear();
+    /**
+     * Splash animasyonlarını başlatır ve [out] listesine ekler. Listede önceki animasyonlar varsa önce
+     * durdurulur (eskiden yalnızca clear() yapılıyor, durdurulmamış animasyonlar sonsuza dek çalışıyordu).
+     * Ayrıca görünüm pencereden ayrılınca kendi animasyonları otomatik durur.
+     */
+    private static void startBootSplashAnimations(View root, List<android.animation.Animator> out) {
+        cancelAll(out);
+        final List<android.animation.Animator> own = new ArrayList<>();
 
         root.setAlpha(0f);
         root.animate().alpha(1f).setDuration(360).start();
@@ -645,7 +657,7 @@ public final class DisplayHelper {
             final AnimatedGradientView g = (AnimatedGradientView) gradient;
             flow.addUpdateListener(a -> g.setProgress((float) a.getAnimatedValue()));
             flow.start();
-            bootSplashAnimators.add(flow);
+            own.add(flow);
         }
 
         if (grid instanceof MapGridView) {
@@ -656,7 +668,7 @@ public final class DisplayHelper {
             final MapGridView g = (MapGridView) grid;
             scroll.addUpdateListener(a -> g.setProgress((float) a.getAnimatedValue()));
             scroll.start();
-            bootSplashAnimators.add(scroll);
+            own.add(scroll);
         }
 
         if (halo != null) {
@@ -665,7 +677,7 @@ public final class DisplayHelper {
             fadeIn.setDuration(900);
             fadeIn.setInterpolator(new AccelerateDecelerateInterpolator());
             fadeIn.start();
-            bootSplashAnimators.add(fadeIn);
+            own.add(fadeIn);
 
             ObjectAnimator pulseX = ObjectAnimator.ofFloat(halo, View.SCALE_X, 0.95f, 1.08f);
             ObjectAnimator pulseY = ObjectAnimator.ofFloat(halo, View.SCALE_Y, 0.95f, 1.08f);
@@ -680,7 +692,7 @@ public final class DisplayHelper {
             AnimatorSet pulse = new AnimatorSet();
             pulse.playTogether(pulseX, pulseY, pulseA);
             pulse.start();
-            bootSplashAnimators.add(pulse);
+            own.add(pulse);
         }
 
         if (center != null) {
@@ -702,7 +714,7 @@ public final class DisplayHelper {
             floatY.setRepeatCount(ValueAnimator.INFINITE);
             floatY.setInterpolator(new AccelerateDecelerateInterpolator());
             floatY.start();
-            bootSplashAnimators.add(floatY);
+            own.add(floatY);
         }
 
         if (tagline != null) {
@@ -712,7 +724,7 @@ public final class DisplayHelper {
             blink.setRepeatMode(ValueAnimator.REVERSE);
             blink.setInterpolator(new AccelerateDecelerateInterpolator());
             blink.start();
-            bootSplashAnimators.add(blink);
+            own.add(blink);
         }
 
         if (bar instanceof RadarPinView) {
@@ -723,7 +735,7 @@ public final class DisplayHelper {
             pulse.setInterpolator(new LinearInterpolator());
             pulse.addUpdateListener(a -> radar.setProgress((float) a.getAnimatedValue()));
             pulse.start();
-            bootSplashAnimators.add(pulse);
+            own.add(pulse);
 
             ObjectAnimator pinBounce = ObjectAnimator.ofFloat(radar, View.TRANSLATION_Y,
                     0f, -dp(root.getContext(), 3), 0f);
@@ -731,18 +743,41 @@ public final class DisplayHelper {
             pinBounce.setRepeatCount(ValueAnimator.INFINITE);
             pinBounce.setInterpolator(new AccelerateDecelerateInterpolator());
             pinBounce.start();
-            bootSplashAnimators.add(pinBounce);
+            own.add(pinBounce);
         }
+        out.addAll(own);
+        // Sonsuz animasyon sürekli çizim demek: cluster splash'i saatlerce ekranda kalabiliyor ve
+        // RenderThread ~%55 CPU harcıyordu. Giriş animasyonu kısa süre oynar, sonra son karede donar.
+        root.postDelayed(() -> {
+            cancelAll(own);
+            out.removeAll(own);
+        }, SPLASH_ANIMATION_MAX_MS);
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                cancelAll(own);
+                out.removeAll(own);
+                v.removeOnAttachStateChangeListener(this);
+            }
+        });
     }
 
     private static void cancelBootSplashAnimations() {
-        for (android.animation.Animator a : bootSplashAnimators) {
+        cancelAll(bootSplashAnimators);
+    }
+
+    private static void cancelAll(List<android.animation.Animator> animators) {
+        for (android.animation.Animator a : new ArrayList<>(animators)) {
             try {
                 a.cancel();
             } catch (Exception ignored) {
             }
         }
-        bootSplashAnimators.clear();
+        animators.clear();
     }
 
     /**
