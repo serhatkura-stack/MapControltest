@@ -2124,6 +2124,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         com.mapcontrol.util.BootSession.markUiLaunched(this);
+        // Görev zaten varken am start onCreate'i çalıştırmaz; güncelleme sonrası launcher modunu her
+        // öne gelişte eşitle (alias + cihaz sahibi sabitlemesi), rol düştüyse sürüm başına bir kez iste.
+        LauncherModeManager.restoreIfEnabled(this);
+        LauncherModeManager.requestHomeRoleOncePerVersion(this, REQUEST_HOME_ROLE);
         SunroofGestureOverlayManager.getInstance(this).onActivityResumed();
         if (currentTab == TAB_CAMERA_360 && camera360TabBuilder != null) {
             camera360TabBuilder.onTabVisible();

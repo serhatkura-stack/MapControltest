@@ -212,6 +212,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- Uygulama güncellenince Launcher Modu'nu (HOME alias + cihaz sahibi sabitlemesi) geri kurar. -->
+        <receiver
+            android:name=".service.PackageReplacedReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
