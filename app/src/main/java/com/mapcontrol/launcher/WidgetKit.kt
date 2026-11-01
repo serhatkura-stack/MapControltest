@@ -90,7 +90,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     HEATS("heats", R.string.launcher_widget_heats, R.drawable.ic_mdi_steering, listOf(Span(2, 2))),
     TIRES("tire_pressure", R.string.launcher_widget_tires, R.drawable.ic_mdi_car, listOf(Span(2, 4), Span(4, 4))),
     TRIP_TOTALS("trip_totals", R.string.launcher_widget_trip_totals, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(3, 2))),
-    REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2)));
+    REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2))),
+    CABIN("cabin", R.string.launcher_widget_cabin, R.drawable.ic_mdi_car_seat, listOf(Span(2, 2), Span(2, 4)));
 
     companion object {
         fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
@@ -194,5 +195,6 @@ object WidgetFactory {
         WidgetType.TIRES -> TireTile(activity)
         WidgetType.TRIP_TOTALS -> TripTotalsTile(activity)
         WidgetType.REAR_SPEAKER -> RearSpeakerTile(activity)
+        WidgetType.CABIN -> CabinTile(activity)
     }
 }

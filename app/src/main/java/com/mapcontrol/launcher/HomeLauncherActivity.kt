@@ -94,6 +94,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
+        LauncherDemo.applyPreview(intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
@@ -191,6 +192,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         consumeEditExtra(intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
+        LauncherDemo.applyPreview(intent)
     }
 
     /** FrostNav Ayarlar'daki "Ana ekran görünümü" bağlantısı: [EXTRA_OPEN_APPEARANCE] ile gelince Görünüm panelini açar. */

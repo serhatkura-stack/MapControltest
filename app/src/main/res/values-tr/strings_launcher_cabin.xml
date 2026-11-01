@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_widget_cabin">Kabin</string>
+    <string name="launcher_cabin_driver">Sürücü</string>
+    <string name="launcher_cabin_passenger">Yolcu</string>
+    <string name="launcher_cabin_heat">Isıtma %1$d</string>
+    <string name="launcher_cabin_vent">Soğutma %1$d</string>
+    <string name="launcher_cabin_both">Isı %1$d · Soğ. %2$d</string>
+</resources>
