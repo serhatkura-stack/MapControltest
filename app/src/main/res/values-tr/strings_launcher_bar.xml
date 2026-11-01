@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="launcher_bar_style">Çubuk stili</string>
+    <string name="launcher_bar_style_a">A · Klima</string>
+    <string name="launcher_bar_style_b">B · Akıllı şerit</string>
+    <string name="home_screen_bar_style_help_a">Zengin klima merkezi: renkli sıcaklık alanları, koltuk ışığı, dönen fan.</string>
+    <string name="home_screen_bar_style_help_b">Yuvaları siz seçersiniz; mini oynatıcı ve kapı açık uyarısı.</string>
+
+    <string name="launcher_bar_fan_title">Fan kademesi</string>
+    <string name="launcher_bar_seat_heat">Koltuk ısıtma</string>
+    <string name="launcher_bar_seat_vent">Koltuk soğutma</string>
+    <string name="launcher_bar_temp_down">Daha serin</string>
+    <string name="launcher_bar_temp_up">Daha sıcak</string>
+
+    <string name="launcher_bar_slot_title">Bu yuva ne yapsın?</string>
+    <string name="launcher_bar_slot_app">Uygulama seç…</string>
+    <string name="launcher_bar_slot_reset">Varsayılana dön</string>
+    <string name="launcher_bar_slot_frostnav">FrostNav</string>
+    <string name="launcher_bar_slot_cam360">Kamera 360</string>
+    <string name="launcher_bar_slot_home_settings">Ana ekran ayarları</string>
+    <string name="launcher_bar_slot_hint">Değiştirmek için yuvaya uzun bas</string>
+
+    <string name="launcher_bar_door_open">Kapı açık</string>
+    <string name="launcher_bar_trunk_open">Bagaj açık</string>
+    <string name="launcher_bar_media_open">Medya uygulamasını aç</string>
+    <string name="launcher_bar_media_none">Müzik</string>
+    <string name="launcher_bar_media_next">Sonraki parça</string>
+</resources>

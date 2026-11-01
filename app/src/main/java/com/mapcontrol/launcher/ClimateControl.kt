@@ -51,14 +51,36 @@ internal class ClimateControl(
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
     private val bubble = ValueBubble()
-    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short)
-    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short)
-    private val fan = FanCell()
+    /** Klasik hücreler (stil B ve eski çubuk); stil A kendi hücrelerini ([RichClimate]) kurar, bunlar hiç oluşturulmaz. */
+    private val driver by lazy { classicUsed = true; TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short) }
+    private val passenger by lazy { classicUsed = true; TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short) }
+    private val fan by lazy { classicUsed = true; FanCell() }
+    private var classicUsed = false
+
+    /** Zengin hücreler her çizimde ([render]) bunu çağırır; sürükleme sırasında çağrılmaz. */
+    var onRender: (() -> Unit)? = null
 
     /** Dock bölümleri (zeminsiz, koyu dock üstünde); yerleşimi ([OurBottomBar]) belirler. */
     val driverView: View get() = driver.view
     val fanView: View get() = fan.view
     val passengerView: View get() = passenger.view
+
+    // --- Zengin hücrelerin ([RichClimate]) kullandığı ortak durum ve onay yolu ---
+
+    internal fun shownTempFor(side: ClimateSide): Double? = shownTemp(side)
+    internal fun shownFanLevel(): Int? = shownFan()
+    internal fun commitTempFor(side: ClimateSide, celsius: Double) = commitTemp(side, celsius)
+    internal fun commitFanLevel(level: Int) = commitFan(level)
+    internal fun lastOnFanLevel(): Int = lastOnFan
+    internal fun rememberOnFan(level: Int) { if (level > 0) lastOnFan = level }
+    internal fun formatTemp(c: Double): String = format(c)
+    internal fun styledTemp(c: Double): CharSequence = styled(c)
+
+    /** Sürükleme başladı/bitti: işlenmemiş geri dönüş durur, çizim sürükleme boyunca araca dönmez. */
+    internal fun setDragging(on: Boolean) {
+        dragging = on
+        if (on) main.removeCallbacks(revert)
+    }
 
     private val revert = Runnable {
         pendingDriver = null
@@ -76,8 +98,10 @@ internal class ClimateControl(
     /** Tema değişti: hücrelerin renkleri, yüzey katmanları ve değer yazıları yeniden atanır (görünümler korunur). */
     fun applyTheme() {
         theme.reapply()
-        driver.resetTint(); passenger.resetTint(); fan.resetTint()
-        fan.invalidateLevel()
+        if (classicUsed) {
+            driver.resetTint(); passenger.resetTint(); fan.resetTint()
+            fan.invalidateLevel()
+        }
         render()
     }
 
@@ -99,9 +123,12 @@ internal class ClimateControl(
 
     private fun render() {
         if (dragging) return
-        driver.show(shownTemp(ClimateSide.DRIVER))
-        passenger.show(shownTemp(ClimateSide.PASSENGER))
-        fan.show(shownFan())
+        if (classicUsed) {
+            driver.show(shownTemp(ClimateSide.DRIVER))
+            passenger.show(shownTemp(ClimateSide.PASSENGER))
+            fan.show(shownFan())
+        }
+        onRender?.invoke()
     }
 
     // --- Onay ("commit") ---

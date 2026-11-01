@@ -126,7 +126,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         header = HeaderBar(this, onSettings = ::openSettings, onThemeChanged = { ThemeTransition.retheme(this) }, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onLayoutPill = ::editDriveLayout)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
-        ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this) else null
+        ourBar = if (LauncherBottomBar.showsOurBar(this)) OurBottomBar(this, LauncherBottomBar.style(this)) else null
         val ourBar = this.ourBar
         val bottomBar: Pair<AppDock, ClimateBar>? =
             if (oemBar || ourBar != null) null else AppDock(this).let { it to ClimateBar(this, it.view) }

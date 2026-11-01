@@ -31,6 +31,13 @@ object HomeScreenPrefs {
         BottomBarMode.values().getOrNull(index)?.let { LauncherBottomBar.setMode(context, it) }
     }
 
+    /** "Bizimki" stili: 0 = A (Klima odaklı), 1 = B (Akıllı şerit). */
+    @JvmStatic fun barStyleIndex(context: Context): Int = LauncherBottomBar.style(context).ordinal
+
+    @JvmStatic fun setBarStyleIndex(context: Context, index: Int) {
+        BarStyle.values().getOrNull(index)?.let { LauncherBottomBar.setStyle(context, it) }
+    }
+
     @JvmStatic fun autoDriveLayout(context: Context): Boolean = DriveLayoutPrefs.get(context)
 
     @JvmStatic fun setAutoDriveLayout(context: Context, on: Boolean) = DriveLayoutPrefs.set(context, on)
@@ -45,7 +52,7 @@ object HomeScreenPrefs {
     /** Launcher'ın kurulumda okuduğu tercihlerin özeti; farklıysa açık launcher yeniden kurulmalıdır. */
     @JvmStatic fun signature(context: Context): String {
         val gen = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_LAYOUT_RESET_GEN, 0)
-        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen"
+        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${barStyleIndex(context)}|${autoDriveLayout(context)}|$gen"
     }
 
     /** Ana ekranı doğrudan düzenleme modunda açar. */

@@ -90,6 +90,23 @@ internal class DockSurface(private val context: Context) : Drawable() {
     private var outer = Path()
     private var inner = Path()
     private var innerRim = Path()
+    private val tintPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var tintLeft = 0
+    private var tintRight = 0
+
+    /**
+     * Orta yamuğa soldan sağa yumuşak bir renk geçişi bindirir (stil A: sürücü ve yolcu sıcaklığının rengi). İki uç da
+     * saydam (0) ise hiçbir şey çizilmez; yalnızca biri saydamsa onun rengi diğerinin tonunu alır ki geçiş kirlenmesin.
+     */
+    fun setTint(left: Int, right: Int) {
+        val l = if (left ushr 24 == 0 && right ushr 24 != 0) right and 0x00FFFFFF else left
+        val r = if (right ushr 24 == 0 && left ushr 24 != 0) left and 0x00FFFFFF else right
+        if (l == tintLeft && r == tintRight) return
+        tintLeft = l
+        tintRight = r
+        if (!bounds.isEmpty) onBoundsChange(bounds)
+        invalidateSelf()
+    }
 
     fun applyTheme() {
         if (!bounds.isEmpty) onBoundsChange(bounds)
@@ -107,6 +124,8 @@ internal class DockSurface(private val context: Context) : Drawable() {
         rim.strokeWidth = maxOf(1f, context.dpF(1f))
         edge.color = LauncherTheme.DOCK_BORDER
         edge.strokeWidth = maxOf(1f, context.dpF(1f))
+        tintPaint.shader = if (tintLeft ushr 24 == 0 && tintRight ushr 24 == 0) null
+        else LinearGradient(b.left + 553f * sx, 0f, b.left + 1367f * sx, 0f, tintLeft, tintRight, Shader.TileMode.CLAMP)
         outer = DockShape.outer(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
         inner = DockShape.mid(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
         innerRim = DockShape.midRim(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
@@ -134,6 +153,7 @@ internal class DockSurface(private val context: Context) : Drawable() {
             canvas.restore()
         }
         canvas.drawPath(inner, mid)
+        if (tintPaint.shader != null) canvas.drawPath(inner, tintPaint)
         canvas.drawPath(innerRim, rim)
     }
 
