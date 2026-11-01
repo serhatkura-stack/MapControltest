@@ -66,6 +66,7 @@
     <string name="launcher_doors_closed">Kapılar kapalı</string>
     <string name="launcher_part_open" formatted="true">%1$s açık</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d yer açık</string>
+    <string name="launcher_windows_open_count" formatted="true">%1$d cam açık: %2$s</string>
     <string name="launcher_close">Kapat</string>
     <string name="launcher_edit_no_room">Yer yok</string>
     <string name="launcher_widget_consumption">Anlık tüketim</string>
@@ -149,7 +150,6 @@
     <string name="launcher_widget_battery">Akü</string>
     <string name="launcher_widget_phone">Telefon</string>
     <string name="launcher_widget_clock">Saat</string>
-    <string name="launcher_widget_body">Gövde</string>
     <string name="launcher_break_hm" formatted="true">%1$d sa %2$d dk</string>
     <string name="launcher_break_m" formatted="true">%1$d dk</string>
     <string name="launcher_break_driving">sürüş</string>
@@ -159,16 +159,12 @@
     <string name="launcher_phone_pad_empty">Şarj pedi boş</string>
     <string name="launcher_phone_on_pad">Telefon pedde</string>
     <string name="launcher_phone_take">Telefonunu al</string>
-    <string name="launcher_body_all_closed">Hepsi kapalı</string>
     <string name="launcher_body_win_lf">Sol ön cam</string>
     <string name="launcher_body_win_rf">Sağ ön cam</string>
     <string name="launcher_body_win_lr">Sol arka cam</string>
     <string name="launcher_body_win_rr">Sağ arka cam</string>
     <string name="launcher_body_hood">Kaput</string>
     <string name="launcher_body_fuel_cap">Yakıt kapağı</string>
-    <string name="launcher_body_handbrake_on">El freni çekili</string>
-    <string name="launcher_body_handbrake_off">El freni indi</string>
-    <string name="launcher_window_part">Cam</string>
     <string name="launcher_drive_theme">Sürüş moduna göre renk</string>
     <string name="launcher_auto_drive_layout">Otomatik sürüş düzeni</string>
     <string name="launcher_toggle_on">Açık</string>

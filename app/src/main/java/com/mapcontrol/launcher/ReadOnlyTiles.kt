@@ -144,6 +144,24 @@ internal enum class BodyPart(@StringRes val label: Int) {
     FUEL_CAP(R.string.launcher_body_fuel_cap),
 }
 
+/** Araç kartındaki kırmızı uyarı satırının bölümleri, gösterim sırasıyla (kapılar/bagaj/kaput ayrı satırda ve şemada kalır). */
+internal enum class AlertSeg { TIRE, WINDOWS, FUEL_CAP }
+
+/** Araç kartı uyarı satırının saf kuralları (JVM'de sınanır). */
+internal object CarAlertMath {
+    fun isWindow(part: BodyPart): Boolean = part.name.startsWith("WINDOW_")
+
+    /** Açık camlar, [BodyPart] sırasıyla. */
+    fun windows(open: List<BodyPart>): List<BodyPart> = open.filter(::isWindow)
+
+    /** Satırda görünen bölümler. Hiçbiri yoksa boş döner ve satır gizlenir. */
+    fun segments(tireAlert: Boolean, windows: List<BodyPart>, fuelCapOpen: Boolean): List<AlertSeg> = buildList {
+        if (tireAlert) add(AlertSeg.TIRE)
+        if (windows.isNotEmpty()) add(AlertSeg.WINDOWS)
+        if (fuelCapOpen) add(AlertSeg.FUEL_CAP)
+    }
+}
+
 /**
  * [ExtraSource] verisi. Her alan null ise "okunamadı / bilinmiyor". [parts] gövde parçalarının açık (true) /
  * kapalı (false) durumunu taşır; hiç okunamayanlar haritada yoktur.
@@ -305,7 +323,14 @@ internal object ReadOnlyDemo {
         padState = ReadOnlyDecode.PAD_CHARGING,
         phoneForgotten = false,
         handbrakeOn = true,
-        parts = BodyPart.values().associateWith { false },
+        // Demo: `launcher_demo_open` içinde wlf/wrf/wlr/wrr (camlar) ve fuel (yakıt kapağı) açık sayılır.
+        parts = BodyPart.values().associateWith { false } + mapOf(
+            BodyPart.WINDOW_LF to ("wlf" in LauncherDemo.openParts),
+            BodyPart.WINDOW_RF to ("wrf" in LauncherDemo.openParts),
+            BodyPart.WINDOW_LR to ("wlr" in LauncherDemo.openParts),
+            BodyPart.WINDOW_RR to ("wrr" in LauncherDemo.openParts),
+            BodyPart.FUEL_CAP to ("fuel" in LauncherDemo.openParts),
+        ),
         tires = TireReading(listOf(2.4, 2.4, 2.3, 2.2), warning = false),
     )
 }
@@ -457,42 +482,6 @@ internal class PhoneTile(context: Context) :
         }
         setValue(context.getString(state), if (pad == ReadOnlyDecode.PAD_EMPTY) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         showDetail(null)
-    }
-}
-
-/**
- * Gövde durumu: kapılar, bagaj, kaput, camlar ve yakıt kapağı. Hepsi kapalıysa sakin "Hepsi kapalı" (altında el freni
- * durumu); açık olan varsa ALERT renginde tek parçanın adı ("Kaput açık") ya da sayı + liste. El freni uyarı değildir.
- */
-internal class BodyTile(context: Context) :
-    ExtraTile(context, R.drawable.ic_mdi_car_door, R.string.launcher_widget_body, narrowValueSp = 32f) {
-
-    override fun bind() {
-        if (!data.connected || !data.bodyKnown) {
-            setAlertSurface(false)
-            showMissing()
-            return
-        }
-        val open = data.openParts()
-        if (open.isEmpty()) {
-            setAlertSurface(false)
-            setIcon(R.drawable.ic_mdi_car_door, LauncherTheme.TEXT_SECONDARY)
-            setValue(context.getString(R.string.launcher_body_all_closed), LauncherTheme.TEXT)
-            showDetail(data.handbrakeOn?.let {
-                context.getString(if (it) R.string.launcher_body_handbrake_on else R.string.launcher_body_handbrake_off)
-            })
-            return
-        }
-        setAlertSurface(true)
-        setIcon(R.drawable.ic_mdi_alert, LauncherTheme.ALERT)
-        val names = open.map { context.getString(it.label) }
-        if (open.size == 1) {
-            setValue(context.getString(R.string.launcher_part_open, names[0]), LauncherTheme.ALERT)
-            showDetail(null)
-        } else {
-            setValue(context.getString(R.string.launcher_doors_open_count, open.size), LauncherTheme.ALERT)
-            showDetail(names.joinToString(", "), LauncherTheme.ALERT)
-        }
     }
 }
 

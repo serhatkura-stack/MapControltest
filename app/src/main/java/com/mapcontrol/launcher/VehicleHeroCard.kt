@@ -90,14 +90,15 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         addView(statusText, wrapLp())
     }
     private val doorsPill = AlertPill()
-    private val tiresPill = AlertPill()
+    /** Kırmızı uyarı satırı: lastik, açık cam(lar) ve yakıt kapağı, " · " ile tek satırda (en fazla iki satır). */
+    private val alertsPill = AlertPill()
     private val alertRow = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.START
         visibility = View.GONE
         addView(doorsPill.root, wrapLp())
-        addView(gap(context, LauncherTheme.GAP_S_DP))
-        addView(tiresPill.root, wrapLp())
+        addView(gap(context, LauncherTheme.GAP_S_DP, vertical = true))
+        addView(alertsPill.root, wrapLp())
     }
 
     override val view: View = card(context, LinearLayout.HORIZONTAL, paddingDp = LauncherTheme.CARD_PAD_DP).apply {
@@ -265,6 +266,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         val tireWarning: Boolean?,
         /** Eşiğin altındaki ilk tekerlek (varsa); yalnızca düşük basınçta dolu. */
         val tireLow: TireLow?,
+        /** Kırmızı satırın bölümleri ve açık camlar (ad için). */
+        val alerts: List<AlertSeg>,
+        val windows: List<BodyPart>,
         val car: CarSchematicView.State,
         val locked: Boolean?,
     )
@@ -298,14 +302,17 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
                 if (s.isTrunkOpen()) add(R.string.launcher_trunk)
                 if (knowsSunroof && s.sunroofOpenOrNull() == true) add(R.string.launcher_sunroof_part)
             }
-            if (knowsExtra && extra.anyWindowOpen()) add(R.string.launcher_window_part)
             if (knowsExtra && extra.hoodOpen()) add(R.string.launcher_body_hood)
         }
         val tireLow = TireDecode.low(extra.tires)
         val tireAlert = TireDecode.alertShown(tireWarning, tireLow)
+        val windows = if (knowsExtra) CarAlertMath.windows(extra.openParts()) else emptyList()
+        val fuelCapOpen = knowsExtra && extra.parts[BodyPart.FUEL_CAP] == true
+        val alerts = CarAlertMath.segments(tireAlert, windows, fuelCapOpen)
         val ui = Ui(
             range = range, fuel = fuel, lowFuel = tenths != null && lowFuel,
             open = open, knowsBody = knowsDoors || knowsExtra, tireWarning = tireWarning, tireLow = tireLow,
+            alerts = alerts, windows = windows,
             car = CarSchematicView.State(
                 doorLf = knowsDoors && s.isDoorLfOpen(), doorRf = knowsDoors && s.isDoorRfOpen(),
                 doorLr = knowsDoors && s.isDoorLrOpen(), doorRr = knowsDoors && s.isDoorRrOpen(),
@@ -341,27 +348,15 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             fuelBar.set(fuel, lowFuel)
         }
 
-        val alertChanged = prev == null || prev.open != open || prev.tireWarning != tireWarning || prev.tireLow != tireLow
+        val alertChanged = prev == null || prev.open != open || prev.tireWarning != tireWarning || prev.tireLow != tireLow || prev.windows != windows || prev.alerts != alerts
         if (alertChanged) {
             if (open.isEmpty()) doorsPill.hide() else doorsPill.show(
                 R.drawable.ic_mdi_car_door,
                 if (open.size == 1) context.getString(R.string.launcher_part_open, context.getString(open[0]))
                 else context.getString(R.string.launcher_doors_open_count, open.size),
             )
-            if (!tireAlert) tiresPill.hide() else tiresPill.show(
-                R.drawable.ic_mdi_alert,
-                when {
-                    // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
-                    open.isNotEmpty() -> context.getString(R.string.launcher_tires_warning_short)
-                    tireLow?.wheel != null -> context.getString(
-                        R.string.launcher_tires_low_wheel,
-                        context.getString(TIRE_WHEEL_NAMES[tireLow.wheel]),
-                        TireDecode.psi(tireLow.bar ?: 0.0),
-                    )
-                    else -> context.getString(R.string.launcher_tires_warning)
-                },
-            )
-            val hasAlert = open.isNotEmpty() || tireAlert
+            if (alerts.isEmpty()) alertsPill.hide() else alertsPill.show(R.drawable.ic_mdi_alert, alertsText(alerts, tireLow, windows, open.isNotEmpty()))
+            val hasAlert = open.isNotEmpty() || alerts.isNotEmpty()
             alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
             calmRow.visibility = if (hasAlert) View.GONE else View.VISIBLE
         }
@@ -384,6 +379,25 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         calmRow.contentDescription = spoken
     }
 
+    /** Kırmızı satırın metni: bölümler " · " ile; kapı satırı da görünürse lastik metni kısa (dar kartta sığması için). */
+    private fun alertsText(alerts: List<AlertSeg>, tireLow: TireLow?, windows: List<BodyPart>, doorsShown: Boolean): String =
+        alerts.joinToString(" · ") { seg ->
+            when (seg) {
+                AlertSeg.TIRE -> when {
+                    doorsShown -> context.getString(R.string.launcher_tires_warning_short)
+                    tireLow?.wheel != null -> context.getString(
+                        R.string.launcher_tires_low_wheel,
+                        context.getString(TIRE_WHEEL_NAMES[tireLow.wheel]),
+                        TireDecode.psi(tireLow.bar ?: 0.0),
+                    )
+                    else -> context.getString(R.string.launcher_tires_warning)
+                }
+                AlertSeg.WINDOWS -> if (windows.size == 1) context.getString(R.string.launcher_part_open, context.getString(windows[0].label))
+                else context.getString(R.string.launcher_windows_open_count, windows.size, windows.joinToString(", ") { context.getString(it.label) })
+                AlertSeg.FUEL_CAP -> context.getString(R.string.launcher_part_open, context.getString(R.string.launcher_body_fuel_cap))
+            }
+        }
+
     private fun bindCalm(iconRes: Int, label: String) {
         statusIcon.setImageResource(iconRes)
         statusIcon.imageTintList = ColorStateList.valueOf(LauncherTheme.TEXT_SECONDARY)
@@ -395,7 +409,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
     private inner class AlertPill {
         private val iconView: ImageView = icon(context, R.drawable.ic_mdi_alert, LauncherTheme.ICON_S_DP, LauncherTheme.ON_ACCENT)
         private val label: TextView = text(context, LauncherTheme.BODY_SP, LauncherTheme.ON_ACCENT, bold = true).apply {
-            maxLines = 1
+            maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
         }
         val root: LinearLayout = LinearLayout(context).apply {

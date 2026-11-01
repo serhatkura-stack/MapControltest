@@ -66,6 +66,7 @@
     <string name="launcher_doors_closed">Doors closed</string>
     <string name="launcher_part_open" formatted="true">%1$s open</string>
     <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
+    <string name="launcher_windows_open_count" formatted="true">%1$d windows open: %2$s</string>
     <string name="launcher_close">Close</string>
     <string name="launcher_edit_no_room">No room</string>
     <string name="launcher_widget_consumption">Consumption</string>
@@ -148,7 +149,6 @@
     <string name="launcher_widget_battery">Battery</string>
     <string name="launcher_widget_phone">Phone</string>
     <string name="launcher_widget_clock">Clock</string>
-    <string name="launcher_widget_body">Body</string>
     <string name="launcher_break_hm" formatted="true">%1$d h %2$d min</string>
     <string name="launcher_break_m" formatted="true">%1$d min</string>
     <string name="launcher_break_driving">driving</string>
@@ -158,16 +158,12 @@
     <string name="launcher_phone_pad_empty">Charging pad empty</string>
     <string name="launcher_phone_on_pad">Phone on pad</string>
     <string name="launcher_phone_take">Take your phone</string>
-    <string name="launcher_body_all_closed">All closed</string>
     <string name="launcher_body_win_lf">Front left window</string>
     <string name="launcher_body_win_rf">Front right window</string>
     <string name="launcher_body_win_lr">Rear left window</string>
     <string name="launcher_body_win_rr">Rear right window</string>
     <string name="launcher_body_hood">Hood</string>
     <string name="launcher_body_fuel_cap">Fuel cap</string>
-    <string name="launcher_body_handbrake_on">Handbrake on</string>
-    <string name="launcher_body_handbrake_off">Handbrake released</string>
-    <string name="launcher_window_part">Window</string>
     <string name="launcher_drive_theme">Drive mode colors</string>
     <string name="launcher_auto_drive_layout">Auto drive layout</string>
     <string name="launcher_toggle_on">On</string>
