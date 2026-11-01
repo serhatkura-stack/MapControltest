@@ -83,6 +83,15 @@ object LauncherTheme {
     private const val DAY_DOCK_BORDER = 0xFFC9D1DC.toInt()
     private const val NIGHT_DOCK_TOP = 0xFF232938.toInt()
     private const val NIGHT_DOCK_BOTTOM = 0xFF1D2331.toInt()
+    // Araç alt çubuğu silueti ([DockShape]): yanlar panel tonunda, yukarıdan aşağıya ~%30 koyulaşır; orta bölüm ~1,5 kat açık.
+    private const val DAY_SIDE_TOP = 0xFFD3DAE5.toInt()
+    private const val DAY_SIDE_BOTTOM = 0xFFAFB9CA.toInt()
+    private const val DAY_MID_TOP = 0xFFF4F6FA.toInt()
+    private const val DAY_MID_BOTTOM = 0xFFDCE2EC.toInt()
+    private const val NIGHT_SIDE_TOP = 0xFF2D3548.toInt()
+    private const val NIGHT_SIDE_BOTTOM = 0xFF1F2536.toInt()
+    private const val NIGHT_MID_TOP = 0xFF444F68.toInt()
+    private const val NIGHT_MID_BOTTOM = 0xFF323C52.toInt()
 
     val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD
@@ -102,6 +111,14 @@ object LauncherTheme {
     /** Alt çubuk yüzeyi, üst ve alt gradyan uçları (gece koyu, gündüz açık buzlu). */
     val DOCK_TOP: Int get() = if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
     val DOCK_BOTTOM: Int get() = if (night) NIGHT_DOCK_BOTTOM else DAY_DOCK_BOTTOM
+    /** Siluetli alt çubuk: yan bölümler ve orta (sıcaklık·fan) bölümü, üst ve alt gradyan uçları; orta kenar parıltısı. */
+    val DOCK_SIDE_TOP: Int get() = if (night) NIGHT_SIDE_TOP else DAY_SIDE_TOP
+    val DOCK_SIDE_BOTTOM: Int get() = if (night) NIGHT_SIDE_BOTTOM else DAY_SIDE_BOTTOM
+    val DOCK_MID_TOP: Int get() = if (night) NIGHT_MID_TOP else DAY_MID_TOP
+    val DOCK_MID_BOTTOM: Int get() = if (night) NIGHT_MID_BOTTOM else DAY_MID_BOTTOM
+    /** Siluetin gölgesi: bir katmanın alfası (birkaç katman üst üste biner). */
+    val DOCK_SHADOW: Int get() = if (night) 0x14000000 else 0x12000000
+    val DOCK_RIM: Int get() = if (night) 0x70FFFFFF else 0xFFFFFFFF.toInt()
     /** Alt çubuk kenar çizgisi (1dp); gecede 0 (çizgi yok), gündüz koyu ince çizgi. */
     val DOCK_BORDER: Int get() = if (night) 0 else DAY_DOCK_BORDER
     /** Gündüz dock'u kendi bölgesi gibi okunsun diye yükselti (dp); gecede 0. */

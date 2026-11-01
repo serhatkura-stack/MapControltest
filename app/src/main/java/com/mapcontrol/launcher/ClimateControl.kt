@@ -139,7 +139,7 @@ internal class ClimateControl(
     // --- Sıcaklık hücresi ---
 
     private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, TEMP_SP, medium = true).apply {
+        private val label = text(context, TEMP_SP, bold = true).apply {
             gravity = Gravity.CENTER
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
@@ -157,27 +157,18 @@ internal class ClimateControl(
             theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                addView(text(context, LauncherTheme.LABEL_SP).apply {
-                    text = context.getString(shortRes)
-                    gravity = Gravity.CENTER
-                    theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
-                })
-                addView(gap(context, 2, vertical = true))
-                addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            // Sürücü/Yolcu etiketi yok (araç çubuğunda da yok; yan kenar dokunma ve erişilebilirlik adı yeterli).
+            addView(label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
             val chev = context.dp(CHEVRON_DP)
             val edge = context.dp(CHEVRON_EDGE_DP)
             addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP).apply {
                 alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+                theme.bind { setTint(LauncherTheme.DOCK_TEXT) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
             addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP).apply {
                 alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+                theme.bind { setTint(LauncherTheme.DOCK_TEXT) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
@@ -347,25 +338,20 @@ internal class ClimateControl(
             theme.bind { foreground = dockPressOverlay(context) }
             isClickable = true
             isFocusable = true
+            // OEM düzeni: simge merkezde (görünüm içi y 39), altında 84x5 kademe çubuğu (y 67), sayı simgenin sağında.
+            addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP).also { ic -> theme.bind { ic.setTint(LauncherTheme.DOCK_TEXT) } },
+                FrameLayout.LayoutParams(context.dp(FAN_ICON_DP), context.dp(FAN_ICON_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                    .apply { topMargin = context.dp(39 - FAN_ICON_DP / 2) })
+            addView(number, FrameLayout.LayoutParams(context.dp(FAN_NUMBER_DP), context.dp(FAN_ICON_DP), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                .apply { topMargin = context.dp(39 - FAN_ICON_DP / 2); marginStart = context.dp(FAN_ICON_DP / 2 + 5 + FAN_NUMBER_DP / 2) })
             addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP).also { ic -> theme.bind { ic.setTint(LauncherTheme.DOCK_TEXT_SECONDARY) } })
-                    addView(gap(context, LauncherTheme.GAP_S_DP))
-                    addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-                addView(gap(context, LauncherTheme.GAP_SM_DP, vertical = true))
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    segments.forEachIndexed { i, v ->
-                        if (i > 0) addView(gap(context, SEGMENT_GAP_DP))
-                        addView(v, LinearLayout.LayoutParams(context.dp(SEGMENT_W_DP), context.dp(SEGMENT_H_DP)))
-                    }
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+                orientation = LinearLayout.HORIZONTAL
+                segments.forEachIndexed { i, v ->
+                    if (i > 0) addView(gap(context, SEGMENT_GAP_DP))
+                    addView(v, LinearLayout.LayoutParams(context.dp(SEGMENT_W_DP), context.dp(SEGMENT_H_DP)))
+                }
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                .apply { topMargin = context.dp(65) })
         }
 
         private var start = 0
@@ -577,19 +563,20 @@ internal class ClimateControl(
 
     companion object {
         private const val DASH = "—"
-        private const val TEMP_SP = 56f
+        private const val TEMP_SP = 38f
         private const val BUBBLE_SP = 56f
         private const val DEGREE_SCALE = 0.8f
-        private const val CHEVRON_DP = 32
-        private const val CHEVRON_EDGE_DP = 8
-        private const val CHEVRON_ALPHA = 0.85f
-        private const val FAN_SP = 44f
-        private const val FAN_ICON_DP = 40
-        private const val FAN_NUMBER_DP = 48
-        private const val SEGMENT_W_DP = 17
-        private const val SEGMENT_H_DP = 10
-        private const val SEGMENT_GAP_DP = 5
-        private const val SEGMENT_RADIUS_DP = 5f
+        private const val CHEVRON_DP = 34
+        /** Ok merkezi OEM x'inde: görünüm kenarından 31 → kenar payı 31 − 17. */
+        private const val CHEVRON_EDGE_DP = 14
+        private const val CHEVRON_ALPHA = 1f
+        private const val FAN_SP = 26f
+        private const val FAN_ICON_DP = 38
+        private const val FAN_NUMBER_DP = 40
+        private const val SEGMENT_W_DP = 6
+        private const val SEGMENT_H_DP = 5
+        private const val SEGMENT_GAP_DP = 3
+        private const val SEGMENT_RADIUS_DP = 2f
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140
         private const val BUBBLE_GAP_DP = 12
