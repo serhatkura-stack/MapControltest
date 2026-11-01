@@ -89,6 +89,7 @@ public class HomeScreenTabBuilder {
         createThemeSection(appearanceGrid);
         createDriveAccentSection(appearanceGrid);
         createBottomBarSection(appearanceGrid);
+        createBarStyleSection(appearanceGrid);
         createAutoLayoutSection(appearanceGrid);
 
         addSectionTitle(R.string.home_screen_layout_title);
@@ -238,6 +239,21 @@ public class HomeScreenTabBuilder {
                 index -> {
                     HomeScreenPrefs.setBottomBarIndex(context, index);
                     callback.log("Ana ekran alt çubuk: " + index);
+                });
+    }
+
+    /** "Bizimki" çubuğunun stili: A (Klima odaklı) / B (Akıllı şerit); yalnızca Bizimki seçiliyken etkili. */
+    private void createBarStyleSection(FeatureGridLayout grid) {
+        UiStyles.addBinarySegmentedControl(context, createCard(grid),
+                context.getString(R.string.launcher_bar_style),
+                context.getString(R.string.launcher_bar_style_a),
+                context.getString(R.string.launcher_bar_style_b),
+                context.getString(R.string.home_screen_bar_style_help_a),
+                context.getString(R.string.home_screen_bar_style_help_b),
+                HomeScreenPrefs.barStyleIndex(context) == 0,
+                left -> {
+                    HomeScreenPrefs.setBarStyleIndex(context, left ? 0 : 1);
+                    callback.log("Ana ekran çubuk stili: " + (left ? "A" : "B"));
                 });
     }
 

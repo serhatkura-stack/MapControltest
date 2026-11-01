@@ -109,6 +109,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(bottomBarSegments(d), fullWidth())
+        // Bizimki seçiliyse stil (A/B) seçilir; ikisinin silueti aynıdır.
+        if (LauncherBottomBar.mode(activity) == BottomBarMode.OURS) {
+            addView(gap(activity, 12, vertical = true))
+            addView(barStyleSegments(d), fullWidth())
+        }
 
         addView(gap(activity, 12, vertical = true))
         addView(autoDriveLayoutToggle(d), fullWidth())
@@ -270,6 +275,39 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                         d.dismiss()
                         if (mode != current) {
                             LauncherBottomBar.setMode(activity, mode)
+                            ThemeTransition.recreate(activity)
+                        }
+                    }
+                    pressFeedback()
+                }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
+            }
+        }
+    }
+
+    /** "Bizimki" stili: A (Klima odaklı) | B (Akıllı şerit); seçim kaydedilir ve ekran yeniden kurulur. */
+    private fun barStyleSegments(d: Dialog): View {
+        val current = LauncherBottomBar.style(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
+            val p = activity.dp(6)
+            setPadding(p, p, p, p)
+            BarStyle.values().forEachIndexed { i, style ->
+                if (i > 0) addView(gap(activity, 6))
+                val selected = style == current
+                addView(text(activity, LauncherTheme.BODY_SP,
+                    if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+                    setText(style.label)
+                    gravity = Gravity.CENTER
+                    if (selected) background = rounded(activity, LauncherTheme.ACCENT, SEGMENT_RADIUS_DP - 4)
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = activity.getString(R.string.launcher_bar_style) + ": " + activity.getString(style.label)
+                    setOnClickListener {
+                        d.dismiss()
+                        if (style != current) {
+                            LauncherBottomBar.setStyle(activity, style)
                             ThemeTransition.recreate(activity)
                         }
                     }

@@ -83,12 +83,19 @@ internal object LauncherDemo {
     @Volatile
     var onBodyChanged: Runnable? = null
 
+    /** Alt çubuk (stil B) için ikinci dinleyici; araç kartınınkini ezmemek için ayrı. */
+    @Volatile
+    var onBodyChangedBar: Runnable? = null
+
     fun applyPreview(intent: Intent?) {
         if (!enabled || intent == null) return
         if (intent.hasExtra(EXTRA_OPEN)) {
             openParts = intent.getStringExtra(EXTRA_OPEN).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            onBodyChanged?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
+            val h = android.os.Handler(android.os.Looper.getMainLooper())
+            onBodyChanged?.let { h.post(it) }
+            onBodyChangedBar?.let { h.post(it) }
         }
+        if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
     }
@@ -114,11 +121,17 @@ internal object LauncherDemo {
 
     val DRIVER_SEAT_LEVEL get() = seatOverride ?: 2
     val PASSENGER_SEAT_LEVEL get() = seatOverride ?: 0
-    const val DRIVER_TEMP = 22.0
-    const val PASSENGER_TEMP = 24.5
-    const val FAN_LEVEL = 3
+    /** Klima önizlemesi: `--es launcher_demo_climate "17.5,27.5,7"` sürücü °C, yolcu °C, fan kademesi (boş alan varsayılan). */
+    const val EXTRA_CLIMATE = "launcher_demo_climate"
+
+    @Volatile
+    private var climate: List<Double?> = emptyList()
+
+    val DRIVER_TEMP: Double get() = climate.getOrNull(0) ?: 22.0
+    val PASSENGER_TEMP: Double get() = climate.getOrNull(1) ?: 24.5
+    val FAN_LEVEL: Int get() = climate.getOrNull(2)?.toInt() ?: 3
     val DRIVER_VENT_LEVEL get() = seatOverride ?: 1
-    val PASSENGER_VENT_LEVEL get() = seatOverride ?: 0
+    val PASSENGER_VENT_LEVEL get() = seatOverride ?: 2
 
     /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam kapalı. */
     fun comfort(): ComfortReading = ComfortReading(
@@ -157,10 +170,26 @@ internal object LauncherDemo {
         totalKm = 18_420, totalFuelL = 1_284.6, drivingRunMin = 47, drivingResetMin = 3_552,
     )
 
+    /** Demo kapak: ekran görüntülerinde boş yer tutucu yerine gerçekçi bir albüm resmi (bir kez çizilir). */
+    private val artwork: android.graphics.Bitmap by lazy {
+        val size = 240
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.shader = android.graphics.LinearGradient(0f, 0f, size.toFloat(), size.toFloat(), 0xFF3B1E6E.toInt(), 0xFFFF7A3D.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, size.toFloat(), size.toFloat(), p)
+        p.shader = null
+        p.color = 0x33FFFFFF
+        c.drawCircle(size * 0.64f, size * 0.42f, size * 0.30f, p)
+        p.color = 0x55000000
+        c.drawCircle(size * 0.30f, size * 0.78f, size * 0.22f, p)
+        bmp
+    }
+
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */
     fun media(): MediaState = MediaState(
         true, true, true,
         "Yolun Sonu", "Demo Sanatçı", "com.google.android.apps.youtube.music",
-        72_000L, 215_000L, null,
+        72_000L, 215_000L, artwork,
     )
 }
