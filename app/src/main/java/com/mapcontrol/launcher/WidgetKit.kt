@@ -60,7 +60,7 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
  * geçersiz boyutlar [LayoutStore.snapSpans] ile en yakın izinli boyuta çekilir.
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>, val parkOnly: Boolean = false) {
-    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4))),
+    MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4), Span(6, 6))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
@@ -120,29 +120,32 @@ interface SizedWidget : LauncherWidget {
 }
 
 /**
- * Varsayılan yerleşim (12×6). Üst dört satır: araç 4×4 (sol), medya 6×4, sağda üst üste hava durumu ve yolculuk 2×2.
- * Alt iki satır, sol direksiyonlu kabine göre (sürücü solda, yolcu sağda): sürücü koltuk ısıtma 2×2 · dört ince
- * uygulama kutucuğu (tek şerit) · hava kalitesi 4×2 · yolcu koltuk ısıtma 2×2.
- * [oemBar] (araçta OEM alt çubuğu var, bizim alt çubuğumuz yok): üst alan aynı; ortadaki alan sekiz ince
- * uygulama kutucuğuyla (2+8+2 = 12) dolar.
+ * Park varsayılanı (12×6): duran araçta sahibini karşılayan, zengin ama sakin ekran. İki bant:
+ *  - Üst bant (bilgi, 4 satır): sürücü tarafında araç kartı 4×4 (menzil, şema, kilit, uyarılar); ortada medya 4×2,
+ *    altında araç sağlığı ve hava kalitesi 2×2; sağda "Toplam" bölümlü yolculuk 4×4.
+ *  - Alt bant (kontroller, 2 satır), sol direksiyonlu kabine göre: sürücü koltuk ısıtma · tavan perdesi · bagaj ·
+ *    buğu giderme · iki ince uygulama kutucuğu (tek şerit) · yolcu koltuk ısıtma.
+ * Izgara boşluksuz dolar. [oemBar] iki durumda da aynı düzeni verir (her iki alt çubukta da uygulamalar düğmesi var);
+ * imza [LayoutStore] ile uyum içindir. Uygulama kutucukları [appPackages] ile dolar.
  */
-fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> {
-    val top = listOf(
-        PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
-        PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 4)),
-        PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
-        PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
-        PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
-    )
-    // Dört uygulama kutucuğu yan yana: ızgara bunları tek şerit olarak birleştirir. Boşsa (paket yok) yalnız düzenlemede artı görünür.
-    fun apps(count: Int) = (0 until count).map { i ->
-        PlacedWidget("app_dock_$i", WidgetType.APP, 2 + i, 4, Span(1, 2), appPackages.getOrNull(i))
-    }
-    return top + if (oemBar) apps(DEFAULT_APP_SLOTS) else apps(4) + PlacedWidget("air", WidgetType.AIR, 6, 4, Span(4, 2))
-}
+fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = listOf(
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
+    PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(4, 2)),
+    PlacedWidget("health", WidgetType.HEALTH, 4, 2, Span(2, 2)),
+    PlacedWidget("air", WidgetType.AIR, 6, 2, Span(2, 2)),
+    PlacedWidget("trip", WidgetType.TRIP, 8, 0, Span(4, 4)),
+    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
+    PlacedWidget("sunshade", WidgetType.SUNSHADE, 2, 4, Span(2, 2)),
+    PlacedWidget("trunk", WidgetType.TRUNK, 4, 4, Span(2, 2)),
+    PlacedWidget("defrost", WidgetType.DEFROST, 6, 4, Span(2, 2)),
+) + (0 until DEFAULT_PARK_APP_TILES).map { i ->
+    PlacedWidget("app_dock_$i", WidgetType.APP, 8 + i, 4, Span(1, 2), appPackages.getOrNull(i))
+} + PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
 
-/** OEM çubuklu varsayılanda yan yana uygulama kutucuğu sayısı (her biri 1×2). */
+/** Park varsayılanındaki ince uygulama kutucuğu sayısı (her biri 1×2, yan yana tek şerit). */
+const val DEFAULT_PARK_APP_TILES = 2
+
+/** Varsayılan düzen için okunan kurulu uygulama sayısı üst sınırı ([AppDock.installedDefaults]). */
 const val DEFAULT_APP_SLOTS = 8
 
 /**

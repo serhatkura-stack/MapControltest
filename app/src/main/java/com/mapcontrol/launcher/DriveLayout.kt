@@ -146,18 +146,19 @@ internal object DriveSignals {
 }
 
 /**
- * Sürüş varsayılan düzeni: sakin ve büyük. Medya 6×4, araç 4×4, sağda tüketim ve yolculuk; alt şerit koltuklar ve mola
- * hatırlatıcısı. Uygulama kutucuğu yoktur ([oemBar] ve [appPackages] yalnızca imza uyumu içindir).
+ * Sürüş varsayılanı: az, büyük, tek bakışlık (7 kart, kaydırma yok, uzun metin yok, Park'a özel widget yok).
+ *  - Sol (sürücü tarafı): araç kartı 4×4 (menzil), altında sürücü koltuk ısıtma (sol alt köşe, kolay erişim) ve uyku modu.
+ *  - Orta: tam yükseklikte medya 6×6 (en çok kullanılan; büyük kapak, büyük tuşlar).
+ *  - Sağ sütun (yolcu tarafı): anlık tüketim, mola hatırlatıcı, en altta yolcu koltuk ısıtma (sağ alt köşe).
+ * Uygulama kutucuğu yoktur ([oemBar] ve [appPackages] yalnızca imza uyumu içindir); ızgara boşluksuz dolar.
  */
 @Suppress("UNUSED_PARAMETER")
 fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = listOf(
-    PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(6, 4)),
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 6, 0, Span(4, 4)),
-    PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
-    PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
+    PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
     PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 5, 4, Span(2, 2)),
-    // Uyku modu (arka hoparlör): sürerken ulaşılabilsin diye yolcu koltuğunun yanında; boşluk açmaz.
-    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 8, 4, Span(2, 2)),
+    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 4, Span(2, 2)),
+    PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 6)),
+    PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
+    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 10, 2, Span(2, 2)),
     PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
 )

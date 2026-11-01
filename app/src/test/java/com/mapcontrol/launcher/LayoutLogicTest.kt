@@ -150,51 +150,53 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun defaultTopAreaIsVehicleMediaConsumptionAndTrip() {
-        listOf(defaultLayout(false), defaultLayout(true)).forEach { layout ->
-            fun at(t: WidgetType) = layout.single { it.type == t }.let { Triple(it.col, it.row, it.span) }
-            assertEquals(Triple(0, 0, Span(4, 4)), at(WidgetType.VEHICLE))
-            assertEquals(Triple(4, 0, Span(6, 4)), at(WidgetType.MEDIA))
-            assertEquals(Triple(10, 0, Span(2, 2)), at(WidgetType.CONSUMPTION))
-            assertEquals(Triple(10, 2, Span(2, 2)), at(WidgetType.TRIP))
-            assertEquals(Triple(0, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_DRIVER))
-            assertEquals(Triple(10, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_PASSENGER))
-            // APP dışında tür tekrarı yok
-            val nonApp = layout.filter { it.type != WidgetType.APP }.map { it.type }
+    fun parkDefaultIsExactlyTheDesignedLayoutForBothBars() {
+        listOf(false, true).forEach { oem ->
+            val l = defaultLayout(oem, List(8) { "p$it" })
+            val got = l.map { "${it.type.key}@${it.col},${it.row}:${it.span}" }.sorted()
+            val want = listOf(
+                "vehicle@0,0:4×4", "media@4,0:4×2", "health@4,2:2×2", "air@6,2:2×2", "trip@8,0:4×4",
+                "seat_heat_driver@0,4:2×2", "sunshade@2,4:2×2", "trunk@4,4:2×2", "defrost@6,4:2×2",
+                "app@8,4:1×2", "app@9,4:1×2", "seat_heat_passenger@10,4:2×2",
+            ).sorted()
+            assertEquals("oem=$oem", want, got)
+            // Uygulama kutucukları sırayla kurulu varsayılanlarla dolar; APP dışında tür tekrarı yok.
+            assertEquals(listOf("p0", "p1"), l.filter { it.type == WidgetType.APP }.sortedBy { it.col }.map { it.extra })
+            val nonApp = l.filter { it.type != WidgetType.APP }.map { it.type }
             assertEquals(nonApp.size, nonApp.toSet().size)
         }
     }
 
-    @Test
-    fun parkDefaultHasExactlyTheExpectedTypes() {
-        val l = defaultLayout(false, List(4) { "p$it" })
-        assertTrue(LayoutStore.isValid(l))
-        assertEquals(
-            listOf(WidgetType.VEHICLE, WidgetType.MEDIA, WidgetType.CONSUMPTION, WidgetType.TRIP, WidgetType.SEAT_HEAT_DRIVER,
-                WidgetType.SEAT_HEAT_PASSENGER, WidgetType.AIR).sortedBy { it.key },
-            l.filter { it.type != WidgetType.APP }.map { it.type }.sortedBy { it.key },
-        )
-        val apps = l.filter { it.type == WidgetType.APP }
-        assertEquals(listOf(2, 3, 4, 5), apps.map { it.col })
-        assertTrue(apps.all { it.row == 4 && it.span == Span(1, 2) })
-        assertEquals(Triple(6, 4, Span(4, 2)), l.single { it.type == WidgetType.AIR }.let { Triple(it.col, it.row, it.span) })
+    /** Varsayılan düzen kuralları: çakışma yok, boşluk yok, her boyut izinli, mod kuralına uygun. */
+    private fun assertCleanDefault(name: String, l: List<PlacedWidget>, mode: LayoutMode) {
+        assertTrue("$name geçerli", LayoutStore.isValid(l))
+        l.forEach { w -> assertTrue("$name ${w.type} ${w.span} izinli", w.span in w.type.sizes) }
+        for (i in l.indices) for (j in i + 1 until l.size) assertTrue("$name çakışma ${l[i].id}/${l[j].id}", !l[i].overlaps(l[j]))
+        for (r in 0 until GRID_ROWS) for (c in 0 until GRID_COLS) {
+            assertTrue("$name boş hücre $c,$r", l.any { c in it.col until it.col + it.span.w && r in it.row until it.row + it.span.h })
+        }
+        assertTrue("$name mod", l.all { isAllowedIn(it.type, mode) })
     }
 
     @Test
-    fun desayDefaultBottomRowIsDriverSeatEightThinAppsPassengerSeat() {
-        val layout = defaultLayout(true)
-        val bottom = layout.filter { it.row == 4 }.sortedBy { it.col }
-        assertEquals(
-            listOf(WidgetType.SEAT_HEAT_DRIVER) + List(8) { WidgetType.APP } + WidgetType.SEAT_HEAT_PASSENGER,
-            bottom.map { it.type },
-        )
-        assertEquals(Span(2, 2), bottom.first().span)
-        assertEquals(0, bottom.first().col)
-        assertTrue(bottom.filter { it.type == WidgetType.APP }.all { it.span == Span(1, 2) })
-        assertEquals(Span(2, 2), bottom.last().span)
-        assertEquals(10, bottom.last().col)
-        // 2 + 8×1 + 2 = 12, boşluksuz
-        assertEquals(GRID_COLS, bottom.sumOf { it.span.w })
+    fun allDefaultsHaveNoOverlapNoHolesAndOnlyAllowedSpans() {
+        listOf(false, true).forEach { oem ->
+            assertCleanDefault("park oem=$oem", defaultLayout(oem, List(8) { "p$it" }), LayoutMode.PARK)
+            assertCleanDefault("sürüş oem=$oem", defaultDriveLayout(oem, List(8) { "p$it" }), LayoutMode.DRIVE)
+        }
+    }
+
+    @Test
+    fun driveDefaultIsSmallAndSeatsSitAtTheReachableEdges() {
+        listOf(false, true).forEach { oem ->
+            val l = defaultDriveLayout(oem)
+            assertTrue(l.size <= 7)
+            assertTrue(l.none { it.type.parkOnly || it.type == WidgetType.APP })
+            val d = l.single { it.type == WidgetType.SEAT_HEAT_DRIVER }
+            val p = l.single { it.type == WidgetType.SEAT_HEAT_PASSENGER }
+            assertEquals(0, d.col)
+            assertEquals(GRID_COLS, p.col + p.span.w)
+        }
     }
 
     @Test
@@ -264,7 +266,7 @@ class LayoutLogicTest {
             WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
             .forEach { assertEquals("$it", listOf(Span(2, 2)), it.sizes) }
         assertEquals(listOf(Span(2, 2), Span(4, 2)), WidgetType.AIR.sizes)
-        assertEquals(listOf(Span(4, 2), Span(6, 4)), WidgetType.MEDIA.sizes)
+        assertEquals(listOf(Span(4, 2), Span(6, 4), Span(6, 6)), WidgetType.MEDIA.sizes)
     }
 
     @Test
@@ -291,10 +293,10 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun snapMediaEightBySixAndSixBySixBecomeSixByFour() {
+    fun snapMediaEightBySixBecomesSixBySixWhichIsKept() {
         listOf(Span(8, 6), Span(6, 6)).forEach {
             val out = LayoutStore.snapSpans(listOf(widget("m", WidgetType.MEDIA, 0, 0, it)))
-            assertEquals(listOf(widget("m", WidgetType.MEDIA, 0, 0, Span(6, 4))), out)
+            assertEquals(listOf(widget("m", WidgetType.MEDIA, 0, 0, Span(6, 6))), out)
         }
     }
 
@@ -320,7 +322,7 @@ class LayoutLogicTest {
         assertTrue(LayoutStore.isValid(moved))
         // Izgara tamamen dolu: yer kalmayan tek widget düşer, diğerleri aynen kalır.
         val base = defaultLayout(false)
-        val out = LayoutStore.snapSpans(base.filter { it.id != "air" } + widget("y", WidgetType.LOCK, 6, 4, Span(1, 1)))
+        val out = LayoutStore.snapSpans(base.filter { it.id != "air" } + widget("y", WidgetType.LOCK, 6, 2, Span(1, 1)))
         assertEquals(base.size, out.size)
         val full = LayoutStore.snapSpans(base + widget("z", WidgetType.CONSUMPTION, 0, 0, Span(1, 1)))
         assertEquals(base, full)
