@@ -4,7 +4,6 @@
     <string name="launcher_climate_lo">LO</string>
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Bagaj durumu değişti, tekrar dokunun</string>
-    <string name="launcher_widget_climate_keys">Klima tuşları</string>
     <string name="launcher_widget_tires">Lastik basıncı</string>
     <string name="launcher_widget_trip_totals">Toplam</string>
     <string name="launcher_widget_rear_speaker">Arka hoparlör</string>

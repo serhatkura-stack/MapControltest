@@ -4,7 +4,6 @@
     <string name="launcher_climate_lo">LO</string>
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Trunk state changed, tap again</string>
-    <string name="launcher_widget_climate_keys">Climate keys</string>
     <string name="launcher_widget_tires">Tire pressure</string>
     <string name="launcher_widget_trip_totals">Totals</string>
     <string name="launcher_widget_rear_speaker">Rear speakers</string>

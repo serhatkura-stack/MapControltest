@@ -1,13 +1,8 @@
 package com.mapcontrol.launcher
 
-import android.content.Context
 import android.util.Log
-import android.view.Gravity
-import android.view.View
-import android.widget.LinearLayout
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
-import com.mapcontrol.R
 
 /** Klima tuşları: A/C, Oto, iç/dış hava, klima gücü. */
 internal enum class ClimateKey { AC, AUTO, RECIRC, POWER }
@@ -93,88 +88,3 @@ internal fun ComfortReader.readClimateKeys(): ComfortReading {
 }
 
 private var lastCirc111: Int? = null
-
-/**
- * Klima tuşları: A/C, Oto, iç/dış hava ve klima gücü, tek şeritte dört düğme (alçak) ya da 2×2 (yüksek). Durumlar araçtan okunur;
- * yazma yalnızca [ComfortWriter.climateKeysEnabled] ise gider (doğrulanana dek bilgi mesajı).
- */
-internal class ClimateKeysTile(context: Context) : ComfortTile(context) {
-
-    private val pending = HashMap<ClimateKey, Boolean>()
-
-    private val chips = linkedMapOf(
-        ClimateKey.AC to ToggleChip(context, R.drawable.ic_mdi_snowflake, R.string.launcher_keys_ac) { toggle(ClimateKey.AC) },
-        ClimateKey.AUTO to ToggleChip(context, R.drawable.ic_mdi_thermometer, R.string.launcher_keys_auto) { toggle(ClimateKey.AUTO) },
-        ClimateKey.RECIRC to ToggleChip(context, R.drawable.ic_mdi_refresh, R.string.launcher_keys_recirc) { toggle(ClimateKey.RECIRC) },
-        ClimateKey.POWER to ToggleChip(context, R.drawable.ic_mdi_power, R.string.launcher_keys_power) { toggle(ClimateKey.POWER) },
-    )
-
-    private val root: LinearLayout = card(context, LinearLayout.VERTICAL, PADDING_DP).apply {
-        theme.bind { background = cardSurface(context) }
-        gravity = Gravity.CENTER
-    }
-
-    override val view: View get() = root
-
-    override fun readNow(): ComfortReading = ComfortReader.readClimateKeys()
-
-    override fun applySpan(span: Span) {
-        val tall = span.h >= TALL_ROWS
-        root.removeAllViews()
-        chips.values.forEach { c -> (c.view.parent as? LinearLayout)?.removeView(c.view); c.setCompact(!tall) }
-        val all = chips.values.toList()
-        if (tall) {
-            all.chunked(2).forEachIndexed { i, pair ->
-                if (i > 0) root.addView(gap(context, GAP_DP, vertical = true))
-                root.addView(row(pair), weightLp(1f, vertical = true))
-            }
-        } else {
-            root.addView(row(all), weightLp(1f, vertical = true))
-        }
-        val pad = context.dp(if (tall) PADDING_DP else COMPACT_PADDING_DP)
-        root.setPadding(pad, pad, pad, pad)
-    }
-
-    private fun row(items: List<ToggleChip>) = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        items.forEachIndexed { i, c ->
-            if (i > 0) addView(gap(context, GAP_DP))
-            addView(c.view, weightLp(1f))
-        }
-    }
-
-    override fun clearPending() = pending.clear()
-
-    private fun shown(key: ClimateKey): Boolean? =
-        pending[key] ?: ClimateKeysMath.current(reading.keys, key).takeIf { reading.connected }
-
-    override fun render() {
-        chips.forEach { (key, chip) ->
-            if (key == ClimateKey.RECIRC) {
-                val recirc = shown(key)
-                chip.setLabel(if (recirc == false) R.string.launcher_keys_fresh else R.string.launcher_keys_recirc)
-                chip.bind(recirc, if (recirc == false) R.string.launcher_keys_fresh_state else R.string.launcher_keys_recirc_state)
-            } else {
-                chip.bind(shown(key))
-            }
-        }
-    }
-
-    private fun toggle(key: ClimateKey) {
-        val current = shown(key)
-        // Okunamıyorsa (test sürümü dışında) tahmin etme.
-        if (current == null && !LauncherEdition.READ_ONLY) return
-        val target = !(current ?: false)
-        pending[key] = target
-        val enabled = ComfortWriter.climateKeysEnabled
-        if (enabled) io.runSafely { ComfortWriter.setClimateKey(key, target) }
-        afterCommit(enabled)
-    }
-
-    private companion object {
-        const val PADDING_DP = 14
-        const val COMPACT_PADDING_DP = 8
-        const val GAP_DP = 8
-        const val TALL_ROWS = 4
-    }
-}
