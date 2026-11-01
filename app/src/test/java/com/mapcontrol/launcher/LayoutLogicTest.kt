@@ -150,12 +150,12 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun defaultTopAreaIsVehicleMediaWeatherAndTrip() {
+    fun defaultTopAreaIsVehicleMediaConsumptionAndTrip() {
         listOf(defaultLayout(false), defaultLayout(true)).forEach { layout ->
             fun at(t: WidgetType) = layout.single { it.type == t }.let { Triple(it.col, it.row, it.span) }
             assertEquals(Triple(0, 0, Span(4, 4)), at(WidgetType.VEHICLE))
             assertEquals(Triple(4, 0, Span(6, 4)), at(WidgetType.MEDIA))
-            assertEquals(Triple(10, 0, Span(2, 2)), at(WidgetType.WEATHER))
+            assertEquals(Triple(10, 0, Span(2, 2)), at(WidgetType.CONSUMPTION))
             assertEquals(Triple(10, 2, Span(2, 2)), at(WidgetType.TRIP))
             assertEquals(Triple(0, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_DRIVER))
             assertEquals(Triple(10, 4, Span(2, 2)), at(WidgetType.SEAT_HEAT_PASSENGER))
@@ -170,7 +170,7 @@ class LayoutLogicTest {
         val l = defaultLayout(false, List(4) { "p$it" })
         assertTrue(LayoutStore.isValid(l))
         assertEquals(
-            listOf(WidgetType.VEHICLE, WidgetType.MEDIA, WidgetType.WEATHER, WidgetType.TRIP, WidgetType.SEAT_HEAT_DRIVER,
+            listOf(WidgetType.VEHICLE, WidgetType.MEDIA, WidgetType.CONSUMPTION, WidgetType.TRIP, WidgetType.SEAT_HEAT_DRIVER,
                 WidgetType.SEAT_HEAT_PASSENGER, WidgetType.AIR).sortedBy { it.key },
             l.filter { it.type != WidgetType.APP }.map { it.type }.sortedBy { it.key },
         )
@@ -259,7 +259,7 @@ class LayoutLogicTest {
         assertEquals(listOf(Span(4, 4)), WidgetType.VEHICLE.sizes)
         assertEquals(listOf(Span(2, 2)), WidgetType.CONSUMPTION.sizes)
         listOf(WidgetType.TRIP, WidgetType.HEALTH).forEach { assertEquals("$it", listOf(Span(2, 2), Span(3, 2)), it.sizes) }
-        listOf(WidgetType.DRIVE_MODE, WidgetType.WEATHER, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER,
+        listOf(WidgetType.DRIVE_MODE, WidgetType.CONSUMPTION, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER,
             WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
             .forEach { assertEquals("$it", listOf(Span(2, 2)), it.sizes) }
         assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.SERVICE.sizes)
@@ -271,7 +271,7 @@ class LayoutLogicTest {
     fun snapMovesRemovedSpansToTheirOnlyAllowedSizeKeepingSlot() {
         val out = LayoutStore.snapSpans(listOf(
             widget("a", WidgetType.APP, 2, 4, Span(2, 2)),
-            widget("zz", WidgetType.WEATHER, 0, 4, Span(2, 2)),
+            widget("zz", WidgetType.DRIVE_MODE, 0, 4, Span(2, 2)),
             widget("v", WidgetType.VEHICLE, 6, 0, Span(6, 4)),
             widget("c", WidgetType.CONSUMPTION, 0, 0, Span(4, 2)),
             widget("t", WidgetType.TRIP, 0, 2, Span(4, 2)),

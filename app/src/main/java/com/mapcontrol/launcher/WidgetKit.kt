@@ -67,7 +67,6 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2))),
     TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(3, 2))),
     HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(3, 2))),
-    WEATHER("weather", R.string.launcher_widget_weather, R.drawable.ic_mdi_weather_partly_cloudy, listOf(Span(2, 2))),
     SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(3, 2))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2))),
@@ -133,7 +132,7 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
     val top = listOf(
         PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
         PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 4)),
-        PlacedWidget("weather", WidgetType.WEATHER, 10, 0, Span(2, 2)),
+        PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
         PlacedWidget("trip", WidgetType.TRIP, 10, 2, Span(2, 2)),
         PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
         PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
@@ -166,7 +165,6 @@ object WidgetFactory {
         WidgetType.CONSUMPTION -> ConsumptionTile(activity)
         WidgetType.TRIP -> TripComputerTile(activity)
         WidgetType.HEALTH -> HealthTile(activity)
-        WidgetType.WEATHER -> WeatherTile(activity)
         WidgetType.SERVICE -> ServiceTile(activity)
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)

@@ -34,7 +34,6 @@
     <string name="launcher_door_rr">Sağ arka</string>
     <string name="launcher_sunroof_part">Tavan</string>
     <string name="launcher_trunk">Bagaj</string>
-    <string name="launcher_widget_weather">Hava durumu</string>
     <string name="launcher_widget_app">Uygulama kısayolu</string>
     <string name="launcher_edit">Düzenle</string>
     <string name="launcher_edit_title_short">Düzenle</string>
@@ -49,7 +48,6 @@
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_range_label">menzil</string>
     <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
-    <string name="launcher_weather_wind" formatted="true">Rüzgâr %1$d km/sa</string>
     <string name="launcher_unavailable">—</string>
     <string name="launcher_theme">Tema</string>
     <string name="launcher_theme_auto">Otomatik</string>
