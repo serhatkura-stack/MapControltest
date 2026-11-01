@@ -37,28 +37,11 @@ enum class BottomBarMode(val key: String, @StringRes val label: Int) {
 }
 
 /**
- * "Bizimki" çubuğunun stili: A "Klima odaklı" (zengin klima merkezi) · B "Akıllı şerit" (özelleştirilebilir yuvalar,
- * mini oynatıcı, durum uyarısı). Silüet ve ölçüler ([DockShape]) ikisinde de aynıdır. Varsayılan A.
- */
-enum class BarStyle(val key: String, @StringRes val label: Int) {
-    A("a", R.string.launcher_bar_style_a),
-    B("b", R.string.launcher_bar_style_b);
-
-    companion object {
-        fun parse(value: String?): BarStyle? =
-            value?.trim()?.lowercase()?.let { v -> values().firstOrNull { it.key == v } }
-
-        fun resolve(stored: String?): BarStyle = parse(stored) ?: A
-    }
-}
-
-/**
  * Alt çubuk seçeneği (profil başına): Orijinal (varsayılan; OEM çubuğu görünür, launcher onun üstünde biter) ·
  * Bizimki (OEM çubuğu gizlenir, yerine launcher'ın kendi çubuğu [OurBottomBar] gelir) · Gizli (çubuk yok, ızgara
  * 720 px'in tamamını kullanır). Gizli iken ve Bizimki'nde alttan yukarı kaydırınca OEM çubuğu geçici görünür.
  *
  * Hata ayıklama (yalnızca debug yapı): `--es launcher_bottom_bar original|ours|hidden` tercihi yazar;
- * `--es launcher_bottom_bar_style a|b` Bizimki'nin stilini yazar;
  * eski `--ez launcher_fullscreen true|false` takma ad olarak çalışır (true → hidden, false → original).
  */
 object LauncherBottomBar {
@@ -67,8 +50,6 @@ object LauncherBottomBar {
     private const val KEY = "bottom_bar"
     /** Eski mantıksal "Tam ekran" anahtarı; yalnızca taşıma için okunur. */
     private const val LEGACY_KEY = "fullscreen"
-    private const val KEY_STYLE = "bottom_bar_style"
-    private const val EXTRA_STYLE = "launcher_bottom_bar_style"
     private const val EXTRA = "launcher_bottom_bar"
     private const val EXTRA_LEGACY = "launcher_fullscreen"
     private const val TAG = "LauncherBottomBar"
@@ -86,15 +67,6 @@ object LauncherBottomBar {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(Profiles.key(context, KEY), mode.key).apply()
     }
 
-    fun style(context: Context): BarStyle {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return BarStyle.resolve(prefs.getString(Profiles.key(context, KEY_STYLE), null))
-    }
-
-    fun setStyle(context: Context, style: BarStyle) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(Profiles.key(context, KEY_STYLE), style.key).apply()
-    }
-
     /** OEM gezinme çubuğu gizlenir mi (Bizimki ya da Gizli). */
     fun hidesOemBar(context: Context): Boolean = mode(context).hidesOemBar
 
@@ -110,7 +82,6 @@ object LauncherBottomBar {
         if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         val requested = BottomBarMode.parse(intent.getStringExtra(EXTRA))
             ?: if (intent.hasExtra(EXTRA_LEGACY)) BottomBarMode.fromLegacyFullscreen(intent.getBooleanExtra(EXTRA_LEGACY, false)) else null
-        BarStyle.parse(intent.getStringExtra(EXTRA_STYLE))?.let { setStyle(activity, it) }
         if (requested != null) setMode(activity, requested)
         else if (intent.hasExtra(EXTRA)) Log.w(TAG, "Bilinmeyen $EXTRA değeri: ${intent.getStringExtra(EXTRA)}")
     }

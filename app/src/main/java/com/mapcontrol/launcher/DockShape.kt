@@ -3,12 +3,10 @@ package com.mapcontrol.launcher
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.ColorFilter
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.Rect
-import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.view.View
 import android.view.ViewGroup
@@ -17,7 +15,7 @@ import kotlin.math.min
 
 /**
  * Aracın (Tiggo 7) alt çubuğunun silueti, 1920x110 başvuru bandında (OEM gezinme penceresi y 610–720):
- * gövde y 21–98 (78), uçları ~45° eğik dış yamuk ve ortada ayrı, daha açık sıcaklık·fan yamuğu. Ölçüler araç
+ * gövde y 21–98 (78), uçları ~45° eğik dış yamuk ve ortada ayrı sıcaklık·fan yamuğu. Ölçüler araç
  * fotoğrafından (katalog/oem-alt-cubuk-olculeri.md); çizim bize ait. Her şey başvurunun oranı olarak ölçeklenir.
  */
 internal object DockShape {
@@ -78,35 +76,16 @@ internal object DockShape {
 }
 
 /**
- * Siluetin yüzeyi: yumuşak alt gölge, yanlar için panel tonunda düşey gradyan, ortada daha açık yamuk (üst ve eğik
- * kenarlarında ince parıltı, altında hafif gölge). Sınırlar bandın tamamıdır (başvuru 1920x110'a ölçeklenir).
+ * Siluetin yüzeyi: tek düz gövde, ortadaki sıcaklık·fan yamuğu bir ton açık; ikisinin de 1dp ince kenarı var.
+ * Gölge, gradyan, parıltı yok: ayrım yalnızca tondan gelir. Sınırlar bandın tamamıdır (başvuru 1920x110'a ölçeklenir).
  */
 internal class DockSurface(private val context: Context) : Drawable() {
-    private val side = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val mid = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val shade = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0 }
-    private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
-    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val body = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val well = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
     private var outer = Path()
     private var inner = Path()
     private var innerRim = Path()
-    private val tintPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var tintLeft = 0
-    private var tintRight = 0
-
-    /**
-     * Orta yamuğa soldan sağa yumuşak bir renk geçişi bindirir (stil A: sürücü ve yolcu sıcaklığının rengi). İki uç da
-     * saydam (0) ise hiçbir şey çizilmez; yalnızca biri saydamsa onun rengi diğerinin tonunu alır ki geçiş kirlenmesin.
-     */
-    fun setTint(left: Int, right: Int) {
-        val l = if (left ushr 24 == 0 && right ushr 24 != 0) right and 0x00FFFFFF else left
-        val r = if (right ushr 24 == 0 && left ushr 24 != 0) left and 0x00FFFFFF else right
-        if (l == tintLeft && r == tintRight) return
-        tintLeft = l
-        tintRight = r
-        if (!bounds.isEmpty) onBoundsChange(bounds)
-        invalidateSelf()
-    }
 
     fun applyTheme() {
         if (!bounds.isEmpty) onBoundsChange(bounds)
@@ -116,16 +95,10 @@ internal class DockSurface(private val context: Context) : Drawable() {
     override fun onBoundsChange(b: Rect) {
         val sx = b.width() / DockShape.REF_W
         val sy = b.height() / DockShape.REF_H
-        val top = b.top + DockShape.BODY_TOP * sy
-        val bottom = b.top + DockShape.BODY_BOTTOM * sy
-        side.shader = LinearGradient(0f, top, 0f, bottom, LauncherTheme.DOCK_SIDE_TOP, LauncherTheme.DOCK_SIDE_BOTTOM, Shader.TileMode.CLAMP)
-        mid.shader = LinearGradient(0f, top, 0f, bottom, LauncherTheme.DOCK_MID_TOP, LauncherTheme.DOCK_MID_BOTTOM, Shader.TileMode.CLAMP)
-        rim.color = LauncherTheme.DOCK_RIM
-        rim.strokeWidth = maxOf(1f, context.dpF(1f))
-        edge.color = LauncherTheme.DOCK_BORDER
+        body.color = LauncherTheme.DOCK_BODY
+        well.color = LauncherTheme.DOCK_WELL
+        edge.color = LauncherTheme.DOCK_EDGE
         edge.strokeWidth = maxOf(1f, context.dpF(1f))
-        tintPaint.shader = if (tintLeft ushr 24 == 0 && tintRight ushr 24 == 0) null
-        else LinearGradient(b.left + 553f * sx, 0f, b.left + 1367f * sx, 0f, tintLeft, tintRight, Shader.TileMode.CLAMP)
         outer = DockShape.outer(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
         inner = DockShape.mid(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
         innerRim = DockShape.midRim(sx, sy).also { it.offset(b.left.toFloat(), b.top.toFloat()) }
@@ -133,39 +106,16 @@ internal class DockSurface(private val context: Context) : Drawable() {
 
     override fun draw(canvas: Canvas) {
         if (bounds.isEmpty) return
-        val sy = bounds.height() / DockShape.REF_H
-        // Dış gölge: bandın alt payına doğru solan birkaç kaydırılmış koyu katman.
-        shade.color = LauncherTheme.DOCK_SHADOW
-        for (i in 1..SHADOW_STEPS) {
-            canvas.save()
-            canvas.translate(0f, i * 1.7f * sy)
-            canvas.drawPath(outer, shade)
-            canvas.restore()
-        }
-        canvas.drawPath(outer, side)
-        if (edge.color != 0) canvas.drawPath(outer, edge)
-        // Orta bölümün yan bölümlere düşen yumuşak gölgesi.
-        shade.color = LauncherTheme.DOCK_SHADOW
-        for (i in 1..MID_SHADOW_STEPS) {
-            canvas.save()
-            canvas.translate(0f, i * 1.2f * sy)
-            canvas.drawPath(inner, shade)
-            canvas.restore()
-        }
-        canvas.drawPath(inner, mid)
-        if (tintPaint.shader != null) canvas.drawPath(inner, tintPaint)
-        canvas.drawPath(innerRim, rim)
+        canvas.drawPath(outer, body)
+        canvas.drawPath(outer, edge)
+        canvas.drawPath(inner, well)
+        canvas.drawPath(innerRim, edge)
     }
 
     override fun setAlpha(alpha: Int) {}
     override fun setColorFilter(colorFilter: ColorFilter?) {}
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
-
-    private companion object {
-        const val SHADOW_STEPS = 6
-        const val MID_SHADOW_STEPS = 3
-    }
 }
 
 /**

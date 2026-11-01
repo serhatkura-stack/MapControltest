@@ -73,8 +73,4 @@ internal object LauncherEdition {
 
     @Suppress("UNUSED_PARAMETER")
     fun openSettings(activity: Activity) = Unit
-
-    /** Bu derlemede MapControl yok. */
-    @Suppress("UNUSED_PARAMETER")
-    fun openMain(activity: Activity, camera360: Boolean) = Unit
 }
