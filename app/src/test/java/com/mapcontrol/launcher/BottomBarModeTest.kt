@@ -44,6 +44,8 @@ class BottomBarModeTest {
         assertEquals(15.5, OurBottomBar.decodeTemp(0)!!, 0.0)
         assertNull(OurBottomBar.decodeTemp(-1))
         assertNull(OurBottomBar.decodeTemp(255))
+        assertNull(OurBottomBar.decodeTemp(31))   // 30 °C üstü yok (OEM: ham 30 = HI)
+        assertEquals(30.5, OurBottomBar.decodeTemp(30)!!, 0.0)
         assertEquals(3, OurBottomBar.decodeFan(3))
         assertNull(OurBottomBar.decodeFan(200))
     }

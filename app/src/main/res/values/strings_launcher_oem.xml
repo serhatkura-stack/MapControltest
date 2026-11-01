@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Desay OEM komutlarından türetilen widget'lar (klima tuşları, ısıtmalar, lastik, yolculuk eklentileri, arka hoparlör). -->
+<resources>
+    <string name="launcher_climate_lo">LO</string>
+    <string name="launcher_climate_hi">HI</string>
+    <string name="launcher_trunk_stale">Trunk state changed, tap again</string>
+</resources>

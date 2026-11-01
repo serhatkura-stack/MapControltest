@@ -2,6 +2,7 @@ package com.mapcontrol.launcher
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,8 +19,11 @@ class ClimateMathTest {
     }
 
     @Test fun tempClampsToRangeAndHalfSteps() {
-        assertEquals(32.0, ClimateMath.targetTemp(31.5, 5), 0.0)
-        assertEquals(16.0, ClimateMath.targetTemp(16.5, -9), 0.0)
+        // Uçlar LO (15,5) ve HI (30,5); 30,5 üstüne çıkılamaz.
+        assertEquals(30.5, ClimateMath.targetTemp(30.0, 5), 0.0)
+        assertEquals(30.5, ClimateMath.targetTemp(29.5, 9), 0.0)
+        assertEquals(15.5, ClimateMath.targetTemp(16.5, -9), 0.0)
+        assertEquals(16.0, ClimateMath.targetTemp(16.5, -1), 0.0)
         assertEquals(22.5, ClimateMath.targetTemp(22.0, 1), 0.0)
         assertEquals(22.5, ClimateMath.clampTemp(22.4), 0.0)
     }
@@ -33,12 +37,37 @@ class ClimateMathTest {
     }
 
     @Test fun rawEncodingInvertsDecode() {
+        assertEquals(0, ClimateMath.encodeTemp(10.0))   // LO
+        assertEquals(0, ClimateMath.encodeTemp(15.5))
         assertEquals(1, ClimateMath.encodeTemp(16.0))
         assertEquals(21, ClimateMath.encodeTemp(26.0))
-        assertEquals(33, ClimateMath.encodeTemp(32.0))
-        assertEquals(33, ClimateMath.encodeTemp(40.0))
-        for (raw in 1..33) assertEquals(raw, ClimateMath.encodeTemp(OurBottomBar.decodeTemp(raw)!!))
+        assertEquals(29, ClimateMath.encodeTemp(30.0))
+        assertEquals(30, ClimateMath.encodeTemp(30.5))  // HI
+        assertEquals(30, ClimateMath.encodeTemp(32.0))  // eski üst sınır (ham 33) artık HI'ye sıkışır
+        assertEquals(30, ClimateMath.encodeTemp(40.0))
+        for (raw in 0..30) assertEquals(raw, ClimateMath.encodeTemp(OurBottomBar.decodeTemp(raw)!!))
+        assertNull(OurBottomBar.decodeTemp(31))
+        assertNull(OurBottomBar.decodeTemp(33))
         assertEquals(10, ClimateMath.encodeFan(12))
+    }
+
+    @Test fun loAndHiEnds() {
+        assertTrue(ClimateMath.isLo(15.5))
+        assertFalse(ClimateMath.isLo(16.0))
+        assertTrue(ClimateMath.isHi(30.5))
+        assertFalse(ClimateMath.isHi(30.0))
+        assertEquals(16.0, ClimateMath.MIN_TEMP, 0.0)
+        assertEquals(30.0, ClimateMath.MAX_TEMP, 0.0)
+        assertEquals(15.5, OurBottomBar.decodeTemp(ClimateMath.RAW_LO)!!, 0.0)
+        assertEquals(30.5, OurBottomBar.decodeTemp(ClimateMath.RAW_HI)!!, 0.0)
+        assertEquals(30.0, OurBottomBar.decodeTemp(29)!!, 0.0)
+    }
+
+    @Test fun powerIsTurnedOnFirstOnlyWhenKnownOff() {
+        assertTrue(ClimateMath.needsPowerOn(2))
+        assertTrue(ClimateMath.needsPowerOn(0))
+        assertFalse(ClimateMath.needsPowerOn(1))
+        assertFalse(ClimateMath.needsPowerOn(null))   // okunamıyorsa 18'e dokunulmaz
     }
 
     @Test fun neverWritesUnlessVerifiedAndNotReadOnly() {

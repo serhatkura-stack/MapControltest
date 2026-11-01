@@ -600,6 +600,8 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
                     }
                     TrunkWriteResult.NOT_PARKED -> showToast(R.string.launcher_trunk_not_parked)
                     TrunkWriteResult.DISABLED -> showToast(R.string.launcher_trunk_unverified)
+                    TrunkWriteResult.STALE -> showToast(R.string.launcher_trunk_stale)
+                    TrunkWriteResult.TOO_SOON -> Unit
                 }
             }
         }

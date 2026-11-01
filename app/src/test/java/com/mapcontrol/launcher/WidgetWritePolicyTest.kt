@@ -30,9 +30,9 @@ class WidgetWritePolicyTest {
             assertTrue(allowed(cs, CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION, v))
             assertTrue(allowed(cs, CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION, v))
         }
-        // Klima: 16,0..32,0 °C 0,5 adım ve fan 0..10.
-        var c = ClimateMath.MIN_TEMP
-        while (c <= ClimateMath.MAX_TEMP) {
+        // Klima: LO, 16,0..30,0 °C 0,5 adım, HI ve fan 0..10.
+        var c = ClimateMath.LO_TEMP
+        while (c <= ClimateMath.HI_TEMP) {
             assertTrue("temp $c", allowed(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, ClimateMath.encodeTemp(c)))
             assertTrue("temp $c", allowed(hv, HvacID.ID_AC_TEMPERATURE_COPILOT, ClimateMath.encodeTemp(c)))
             c += 0.5
@@ -46,8 +46,8 @@ class WidgetWritePolicyTest {
         for (front in listOf(true, false)) for (on in listOf(true, false)) {
             ComfortMath.defrostCommands(front, on).forEach { assertTrue(allowed(it.module, it.id, it.value)) }
         }
-        for (open in listOf(true, false)) for (viaVr in listOf(true, false)) {
-            val cmd = TrunkMath.command(open, viaVr)
+        for (open in listOf(true, false)) {
+            val cmd = TrunkMath.command(open)
             assertTrue(allowed(cmd.module, cmd.id, cmd.value))
         }
         for (locked in listOf(true, false)) {
@@ -66,12 +66,19 @@ class WidgetWritePolicyTest {
         assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_MAX_FRONT_DEFOREST, 0))  // 0 buğuyu kapatmıyor
         assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_REAR_DEFROST, 3))
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_IVI_LOCK, 0))
-        assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, 0))
-        assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, 34))
+        assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, -1))
+        // 30 °C üstü (ham 31..33) OEM'de yok: reddedilir. 0 = LO ve 30 = HI izinli.
+        for (raw in 31..34) {
+            assertNull("raw $raw", WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, raw))
+            assertNull("raw $raw", WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_COPILOT, raw))
+        }
+        assertNotNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, 0))
+        assertNotNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_COPILOT, 30))
         assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, 11))
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_DRIVER_SEAT_HEAT, 5))
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, 1))   // direksiyon ısıtma widget'ı yok
-        assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, 2))  // bagaj durdurma değeri gönderilmiyor
+        assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, 0))  // bagaj: yalnızca 1 aç / 2 kapat (durdurma yok)
+        assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, 3))
         assertNull(WidgetWritePolicy.find(0, 0, 0))
         assertEquals(WidgetWritePolicy.Verdict.NotWhitelisted, WidgetWritePolicy.evaluate(cs, 10, 1, parked))
     }

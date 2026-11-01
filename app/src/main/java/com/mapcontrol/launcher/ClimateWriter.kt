@@ -13,9 +13,19 @@ internal enum class ClimateSide { DRIVER, PASSENGER }
  * sınırlama, ham kodlama.
  */
 internal object ClimateMath {
+    /**
+     * Geçerli aralık (OEM `VRC a/a.java`, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
+     * 30 °C üstü (ham 31..33) OEM'de yoktur ve yazılmaz.
+     */
     const val MIN_TEMP = 16.0
-    const val MAX_TEMP = 32.0
+    const val MAX_TEMP = 30.0
     const val TEMP_STEP = 0.5
+
+    /** LO ve HI uçları; sıcaklık hep bu ikisi arasındadır. LO = ham 0, HI = ham 30 (sıcaklık değeri değil, uç işaretidir). */
+    const val LO_TEMP = 15.5
+    const val HI_TEMP = 30.5
+    const val RAW_LO = 0
+    const val RAW_HI = 30
 
     const val FAN_MIN = 1
     // Araçta ölçüldü: A/C açıkken 4, maks. ön buğu çözmede 10, buğu kapanınca 1 okundu; en az 10'a kadar çıkıyor.
@@ -35,9 +45,12 @@ internal object ClimateMath {
     fun stepsForDrag(delta: Float, density: Float, dpPerStep: Float): Int =
         (delta / (dpPerStep * density)).toInt()
 
-    /** 0,5'e yuvarlar ve [MIN_TEMP]..[MAX_TEMP] aralığına sıkıştırır. */
+    /** 0,5'e yuvarlar ve [LO_TEMP]..[HI_TEMP] aralığına sıkıştırır (uçlar LO / HI). */
     fun clampTemp(c: Double): Double =
-        ((c / TEMP_STEP).roundToInt() * TEMP_STEP).coerceIn(MIN_TEMP, MAX_TEMP)
+        ((c / TEMP_STEP).roundToInt() * TEMP_STEP).coerceIn(LO_TEMP, HI_TEMP)
+
+    fun isLo(c: Double): Boolean = c <= LO_TEMP
+    fun isHi(c: Double): Boolean = c >= HI_TEMP
 
     /** [start] sıcaklığından [steps] adım sonra hedef (sınırlı). */
     fun targetTemp(start: Double, steps: Int): Double = clampTemp(start + steps * TEMP_STEP)
@@ -52,8 +65,18 @@ internal object ClimateMath {
         else -> (start + steps).coerceIn(FAN_MIN, FAN_MAX)
     }
 
-    /** Ham değer: °C = 15,5 + ham/2 ([OurBottomBar.decodeTemp]'in tersi). */
-    fun encodeTemp(c: Double): Int = ((clampTemp(c) - 15.5) * 2).roundToInt()
+    /** Ham değer: °C = 15,5 + ham/2 ([OurBottomBar.decodeTemp]'in tersi); LO = 0, HI = 30. */
+    fun encodeTemp(c: Double): Int = ((clampTemp(c) - LO_TEMP) * 2).roundToInt()
+
+    /** Klima gücü (HVAC 18): okuma 1 = açık; yazma 1 aç / 2 kapat (OEM `HvacModel.onPowerClick`). */
+    const val POWER_ON = 1
+    const val POWER_OFF = 2
+
+    /**
+     * OEM sesli komutu klima kapalıyken sıcaklık/fan yazmadan önce 18 ← 1 gönderir (`VRC a/b.java:1285`). Güç okunabiliyor
+     * ve açık değilse önce açılır; okunamıyorsa (sinyal yok) hiçbir şey eklenmez.
+     */
+    fun needsPowerOn(powerRaw: Int?): Boolean = powerRaw != null && powerRaw != POWER_ON
 
     /** Fan ham değeri doğrudan kademedir (okuma da öyle); 0..10. */
     fun encodeFan(level: Int): Int = level.coerceIn(0, FAN_MAX)
@@ -79,13 +102,20 @@ internal object ClimateWriter {
     fun setTemperature(side: ClimateSide, celsius: Double): Boolean {
         if (!enabled) return false
         val id = if (side == ClimateSide.DRIVER) HvacID.ID_AC_TEMPERATURE_DRIVER else HvacID.ID_AC_TEMPERATURE_COPILOT
+        powerOnIfOff()
         return send(id, ClimateMath.encodeTemp(celsius))
     }
 
     /** Fan kademesini (0 = kapalı, 1..10) yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setFan(level: Int): Boolean {
         if (!enabled) return false
+        if (level > 0) powerOnIfOff()
         return send(HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(level))
+    }
+
+    /** Klima kapalıysa önce aç (HVAC 18 ← 1), OEM gibi. Arka planda çağrılır. */
+    private fun powerOnIfOff() {
+        if (ClimateMath.needsPowerOn(CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_WORKING))) send(HvacID.ID_AC_WORKING, ClimateMath.POWER_ON)
     }
 
     private fun send(id: Int, raw: Int): Boolean {

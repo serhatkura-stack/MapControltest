@@ -44,16 +44,21 @@ internal object WidgetWritePolicy {
     /** Koltuk ısıtma/soğutma: ham seviye 0..3 ya da sarmalanmış 1..4 (kodlama doğrulanmadı, ikisi de izinli). */
     private val SEAT_VALUES = (0..4).toSet()
 
+    private val TEMP_VALUES = (ClimateMath.RAW_LO..ClimateMath.RAW_HI).toSet()
+
     val ENTRIES: List<Entry> = listOf(
         seat("SeatHeatDriver", CarSettingID.ID_CAR_DRIVER_SEAT_HEAT),
         seat("SeatHeatPassenger", CarSettingID.ID_CAR_COPILOT_SEAT_HEAT),
         seat("SeatVentDriver", CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION),
         seat("SeatVentPassenger", CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION),
-        // Klima: sıcaklık ham = (°C - 15,5) * 2 → 16,0..32,0 °C = 1..33; fan 0..10.
-        Entry("ClimateTempDriver", HV, HvacID.ID_AC_TEMPERATURE_DRIVER, (1..33).toSet(),
+        // Klima: sıcaklık ham = (°C - 15,5) * 2 → LO = 0, 16,0..30,0 °C = 1..29, HI = 30 (OEM aralığı; 31..33 yok); fan 0..10.
+        Entry("ClimateTempDriver", HV, HvacID.ID_AC_TEMPERATURE_DRIVER, TEMP_VALUES,
             listOf(sig("hvac10_temp_driver", HV, HvacID.ID_AC_TEMPERATURE_DRIVER))),
-        Entry("ClimateTempPassenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT, (1..33).toSet(),
+        Entry("ClimateTempPassenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT, TEMP_VALUES,
             listOf(sig("hvac13_temp_passenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT))),
+        // Klima gücü (HVAC 18): 1 aç / 2 kapat. Sıcaklık/fan yazmadan önce otomatik 1 de buradan geçer.
+        Entry("ClimatePower", HV, HvacID.ID_AC_WORKING, setOf(ClimateMath.POWER_ON, ClimateMath.POWER_OFF),
+            listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (0..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
         // Perde: yalnızca doğrulanmış VR 124 (1 aç, 2 kapat). CarSetting 10 yazmaları yok sayılıyor, listede yok.
@@ -63,9 +68,8 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac24_max_front_deforest", HV, HvacID.ID_AC_MAX_FRONT_DEFOREST))),
         Entry("DefrostRear", HV, HvacID.ID_AC_REAR_DEFROST, setOf(1, 2),
             listOf(sig("hvac80_rear_defrost", HV, HvacID.ID_AC_REAR_DEFROST))),
-        // Bagaj: VR 121 (1 aç, 2 kapat) ya da CarSetting 92 (3 aç, 4 kapat); ikisi de doğrulanmadı.
-        Entry("TrunkVr", VR, ComfortPlan.ID_VR_TRUNK, setOf(1, 2), TRUNK_READ),
-        Entry("TrunkCs", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(3, 4), TRUNK_READ),
+        // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
+        Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),
         // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç.
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK))),

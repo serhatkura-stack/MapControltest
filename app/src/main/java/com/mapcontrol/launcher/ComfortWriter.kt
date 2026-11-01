@@ -49,8 +49,11 @@ internal data class TrunkReading(val position: Int? = null, val latchOpen: Int? 
 /** Bagaj dokunuşunun sonucu: ne yapılacağı (saf karar, [TrunkMath.tapAction]). */
 internal enum class TrunkAction { OPEN, CLOSE_CONFIRM, STOP, STOP_UNKNOWN, NONE }
 
-/** Kapılı bagaj yazmasının sonucu. */
-internal enum class TrunkWriteResult { SENT, DISABLED, NOT_PARKED }
+/**
+ * Kapılı bagaj yazmasının sonucu. [STALE]: araç durumu dokunuşun varsaydığından farklı (OEM kuralı ters yönü seçti), hiçbir şey
+ * gönderilmedi. [TOO_SOON]: son komuttan beri OEM'in 1 sn tıklama kilidi dolmadı, sessizce yok sayıldı.
+ */
+internal enum class TrunkWriteResult { SENT, DISABLED, NOT_PARKED, STALE, TOO_SOON }
 
 /** Perde komut adımı: [delayMs] sonra [value] yazılır (VR 124: 1 aç, 2 kapat, [ComfortWriter.SUNSHADE_STOP_VALUE] durdur). */
 internal data class SunshadeStep(val value: Int, val delayMs: Long)
@@ -117,13 +120,29 @@ internal object TrunkMath {
         TrunkState.UNKNOWN -> TrunkAction.NONE
     }
 
+    /** OEM bagaj tıklama kilidi: iki komut arası en az bu kadar (SVSetting `isTrunkClickable`, `u0.a(1000L)`). */
+    const val DEBOUNCE_MS = 1_000L
+
+    /** CarSetting 92 yazma değerleri (OEM): 1 = aç, 2 = kapat. */
+    const val CMD_OPEN = 1
+    const val CMD_CLOSE = 2
+
     /**
-     * Yazma komutu. [viaVr] true: VR 121 (1 aç, 2 kapat); false: CarSetting 92 (3 aç, 4 kapat). İkisi de araçta DOĞRULANMADI;
-     * hangisi çalışırsa [ComfortWriter.TRUNK_VIA_VR] ona ayarlanır.
+     * OEM'in gönderdiği değeri seçer (`SVSetting i0/m.D`, `SVSystemUI QuickSettingPresenter.triggerTrunkState`):
+     * `(CS92 == 2 || PLG_POSITION == 0) ? 1 (aç) : 2 (kapat)`, yani kapalı ya da duruyorsa aç, açık ya da hareketteyse kapat.
+     * İkisi de okunamazsa null (OEM kuralı uygulanamaz).
      */
-    fun command(open: Boolean, viaVr: Boolean): ComfortCmd =
-        if (viaVr) ComfortCmd(ComfortWriter.MODULE_VR, ComfortWriter.ID_VR_TRUNK, if (open) 1 else 2)
-        else ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, if (open) 3 else 4)
+    fun oemValue(cs92: Int?, plgPosition: Int?): Int? {
+        if (cs92 == null && plgPosition == null) return null
+        return if (cs92 == 2 || plgPosition == 0) CMD_OPEN else CMD_CLOSE
+    }
+
+    /** Yazma komutu: CarSetting 92 ← [CMD_OPEN] / [CMD_CLOSE]. Araçta DOĞRULANMADI. */
+    fun command(open: Boolean): ComfortCmd =
+        ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, if (open) CMD_OPEN else CMD_CLOSE)
+
+    /** Son komuttan [DEBOUNCE_MS] dolmadan yeni komut yok sayılır. [lastMs] null: hiç komut yok. */
+    fun debounced(nowMs: Long, lastMs: Long?): Boolean = lastMs != null && nowMs - lastMs < DEBOUNCE_MS
 }
 
 /**
@@ -254,12 +273,6 @@ internal object ComfortWriter {
     /** Bagaj kapağı yazması araçta DOĞRULANMADI: false iken kutucuk salt-okur, dokunuş "henüz doğrulanmadı" ipucu gösterir. */
     const val TRUNK_WRITE_VERIFIED = false
 
-    /** Bagaj yazması hangi yoldan: true VR 121 (1 aç / 2 kapat), false CarSetting 92 (3 aç / 4 kapat). Araç testinde çalışana ayarlanır. */
-    const val TRUNK_VIA_VR = true
-
-    /** VrID.ID_VR_TRUNK (bagaj yazma adayı). */
-    const val ID_VR_TRUNK = 121
-
     /** Hareketteki bagajı durduran CarSetting 92 değeri; araçta bulunamadı (2 denenecek). Null iken dokunuş yalnızca ipucu gösterir. */
     val TRUNK_STOP_VALUE: Int? = null
 
@@ -329,9 +342,32 @@ internal object ComfortWriter {
         ).allowed
     }
 
-    /** Bagaj aç/kapat. Doğrulanmadıysa ya da araç park halinde değilse araca dokunmaz. Arka planda çağrılır. */
-    fun setTrunk(open: Boolean): TrunkWriteResult =
-        writeParked(trunkEnabled, ::parkedNow, listOf(TrunkMath.command(open, TRUNK_VIA_VR)), ::sendToCar)
+    private var lastTrunkMs: Long? = null
+
+    /**
+     * Bagaj aç/kapat (CarSetting 92 ← 1 / 2). Doğrulanmadıysa ya da araç park halinde değilse araca dokunmaz. Değer OEM gibi
+     * seçilir ([TrunkMath.oemValue]); [open] ile çelişirse (araç dokunuştan sonra durum değiştirdi) hiçbir şey gönderilmez
+     * ([TrunkWriteResult.STALE]). 1 sn içinde ikinci komut yok sayılır. Arka planda çağrılır.
+     */
+    fun setTrunk(open: Boolean): TrunkWriteResult {
+        if (!trunkEnabled) return TrunkWriteResult.DISABLED
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (TrunkMath.debounced(now, lastTrunkMs)) return TrunkWriteResult.TOO_SOON
+        val cmd = trunkCommandNow(open) ?: return TrunkWriteResult.STALE
+        return writeParked(trunkEnabled, ::parkedNow, listOf(cmd), ::sendToCar).also {
+            if (it == TrunkWriteResult.SENT) lastTrunkMs = now
+        }
+    }
+
+    /** OEM kuralına göre komut; kural niyetle çelişirse null (bkz. [setTrunk]). Okunamıyorsa niyet kullanılır. */
+    private fun trunkCommandNow(open: Boolean): ComfortCmd? {
+        val oem = TrunkMath.oemValue(
+            CarSignals.readInt(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL),
+            CarSignals.readInt(VDEventCarInfo.MODULE_READONLY_INFO, ReadOnlyID.ID_PLG_POSITION),
+        )
+        val want = if (open) TrunkMath.CMD_OPEN else TrunkMath.CMD_CLOSE
+        return if (oem == null || oem == want) TrunkMath.command(open) else null
+    }
 
     /** Hareketteki bagajı durdur (CarSetting 92 ← [TRUNK_STOP_VALUE]); değer bilinmiyorsa DISABLED. Arka planda çağrılır. */
     fun stopTrunk(): TrunkWriteResult {

@@ -185,7 +185,7 @@ class ComfortMathTest {
         assertFalse(ComfortWriter.trunkStopKnown)
         assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.stopTrunk())
         val sent = ArrayList<ComfortCmd>()
-        val cmd = listOf(TrunkMath.command(true, true))
+        val cmd = listOf(TrunkMath.command(true))
         assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.writeParked(false, { error("park okunmamalı") }, cmd) { sent += it })
         assertEquals(TrunkWriteResult.NOT_PARKED, ComfortWriter.writeParked(true, { false }, cmd) { sent += it })
         assertTrue(sent.isEmpty())
@@ -194,10 +194,41 @@ class ComfortMathTest {
     }
 
     @Test fun trunkCommandValues() {
-        assertEquals(ComfortCmd(327696, 121, 1), TrunkMath.command(true, true))
-        assertEquals(ComfortCmd(327696, 121, 2), TrunkMath.command(false, true))
-        assertEquals(ComfortCmd(327681, 92, 3), TrunkMath.command(true, false))
-        assertEquals(ComfortCmd(327681, 92, 4), TrunkMath.command(false, false))
+        // Yalnızca CarSetting 92: 1 aç, 2 kapat (OEM). VR 121 yolu ve 3/4 değerleri kaldırıldı.
+        assertEquals(ComfortCmd(327681, 92, 1), TrunkMath.command(true))
+        assertEquals(ComfortCmd(327681, 92, 2), TrunkMath.command(false))
+    }
+
+    @Test fun trunkValueChosenLikeOem() {
+        // (CS92 == 2 || PLG == 0) ? 1 : 2
+        assertEquals(1, TrunkMath.oemValue(cs92 = 2, plgPosition = 40))   // duruyor ama konum > 0: CS92 == 2 yeter
+        assertEquals(1, TrunkMath.oemValue(cs92 = 0, plgPosition = 0))    // kapalı
+        assertEquals(1, TrunkMath.oemValue(cs92 = null, plgPosition = 0))
+        assertEquals(1, TrunkMath.oemValue(cs92 = 2, plgPosition = null))
+        assertEquals(2, TrunkMath.oemValue(cs92 = 1, plgPosition = 81))   // açık
+        assertEquals(2, TrunkMath.oemValue(cs92 = 3, plgPosition = 30))   // açılıyor
+        assertEquals(2, TrunkMath.oemValue(cs92 = null, plgPosition = 81))
+        assertNull(TrunkMath.oemValue(null, null))
+    }
+
+    @Test fun trunkOneSecondDebounce() {
+        assertFalse(TrunkMath.debounced(5_000, null))
+        assertTrue(TrunkMath.debounced(5_999, 5_000))
+        assertFalse(TrunkMath.debounced(6_000, 5_000))
+    }
+
+    @Test fun trunkNoLongerHasVrOrOldValues() {
+        for (open in listOf(true, false)) {
+            val c = TrunkMath.command(open)
+            assertEquals(327681, c.module)
+            assertEquals(92, c.id)
+            assertTrue(c.value == 1 || c.value == 2)
+        }
+        assertNull(WidgetWritePolicy.find(327696, 121, 1))
+        assertNull(WidgetWritePolicy.find(327681, 92, 3))
+        assertNull(WidgetWritePolicy.find(327681, 92, 4))
+        assertEquals("Trunk", WidgetWritePolicy.find(327681, 92, 1)?.widget)
+        assertEquals("Trunk", WidgetWritePolicy.find(327681, 92, 2)?.widget)
     }
 
     @Test fun trunkWidgetRegistered() {
