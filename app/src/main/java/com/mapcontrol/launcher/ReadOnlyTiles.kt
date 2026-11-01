@@ -415,37 +415,6 @@ internal class BreakTile(context: Context) :
 }
 
 /**
- * Akü: şarj yüzdesi büyük ("%85"), gerilim küçük ("14,1 V"). Şarj (IBS_SOC) Tiggo 7'de hep 0 okundu ve
- * desteklenmiyor sayılır; o zaman gerilim büyük görünür. Gerilim çözümü sağlık kutucuğuyla aynıdır (ham/1000).
- */
-internal class BatteryTile(context: Context) :
-    ExtraTile(context, R.drawable.ic_mdi_lightning_bolt, R.string.launcher_widget_battery) {
-
-    override fun bind() {
-        val volts = data.batteryV
-        val soc = data.batterySoc
-        if (!data.connected || (volts == null && soc == null)) {
-            setAlertSurface(false)
-            showMissing()
-            return
-        }
-        val low = ReadOnlyDecode.batteryLow(volts, soc)
-        val voltText = volts?.let { context.getString(R.string.launcher_health_volt_only, String.format(Locale.getDefault(), "%.1f", it)) }
-        setAlertSurface(false)
-        setIcon(if (low) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
-            if (low) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
-        val color = if (low) LauncherTheme.ALERT else LauncherTheme.TEXT
-        if (soc != null) {
-            setValue(context.getString(R.string.launcher_percent, soc), color)
-            showDetail(voltText)
-        } else {
-            setValue(voltText.orEmpty(), color)
-            showDetail(null)
-        }
-    }
-}
-
-/**
  * Telefon hatırlatıcı: kablosuz şarj padinin durumu ("Telefon şarjda" / "Şarj pedi boş"). Pedde unutulan telefon
  * bayrağı (PHONE_FORGOT_ON_WIRLESS_BOARD) kalkarsa sakin ALERT zeminiyle "Telefonunu al". Araçta yalnızca pedin
  * boş (0) ve telefon pedde (1) durumları araçta ölçüldü (CarSetting 44).

@@ -53,7 +53,7 @@ class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PA
             val migrated = snapSpans(resolved)
             if (migrated.isNotEmpty() && isValid(migrated)) {
                 // Eski ızgara, eski koltuk anahtarları ya da boyut uyarlaması olduysa yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
-                if (oldGrid || migrated != resolved || resolved.size != resolvedAll.size || raws.any { it.typeKey in LEGACY_SEAT_KEYS }) save(migrated)
+                if (oldGrid || migrated != resolved || resolved.size != resolvedAll.size || raws.any { it.typeKey in LEGACY_SEAT_KEYS || it.typeKey in HealthMath.REMOVED_KEYS }) save(migrated)
                 migrated
             } else fallback()
         } catch (e: org.json.JSONException) {

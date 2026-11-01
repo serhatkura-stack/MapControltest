@@ -219,7 +219,7 @@ class LayoutLogicTest {
     @Test
     fun migratedDenseOldLayoutStaysValidAndKeepsExtra() {
         val old = listOf(
-            widget("service", WidgetType.SERVICE, 0, 0, Span(1, 1)),
+            widget("service", WidgetType.HEALTH, 0, 0, Span(1, 1)),
             widget("trip", WidgetType.TRIP, 3, 0, Span(2, 1)),
             widget("lock", WidgetType.LOCK, 1, 1, Span(1, 1)),
             widget("seat", WidgetType.SEAT_HEAT_DRIVER, 0, 2, Span(1, 1)),
@@ -258,11 +258,11 @@ class LayoutLogicTest {
         assertEquals(listOf(Span(1, 2)), WidgetType.LOCK.sizes)
         assertEquals(listOf(Span(4, 4)), WidgetType.VEHICLE.sizes)
         assertEquals(listOf(Span(2, 2)), WidgetType.CONSUMPTION.sizes)
-        listOf(WidgetType.TRIP, WidgetType.HEALTH).forEach { assertEquals("$it", listOf(Span(2, 2), Span(3, 2)), it.sizes) }
+        assertEquals(listOf(Span(2, 2), Span(3, 2), Span(4, 4)), WidgetType.TRIP.sizes)
+        assertEquals(listOf(Span(2, 2), Span(4, 4)), WidgetType.HEALTH.sizes)
         listOf(WidgetType.DRIVE_MODE, WidgetType.CONSUMPTION, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER,
             WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
             .forEach { assertEquals("$it", listOf(Span(2, 2)), it.sizes) }
-        assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.SERVICE.sizes)
         assertEquals(listOf(Span(2, 2), Span(4, 2)), WidgetType.AIR.sizes)
         assertEquals(listOf(Span(4, 2), Span(6, 4)), WidgetType.MEDIA.sizes)
     }
@@ -281,7 +281,7 @@ class LayoutLogicTest {
         assertEquals(Triple(6, 0, Span(4, 4)), out.first { it.id == "v" }.let { Triple(it.col, it.row, it.span) })
         assertEquals(Span(2, 2), out.first { it.id == "c" }.span)
         assertEquals(Span(3, 2), out.first { it.id == "t" }.span)
-        assertEquals(Span(3, 2), out.first { it.id == "h" }.span)
+        assertEquals(Span(2, 2), out.first { it.id == "h" }.span)
     }
 
     @Test

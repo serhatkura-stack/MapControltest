@@ -83,7 +83,6 @@
     <string name="launcher_health_hot">Engine hot</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
-    <string name="launcher_widget_service">Service</string>
     <string name="launcher_widget_air">Air quality</string>
     <string name="launcher_days_value" formatted="true">%1$d days</string>
     <string name="launcher_air_good">Good</string>
@@ -124,6 +123,14 @@
     <string name="launcher_climate_increase">Increase</string>
     <string name="launcher_climate_decrease">Decrease</string>
     <string name="launcher_health_row_battery">Battery</string>
+    <string name="launcher_health_all_ok">All normal</string>
+    <string name="launcher_health_battery_low">Battery low</string>
+    <string name="launcher_health_battery_high">Battery high</string>
+    <string name="launcher_health_service_overdue">Service due</string>
+    <string name="launcher_health_service_soon">Service soon</string>
+    <string name="launcher_health_service_in" formatted="true">Service in %1$s</string>
+    <string name="launcher_health_row_service">Until service</string>
+    <string name="launcher_health_row_service_days">Time to service</string>
     <string name="launcher_health_row_engine">Engine</string>
     <string name="launcher_layout_park">Park</string>
     <string name="launcher_layout_drive">Drive</string>
@@ -144,7 +151,6 @@
     <string name="launcher_screen_off_label">Dim screen</string>
     <string name="launcher_screen_off_hint">Tap</string>
     <string name="launcher_widget_break">Break</string>
-    <string name="launcher_widget_battery">Battery</string>
     <string name="launcher_widget_phone">Phone</string>
     <string name="launcher_widget_clock">Clock</string>
     <string name="launcher_break_hm" formatted="true">%1$d h %2$d min</string>

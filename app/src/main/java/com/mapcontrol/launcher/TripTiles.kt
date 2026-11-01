@@ -281,6 +281,10 @@ internal abstract class TripCard(
     protected var wide = false
         private set
 
+    /** Büyük boyut (>= 4 sütun ve >= 4 satır): sağ blokta ek bölüm ve fazladan satırlar için yer var. */
+    protected var large = false
+        private set
+
     private val listener = TripSource.Listener {
         data = it
         bind()
@@ -349,6 +353,7 @@ internal abstract class TripCard(
 
     override fun applySpan(span: Span) {
         wide = span.w >= 3
+        large = span.w >= 4 && span.h >= 4
         bind()
     }
 
@@ -382,31 +387,52 @@ internal abstract class TripCard(
     }
 
     /**
-     * Sağ blok satırları (etiket null ise yalnız değer). Dar boyutta ya da satır yoksa blok ve ayraç gizlenir
-     * ve sol sütun tüm kartı alır.
+     * Sağ blok satırları (etiket null ise yalnız değer). [alert] uyarı rengiyle gösterilecek satır numaraları.
+     * [section] varsa satırların altında başlıklı, tek satırlık (etiket solda, değer sağda) ek bir bölüm çizilir
+     * (yolculukta "Toplam"). Dar boyutta ya da satır yoksa blok ve ayraç gizlenir ve sol sütun tüm kartı alır.
      */
-    protected fun showRows(rows: List<Pair<String?, String>>) {
+    protected fun showRows(rows: List<Pair<String?, String>>, alert: Set<Int> = emptySet(), section: Section? = null) {
         rightBlock.removeAllViews()
-        val show = wide && rows.isNotEmpty()
+        val show = wide && (rows.isNotEmpty() || section != null)
         rows.forEachIndexed { i, (label, value) ->
             rightBlock.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 if (label != null) addView(text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY).apply { text = label })
-                addView(unitRow(value))
+                addView(unitRow(value, if (i in alert) LauncherTheme.ALERT else null))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 if (i > 0) topMargin = context.dp(6)
             })
+        }
+        if (show && section != null && section.rows.isNotEmpty()) {
+            rightBlock.addView(View(context).apply { theme.bind { setBackgroundColor(LauncherTheme.TRACK) } },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)).apply {
+                    topMargin = context.dp(8)
+                    bottomMargin = context.dp(6)
+                })
+            rightBlock.addView(text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY, bold = true).apply { text = section.title })
+            section.rows.forEach { (label, value) ->
+                rightBlock.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(text(context, TITLE_SP, LauncherTheme.TEXT_SECONDARY).apply { text = label }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(text(context, SECTION_VALUE_SP, medium = true).apply { text = value; gravity = Gravity.END })
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2) })
+            }
         }
         rightBlock.visibility = if (show) View.VISIBLE else View.GONE
         divider.visibility = if (show) View.VISIBLE else View.GONE
     }
 
+    /** Sağ bloktaki başlıklı ek bölüm: [rows] (etiket, değer). */
+    protected class Section(val title: String, val rows: List<Pair<String, String>>)
+
     /** "7,9 L/100 km" -> sayı büyük, birim küçük ve ikincil tonda. */
-    private fun unitRow(value: String) = text(context, ROW_VALUE_SP, medium = true).apply {
+    private fun unitRow(value: String, color: Int? = null) = text(context, ROW_VALUE_SP, medium = true).apply {
+        if (color != null) setTextColor(color)
         val i = value.indexOf(' ')
         text = if (i < 0) value else android.text.SpannableStringBuilder(value).apply {
             setSpan(android.text.style.RelativeSizeSpan(0.75f), i, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            setSpan(android.text.style.ForegroundColorSpan(LauncherTheme.TEXT_SECONDARY), i, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(android.text.style.ForegroundColorSpan(color ?: LauncherTheme.TEXT_SECONDARY), i, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 
@@ -427,6 +453,8 @@ internal abstract class TripCard(
         const val VALUE_SP = 44f
         const val TITLE_SP = 18f
         const val ROW_VALUE_SP = 28f
+        /** Başlıklı ek bölümün değerleri; ikincil bilgi olduğu için satırlardan küçük ama en az 24 sp. */
+        const val SECTION_VALUE_SP = 24f
         const val TITLE_ICON_DP = 24
         const val PADDING_DP = 12
         const val DIVIDER_DP = 64
@@ -554,7 +582,9 @@ internal class ConsumptionTile(context: Context) :
 
 /**
  * Yolculuk: gösterge TripB sayfası gibi "Sıfırlamadan beri". 2×2'de başlık, büyük mesafe ve alt başlık;
- * 3×2'de mesafe solda, sağda ortalama tüketim ve ortalama hız.
+ * 3×2'de mesafe solda, sağda ortalama tüketim ve ortalama hız; 4×4'te ayrıca "Toplam" bölümü
+ * (ömür boyu km, toplam yakıt, sürüş süresi). Ana değer her boyutta sıfırlamadan beri km'dir.
+ * Toplam sinyalleri (150-153) eski yazılımlı araçta olmayabilir: eksik satırlar düşer, hiç yoksa bölüm gizlenir.
  */
 internal class TripComputerTile(context: Context) :
     TripCard(context, R.drawable.ic_mdi_road_variant, R.string.launcher_widget_trip) {
@@ -572,55 +602,108 @@ internal class TripComputerTile(context: Context) :
             data.avgL100?.let { context.getString(R.string.launcher_trip_avg_cons_label) to context.getString(R.string.launcher_l100_value, one(it)) },
             data.avgSpeedKmh?.let { context.getString(R.string.launcher_trip_avg_speed_label) to context.getString(R.string.launcher_kmh_value, it) },
         )
-        showRows(entries)
-        describe(context.getString(R.string.launcher_trip_since_reset), distance, *entries.map { "${it.first} ${it.second}" }.toTypedArray())
+        val totals = if (large) totalsRows() else emptyList()
+        showRows(entries, section = if (totals.isEmpty()) null else Section(context.getString(R.string.launcher_widget_trip_totals), totals))
+        val spoken = (entries.map { "${it.first} ${it.second}" } + totals.map { "${it.first} ${it.second}" }).toTypedArray()
+        describe(context.getString(R.string.launcher_trip_since_reset), distance, *spoken)
     }
+
+    /** "Toplam" bölümünün satırları: ömür boyu km, toplam yakıt, sürüş süresi (okunabilenler). */
+    private fun totalsRows(): List<Pair<String, String>> {
+        val d = data
+        val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin)
+        return TripTotals.rows(d.totalKm, d.totalFuelL, time).map { (kind, value) ->
+            when (kind) {
+                TripTotals.Kind.ODOMETER -> context.getString(R.string.launcher_totals_odometer) to
+                    context.getString(R.string.launcher_km_value, String.format(java.util.Locale.getDefault(), "%,d", value as Int))
+                TripTotals.Kind.FUEL -> context.getString(R.string.launcher_totals_fuel_label) to
+                    context.getString(R.string.launcher_liter_value, one(value as Double))
+                TripTotals.Kind.TIME -> context.getString(R.string.launcher_totals_time_label) to duration(value as Int)
+            }
+        }
+    }
+
+    private fun duration(min: Int): String =
+        if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
 }
 
 /**
- * Araç sağlığı: tek bir durum ("İyi" / "Kontrol et"). Yalnızca eldeki veriden türetilir, araca bir şey göndermez:
- * akü 12,0-15,0 V dışı, motor suyu > 110 °C ya da yakıt azaldı uyarısı "Kontrol et" yapar.
- * 2×2'de durum sözcüğü büyük ve ortada (sorun varsa sebebi altında); 3×2'de sağda akü gerilimi ve motor suyu.
+ * Araç sağlığı (eski Akü + Bakım + sağlık kutucukları tek yerde): akü gerilimi, motor suyu, yakıt uyarısı ve bakım aralığı
+ * ([HealthMath]). Her şey yolundaysa sakin "Her şey normal" ve bakıma kalan mesafe; bir sorun varsa en önemlisi
+ * uyarı renginde adıyla görünür. Yalnızca eldeki veriden türetilir, araca bir şey göndermez.
+ * 2×2: özet; 4×4: sağda akü, motor ve bakım satırları (sorunlu satır kırmızı).
  */
 internal class HealthTile(context: Context) :
     TripCard(context, R.drawable.ic_mdi_lightning_bolt, R.string.launcher_widget_health) {
 
+    private fun number(n: Int) = java.text.NumberFormat.getIntegerInstance(java.util.Locale.getDefault()).format(n)
+
+    private fun label(issue: HealthMath.Issue) = context.getString(when (issue) {
+        HealthMath.Issue.ENGINE_HOT -> R.string.launcher_health_hot
+        HealthMath.Issue.BATTERY_LOW -> R.string.launcher_health_battery_low
+        HealthMath.Issue.BATTERY_HIGH -> R.string.launcher_health_battery_high
+        HealthMath.Issue.SERVICE_OVERDUE -> R.string.launcher_health_service_overdue
+        HealthMath.Issue.LOW_FUEL -> R.string.launcher_health_low_fuel
+        HealthMath.Issue.SERVICE_SOON -> R.string.launcher_health_service_soon
+    })
+
+    /** Sorunun değeri (ölçüm), yoksa null: akü "11,4 V", motor "118 °C", bakım kalan mesafe/gün. */
+    private fun detail(issue: HealthMath.Issue): String? = when (issue) {
+        HealthMath.Issue.BATTERY_LOW, HealthMath.Issue.BATTERY_HIGH ->
+            data.batteryV?.let { context.getString(R.string.launcher_health_volt_only, one(it)) }
+        HealthMath.Issue.ENGINE_HOT -> data.coolantC?.let { context.getString(R.string.launcher_temp_c, it) }
+        HealthMath.Issue.SERVICE_OVERDUE, HealthMath.Issue.SERVICE_SOON -> serviceText()
+        HealthMath.Issue.LOW_FUEL -> null
+    }
+
+    /** "3.978 km" ya da yalnız gün biliniyorsa "155 gün". */
+    private fun serviceText(): String? = data.serviceKm?.let { context.getString(R.string.launcher_km_value, number(it)) }
+        ?: data.serviceDays?.let { context.getString(R.string.launcher_days_value, it) }
+
     override fun bind() {
-        val v = data.batteryV
-        val coolant = data.coolantC
-        val lowFuel = data.lowFuel
-        if (!data.connected || (v == null && coolant == null && lowFuel == null)) {
+        val d = data
+        if (!d.connected || !HealthMath.hasData(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays)) {
             setIcon(R.drawable.ic_mdi_lightning_bolt, LauncherTheme.TEXT_SECONDARY)
             showMissing()
             return
         }
-        val reasons = buildList {
-            if (lowFuel == true) add(R.string.launcher_health_low_fuel)
-            if (v != null && (v < BATTERY_MIN_V || v > BATTERY_MAX_V)) add(R.string.launcher_health_battery)
-            if (coolant != null && coolant > COOLANT_MAX_C) add(R.string.launcher_health_hot)
-        }
-        val bad = reasons.isNotEmpty()
+        val issues = HealthMath.issues(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays)
+        val bad = issues.isNotEmpty()
         setIcon(if (bad) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
             if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
-        val status = context.getString(if (bad) R.string.launcher_health_check else R.string.launcher_health_good)
-        setValue(status, if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT, if (bad && wide) STATUS_WIDE_BAD_SP else STATUS_SP)
-        val why = reasons.joinToString(", ") { context.getString(it) }
-        setSubtitle(why.ifEmpty { null }, LauncherTheme.ALERT)
-        val rows = listOfNotNull(
-            v?.let { context.getString(R.string.launcher_health_row_battery) to context.getString(R.string.launcher_health_volt_only, one(it)) },
-            coolant?.let { context.getString(R.string.launcher_health_row_engine) to context.getString(R.string.launcher_temp_c, it) },
-        )
-        showRows(rows)
-        describe(context.getString(R.string.launcher_widget_health), status, why.ifEmpty { null }, *rows.map { it.second }.toTypedArray())
+        val headline = if (bad) label(issues.first()) else context.getString(R.string.launcher_health_all_ok)
+        setValue(headline, if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT, if (headline.length > LONG_TEXT) STATUS_LONG_SP else STATUS_SP)
+        // Sorunluyken ölçüm (+ başka sorun sayısı); sorunsuzken bakıma kalan mesafe.
+        val sub = if (bad) listOfNotNull(detail(issues.first()), issues.size.takeIf { it > 1 }?.let { "+${it - 1}" }).joinToString(" · ")
+        else serviceText()?.let { context.getString(R.string.launcher_health_service_in, it) }
+        setSubtitle(sub?.ifEmpty { null }, if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
+
+        val rows = mutableListOf<Pair<String?, String>>()
+        val alert = mutableSetOf<Int>()
+        fun add(label: String, value: String?, isAlert: Boolean) {
+            if (value == null) return
+            if (isAlert) alert += rows.size
+            rows += label to value
+        }
+        add(context.getString(R.string.launcher_health_row_battery),
+            d.batteryV?.let { context.getString(R.string.launcher_health_volt_only, one(it)) },
+            HealthMath.Issue.BATTERY_LOW in issues || HealthMath.Issue.BATTERY_HIGH in issues)
+        add(context.getString(R.string.launcher_health_row_engine),
+            d.coolantC?.let { context.getString(R.string.launcher_temp_c, it) }, HealthMath.Issue.ENGINE_HOT in issues)
+        val serviceBad = HealthMath.Issue.SERVICE_OVERDUE in issues || HealthMath.Issue.SERVICE_SOON in issues
+        add(context.getString(R.string.launcher_health_row_service),
+            d.serviceKm?.let { context.getString(R.string.launcher_km_value, number(it)) }, serviceBad)
+        if (large) add(context.getString(R.string.launcher_health_row_service_days),
+            d.serviceDays?.let { context.getString(R.string.launcher_days_value, it) }, serviceBad)
+        showRows(rows, alert)
+        describe(context.getString(R.string.launcher_widget_health), headline, sub, *rows.map { "${it.first} ${it.second}" }.toTypedArray())
     }
 
     private companion object {
-        const val STATUS_SP = 44f
-        /** 3×2'de sol yarı dar kalır: uzun "Kontrol et" bu boyda sığar. */
-        const val STATUS_WIDE_BAD_SP = 32f
-        const val BATTERY_MIN_V = 12.0
-        const val BATTERY_MAX_V = 15.0
-        const val COOLANT_MAX_C = 110
+        const val STATUS_SP = 32f
+        /** Uzun başlıklar ("Bakım yaklaşıyor") 2×2'de bu boyda tek satıra sığar. */
+        const val STATUS_LONG_SP = 28f
+        const val LONG_TEXT = 14
     }
 }
 
@@ -634,48 +717,4 @@ internal object ReadOnlyIds {
     const val DRIVING_TIME_AFTER_RUNNING = 151
     const val DRIVING_TIME_AFTER_RESET = 152
     const val TOTAL_FUEL = 153
-}
-
-/**
- * Toplamlar (yolculuk kartının eşi): toplam km büyük, solda toplam yakıt ve sürüş süresi. "Sıfırlamadan beri" yolculuk kartından ayrı
- * bir kutucuktur çünkü bunlar ömür boyu sayaçlardır; aynı kartta karışırdı. 2×2'de alt satırlar yazı olarak, 3×2'de sağ blokta.
- * Eksik sinyaller satırdan düşer (eski yazılımda 150-153 olmayabilir).
- */
-internal class TripTotalsTile(context: Context) :
-    TripCard(context, R.drawable.ic_mdi_speedometer, R.string.launcher_widget_trip_totals) {
-
-    private fun duration(min: Int): String =
-        if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
-
-    override fun bind() {
-        val d = data
-        val km = d.totalKm
-        // Bu sürüş (151); yoksa sıfırlamadan beri (152). İkisi de erişilebilirlik metninde.
-        val time = d.drivingRunMin ?: d.drivingResetMin
-        val rows = listOfNotNull(
-            d.totalFuelL?.let { context.getString(R.string.launcher_totals_fuel_label) to context.getString(R.string.launcher_liter_value, one(it)) },
-            time?.let { context.getString(R.string.launcher_totals_time_label) to duration(it) },
-        )
-        if (!d.connected || (km == null && rows.isEmpty())) {
-            showMissing()
-            return
-        }
-        val value = if (km != null) context.getString(R.string.launcher_km_value, String.format(java.util.Locale.getDefault(), "%,d", km))
-        else context.getString(R.string.launcher_unavailable)
-        setValue(value, if (km != null) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, if (value.length > 8) VALUE_NARROW_SP else VALUE_SP)
-        // 2×2'de satırlar sağ blok yerine alt başlıkta ve ne olduklarını söyler ("1284,6 L yakıt", "47 dk sürüş").
-        val lines = listOfNotNull(
-            d.totalFuelL?.let { context.getString(R.string.launcher_liter_value, one(it)) + " " + context.getString(R.string.launcher_totals_fuel_suffix) },
-            time?.let { duration(it) + " " + context.getString(R.string.launcher_totals_time_suffix) },
-        )
-        setSubtitle(if (wide) context.getString(R.string.launcher_totals_odometer) else lines.joinToString("\n"))
-        showRows(rows)
-        val both = if (d.drivingRunMin != null && d.drivingResetMin != null) context.getString(R.string.launcher_totals_since_reset, duration(d.drivingResetMin)) else null
-        describe(context.getString(R.string.launcher_widget_trip_totals), value, *rows.map { "${it.first} ${it.second}" }.toTypedArray(), both)
-    }
-
-    private companion object {
-        /** "11.032 km" 2×2'de 44 sp'te sığmaz. */
-        const val VALUE_NARROW_SP = 34f
-    }
 }

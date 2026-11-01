@@ -65,9 +65,8 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
     DRIVE_MODE("drive_mode", R.string.launcher_widget_drive_mode, R.drawable.ic_mdi_car_sports, listOf(Span(2, 2))),
     CONSUMPTION("consumption", R.string.launcher_widget_consumption, R.drawable.ic_mdi_leaf, listOf(Span(2, 2))),
-    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(3, 2))),
-    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(3, 2))),
-    SERVICE("service", R.string.launcher_widget_service, R.drawable.ic_mdi_wrench, listOf(Span(2, 2), Span(3, 2))),
+    TRIP("trip", R.string.launcher_widget_trip, R.drawable.ic_mdi_road_variant, listOf(Span(2, 2), Span(3, 2), Span(4, 4))),
+    HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 4))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2))),
     SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
@@ -81,14 +80,13 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
     SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2)), parkOnly = true),
     BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
-    BATTERY("battery", R.string.launcher_widget_battery, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
     CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
-    TRIP_TOTALS("trip_totals", R.string.launcher_widget_trip_totals, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(3, 2))),
     REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2), Span(2, 1)));
 
     companion object {
-        fun fromKey(key: String): WidgetType? = values().firstOrNull { it.key == key }
+        /** Kaldırılan "battery"/"service" -> HEALTH, "trip_totals" -> TRIP ([HealthMath.REMOVED_KEYS]); bilinmeyen anahtar null. */
+        fun fromKey(key: String): WidgetType? = (HealthMath.REMOVED_KEYS[key] ?: key).let { k -> values().firstOrNull { it.key == k } }
     }
 }
 
@@ -165,7 +163,6 @@ object WidgetFactory {
         WidgetType.CONSUMPTION -> ConsumptionTile(activity)
         WidgetType.TRIP -> TripComputerTile(activity)
         WidgetType.HEALTH -> HealthTile(activity)
-        WidgetType.SERVICE -> ServiceTile(activity)
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
         WidgetType.SEAT_HEAT_DRIVER -> SeatHeatTile(activity, vent = false, driverSeat = true)
@@ -179,10 +176,8 @@ object WidgetFactory {
         WidgetType.PHOTO -> PhotoTile(activity, placed.id)
         WidgetType.SCREEN_OFF -> ScreenOffTile(activity)
         WidgetType.BREAK_REMINDER -> BreakTile(activity)
-        WidgetType.BATTERY -> BatteryTile(activity)
         WidgetType.PHONE_REMINDER -> PhoneTile(activity)
         WidgetType.CLOCK -> ClockTile(activity)
-        WidgetType.TRIP_TOTALS -> TripTotalsTile(activity)
         WidgetType.REAR_SPEAKER -> RearSpeakerTile(activity)
     }
 }

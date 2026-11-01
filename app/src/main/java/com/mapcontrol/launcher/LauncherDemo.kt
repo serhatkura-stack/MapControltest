@@ -83,6 +83,13 @@ internal object LauncherDemo {
     /** Koltuk seviyesi önizlemesi: `--ei launcher_demo_seat N` (0..3) tüm ısıtma/soğutma koltuklarını N yapar. */
     const val EXTRA_SEAT = "launcher_demo_seat"
 
+    /** Araç sağlığı önizlemesi: `--es launcher_demo_health battery|hot|service|overdue|multi`; verilmezse her şey normal. */
+    const val EXTRA_HEALTH = "launcher_demo_health"
+
+    @Volatile
+    var healthProblem: String? = null
+        private set
+
     @Volatile
     var seatOverride: Int? = null
         private set
@@ -105,6 +112,7 @@ internal object LauncherDemo {
         }
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
+        if (intent.hasExtra(EXTRA_HEALTH)) healthProblem = intent.getStringExtra(EXTRA_HEALTH)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
     }
 
@@ -168,7 +176,16 @@ internal object LauncherDemo {
 
     fun trip(): TripData {
         val (isMoving, speed, instant) = tripLive()
-        return tripBase().copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
+        val base = tripBase()
+        val sick = when (healthProblem) {
+            "battery" -> base.copy(batteryV = 11.4)
+            "hot" -> base.copy(coolantC = 118)
+            "service" -> base.copy(serviceKm = 640, serviceDays = 22)
+            "overdue" -> base.copy(serviceKm = 0, serviceDays = 0)
+            "multi" -> base.copy(batteryV = 11.4, coolantC = 118, serviceKm = 640)
+            else -> base
+        }
+        return sick.copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
     }
 
     private fun tripBase(): TripData = TripData(

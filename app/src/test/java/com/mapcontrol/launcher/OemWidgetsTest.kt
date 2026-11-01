@@ -196,8 +196,7 @@ class OemWidgetsTest {
     // --- Katalog ---
 
     @Test fun newWidgetsAreRegisteredWithSizes() {
-        assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.TRIP_TOTALS.sizes)
         assertEquals(listOf(Span(2, 2), Span(2, 1)), WidgetType.REAR_SPEAKER.sizes)
-        for (t in listOf("trip_totals", "rear_speaker")) assertNotNull(WidgetType.fromKey(t))
+        for (t in listOf("rear_speaker")) assertNotNull(WidgetType.fromKey(t))
     }
 }
