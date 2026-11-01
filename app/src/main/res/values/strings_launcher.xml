@@ -36,6 +36,7 @@
     <string name="launcher_widget_weather">Weather</string>
     <string name="launcher_widget_app">App shortcut</string>
     <string name="launcher_edit">Edit</string>
+    <string name="launcher_edit_title_short">Edit</string>
     <string name="launcher_edit_title">Edit home screen</string>
     <string name="launcher_edit_hint">Drag to move, choose a size, or remove</string>
     <string name="launcher_edit_add">Add widget</string>
@@ -50,9 +51,9 @@
     <string name="launcher_weather_wind" formatted="true">Wind %1$d km/h</string>
     <string name="launcher_unavailable">—</string>
     <string name="launcher_theme">Theme</string>
-    <string name="launcher_theme_auto">Automatic</string>
-    <string name="launcher_theme_day">Day</string>
-    <string name="launcher_theme_night">Night</string>
+    <string name="launcher_theme_auto">Auto</string>
+    <string name="launcher_theme_day">Light</string>
+    <string name="launcher_theme_night">Dark</string>
     <string name="launcher_vehicle_settings">Vehicle settings</string>
     <string name="launcher_mapcontrol_settings">MapControl settings</string>
     <string name="launcher_waiting_data">Waiting for car data</string>

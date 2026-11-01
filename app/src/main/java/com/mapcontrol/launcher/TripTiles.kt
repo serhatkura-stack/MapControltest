@@ -376,6 +376,7 @@ internal abstract class TripCard(
 
     protected fun setSubtitle(subtitle: CharSequence?, color: Int = LauncherTheme.TEXT_SECONDARY) {
         subtitleText.setTextColor(color)
+        subtitleText.textSize = TITLE_SP
         subtitleText.text = subtitle
         subtitleText.visibility = if (subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
     }
@@ -416,6 +417,7 @@ internal abstract class TripCard(
     protected fun showMissing() {
         setValue(context.getString(R.string.launcher_unavailable), LauncherTheme.TEXT_SECONDARY)
         setSubtitle(context.getString(R.string.launcher_waiting_data))
+        subtitleText.textSize = LauncherTheme.WAITING_SP
         showRows(emptyList())
         describe(context.getString(R.string.launcher_waiting_data))
     }

@@ -47,4 +47,12 @@ class AwdMathTest {
         assertEquals(0, AwdMath.frontPercent(150))
         assertEquals(100, AwdMath.frontPercent(-5))
     }
+
+    @Test fun noDataIsNotFrontWheelDrive() {
+        assertNull(AwdMath.rearPercentOrNull(null, null))
+        assertNull(AwdMath.rearPercentOrNull(200, null))
+        assertNull(AwdMath.rearPercentOrNull(null, 60))
+        assertEquals(0, AwdMath.rearPercentOrNull(200, 0))
+        assertEquals(30, AwdMath.rearPercentOrNull(200, 60))
+    }
 }

@@ -1,11 +1,14 @@
 package com.mapcontrol.util;
 
+import android.app.Activity;
+import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.os.Build;
 import android.provider.Settings;
 
 import java.util.List;
@@ -72,6 +75,62 @@ public final class LauncherModeManager {
         } catch (Exception ignored) {
             // Alias bileşeni bulunamazsa (ör. eski build) sessizce yok say.
         }
+    }
+
+    /**
+     * Kayıtlı tercihle alias durumunu eşitler (ör. APK güncellenince alias bileşen durumu
+     * manifest varsayılanına, yani kapalıya döner; tercih ise açık kalır).
+     */
+    public static void syncAliasWithPreference(Context context) {
+        setHomeAliasEnabled(context, isEnabled(context));
+    }
+
+    /** HOME intent'i şu an bu uygulamaya mı çözülüyor? */
+    public static boolean isDefaultHome(Context context) {
+        try {
+            Intent homeIntent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+            ResolveInfo resolved = context.getPackageManager()
+                    .resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
+            return resolved != null && resolved.activityInfo != null
+                    && context.getPackageName().equals(resolved.activityInfo.packageName);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Launcher modu açıldıktan sonra HOME'u yeniden bu uygulamaya bağlamayı dener.
+     *
+     * <p>Neden gerekli: alias devre dışı bırakılınca Android rol yöneticisi uygulamayı HOME rolünden
+     * düşürür ("no longer qualifies for the role"); alias yeniden etkinleştirilse de rol otomatik
+     * geri gelmez ve HOME sistem launcher'ına çözülür. Bu yüzden, zaten varsayılan Home değilsek
+     * (Android 10+) sistemin rol isteği diyaloğu ({@link RoleManager#createRequestRoleIntent})
+     * gösterilir; kullanıcı onaylayınca HOME tuşu tekrar bizim launcher'a gider. Rol API'si
+     * yoksa veya reddedilirse {@link #openHomeChooser} yedek yoludur. Araç ünitesi bu API'yi
+     * desteklemeyebilir; bu yüzden her yol hata durumunda sessizce bir sonrakine geçer ve
+     * zaten varsayılan Home isek hiçbir şey yapılmaz.
+     *
+     * @return diyalog/ekran gösterildiyse true
+     */
+    public static boolean requestHomeRoleIfNeeded(Activity activity, int requestCode) {
+        if (isDefaultHome(activity)) {
+            return false;
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                RoleManager roleManager = activity.getSystemService(RoleManager.class);
+                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)
+                        && !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                    activity.startActivityForResult(
+                            roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME), requestCode);
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            // Rol isteği başlatılamadı; aşağıdaki seçiciye düş.
+        }
+        openHomeChooser(activity);
+        return true;
     }
 
     /**

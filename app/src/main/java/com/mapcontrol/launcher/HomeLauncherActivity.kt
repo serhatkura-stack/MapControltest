@@ -510,7 +510,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (grid.editMode) return
         if (editLocked()) return
         grid.editMode = true
-        editTitle.text = getString(R.string.launcher_edit_title) + " · " + getString(
+        editTitle.text = getString(R.string.launcher_edit_title_short) + " · " + getString(
             if (activeMode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
         dock?.setEditMode(true)
         header.view.visibility = View.INVISIBLE
@@ -617,6 +617,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             addView(icon(context, type.icon, 32, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY))
             addView(gap(context, 8, vertical = true))
             addView(text(context, LauncherTheme.BODY_SP, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+                // Uzun adlar ("Soğutma · Sürücü") kesilmesin: tek satırda küçülür.
+                setAutoSizeTextTypeUniformWithConfiguration(CATALOG_MIN_SP, LauncherTheme.BODY_SP.toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 setText(type.label)
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(gap(context, 4, vertical = true))
@@ -725,6 +727,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         const val DRIVE_STABLE_MS = 2_000L
         const val DRIVE_TICK_MS = 500L
         const val ADD_COLUMNS = 5
+        const val CATALOG_MIN_SP = 16
         const val ADD_SHEET_WIDTH_DP = 1280
         const val ADD_TILE_HEIGHT_DP = 136
         const val ADD_LIST_HEIGHT_DP = 400
