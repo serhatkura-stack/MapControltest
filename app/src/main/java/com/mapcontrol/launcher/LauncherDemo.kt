@@ -61,7 +61,7 @@ internal object LauncherDemo {
         WifiScan("Kafe Misafir", 3, "[ESS]"),
         WifiScan("TurkNet_A1B2", 3, "[WPA2-PSK-CCMP][ESS]"),
         WifiScan("Ofis", 2, "[WPA3-SAE][ESS]"),
-        WifiScan("iPhone (Serhat)", 2, "[WPA2-PSK-CCMP][ESS]"),
+        WifiScan("iPhone", 2, "[WPA2-PSK-CCMP][ESS]"),
         WifiScan("Komşu_2.4", 1, "[WPA2-PSK-CCMP][ESS]"),
         WifiScan("DIRECT-roku", 1, "[WPA2-PSK-CCMP][ESS]"),
         WifiScan("Kitap Cafe", 1, "[ESS]"),
