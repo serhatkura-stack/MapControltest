@@ -10,7 +10,6 @@ import com.mapcontrol.media.ClusterTrackRelay;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.util.AppLocaleManager;
 import com.mapcontrol.util.DisplayHelper;
-import com.mapcontrol.util.LauncherLegacyPrefs;
 
 public final class MapControlApplication extends Application {
 
@@ -21,7 +20,6 @@ public final class MapControlApplication extends Application {
         super.onCreate();
         GlitchTip.start(this);
         AppLocaleManager.applyStoredLocale(this);
-        LauncherLegacyPrefs.applyMigrations(this);
         ClusterTrackRelay.install(this);
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
         lastNightModeUiBits = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;

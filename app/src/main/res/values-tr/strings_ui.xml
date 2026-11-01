@@ -66,7 +66,6 @@
     <string name="topbar_app_management">Uygulama Yönetimi</string>
     <string name="topbar_system_logs">Sistem Kayıtları</string>
     <string name="topbar_apps">Uygulamalar</string>
-    <string name="topbar_vehicle_home">Araç Ana Ekranı</string>
 
     <string name="wifi_not_connected">Bağlı değil</string>
     <string name="wifi_turn_on">Wi-Fi Aç</string>
@@ -547,15 +546,6 @@
     <string name="projection_map_key_off_help">Donanım tuşu harita için bir şey yapmaz.</string>
     <string name="projection_installed_apps">Yüklü Uygulamalar (%1$d)</string>
 
-    <string name="launcher_shortcut_wifi">Wi-Fi</string>
-    <string name="launcher_shortcut_web">Web</string>
-    <string name="launcher_shortcut_profile">Profil</string>
-    <string name="launcher_shortcut_projection">Yansıtma</string>
-    <string name="launcher_shortcut_apps">Uygulamalar</string>
-    <string name="launcher_shortcut_drive">Hafıza</string>
-    <string name="launcher_shortcut_welcome">Hoşgeldin Ekranı</string>
-    <string name="launcher_shortcut_equalizer">Ekolayzer</string>
-    <string name="launcher_shortcut_settings">Ayarlar</string>
     <string name="side_rail_equalizer">Ekolayzer</string>
     <string name="equalizer_title">Ekolayzer</string>
     <string name="equalizer_desc">Beş bant. Yükseltme en fazla 15 dB. Sınırlayıcı tepeleri cızırtıya bırakmaz.</string>

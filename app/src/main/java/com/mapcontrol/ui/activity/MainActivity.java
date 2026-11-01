@@ -74,6 +74,7 @@ import com.mapcontrol.util.ApkSessionInstaller;
 import com.mapcontrol.manager.WebServerManager;
 import com.mapcontrol.service.GlobalBackService;
 import com.mapcontrol.service.ServiceInitializer;
+import com.mapcontrol.launcher.HomeLauncherActivity;
 import com.mapcontrol.ui.builder.AppsTabBuilder;
 import com.mapcontrol.ui.builder.AssistTabBuilder;
 import com.mapcontrol.ui.builder.DriveModeTabBuilder;
@@ -85,7 +86,6 @@ import com.mapcontrol.ui.builder.SunroofAutomationTabBuilder;
 import com.mapcontrol.ui.builder.DmsFaceRecognitionTabBuilder;
 import com.mapcontrol.ui.builder.EqualizerTabBuilder;
 import com.mapcontrol.ui.builder.FileUploadTabBuilder;
-import com.mapcontrol.ui.builder.LauncherTabBuilder;
 import com.mapcontrol.ui.builder.LogTabBuilder;
 import com.mapcontrol.ui.builder.ProfileTabBuilder;
 import com.mapcontrol.ui.builder.ProjectionTabBuilder;
@@ -103,7 +103,6 @@ import com.mapcontrol.nav.GoogleMapsNavNotificationCoordinator;
 import com.mapcontrol.util.ClusterNavigationState;
 import com.mapcontrol.util.ImmersiveFullscreenHelper;
 import com.mapcontrol.util.LauncherModeManager;
-import com.mapcontrol.util.LauncherSwipeStore;
 import com.mapcontrol.util.GestureConflicts;
 import com.mapcontrol.util.SplitScreenGesture;
 import com.mapcontrol.util.TargetPackageStore;
@@ -120,8 +119,6 @@ public class MainActivity extends AppCompatActivity {
 
     /** Yüzen yansıtma çubuğundan hedef uygulama seçiciyi açmak için {@link Intent} extra anahtarı. */
     public static final String EXTRA_OPEN_PROJECTION_TARGET_PICKER = "com.mapcontrol.extra.OPEN_PROJECTION_TARGET_PICKER";
-    /** Araç Launcher Modu "Ana Ekran" karşılama sekmesinin {@code switchTab} indeksi. */
-    private static final int TAB_LAUNCHER = 10;
     private static final int TAB_EQUALIZER = 11;
     public static final int TAB_CLIMATE_AUTOMATION = 12;
     public static final int TAB_FACE_RECOGNITION = 13;
@@ -179,8 +176,6 @@ public class MainActivity extends AppCompatActivity {
     private VehicleInfoTabBuilder vehicleInfoTabBuilder;
     private VehicleMetricsRepository vehicleMetricsRepository;
     private ScrollView vehicleInfoScrollView;
-    private ScrollView launcherScrollView; // Araç Launcher Modu "Ana Ekran" karşılama sekmesi
-    private LauncherTabBuilder launcherTabBuilder;
     private SettingsTabBuilder settingsTabBuilder;
     private ProfileTabBuilder profileTabBuilder;
     private DriveModeTabBuilder driveModeTabBuilder;
@@ -190,7 +185,6 @@ public class MainActivity extends AppCompatActivity {
     private android.view.View camera360TabContent;
     private SplitScreenTabBuilder splitScreenTabBuilder;
     /** Bu görev, Android'in Ana Ekran (HOME) isteğiyle mi başlatıldı? */
-    private boolean launchedAsHome;
     private int currentTab = 0; // 0=Wi-Fi, 1=Web, 2=Profil, 3=Yansıtma, 4=LOG, 5=Uygulamalar, 6=Hafıza, 7=Ayarlar, 8=Açılış Sesi, 9=Araç Bilgi, 10=Ana Ekran (Launcher), 11=Ekolayzer
     private WebServerManager webServerManager; // HTTP Server Manager
     /** Kullanıcı seçtiyse kontak açılınca (güç modu 1/2) sunucuyu açar. */
@@ -288,8 +282,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Ana Ekran (HOME) rolü artık com.mapcontrol.launcher.HomeLauncherActivity'de; HOME
+        // intent'i yine de buraya düşerse yeni launcher'a yönlendir.
+        if (LauncherModeManager.isHomeIntent(getIntent())) {
+            openHomeLauncher();
+            finish();
+            return;
+        }
+
         handler = new Handler(Looper.getMainLooper());
-        launchedAsHome = LauncherModeManager.isHomeIntent(getIntent());
         if (savedInstanceState == null && getIntent() != null
                 && getIntent().getBooleanExtra(EXTRA_OPEN_PROJECTION_TARGET_PICKER, false)) {
             deferredOpenProjectionTargetPicker = true;
@@ -925,63 +926,14 @@ public class MainActivity extends AppCompatActivity {
         settingsScrollView = settingsTabBuilder.getScrollView();
         settingsTabContent = settingsTabBuilder.getSettingsTabContent();
 
-        // Araç Launcher Modu "Ana Ekran" karşılama sekmesi (Builder) — mevcut switchTab akışını kullanır
-        launcherTabBuilder = new LauncherTabBuilder(this, vehicleMetricsRepository,
-                new LauncherTabBuilder.LauncherCallback() {
-                    @Override
-                    public void onShortcutSelected(int tabIndex, String title) {
-                        crossfadeLauncherTransition(() -> {
-                            switchTab(tabIndex);
-                            if (topBarTitle != null) topBarTitle.setText(title);
-                            if (sideRailBuilder != null) sideRailBuilder.setSelectionForTabIndex(tabIndex);
-                        });
-                    }
-
-                    @Override
-                    public void onExitLauncherRequested() {
-                        crossfadeLauncherTransition(() -> exitLauncherMode());
-                    }
-
-                    @Override
-                    public void onAppLaunchRequested(String packageName) {
-                        if (appsTabBuilder != null) {
-                            appsTabBuilder.launchApp(packageName);
-                        }
-                    }
-
-                    @Override
-                    public void onClusterProjectionRequested(String action) {
-                        if (clusterDisplayManager == null) {
-                            return;
-                        }
-                        if (LauncherSwipeStore.ACTION_CLUSTER_CLOSE.equals(action)
-                                || (LauncherSwipeStore.ACTION_CLUSTER_TOGGLE.equals(action)
-                                && isNavigationOpen)) {
-                            clusterDisplayManager.closeClusterDisplay(false);
-                        } else {
-                            clusterDisplayManager.openClusterDisplay();
-                        }
-                    }
-                });
-        launcherScrollView = launcherTabBuilder.build();
-
         lastOrientation = getResources().getConfiguration().orientation;
         lastNightModeUiBits = getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK;
         UiStyles.setUiModeOverride(getResources().getConfiguration());
         presentMainUi(mainRootContainer);
 
-        if (LauncherModeManager.isHomeIntent(getIntent())) {
-            LauncherModeManager.ensurePersistedFromHomeLaunch(this);
-            launchedAsHome = true;
-        }
-        if (LauncherModeManager.isEnabled(this)) {
-            applyLauncherChrome(true);
-            switchTab(TAB_LAUNCHER);
-        } else {
-            applyLauncherChrome(false);
-            switchTab(0);
-        }
+        applyLauncherChrome(LauncherModeManager.isEnabled(this));
+        switchTab(0);
         
         // Uygulamaları yükle
         if (appsTabBuilder != null) appsTabBuilder.loadAppsFromServer();
@@ -1205,9 +1157,6 @@ public class MainActivity extends AppCompatActivity {
         if (currentTab == 9 && tabIndex != 9 && vehicleInfoTabBuilder != null) {
             vehicleInfoTabBuilder.stopListening();
         }
-        if (currentTab == TAB_LAUNCHER && tabIndex != TAB_LAUNCHER && launcherTabBuilder != null) {
-            launcherTabBuilder.onTabHidden();
-        }
         if (currentTab == 5 && tabIndex != 5 && appsTabBuilder != null) {
             appsTabBuilder.onTabHidden();
         }
@@ -1288,13 +1237,6 @@ public class MainActivity extends AppCompatActivity {
                 addTabChild(parent, splitScreenTabBuilder.getScrollView(), matchParent);
                 splitScreenTabBuilder.onTabVisible();
             }
-        } else if (tabIndex == TAB_LAUNCHER) {
-            if (launcherScrollView != null) {
-                addTabChild(parent, launcherScrollView, matchParent);
-            }
-            if (launcherTabBuilder != null) {
-                launcherTabBuilder.onTabVisible();
-            }
         }
     }
 
@@ -1348,10 +1290,6 @@ public class MainActivity extends AppCompatActivity {
             if (topBarTitle != null) {
                 topBarTitle.setText(getString(R.string.equalizer_title));
             }
-        } else if (tabIndex == TAB_LAUNCHER) {
-            if (topBarTitle != null) {
-                topBarTitle.setText(R.string.topbar_vehicle_home);
-            }
         } else if (tabIndex == TAB_CAMERA_360) {
             if (topBarTitle != null) {
                 topBarTitle.setText(R.string.camera360_title);
@@ -1368,10 +1306,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void applyLauncherChrome(boolean active) {
         if (sideRailBuilder != null) {
-            sideRailBuilder.setLauncherModeActive(active);
             sideRailBuilder.setContentWide(contentWide);
         }
-        boolean railHidden = active || contentWide;
+        boolean railHidden = contentWide;
         if (mainContent != null && mainContentParams != null) {
             if (portraitShell) {
                 mainContentParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
@@ -1385,9 +1322,9 @@ public class MainActivity extends AppCompatActivity {
             mainContent.setLayoutParams(mainContentParams);
         }
         if (topBarBuilder != null) {
-            boolean onLauncherHome = active && currentTab == TAB_LAUNCHER;
-            topBarBuilder.setTopBarVisible(!onLauncherHome);
-            topBarBuilder.setLauncherBackButtonVisible(active && !onLauncherHome);
+            topBarBuilder.setTopBarVisible(true);
+            // Launcher modu açıkken üst çubukta yeni launcher'a dönüş düğmesi görünür.
+            topBarBuilder.setLauncherBackButtonVisible(active);
         }
         ImmersiveFullscreenHelper.setImmersiveFullscreen(this, active);
     }
@@ -1399,17 +1336,17 @@ public class MainActivity extends AppCompatActivity {
         applyLauncherChrome(LauncherModeManager.isEnabled(this));
     }
 
-    /** Launcher modunda alt sekmeden ana ekran ızgarasına döner; modu kapatmaz. */
+    /** Launcher modunda FrostNav sekmesinden yeni launcher'a (HomeLauncherActivity) döner; modu kapatmaz. */
     private void returnToLauncherHome() {
         if (!LauncherModeManager.isEnabled(this)) {
             return;
         }
-        crossfadeLauncherTransition(() -> {
-            switchTab(TAB_LAUNCHER);
-            if (topBarTitle != null) {
-                topBarTitle.setText(R.string.topbar_vehicle_home);
-            }
-        });
+        openHomeLauncher();
+    }
+
+    private void openHomeLauncher() {
+        startActivity(new Intent(this, HomeLauncherActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 
     /** Fades only the content column (side rail stays put) around a tab switch. */
@@ -1515,43 +1452,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void enterLauncherMode() {
         LauncherModeManager.setEnabled(this, true);
-        launchedAsHome = true;
         applyLauncherChrome(true);
-        switchTab(TAB_LAUNCHER);
         syncLauncherModeSettingsUi();
     }
 
-    /**
-     * Launcher modunu kapatır. Yalnızca araç paneli sekmesindeyken Wi-Fi sekmesine döner;
-     * Ayarlar gibi başka bir sekmeden kapatılırsa mevcut sekme korunur.
-     */
     private void exitLauncherMode() {
-        boolean wasOnLauncherTab = currentTab == TAB_LAUNCHER;
         LauncherModeManager.setEnabled(this, false);
-        launchedAsHome = false;
         applyLauncherChrome(false);
         syncLauncherModeSettingsUi();
-        detachParkedLauncher();
-        if (wasOnLauncherTab) {
-            switchTab(0);
-            if (topBarTitle != null) {
-                topBarTitle.setText(R.string.topbar_wifi_management);
-            }
-            if (sideRailBuilder != null) {
-                sideRailBuilder.setSelectionForTabIndex(0);
-            }
-        }
-    }
-
-    /** Launcher modu kapanırken ana ekran view'ını parent'tan ayırır. */
-    private void detachParkedLauncher() {
-        if (launcherScrollView == null || tabContentArea == null) {
-            return;
-        }
-        if (launcherScrollView.getParent() == tabContentArea) {
-            tabContentArea.removeView(launcherScrollView);
-        }
-        launcherScrollView.setVisibility(View.VISIBLE);
     }
 
     private void syncLauncherModeSettingsUi() {
@@ -1645,11 +1553,9 @@ public class MainActivity extends AppCompatActivity {
             intent.removeExtra(EXTRA_OPEN_PROJECTION_TARGET_PICKER);
             deferredOpenProjectionTargetPicker = true;
         }
-        // Cihaz Ana Ekran (Home) tuşuna basılıp uygulama zaten açıkken (singleTop) tekrar
-        // çağrılırsa Araç Launcher karşılama ekranına dön.
+        // HOME intent'i yine de buraya düşerse yeni launcher'a yönlendir.
         if (LauncherModeManager.isHomeIntent(intent)) {
-            LauncherModeManager.ensurePersistedFromHomeLaunch(this);
-            enterLauncherMode();
+            openHomeLauncher();
         }
     }
 
@@ -1676,15 +1582,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (LauncherModeManager.isEnabled(this)) {
-            // Ana Ekran (Home) olarak çalışırken geri tuşu uygulamayı kapatmamalı:
-            // Launcher ekranındaysak hiçbir şey yapma, başka sekmedeysek Launcher'a dön.
-            if (currentTab == TAB_LAUNCHER) {
-                return;
-            }
-            switchTab(TAB_LAUNCHER);
-            if (topBarTitle != null) {
-                topBarTitle.setText(R.string.topbar_vehicle_home);
-            }
+            // Launcher modunda geri tuşu uygulamayı kapatmaz; yeni launcher'a döner.
+            openHomeLauncher();
             return;
         }
         super.onBackPressed();
@@ -1704,15 +1603,10 @@ public class MainActivity extends AppCompatActivity {
         if (newConfig.orientation != lastOrientation) {
             lastOrientation = newConfig.orientation;
             mountShell(newConfig.orientation == Configuration.ORIENTATION_PORTRAIT);
-            boolean launcherMode = LauncherModeManager.isEnabled(this);
             if (sideRailBuilder != null) {
-                sideRailBuilder.setLauncherModeActive(launcherMode);
-                if (currentTab != TAB_LAUNCHER) {
-                    sideRailBuilder.setSelectionForTabIndex(currentTab);
-                }
+                sideRailBuilder.setSelectionForTabIndex(currentTab);
             }
-            applyLauncherChrome(launcherMode);
-            rebuildLauncherForOrientation();
+            applyLauncherChrome(LauncherModeManager.isEnabled(this));
         }
         int night = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (night == lastNightModeUiBits) {
@@ -1738,14 +1632,10 @@ public class MainActivity extends AppCompatActivity {
         rebuildTopBarForUiMode();
         rebuildNonLauncherTabsForUiMode();
 
-        if (launcherTabBuilder != null) {
-            launcherTabBuilder.onUiModeChanged();
-        }
-
         int tab = currentTab;
         boolean launcherMode = LauncherModeManager.isEnabled(this);
         applyLauncherChrome(launcherMode);
-        if (sideRailBuilder != null && tab != TAB_LAUNCHER) {
+        if (sideRailBuilder != null) {
             sideRailBuilder.setSelectionForTabIndex(tab);
         }
         if (tabContentArea == null) {
@@ -1760,8 +1650,7 @@ public class MainActivity extends AppCompatActivity {
         if (sideRailBuilder == null || shellHost == null) {
             return;
         }
-        boolean launcherActive = LauncherModeManager.isEnabled(this);
-        int selectTab = currentTab == TAB_LAUNCHER ? 0 : currentTab;
+        int selectTab = currentTab;
         if (sideRail != null) {
             shellHost.removeView(sideRail);
         }
@@ -1774,7 +1663,6 @@ public class MainActivity extends AppCompatActivity {
                         sidebarWidthPx,
                         LinearLayout.LayoutParams.MATCH_PARENT);
         shellHost.addView(sideRail, 0, railParams);
-        sideRailBuilder.setLauncherModeActive(launcherActive);
         sideRailBuilder.setSelectionForTabIndex(selectTab);
     }
 
@@ -1826,25 +1714,6 @@ public class MainActivity extends AppCompatActivity {
                     LinearLayout.LayoutParams.MATCH_PARENT);
         }
         shellHost.addView(mainContent, mainContentParams);
-    }
-
-    /** Launcher kartları yön değişince yeniden dizilir; normal sekmeler kaydırılmaya devam eder. */
-    private void rebuildLauncherForOrientation() {
-        if (launcherTabBuilder == null) {
-            return;
-        }
-        boolean show = currentTab == TAB_LAUNCHER;
-        launcherTabBuilder.onTabHidden();
-        if (launcherScrollView != null
-                && launcherScrollView.getParent() instanceof android.view.ViewGroup) {
-            ((android.view.ViewGroup) launcherScrollView.getParent()).removeView(launcherScrollView);
-        }
-        launcherScrollView = launcherTabBuilder.build();
-        if (show && tabContentArea != null) {
-            tabContentArea.removeAllViews();
-            attachTabContent(TAB_LAUNCHER);
-            applyTabChrome(TAB_LAUNCHER);
-        }
     }
 
     private void rebuildTopBarForUiMode() {

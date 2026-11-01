@@ -59,7 +59,6 @@
     <string name="topbar_app_management">App management</string>
     <string name="topbar_system_logs">System logs</string>
     <string name="topbar_apps">Apps</string>
-    <string name="topbar_vehicle_home">Vehicle home screen</string>
     <string name="wifi_not_connected">Not connected</string>
     <string name="wifi_turn_on">Turn Wi‑Fi on</string>
     <string name="wifi_turn_off">Turn Wi‑Fi off</string>
@@ -528,15 +527,6 @@
     <string name="projection_map_key_off_help">The hardware key does nothing for the map.</string>
     <string name="projection_installed_apps">Installed apps (%1$d)</string>
 
-    <string name="launcher_shortcut_wifi">Wi‑Fi</string>
-    <string name="launcher_shortcut_web">Web</string>
-    <string name="launcher_shortcut_profile">Profile</string>
-    <string name="launcher_shortcut_projection">Projection</string>
-    <string name="launcher_shortcut_apps">Apps</string>
-    <string name="launcher_shortcut_drive">Memory</string>
-    <string name="launcher_shortcut_welcome">Welcome Screen</string>
-    <string name="launcher_shortcut_equalizer">Equalizer</string>
-    <string name="launcher_shortcut_settings">Settings</string>
     <string name="side_rail_equalizer">Equalizer</string>
     <string name="equalizer_title">Equalizer</string>
     <string name="equalizer_desc">Five bands. Boost goes up to 15 dB. A limiter keeps the peaks from crackling.</string>

@@ -132,11 +132,11 @@
 
         <!-- Araç Launcher Modu: varsayılan olarak KAPALI (enabled=false). Ayarlar > Araç Launcher
              Modu açıldığında LauncherModeManager bu bileşeni etkinleştirir; böylece MapControl,
-             cihazın Ana Ekran (HOME) uygulaması olarak seçilebilir hale gelir. MainActivity'yi
-             hedefler; ayrı bir Activity sınıfı gerekmez, mevcut ekran akışı değişmez. -->
+             cihazın Ana Ekran (HOME) uygulaması olarak seçilebilir hale gelir. Hedef: yeni launcher
+             (HomeLauncherActivity). Alias adı, mevcut kullanıcı tercihleri bozulmasın diye korunur. -->
         <activity-alias
             android:name=".ui.activity.MainActivityHomeAlias"
-            android:targetActivity=".ui.activity.MainActivity"
+            android:targetActivity=".launcher.HomeLauncherActivity"
             android:enabled="false"
             android:exported="true"
             android:label="Map Control (Ana Ekran)"
@@ -174,7 +174,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
-        <!-- Yeni launcher (Kotlin). HOME olarak seçilebilir; test için uygulama listesinde de görünür. -->
+        <!-- Yeni launcher (Kotlin). HOME rolü yalnızca MainActivityHomeAlias üzerinden (Launcher Modu anahtarı); test için uygulama listesinde de görünür. -->
         <activity
             android:name=".launcher.HomeLauncherActivity"
             android:exported="true"
@@ -185,11 +185,6 @@
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
