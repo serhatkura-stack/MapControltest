@@ -4,7 +4,6 @@
     <string name="launcher_climate_lo">LO</string>
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Trunk state changed, tap again</string>
-    <string name="launcher_widget_tires">Tire pressure</string>
     <string name="launcher_widget_trip_totals">Totals</string>
     <string name="launcher_widget_rear_speaker">Rear speakers</string>
     <string name="launcher_keys_ac">A/C</string>
@@ -14,7 +13,6 @@
     <string name="launcher_keys_recirc_state">Recirculating</string>
     <string name="launcher_keys_fresh_state">Fresh</string>
     <string name="launcher_keys_power">Climate</string>
-    <string name="launcher_tires_unit">bar</string>
     <string name="launcher_tire_fl">Front left</string>
     <string name="launcher_tire_fr">Front right</string>
     <string name="launcher_tire_rl">Rear left</string>

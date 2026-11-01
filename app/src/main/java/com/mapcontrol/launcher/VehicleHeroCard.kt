@@ -263,9 +263,13 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         val open: List<Int>,
         val knowsBody: Boolean,
         val tireWarning: Boolean?,
+        /** Eşiğin altındaki ilk tekerlek (varsa); yalnızca düşük basınçta dolu. */
+        val tireLow: TireLow?,
         val car: CarSchematicView.State,
         val locked: Boolean?,
     )
+
+    private val TIRE_WHEEL_NAMES = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
 
     private var lastUi: Ui? = null
 
@@ -297,10 +301,11 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             if (knowsExtra && extra.anyWindowOpen()) add(R.string.launcher_window_part)
             if (knowsExtra && extra.hoodOpen()) add(R.string.launcher_body_hood)
         }
-        val tireAlert = tireWarning == true
+        val tireLow = TireDecode.low(extra.tires)
+        val tireAlert = TireDecode.alertShown(tireWarning, tireLow)
         val ui = Ui(
             range = range, fuel = fuel, lowFuel = tenths != null && lowFuel,
-            open = open, knowsBody = knowsDoors || knowsExtra, tireWarning = tireWarning,
+            open = open, knowsBody = knowsDoors || knowsExtra, tireWarning = tireWarning, tireLow = tireLow,
             car = CarSchematicView.State(
                 doorLf = knowsDoors && s.isDoorLfOpen(), doorRf = knowsDoors && s.isDoorRfOpen(),
                 doorLr = knowsDoors && s.isDoorLrOpen(), doorRr = knowsDoors && s.isDoorRrOpen(),
@@ -336,7 +341,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             fuelBar.set(fuel, lowFuel)
         }
 
-        val alertChanged = prev == null || prev.open != open || prev.tireWarning != tireWarning
+        val alertChanged = prev == null || prev.open != open || prev.tireWarning != tireWarning || prev.tireLow != tireLow
         if (alertChanged) {
             if (open.isEmpty()) doorsPill.hide() else doorsPill.show(
                 R.drawable.ic_mdi_car_door,
@@ -345,8 +350,16 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             )
             if (!tireAlert) tiresPill.hide() else tiresPill.show(
                 R.drawable.ic_mdi_alert,
-                // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
-                context.getString(if (open.isNotEmpty()) R.string.launcher_tires_warning_short else R.string.launcher_tires_warning),
+                when {
+                    // Yanında kapı uyarısı da varsa dar kartta (4×4) sığması için kısa metin.
+                    open.isNotEmpty() -> context.getString(R.string.launcher_tires_warning_short)
+                    tireLow?.wheel != null -> context.getString(
+                        R.string.launcher_tires_low_wheel,
+                        context.getString(TIRE_WHEEL_NAMES[tireLow.wheel]),
+                        TireDecode.psi(tireLow.bar ?: 0.0),
+                    )
+                    else -> context.getString(R.string.launcher_tires_warning)
+                },
             )
             val hasAlert = open.isNotEmpty() || tireAlert
             alertRow.visibility = if (hasAlert) View.VISIBLE else View.GONE
@@ -366,7 +379,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         val spoken = buildList {
             add(if (locked == null) context.getString(R.string.launcher_waiting_data) else statusText.text.toString())
             if (ui.knowsBody && open.isEmpty()) add(context.getString(R.string.launcher_doors_closed))
-            if (tireWarning == false) add(context.getString(R.string.launcher_tires_ok))
+            if (tireWarning == false && !tireAlert) add(context.getString(R.string.launcher_tires_ok))
         }.joinToString(", ")
         calmRow.contentDescription = spoken
     }

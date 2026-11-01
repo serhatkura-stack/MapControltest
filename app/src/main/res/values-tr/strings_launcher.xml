@@ -11,7 +11,8 @@
     <string name="launcher_locked">Kilitli</string>
     <string name="launcher_unlocked">Kilit açık</string>
     <string name="launcher_tires_ok">Normal</string>
-    <string name="launcher_tires_warning">Lastik basıncını kontrol et</string>
+    <string name="launcher_tires_warning">Lastik basıncı düşük</string>
+    <string name="launcher_tires_low_wheel">Lastik basıncı düşük · %1$s %2$d psi</string>
     <string name="launcher_tires_warning_short">Lastik uyarısı</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>

@@ -129,6 +129,28 @@ class OemWidgetsTest {
         assertFalse(TireDecode.isLow(null))
     }
 
+    @Test fun tireLowFindsFirstLowWheelAndShowsOnlyWhenLow() {
+        val t = TireDecode.parse(intArrayOf(240, 160, 230, 220))!!   // 2,4 · 1,6 · 2,3 · 2,2 bar
+        assertEquals(TireLow(1, 1.6), TireDecode.low(t))
+        assertEquals(TireLow(null, 1.5), TireDecode.low(TireReading(listOf(1.5))))
+        assertNull(TireDecode.low(TireDecode.parse(intArrayOf(240, 240, 240, 240))))
+        assertNull(TireDecode.low(null))
+        // Araç kartında uyarı yalnızca uyarı sinyali açıkken ya da bir değer düşükken görünür.
+        assertFalse(TireDecode.alertShown(false, null))
+        assertFalse(TireDecode.alertShown(null, null))
+        assertTrue(TireDecode.alertShown(true, null))
+        assertTrue(TireDecode.alertShown(null, TireLow(0, 1.5)))
+    }
+
+    @Test fun tirePressureShownInPsi() {
+        assertEquals(26.0, TireDecode.LOW_PSI, 1e-9)
+        assertEquals(23, TireDecode.psi(1.6))    // 23,2 psi
+        assertEquals(35, TireDecode.psi(2.4))    // 34,8 psi
+        assertEquals(26, TireDecode.psi(TireDecode.LOW_BAR))
+        assertTrue(TireDecode.isLow(TireDecode.LOW_BAR - 0.01))
+        assertFalse(TireDecode.isLow(TireDecode.LOW_BAR))
+    }
+
     // --- Yolculuk toplamları ---
 
     @Test fun tripTotalsDecode() {
@@ -174,9 +196,8 @@ class OemWidgetsTest {
     // --- Katalog ---
 
     @Test fun newWidgetsAreRegisteredWithSizes() {
-        assertEquals(listOf(Span(2, 4), Span(4, 4)), WidgetType.TIRES.sizes)
         assertEquals(listOf(Span(2, 2), Span(3, 2)), WidgetType.TRIP_TOTALS.sizes)
         assertEquals(listOf(Span(2, 2)), WidgetType.REAR_SPEAKER.sizes)
-        for (t in listOf("tire_pressure", "trip_totals", "rear_speaker")) assertNotNull(WidgetType.fromKey(t))
+        for (t in listOf("trip_totals", "rear_speaker")) assertNotNull(WidgetType.fromKey(t))
     }
 }

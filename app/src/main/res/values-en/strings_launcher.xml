@@ -11,7 +11,8 @@
     <string name="launcher_locked">Locked</string>
     <string name="launcher_unlocked">Unlocked</string>
     <string name="launcher_tires_ok">Normal</string>
-    <string name="launcher_tires_warning">Check tire pressure</string>
+    <string name="launcher_tires_warning">Low tire pressure</string>
+    <string name="launcher_tires_low_wheel">Low tire pressure · %1$s %2$d psi</string>
     <string name="launcher_tires_warning_short">Tire alert</string>
     <string name="launcher_seat_heat_driver">Driver seat heat</string>
     <string name="launcher_seat_heat_passenger">Passenger seat heat</string>
