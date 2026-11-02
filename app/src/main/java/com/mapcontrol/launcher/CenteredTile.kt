@@ -33,6 +33,9 @@ internal abstract class CenteredTile(
     private var stripDetail: String? = null
     private var stripLevel = 0
     private var stripLevels = 0
+    private var stripRows: List<Pair<String, String>> = emptyList()
+    private var stripProgress: Float? = null
+    private var stripPanelDetail: String? = null
 
     override fun stripState(): StripState = StripState(
         title = context.getString(labelRes),
@@ -42,7 +45,19 @@ internal abstract class CenteredTile(
         level = stripLevel,
         levels = stripLevels,
         detail = stripDetail,
+        rows = stripRows,
+        progress = stripProgress,
+        panelDetail = stripPanelDetail,
     )
+
+    /** Yalnızca panel biçiminde (Sahne) gösterilen ek satırlar ve ilerleme çubuğu; kutucukta çizilmez. */
+    protected fun setPanelExtras(rows: List<Pair<String, String>>, progress: Float?, panelDetail: String? = null) {
+        if (rows == stripRows && progress == stripProgress && panelDetail == stripPanelDetail) return
+        stripRows = rows
+        stripProgress = progress
+        stripPanelDetail = panelDetail
+        notifyStrip()
+    }
 
     /** Kutucukta dokunma işi varsa (kök tıklanabilirse) aynısı. */
     override fun stripTap(part: Int) { root.performClick() }

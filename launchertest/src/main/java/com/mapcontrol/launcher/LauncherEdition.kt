@@ -13,14 +13,14 @@ import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
  *
  * Ayarlar'daki "Widget'lardan araca yaz (test)" anahtarı AÇIKKEN (varsayılan KAPALI, tercihlerde saklanır) bu sürüm gerçek
  * sürüm gibi davranır: tüm özellik kapıları açılır ve komutlar [WidgetWriter] üzerinden gider. [WidgetWriter] her komutu
- * park kapısından ve beyaz listeden ([WidgetWritePolicy]) geçirir, `WidgetWrite` etiketiyle günlüğe yazar.
+ * beyaz listeden ([WidgetWritePolicy]) geçirir (sürüş kilidi yok), `WidgetWrite` etiketiyle günlüğe yazar.
  */
 internal object LauncherEdition {
 
     @Volatile
     private var on = false
 
-    /** true iken widget komutları araca gider (kapılar açık, park + beyaz liste şartıyla). */
+    /** true iken widget komutları araca gider (kapılar açık, beyaz liste şartıyla). */
     val WRITE_TEST: Boolean get() = on
 
     /** true: araç verisi yalnızca okunur, dokunuşlar komut göndermez. Test anahtarı açıkken false. */
@@ -47,7 +47,7 @@ internal object LauncherEdition {
 
     fun writeTestTitle(value: Boolean): String = "Widget'lardan araca yaz (test): " + if (value) "Açık" else "Kapalı"
 
-    fun writeTestHint(): String = "Yalnızca Park'ta. Her komut günlüğe yazılır."
+    fun writeTestHint(): String = "Her komut günlüğe yazılır."
 
     /** Kodlama ısıtmayla aynı (SeatHeatModel.encode). Anahtar kapalıysa hiçbir şey olmaz. */
     fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
@@ -61,7 +61,7 @@ internal object LauncherEdition {
         WidgetWriter.send(proxy, module, id, value)
     }
 
-    /** Ses alanı (arka hoparlör): anahtar kapalıysa hiçbir şey olmaz; açıkken park + beyaz liste kapısından geçer. */
+    /** Ses alanı (arka hoparlör): anahtar kapalıysa hiçbir şey olmaz; açıkken beyaz listeden geçer. */
     fun sendSoundField(balance: Int, fade: Int) {
         if (!on) return
         WidgetWriter.sendSoundField(balance, fade)

@@ -22,7 +22,15 @@ import com.mapcontrol.R
  * "Ekranı karart" kutucuğu (1×2 ve 2×2): dokununca [ScreenOffActivity] ile tam siyah, en düşük parlaklıkta
  * bir ekran açar. Araca ya da sistem ayarlarına hiçbir şey yazılmaz.
  */
-class ScreenOffTile(private val activity: Activity) : SizedWidget, Themeable {
+class ScreenOffTile(private val activity: Activity) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne): başlık "Ekran", değer "Karart"; dokunuş kutucuktakiyle aynı ---
+    override var onStripChanged: (() -> Unit)? = null
+    override fun stripState(): StripState = StripState(
+        activity.getString(R.string.launcher_screen_off_title), activity.getString(R.string.launcher_screen_off_action),
+        R.drawable.ic_mdi_weather_night,
+    )
+    override fun stripTap(part: Int) { root.performClick() }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()

@@ -21,9 +21,10 @@
     <string name="launcher_fn_open_settings">Ayarları aç</string>
     <string name="launcher_fn_split_start">Başlat</string>
     <string name="launcher_fn_split_starting">Başlatılıyor…</string>
-    <string name="launcher_fn_split_choose">Uygulama seç</string>
+    <string name="launcher_fn_split_none">Seçilmedi</string>
     <string name="launcher_fn_split_no_pair">FrostNav\'da iki uygulama seçin</string>
     <string name="launcher_fn_cluster_start">Yansıt</string>
     <string name="launcher_fn_cluster_stop">Durdur</string>
     <string name="launcher_fn_cluster_no_target">Hedef uygulama seçilmedi</string>
+    <string name="launcher_wifi_web_hint">Web paneli FrostNav\'ın Aktar sekmesinden açılıp kapatılır</string>
 </resources>

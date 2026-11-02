@@ -40,17 +40,6 @@ fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it
 fun isAddable(type: WidgetType, layout: List<PlacedWidget>): Boolean =
     type == WidgetType.APP || type !in onScreenTypes(layout)
 
-/** Dikkat dağıtan widget'lar ([WidgetType.parkOnly]) Sürüş düzenine eklenemez; Park'ta serbesttir. */
-fun isAllowedIn(type: WidgetType, mode: LayoutMode): Boolean = !(type.parkOnly && mode == LayoutMode.DRIVE)
-
-/** Seçici için: [mode] düzenine konabilen türler ([addableWidgetTypes] listesinden). */
-fun addableWidgetTypes(mode: LayoutMode): List<WidgetType> =
-    addableWidgetTypes().filter { isAllowedIn(it, mode) }
-
-/** Düzen yüklenirken: Sürüş'te eski kayıttan gelen parkOnly widget'lar çizilmez (depodan silinmez, boşluk kalır). */
-fun visibleForMode(layout: List<PlacedWidget>, mode: LayoutMode): List<PlacedWidget> =
-    layout.filter { isAllowedIn(it.type, mode) }
-
 /** [layout] verilince "Widget ekle" listesinde seçilebilir türler: ekranda olanlar elenir (APP hariç). */
 fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
     addableWidgetTypes().filter { isAddable(it, layout) }
@@ -61,7 +50,7 @@ fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
  * Kural: bir boyut yalnızca anlamlı ölçüde daha fazla bilgi gösteriyorsa vardır. Kayıtlı düzendeki artık
  * geçersiz boyutlar [LayoutStore.snapSpans] ile en yakın izinli boyuta çekilir.
  */
-enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>, val parkOnly: Boolean = false) {
+enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4), Span(6, 6))),
     VEHICLE("vehicle", R.string.launcher_widget_vehicle, R.drawable.ic_mdi_car, listOf(Span(4, 4))),
     LOCK("lock", R.string.launcher_widget_lock, R.drawable.ic_mdi_lock, listOf(Span(1, 2))),
@@ -71,19 +60,16 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     HEALTH("health", R.string.launcher_widget_health, R.drawable.ic_mdi_lightning_bolt, listOf(Span(2, 2), Span(4, 4))),
     AIR("air", R.string.launcher_widget_air, R.drawable.ic_mdi_air_filter, listOf(Span(2, 2), Span(4, 2))),
     APP("app", R.string.launcher_widget_app, R.drawable.ic_mdi_view_grid, listOf(Span(1, 2))),
-    SEAT_HEAT_DRIVER("seat_heat_driver", R.string.launcher_widget_seat_heat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
-    SEAT_HEAT_PASSENGER("seat_heat_passenger", R.string.launcher_widget_seat_heat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2))),
-    SEAT_VENT_DRIVER("seat_vent_driver", R.string.launcher_widget_seat_vent_driver, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
-    SEAT_VENT_PASSENGER("seat_vent_passenger", R.string.launcher_widget_seat_vent_passenger, R.drawable.ic_mdi_car_seat_vent, listOf(Span(2, 2))),
+    // Birleşik koltuk (ısıtma + soğutma tek widget'ta, taraf başına bir tane); 4×4 büyük biçim Sahne panelindedir.
+    SEAT_DRIVER("seat_driver", R.string.launcher_widget_seat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 4))),
+    SEAT_PASSENGER("seat_passenger", R.string.launcher_widget_seat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 4))),
     AWD("awd", R.string.launcher_widget_awd, R.drawable.ic_mdi_car_cog, listOf(Span(4, 4), Span(2, 2))),
-    PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4)), parkOnly = true),
-    SUNSHADE("sunshade", R.string.launcher_widget_sunshade, R.drawable.ic_mdi_car_sunroof, listOf(Span(2, 2), Span(2, 4))),
+    PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
     TRUNK("trunk", R.string.launcher_widget_trunk, R.drawable.ic_mdi_car_trunk, listOf(Span(2, 2), Span(2, 4))),
-    DEFROST("defrost", R.string.launcher_widget_defrost, R.drawable.ic_mdi_defrost_front, listOf(Span(2, 2))),
-    SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2)), parkOnly = true),
+    SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2))),
     BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
-    CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
+    CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2))),
     REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2), Span(2, 1))),
     // FrostNav özellikleri ([FrostNavTile]): 4 sütunlu boyut büyük biçimdir ve Sahne panelinde kullanılır.
     WEB_PANEL("web_panel", R.string.launcher_widget_web_panel, R.drawable.ic_mdi_web, listOf(Span(2, 2), Span(4, 4))),
@@ -93,8 +79,19 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     CLUSTER_MIRROR("cluster_mirror", R.string.launcher_widget_cluster_mirror, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(4, 2), Span(4, 4)));
 
     companion object {
-        /** Kaldırılan "battery"/"service" -> HEALTH, "trip_totals" -> TRIP ([HealthMath.REMOVED_KEYS]); bilinmeyen anahtar null. */
-        fun fromKey(key: String): WidgetType? = (HealthMath.REMOVED_KEYS[key] ?: key).let { k -> values().firstOrNull { it.key == k } }
+        /**
+         * Eski anahtarların yeni karşılıkları: "battery"/"service" -> HEALTH, "trip_totals" -> TRIP ([HealthMath.REMOVED_KEYS]);
+         * ayrı ısıtma/soğutma koltukları -> o tarafın birleşik koltuğu. Kaldırılan türler ("sunshade", "defrost") ve bilinmeyen
+         * anahtar null: kayıtlı düzende o yuva boşalır (Sahne) ya da hücre serbest kalır (Serbest).
+         */
+        val MERGED_KEYS: Map<String, String> = HealthMath.REMOVED_KEYS + mapOf(
+            "seat_heat_driver" to "seat_driver",
+            "seat_vent_driver" to "seat_driver",
+            "seat_heat_passenger" to "seat_passenger",
+            "seat_vent_passenger" to "seat_passenger",
+        )
+
+        fun fromKey(key: String): WidgetType? = (MERGED_KEYS[key] ?: key).let { k -> values().firstOrNull { it.key == k } }
     }
 }
 
@@ -131,8 +128,8 @@ interface SizedWidget : LauncherWidget {
  * Park varsayılanı (12×6): duran araçta sahibini karşılayan, zengin ama sakin ekran. İki bant:
  *  - Üst bant (bilgi, 4 satır): sürücü tarafında araç kartı 4×4 (menzil, şema, kilit, uyarılar); ortada medya 4×2,
  *    altında araç sağlığı ve hava kalitesi 2×2; sağda "Toplam" bölümlü yolculuk 4×4.
- *  - Alt bant (kontroller, 2 satır), sol direksiyonlu kabine göre: sürücü koltuk ısıtma · tavan perdesi · bagaj ·
- *    buğu giderme · iki ince uygulama kutucuğu (tek şerit) · yolcu koltuk ısıtma.
+ *  - Alt bant (kontroller, 2 satır), sol direksiyonlu kabine göre: sürücü koltuğu · bagaj · arka hoparlör · ince kapı kilidi ve
+ *    ekranı karart · iki ince uygulama kutucuğu (tek şerit) · yolcu koltuğu (Sahne Park şeridiyle aynı seçki).
  * Izgara boşluksuz dolar. [oemBar] iki durumda da aynı düzeni verir (her iki alt çubukta da uygulamalar düğmesi var);
  * imza [LayoutStore] ile uyum içindir. Uygulama kutucukları [appPackages] ile dolar.
  */
@@ -142,13 +139,14 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
     PlacedWidget("health", WidgetType.HEALTH, 4, 2, Span(2, 2)),
     PlacedWidget("air", WidgetType.AIR, 6, 2, Span(2, 2)),
     PlacedWidget("trip", WidgetType.TRIP, 8, 0, Span(4, 4)),
-    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
-    PlacedWidget("sunshade", WidgetType.SUNSHADE, 2, 4, Span(2, 2)),
-    PlacedWidget("trunk", WidgetType.TRUNK, 4, 4, Span(2, 2)),
-    PlacedWidget("defrost", WidgetType.DEFROST, 6, 4, Span(2, 2)),
+    PlacedWidget("seat_driver", WidgetType.SEAT_DRIVER, 0, 4, Span(2, 2)),
+    PlacedWidget("trunk", WidgetType.TRUNK, 2, 4, Span(2, 2)),
+    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 4, 4, Span(2, 2)),
+    PlacedWidget("lock", WidgetType.LOCK, 6, 4, Span(1, 2)),
+    PlacedWidget("screen_off", WidgetType.SCREEN_OFF, 7, 4, Span(1, 2)),
 ) + (0 until DEFAULT_PARK_APP_TILES).map { i ->
     PlacedWidget("app_dock_$i", WidgetType.APP, 8 + i, 4, Span(1, 2), appPackages.getOrNull(i))
-} + PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)) +
+} + PlacedWidget("seat_passenger", WidgetType.SEAT_PASSENGER, 10, 4, Span(2, 2)) +
     if (profile == VehicleProfile.TIGGO8) parkExtraBandT8() else emptyList()
 
 /**
@@ -156,12 +154,12 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
  * (kahraman kartlar dahil) Tiggo 7 ile aynı kalır; kahramanlar 4×4'te zaten orantılıdır. Yer tutucudur.
  */
 private fun parkExtraBandT8(): List<PlacedWidget> = listOf(
-    PlacedWidget("seat_vent_driver", WidgetType.SEAT_VENT_DRIVER, 0, 6, Span(2, 2)),
-    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 6, Span(2, 2)),
-    PlacedWidget("consumption", WidgetType.CONSUMPTION, 4, 6, Span(2, 2)),
-    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 6, 6, Span(2, 2)),
-    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 8, 6, Span(2, 2)),
-    PlacedWidget("seat_vent_passenger", WidgetType.SEAT_VENT_PASSENGER, 10, 6, Span(2, 2)),
+    PlacedWidget("consumption", WidgetType.CONSUMPTION, 0, 6, Span(2, 2)),
+    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 2, 6, Span(2, 2)),
+    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 4, 6, Span(2, 2)),
+    PlacedWidget("phone_reminder", WidgetType.PHONE_REMINDER, 6, 6, Span(2, 2)),
+    PlacedWidget("awd", WidgetType.AWD, 8, 6, Span(2, 2)),
+    PlacedWidget("clock", WidgetType.CLOCK, 10, 6, Span(2, 2)),
 )
 
 /** Park varsayılanındaki ince uygulama kutucuğu sayısı (her biri 1×2, yan yana tek şerit). */
@@ -190,14 +188,10 @@ object WidgetFactory {
         WidgetType.HEALTH -> HealthTile(activity)
         WidgetType.AIR -> AirQualityTile(activity)
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
-        WidgetType.SEAT_HEAT_DRIVER -> SeatHeatTile(activity, vent = false, driverSeat = true)
-        WidgetType.SEAT_HEAT_PASSENGER -> SeatHeatTile(activity, vent = false, driverSeat = false)
-        WidgetType.SEAT_VENT_DRIVER -> SeatHeatTile(activity, vent = true, driverSeat = true)
-        WidgetType.SEAT_VENT_PASSENGER -> SeatHeatTile(activity, vent = true, driverSeat = false)
+        WidgetType.SEAT_DRIVER -> SeatTile(activity, driverSeat = true)
+        WidgetType.SEAT_PASSENGER -> SeatTile(activity, driverSeat = false)
         WidgetType.AWD -> AwdTile(activity)
-        WidgetType.SUNSHADE -> SunshadeTile(activity)
         WidgetType.TRUNK -> TrunkTile(activity)
-        WidgetType.DEFROST -> DefrostTile(activity)
         WidgetType.PHOTO -> PhotoTile(activity, placed.id)
         WidgetType.SCREEN_OFF -> ScreenOffTile(activity)
         WidgetType.BREAK_REMINDER -> BreakTile(activity)

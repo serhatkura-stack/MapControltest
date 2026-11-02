@@ -22,7 +22,7 @@ import com.mapcontrol.R
  * altta tek cam şeritte [STRIP_SLOTS] yuva. Yuvalardaki widget'lar yalnızca ekran görünürken çalışır.
  *
  * Düzenleme modunda her yuvanın üstünde "Değiştir" örtüsü vardır; dokununca o yuvaya uyan türleri gösteren seçici açılır
- * (panel ya da şerit biçimi, ekranda olanlar ve Sürüş'te Park'a özel olanlar soluk). "Kaldır" yuvayı boşaltır (sessiz "+").
+ * (panel ya da şerit seçkisi [SahneForm]; ekranda olanlar soluk). "Kaldır" yuvayı boşaltır (sessiz "+").
  * Değişiklikler hemen etkin moda ait [SahneStore]'a yazılır; Serbest ızgaranın kayıtlarına dokunulmaz.
  */
 @SuppressLint("ViewConstructor")
@@ -39,9 +39,9 @@ class SahneScreen(
     private var mode = LayoutMode.PARK
     private val store get() = if (mode == LayoutMode.DRIVE) driveStore else parkStore
 
-    /** Kayıtlı düzen (Sürüş'te gizlenen Park'a özel yuvalar dahil) ve ekranda gösterilen. */
+    /** Kayıtlı ve ekranda gösterilen düzen (Park ve Sürüş'te her widget çalışır; gizlenen yuva yoktur). */
     private var stored: SahneLayout = parkStore.load()
-    private var shown: SahneLayout = stored
+    private val shown: SahneLayout get() = stored
 
     private val stage = SahneStage(activity)
     private val leftPanel = GlassPanel(activity, glow = false)
@@ -110,7 +110,6 @@ class SahneScreen(
     }
 
     private fun rebuildAll() {
-        shown = SahneSlots.visibleForMode(stored, mode)
         hosted.keys.toList().forEach { dropHosted(it) }
         build(SahneSlotRef(SahneSlotKind.PANEL, 0))
         build(SahneSlotRef(SahneSlotKind.PANEL, 1))
@@ -172,11 +171,16 @@ class SahneScreen(
         val widget = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, span, slot.extra)).also { it.applySpan(span) }
         val source = widget as? StripSource
         val fallback = StripState(activity.getString(slot.type.label), "", slot.type.icon)
+        var anchor: View? = null
         val item = StripItemView(activity,
-            onTap = { part -> if (source != null) source.stripTap(part) else widget.view.performClick() },
+            onTap = { part ->
+                val a = anchor
+                if (source == null) widget.view.performClick() else if (a != null) source.stripTapFrom(a, part) else source.stripTap(part)
+            },
             onLong = { source?.stripLongPress() ?: false },
             type = slot.type,
         )
+        anchor = item
         if (source != null) source.onStripChanged = { item.bind(source.stripState() ?: fallback) }
         item.bind(source?.stripState() ?: fallback)
         return item to listOf(widget)
@@ -207,7 +211,6 @@ class SahneScreen(
     private fun apply(ref: SahneSlotRef, slot: SahneSlot?) {
         stored = SahneSlots.set(stored, ref, slot)
         store.save(stored)
-        shown = SahneSlots.visibleForMode(stored, mode)
         build(ref)
         if (ref.kind == SahneSlotKind.STRIP) strip.syncDividers()
         refreshEmpty()
@@ -218,7 +221,7 @@ class SahneScreen(
     private fun openPicker(ref: SahneSlotRef) {
         if (!canEdit() || activity.isFinishing || activity.isDestroyed) return
         val current = SahneSlots.get(stored, ref)
-        val types = WidgetType.values().filter { SahneForm.fits(it, ref.kind) }
+        val types = SahneForm.offered(ref.kind)
         val title = if (ref.kind == SahneSlotKind.PANEL) R.string.launcher_sahne_pick_panel else R.string.launcher_sahne_pick_strip
         val d = showLauncherSheet(activity, title, PICKER_WIDTH_DP) { dialog ->
             if (current != null) {
@@ -264,9 +267,8 @@ class SahneScreen(
     }
 
     private fun pickerTile(ref: SahneSlotRef, type: WidgetType, current: SahneSlot?, dismiss: () -> Unit): View {
-        val parkBlocked = !isAllowedIn(type, mode)
         val here = current?.type == type
-        val ok = !here && SahneForm.canPlace(stored, ref, type, mode)
+        val ok = !here && SahneForm.canPlace(stored, ref, type)
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -282,7 +284,6 @@ class SahneScreen(
             addView(text(context, LauncherTheme.LABEL_SP - 4f, LauncherTheme.TEXT_SECONDARY).apply {
                 text = when {
                     here -> context.getString(R.string.launcher_sahne_in_this_slot)
-                    parkBlocked -> context.getString(R.string.launcher_edit_park_only)
                     !ok -> context.getString(R.string.launcher_edit_on_screen)
                     ref.kind == SahneSlotKind.PANEL && !SahneForm.hasLargeForm(type) && type !in SahnePanelFactory.VALUE_PANEL_TYPES ->
                         context.getString(R.string.launcher_sahne_enlarged)

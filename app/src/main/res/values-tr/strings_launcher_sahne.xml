@@ -3,10 +3,6 @@
     <!-- Sahne ana ekran düzeni -->
     <string name="launcher_sahne_car">Araç görünümü</string>
     <string name="launcher_sahne_km">km</string>
-    <string name="launcher_sahne_seat_heat_driver">Isıtma sürücü</string>
-    <string name="launcher_sahne_seat_heat_passenger">Isıtma yolcu</string>
-    <string name="launcher_sahne_seat_vent_driver">Soğutma sürücü</string>
-    <string name="launcher_sahne_seat_vent_passenger">Soğutma yolcu</string>
     <string name="launcher_sahne_pick_panel">Panel için widget</string>
     <string name="launcher_sahne_pick_strip">Şerit için widget</string>
     <string name="launcher_sahne_in_slot" formatted="true">Bu yuvada: %1$s</string>

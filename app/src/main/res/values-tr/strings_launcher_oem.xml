@@ -5,7 +5,7 @@
     <string name="launcher_climate_hi">HI</string>
     <string name="launcher_trunk_stale">Bagaj durumu değişti, tekrar dokunun</string>
     <string name="launcher_widget_trip_totals">Toplam</string>
-    <string name="launcher_widget_rear_speaker">Uyku modu</string>
+    <string name="launcher_widget_rear_speaker">Arka hoparlör</string>
     <string name="launcher_rear_on">Açık</string>
     <string name="launcher_rear_off">Kapalı</string>
     <string name="launcher_keys_ac">A/C</string>
@@ -26,7 +26,6 @@
     <string name="launcher_totals_time_suffix">sürüş</string>
     <string name="launcher_totals_since_reset" formatted="true">sıfırlamadan beri sürüş %1$s</string>
     <string name="launcher_totals_odometer">Toplam yol</string>
-    <string name="launcher_sleep_sub">Arka hoparlörler</string>
-    <string name="launcher_sleep_on_detail">Arkada ses kapalı, müzik önde</string>
-    <string name="launcher_sleep_off_detail">Tüm hoparlörler</string>
+    <string name="launcher_rear_muted_detail">Ses sadece önden</string>
+    <string name="launcher_rear_on_detail">Tüm hoparlörler</string>
 </resources>

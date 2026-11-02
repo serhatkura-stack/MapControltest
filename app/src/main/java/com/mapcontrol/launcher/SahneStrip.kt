@@ -18,16 +18,10 @@ import com.mapcontrol.R
 enum class StripTone { NORMAL, MUTED, ON, HEAT, COOL, ALERT }
 
 /**
- * Şerit öğesinin içinde ayrı dokunulan küçük düğme (ör. buğu giderme Ön / Arka). [on] null = bilinmiyor.
- * [artKey] verilirse `launcher_art_<artKey>` görseli (varsa) ikonun yerine çizilir ([SahneArt]).
- */
-data class StripPart(val label: String, val state: String, val on: Boolean?, @DrawableRes val icon: Int, val artKey: String? = null)
-
-/**
  * Değiştirilebilir illüstrasyonlar: bir şerit/panel öğesinin görseli res/drawable altındaki `launcher_art_<anahtar>` adlı bir
  * kaynaktır (ör. raster `launcher_art_seat_heat_driver.webp`); kaynak yoksa ince çizgili vektör ikon kullanılır. Anahtar
- * widget türünün kaydedilen anahtarıdır ([WidgetType.key]); parçalar için ayrı anahtar ("defrost_front"), panel zemini
- * için "panel_<anahtar>". Kod değişmeden görsel eklenip çıkarılabilir; arama bir kez yapılıp önbelleğe alınır.
+ * widget türünün kaydedilen anahtarıdır ([WidgetType.key]); duruma bağlı görseller için ayrı anahtar ("seat_heat_on"), panel
+ * zemini için "panel_<anahtar>". Kod değişmeden görsel eklenip çıkarılabilir; arama bir kez yapılıp önbelleğe alınır.
  */
 object SahneArt {
     private val ids = HashMap<String, Int>()
@@ -48,23 +42,33 @@ object SahneArt {
     fun illustration(context: android.content.Context, type: WidgetType): Drawable? = drawable(context, type.key)
 
     /**
-     * Duruma bağlı şerit görseli anahtarı (yoksa null): koltuk ısıtma/havalandırma açıkken kendi görseli, kapalıyken
-     * "seat_off"; diğer türlerde türün anahtarı. Kaynak yoksa null (vektör ikon kullanılır). Ayrılmış nesne üretmez.
+     * Duruma bağlı şerit görseli anahtarı (yoksa null): koltukta ısıtma açıkken "seat_heat_on", soğutma açıkken "seat_vent_on",
+     * kapalıyken "seat_off"; diğer türlerde türün anahtarı. Kaynak yoksa null (vektör ikon kullanılır). Ayrılmış nesne üretmez.
      */
     fun stripKey(context: android.content.Context, type: WidgetType, s: StripState): String? {
         val key = when (type) {
-            WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_HEAT_PASSENGER -> if (s.level > 0) "seat_heat_on" else "seat_off"
-            WidgetType.SEAT_VENT_DRIVER, WidgetType.SEAT_VENT_PASSENGER -> if (s.level > 0) "seat_vent_on" else "seat_off"
+            WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER -> seatKey(s.tone, s.level)
             else -> type.key
         }
         return if (resId(context, key) == 0) null else key
     }
 
-    /** Yolcu koltukları yatay çevrilir (görsel sürücü koltuğuna bakar). */
-    fun mirrored(type: WidgetType): Boolean = type == WidgetType.SEAT_HEAT_PASSENGER || type == WidgetType.SEAT_VENT_PASSENGER
+    /** Koltuk görseli: ısıtma (turuncu ton) / soğutma (buz tonu) seviyesi varsa kendi görseli, yoksa kapalı koltuk. */
+    fun seatKey(tone: StripTone, level: Int): String = SeatChoice.artKey(when (tone) {
+        StripTone.HEAT -> SeatMode.HEAT
+        StripTone.COOL -> SeatMode.COOL
+        else -> SeatMode.OFF
+    }, level)
 
-    /** Koltuk görselleri kendi açık/kapalı halini taşır; sunroof perdesi ve bagaj kapalıyken soluk çizilir. */
-    fun dimmed(type: WidgetType, s: StripState): Boolean = (type == WidgetType.SUNSHADE || type == WidgetType.TRUNK) && s.active != true
+    /** Yolcu koltuğu yatay çevrilir (görsel sürücü koltuğuna bakar). */
+    fun mirrored(type: WidgetType): Boolean = type == WidgetType.SEAT_PASSENGER
+
+    /**
+     * Koltuk görselleri kendi açık/kapalı halini taşır; diğer görseller [StripState.active] false iken (bagaj kapalı, arka
+     * hoparlör kapalı, özellik kapalı) soluk çizilir. Durumu olmayan (null) türler hep tam renktir.
+     */
+    fun dimmed(type: WidgetType, s: StripState): Boolean =
+        type != WidgetType.SEAT_DRIVER && type != WidgetType.SEAT_PASSENGER && s.active == false
 
     /** Kapalı/pasif görsel (buğu giderme kapalıyken): renksizleştirilmiş. Tek örnek, çizimde ayrılma yok. */
     val DESATURATE: android.graphics.ColorFilter = android.graphics.ColorMatrixColorFilter(
@@ -93,12 +97,15 @@ object SahneArt {
     private class SpotDrawable : Drawable() {
         private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         override fun onBoundsChange(b: android.graphics.Rect) {
-            val r = maxOf(b.width(), b.height()) / 2f
+            // Kısa kenara göre: geniş kutuda da kenarlarda sert çizgi kalmaz.
+            val r = minOf(b.width(), b.height()) / 2f
             paint.shader = if (r <= 0f) null else android.graphics.RadialGradient(
                 b.exactCenterX(), b.exactCenterY(), r,
                 intArrayOf(0x17FFFFFF, 0x0AFFFFFF, 0x00FFFFFF), floatArrayOf(0f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP)
         }
-        override fun draw(canvas: android.graphics.Canvas) { if (paint.shader != null) canvas.drawRect(bounds, paint) }
+        override fun draw(canvas: android.graphics.Canvas) {
+            if (paint.shader != null) canvas.drawCircle(bounds.exactCenterX(), bounds.exactCenterY(), minOf(bounds.width(), bounds.height()) / 2f, paint)
+        }
         override fun setAlpha(alpha: Int) {}
         override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
         @Deprecated("Deprecated in Java")
@@ -111,7 +118,7 @@ object SahneArt {
 
 /**
  * Bir widget'ın Sahne şeridindeki (ve sahnedeki notlardaki) özeti. Widget kendi verisinden üretir; şerit yalnızca çizer.
- * [level]/[levels] seviye dilimleri (koltuk ısıtma), [parts] ayrı dokunulan küçük düğmeler, [iconDrawable] uygulama ikonu.
+ * [level]/[levels] seviye dilimleri (koltuk), [iconDrawable] uygulama ikonu, [badge] değerin yanında küçük simge (ör. ay).
  */
 data class StripState(
     val title: String,
@@ -121,26 +128,35 @@ data class StripState(
     val level: Int = 0,
     val levels: Int = 0,
     val detail: String? = null,
-    val parts: List<StripPart> = emptyList(),
     val iconDrawable: Drawable? = null,
     /** Panel biçiminde değerin altında gösterilen ek satırlar (etiket, değer); [alertRows] uyarı renginde olanlar. */
     val rows: List<Pair<String, String>> = emptyList(),
     val alertRows: Set<Int> = emptySet(),
-    /** Açık/etkin mi (perde, bagaj); null = bilinmiyor/ilgisiz. Duruma bağlı görsel için. */
+    /** Açık/etkin mi (bagaj, arka hoparlör); null = bilinmiyor/ilgisiz. Duruma bağlı görsel için. */
     val active: Boolean? = null,
+    /** Değerin yanında küçük simge (ör. arka hoparlör kapalıyken ay); 0 = yok. */
+    @DrawableRes val badge: Int = 0,
+    /** Panel biçiminde değerin altında küçük çubuk geçmişi (ör. son tüketim ölçümleri, eskiden yeniye); boşsa çizilmez. */
+    val history: List<Float> = emptyList(),
+    /** Panel biçiminde ilerleme çubuğu 0..1 (ör. mola önerisine kadar geçen süre); null = yok. */
+    val progress: Float? = null,
+    /** Panel biçiminde [detail] yerine gösterilecek alt satır (satırlar aynı bilgiyi taşıyorsa kısa özet); null = [detail]. */
+    val panelDetail: String? = null,
 )
 
 /**
  * Şerit biçimini destekleyen widget: durumunu [stripState] ile verir, değişince [onStripChanged]'i çağırır ve
- * dokunuşu kutucuktaki ile aynı yoldan ([stripTap]) işler; yazma kuralları (WidgetWritePolicy, park kapısı, doğrulama
- * bayrakları, onaylar) widget'ın kendi kodunda kalır. Desteklemeyen widget şeritte başlık + ikonla görünür ve
+ * dokunuşu kutucuktaki ile aynı yoldan ([stripTap]) işler; yazma kuralları (WidgetWritePolicy, doğrulama bayrakları,
+ * onaylar) widget'ın kendi kodunda kalır. Desteklemeyen widget şeritte başlık + ikonla görünür ve
  * dokunuş kutucuğun kök görünümüne ([View.performClick]) gider.
  */
 interface StripSource {
     fun stripState(): StripState?
     var onStripChanged: (() -> Unit)?
-    /** [part]: [StripState.parts] içindeki düğme (yoksa 0). */
+    /** [part]: öğe içindeki ayrı düğme (yoksa 0). */
     fun stripTap(part: Int = 0)
+    /** Şerit öğesinden dokunuş: [anchor] öğenin kendisi (üstünde seçici açan widget'lar için, ör. koltuk). */
+    fun stripTapFrom(anchor: View, part: Int = 0) = stripTap(part)
     /** Uzun basış (ör. uygulama seçici); işlendiyse true. */
     fun stripLongPress(): Boolean = false
 }
@@ -158,7 +174,7 @@ internal fun stripToneFor(color: Int): StripTone = when (color) {
 /** Tonun Sahne rengi; [NORMAL] için [fallback]. */
 internal fun stripToneColor(tone: StripTone, fallback: Int): Int = when (tone) {
     StripTone.HEAT -> Sahne.AMBER
-    StripTone.COOL -> Sahne.COOL
+    StripTone.COOL -> Sahne.ICE
     StripTone.ON -> Sahne.ICE
     StripTone.ALERT -> Sahne.ALERT
     StripTone.MUTED -> Sahne.INK_3
@@ -166,8 +182,9 @@ internal fun stripToneColor(tone: StripTone, fallback: Int): Int = when (tone) {
 }
 
 /**
- * Sahne şeridinin bir öğesi (taslaktaki ".seg"): ikon, küçük başlık, değer; seviyesi olan widget'ta sağda dilimler;
- * [StripState.parts] varsa başlığın yanında ayrı dokunulan küçük düğmeler. Yalnızca durum değişince yeniden bağlanır.
+ * Sahne şeridinin bir öğesi (taslaktaki ".seg"): görsel (illüstrasyon ya da ince ikon), küçük başlık, değer (tek satır, gerekirse
+ * küçülür, asla kesilmez), değerin yanında isteğe bağlı küçük simge ve seviyesi olan widget'ta altta dilimler. Ölçüler tüm
+ * öğelerde aynıdır ([Sahne] tip ölçeği: başlık [TITLE_SP], değer [VALUE_SP], görsel [ART_DP]). Yalnızca durum değişince yeniden bağlanır.
  */
 @SuppressLint("ViewConstructor")
 internal class StripItemView(
@@ -182,33 +199,44 @@ internal class StripItemView(
         scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-    private val title = text(context, TITLE_SP).apply { SahneFonts.apply(this, 400) }
+    /** Görsel kutusu: tüm öğelerde aynı genişlik, böylece yazılar aynı hizadan başlar. */
+    private val iconBox = android.widget.FrameLayout(context).apply {
+        addView(iconView, android.widget.FrameLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP), Gravity.CENTER))
+    }
+    private val title = text(context, TITLE_SP).apply {
+        SahneFonts.apply(this, 400)
+        maxLines = 1
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+            this, TITLE_MIN_SP, TITLE_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
+    }
     private val value = text(context, VALUE_SP).apply {
         SahneFonts.apply(this, 500)
         maxLines = 1
-        // Uzun değer ("Tüm hoparlörler") şeritte kesilmez: 28sp'den küçülerek sığar.
+        // Uzun değer şeritte kesilmez ve kaymaz: [VALUE_SP]'den küçülerek sığar.
         androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
             this, VALUE_MIN_SP, VALUE_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
+    }
+    private val badge = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+    private val valueRow = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(value, LayoutParams(0, context.dp(VALUE_H_DP), 1f))
+        addView(badge, LayoutParams(context.dp(BADGE_DP), context.dp(BADGE_DP)).apply { marginStart = context.dp(6) })
     }
     private val pips = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
-    private val partsRow = LinearLayout(context).apply {
-        orientation = HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-    }
-    /** Başlık, değer ve altında seviye dilimleri (ya da buğu giderme düğmeleri) dikey sütunu. */
+    /** Başlık, değer ve altında seviye dilimleri. */
     private val texts = LinearLayout(context).apply {
         orientation = VERTICAL
         gravity = Gravity.CENTER_VERTICAL
         addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        addView(value, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(1) })
-        addView(pips, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(5) })
-        addView(partsRow, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(PART_H_DP)).apply { topMargin = context.dp(3) })
+        addView(valueRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        addView(pips, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(4) })
     }
     private var last: StripState? = null
-    private var sizing = SIZE_ICON
+    private var sizing = -1
     private var artKey: String? = null
     private var spot = false
 
@@ -217,8 +245,8 @@ internal class StripItemView(
         gravity = Gravity.CENTER_VERTICAL
         setPadding(context.dp(PAD_DP), 0, context.dp(PAD_DP), 0)
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        addView(iconView, LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-        addView(texts, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(12) })
+        addView(iconBox, LayoutParams(context.dp(ART_BOX_W_DP), context.dp(ART_DP)))
+        addView(texts, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(TEXT_GAP_DP) })
         isClickable = true
         isFocusable = true
         setOnClickListener { onTap(0) }
@@ -256,9 +284,13 @@ internal class StripItemView(
         title.visibility = if (s.title.isEmpty()) View.GONE else View.VISIBLE
         value.setTextSmooth(s.value)
         value.setTextColor(if (s.tone == StripTone.NORMAL) Sahne.INK else tint)
-        value.visibility = if (s.value.isEmpty()) View.GONE else View.VISIBLE
+        valueRow.visibility = if (s.value.isEmpty()) View.GONE else View.VISIBLE
+        if (s.badge != 0) {
+            badge.setImageResource(s.badge)
+            badge.imageTintList = ColorStateList.valueOf(Sahne.INK_2)
+            badge.visibility = View.VISIBLE
+        } else badge.visibility = View.GONE
         bindPips(s)
-        bindParts(s)
         contentDescription = listOf(s.title, s.value, s.detail).filter { !it.isNullOrEmpty() }.joinToString(", ")
     }
 
@@ -266,29 +298,26 @@ internal class StripItemView(
         iconView.scaleX = if (mirror) -1f else 1f
         iconView.imageAlpha = if (dim) SahneArt.DIM_ALPHA else 255
         val art = artKey != null
-        iconView.colorFilter = if (art) SahneArt.filter(false) else null
+        iconView.colorFilter = if (art) SahneArt.filter(dim) else null
         val night = art && LauncherTheme.night
         if (night != spot) {
             spot = night
-            iconView.background = if (night) SahneArt.spotlight() else null
+            iconBox.background = if (night) SahneArt.spotlight() else null
         }
     }
 
     private fun resizeIcon(mode: Int) {
-        if (mode == sizing && iconView.layoutParams != null && iconView.tag == mode) return
+        if (mode == sizing) return
         sizing = mode
-        iconView.tag = mode
         val dp = when (mode) { SIZE_ART -> ART_DP; SIZE_APP -> APP_ICON_DP; else -> ICON_DP }
-        iconView.adjustViewBounds = mode == SIZE_ART
-        iconView.maxWidth = if (mode == SIZE_ART) context.dp(ART_MAX_W_DP) else Int.MAX_VALUE
-        iconView.layoutParams = (iconView.layoutParams as LayoutParams).apply {
-            width = if (mode == SIZE_ART) LayoutParams.WRAP_CONTENT else context.dp(dp)
+        iconView.layoutParams = (iconView.layoutParams as android.widget.FrameLayout.LayoutParams).apply {
+            width = context.dp(if (mode == SIZE_ART) ART_BOX_W_DP else dp)
             height = context.dp(dp)
         }
     }
 
     private fun bindPips(s: StripState) {
-        if (s.levels <= 0 || s.parts.isNotEmpty()) {
+        if (s.levels <= 0) {
             pips.visibility = View.GONE
             return
         }
@@ -299,118 +328,34 @@ internal class StripItemView(
                 pips.addView(View(context), LayoutParams(context.dp(PIP_W_DP), context.dp(PIP_H_DP)).apply { if (i > 0) marginStart = context.dp(5) })
             }
         }
-        val heat = s.tone == StripTone.COOL
+        val cool = s.tone == StripTone.COOL
         for (i in 0 until s.levels) {
             val on = i < s.level
             pips.getChildAt(i).background = if (!on) rounded(context, Sahne.TRACK, PIP_H_DP / 2f) else GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                if (heat) intArrayOf(Sahne.COOL, Sahne.COOL) else intArrayOf(Sahne.AMBER_HI, Sahne.AMBER),
+                if (cool) intArrayOf(Sahne.ICE, Sahne.ICE) else intArrayOf(Sahne.AMBER_HI, Sahne.AMBER),
             ).apply { cornerRadius = context.dpF(PIP_H_DP / 2f) }
         }
     }
 
-    private fun bindParts(s: StripState) {
-        if (s.parts.isEmpty()) {
-            partsRow.visibility = View.GONE
-            iconView.visibility = View.VISIBLE
-            return
-        }
-        // Parçalı öğede (buğu giderme) büyük ikon yok: başlık üstte, altında iki düğme yan yana (eşit pay).
-        iconView.visibility = View.GONE
-        (texts.layoutParams as LayoutParams).marginStart = 0
-        partsRow.visibility = View.VISIBLE
-        if (partsRow.childCount != s.parts.size) {
-            partsRow.removeAllViews()
-            s.parts.forEachIndexed { i, _ ->
-                partsRow.addView(MiniButton(context) { onTap(i) }, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
-                    marginStart = context.dp(if (i == 0) 0 else 8)
-                })
-            }
-        }
-        s.parts.forEachIndexed { i, p -> (partsRow.getChildAt(i) as MiniButton).bind(p) }
-    }
-
-    /** Parça düğmesi (taslaktaki ".mini"): ikon + ad + durum; açıkken sıcak turuncu zemin ve çizgi. */
-    private class MiniButton(context: Context, onClick: () -> Unit) : LinearLayout(context) {
-        private val icon = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-        private val name = text(context, 18f).apply { SahneFonts.apply(this, 600) }
-        private val state = text(context, 14f).apply { SahneFonts.apply(this, 400) }
-        private var artKey: String? = null
-        private var artSized = false
-        private var spot = false
-
-        private fun sizeIcon(art: Boolean) {
-            icon.adjustViewBounds = art
-            icon.maxWidth = if (art) context.dp(MINI_ART_MAX_W_DP) else Int.MAX_VALUE
-            icon.scaleType = ImageView.ScaleType.FIT_CENTER
-            icon.layoutParams = (icon.layoutParams as LayoutParams).apply {
-                width = if (art) LayoutParams.WRAP_CONTENT else context.dp(26)
-                height = context.dp(if (art) MINI_ART_DP else 26)
-            }
-        }
-
-        init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(10), 0, context.dp(8), 0)
-            addView(icon, LayoutParams(context.dp(26), context.dp(26)))
-            addView(LinearLayout(context).apply {
-                orientation = VERTICAL
-                addView(name, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-                addView(state, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-            }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(10) })
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onClick() }
-            pressFeedback()
-        }
-
-        fun bind(p: StripPart) {
-            val on = p.on == true
-            val art = if (p.artKey != null && SahneArt.resId(context, p.artKey) != 0) p.artKey else null
-            if (art != null) {
-                if (art != artKey) { artKey = art; icon.setImageDrawable(SahneArt.drawable(context, art)) }
-                icon.imageTintList = null
-                // Açıkken tam renk; kapalı/bilinmiyorken renksiz ve soluk.
-                icon.colorFilter = SahneArt.filter(!on)
-                icon.imageAlpha = if (on) 255 else SahneArt.DIM_ALPHA
-                val night = LauncherTheme.night
-                if (night != spot) { spot = night; icon.background = if (night) SahneArt.spotlight() else null }
-                if (!artSized) { artSized = true; sizeIcon(true) }
-            } else {
-                if (artSized) { artSized = false; artKey = null; icon.colorFilter = null; icon.imageAlpha = 255; icon.background = null; spot = false; sizeIcon(false) }
-                icon.setImageResource(sahneIconFor(p.icon))
-                icon.imageTintList = ColorStateList.valueOf(if (on) Sahne.AMBER else Sahne.INK_2)
-            }
-            name.text = p.label
-            name.setTextColor(if (on) Sahne.AMBER else if (p.on == null) Sahne.INK_3 else Sahne.INK)
-            state.setTextSmooth(p.state)
-            state.setTextColor(if (on) Sahne.AMBER_SUB else Sahne.INK_3)
-            background = GradientDrawable().apply {
-                cornerRadius = context.dpF(18f)
-                setColor(if (on) Sahne.AMBER_SOFT else Sahne.SOFT_FILL)
-                setStroke(context.dp(1), if (on) Sahne.AMBER_LINE else Sahne.HAIR)
-            }
-            contentDescription = p.label + ", " + p.state
-        }
-    }
-
     companion object {
-        const val PAD_DP = 16
+        const val PAD_DP = 14
         const val ICON_DP = 36
         const val APP_ICON_DP = 48
-        /** Illüstrasyon yüksekliği (şerit 92dp: 10dp pay) ve en geniş hali. */
+        /** Illüstrasyon kutusu (şerit 92dp: 10dp pay): tüm öğelerde aynı, yazılar aynı hizadan başlar. */
         const val ART_DP = 72
-        const val ART_MAX_W_DP = 84
-        const val PART_H_DP = 52
+        const val ART_BOX_W_DP = 80
+        const val TEXT_GAP_DP = 10
         private const val SIZE_ICON = 0
         private const val SIZE_APP = 1
         private const val SIZE_ART = 2
         const val TITLE_SP = 15f
-        const val VALUE_SP = 28f
-        const val VALUE_MIN_SP = 17
-        const val MINI_ART_DP = 34
-        const val MINI_ART_MAX_W_DP = 46
+        const val TITLE_MIN_SP = 12
+        const val VALUE_SP = 26f
+        const val VALUE_MIN_SP = 16
+        /** Değer satırı sabit yükseklikte: küçülen değer dikey ritmi bozmaz. */
+        const val VALUE_H_DP = 34
+        const val BADGE_DP = 20
         const val PIP_W_DP = 22
         const val PIP_H_DP = 6
     }
@@ -495,10 +440,7 @@ internal fun sahneText(context: Context, sizeSp: Float, color: Int, weight: Int,
 @DrawableRes
 internal fun sahneIconFor(@DrawableRes res: Int): Int = when (res) {
     R.drawable.ic_mdi_car_seat_heater, R.drawable.ic_mdi_car_seat_vent -> R.drawable.ic_sahne_seat
-    R.drawable.ic_mdi_car_sunroof -> R.drawable.ic_sahne_roof
     R.drawable.ic_mdi_car_trunk -> R.drawable.ic_sahne_trunk
-    R.drawable.ic_mdi_defrost_front -> R.drawable.ic_sahne_defrost_front
-    R.drawable.ic_mdi_defrost_rear -> R.drawable.ic_sahne_defrost_rear
     R.drawable.ic_mdi_music_note -> R.drawable.ic_sahne_note
     R.drawable.ic_mdi_road_variant -> R.drawable.ic_sahne_route
     R.drawable.ic_mdi_lock -> R.drawable.ic_sahne_lock

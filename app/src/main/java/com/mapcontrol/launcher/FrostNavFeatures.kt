@@ -9,7 +9,7 @@ import android.app.Activity
  * FrostNav yoktur: [NONE] her şeyi "yok" döner ve hiçbir şey yapmaz.
  *
  * Bu widget'lar aracın hareketini değil, uygulama/cihaz durumunu değiştirir; FrostNav'ın kendisi kısıtlamadığı için sürüşte
- * de çalışır (park kapısı ve [WidgetWritePolicy] beyaz listesi yalnızca araç sinyali yazmaları içindir).
+ * de çalışır ([WidgetWritePolicy] beyaz listesi yalnızca araç sinyali yazmaları içindir; sürüş kilidi yoktur).
  *
  * Okuma çağrıları (adı `read` ile başlayanlar) G/Ç yapabilir: arka plan iş parçacığında çağrılır.
  */

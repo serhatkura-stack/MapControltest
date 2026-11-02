@@ -28,8 +28,9 @@ import com.mapcontrol.R
 
 /**
  * Başlıktaki Wi-Fi simgesine dokununca açılan, simgenin altına bağlı Wi-Fi paneli (macOS menü çubuğu gibi):
- * aç/kapa, bağlı ağ ("Bağlantıyı kes"), yakındaki ağlar, yeni şifreli ağ için şifre penceresi ve "Wi-Fi ayarları…".
- * Wi-Fi işleri [WifiBackend] üzerinden gider; zamanlayıcı yok, yalnızca açıkken tarama/ağ yayınlarıyla yenilenir.
+ * aç/kapa, bağlı ağ ("Bağlantıyı kes"), yakındaki ağlar, yeni şifreli ağ için şifre penceresi, "Web paneli" satırı (FrostNav web
+ * sunucusu; açıkken QR ve adres) ve "Wi-Fi ayarları…". Wi-Fi işleri [WifiBackend] üzerinden gider ve yalnızca açıkken tarama/ağ
+ * yayınlarıyla yenilenir; web paneli durumu panel açıkken [WEB_POLL_MS]'de bir arka planda okunur ([FrostNavFeatures]).
  *
  * Sürüşte ([driving] true) en çok [WifiListShaper.MAX_VISIBLE] ağ, kaydırma yok ve şifre girilemez; park halinde liste kayar.
  */
@@ -38,6 +39,9 @@ internal class WifiPanel(
     private val backend: WifiBackend,
     private val driving: () -> Boolean,
     private val onSettings: () -> Unit,
+    /** FrostNav web paneli arka ucu (yoksa satır gösterilmez) ve durum değişince başlıktaki noktayı güncelleyen geri çağrı. */
+    private val features: FrostNavFeatures = FrostNavFeatures.NONE,
+    private val onWebState: (Boolean) -> Unit = {},
 ) {
     private val main = Handler(Looper.getMainLooper())
     private var popup: PopupWindow? = null
@@ -47,9 +51,23 @@ internal class WifiPanel(
     private var status: String? = null
     private var statusAlert = false
     private var maxRows = WifiListShaper.MAX_VISIBLE
+    /** Panelin açıldığı yerden ekran altına kalan yükseklik (dp); ağ satırı sayısı her çizimde buna göre. */
+    private var availDp = 0f
     private var scrollY = 0
 
     private val scanTimeout = Runnable { scanning = false; render() }
+
+    /** Web paneli: son okunan durum, adresin QR'ı (adres değişmedikçe aynı örnek). */
+    private var web: WebPanelState? = null
+    private var webQr: QrMatrix? = null
+    private var webQrUrl: String? = null
+    private val webIo = LauncherIo.serial()
+    private val webPoll = object : Runnable {
+        override fun run() {
+            readWeb()
+            main.postDelayed(this, WEB_POLL_MS)
+        }
+    }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, intent: Intent?) {
             if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) { scanning = false; main.removeCallbacks(scanTimeout) }
@@ -61,9 +79,12 @@ internal class WifiPanel(
 
     fun show(anchor: View) {
         if (isShowing) { dismiss(); return }
+        // Simgeye ikinci dokunuş: önce dışarı dokunuşla kapandı, hemen yeniden açılmasın (aç/kapa gibi davranır).
+        if (android.os.SystemClock.uptimeMillis() - dismissedAt < REOPEN_GUARD_MS) return
         val ctx = activity
         status = null
-        maxRows = rowsThatFit(anchor)
+        availDp = availableDp(anchor)
+        maxRows = rowsThatFit()
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(ctx, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
@@ -71,8 +92,10 @@ internal class WifiPanel(
             setPadding(p, p, p, p)
         }
         root = box
-        val pw = PopupWindow(box, ctx.dp(WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+        // Odak almayan pencere: sistem gezinme çubuğu geri gelmez, ekran kaymaz; dışarı dokunuş paneli kapatır.
+        val pw = PopupWindow(box, ctx.dp(WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT, false).apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isTouchable = true
             isOutsideTouchable = true
             elevation = 0f
             setOnDismissListener { onDismissed() }
@@ -88,6 +111,7 @@ internal class WifiPanel(
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
         })
         scan()
+        if (features.available) main.post(webPoll)
     }
 
     fun dismiss() {
@@ -99,8 +123,12 @@ internal class WifiPanel(
         if (isShowing) { render(); scan() }
     }
 
+    private var dismissedAt = 0L
+
     private fun onDismissed() {
+        dismissedAt = android.os.SystemClock.uptimeMillis()
         main.removeCallbacks(scanTimeout)
+        main.removeCallbacks(webPoll)
         try { activity.unregisterReceiver(receiver) } catch (e: IllegalArgumentException) { }
         popup = null
         root = null
@@ -115,14 +143,22 @@ internal class WifiPanel(
         render()
     }
 
-    /** Alt/üst sabit satırlardan artan yüksekliğe sığan ağ satırı sayısı (3..6): sürüşte kaydırma olmadığından hepsi görünmeli. */
-    private fun rowsThatFit(anchor: View): Int {
+    private fun availableDp(anchor: View): Float {
         val loc = IntArray(2)
         anchor.getLocationOnScreen(loc)
         val screenH = activity.resources.displayMetrics.heightPixels
-        val availDp = (screenH - (loc[1] + anchor.height)) / activity.resources.displayMetrics.density - 24f
-        val fixedDp = PAD_DP * 2 + ROW_DP * 3 + SECTION_DP + 8
-        return ((availDp - fixedDp) / ROW_DP).toInt().coerceIn(3, WifiListShaper.MAX_VISIBLE)
+        return (screenH - (loc[1] + anchor.height)) / activity.resources.displayMetrics.density - 24f
+    }
+
+    /**
+     * Alt/üst sabit satırlardan (ve web paneli satırı ile açıksa QR bloğundan) artan yüksekliğe sığan ağ satırı sayısı
+     * (2..6): sürüşte kaydırma olmadığından hepsi görünmeli.
+     */
+    private fun rowsThatFit(): Int {
+        var fixedDp = PAD_DP * 2 + ROW_DP * 3 + SECTION_DP + 8
+        if (features.available) fixedDp += ROW_DP + DIVIDER_DP
+        if (web?.running == true) fixedDp += WEB_QR_DP + 16 - ROW_DP
+        return ((availDp - fixedDp) / ROW_DP).toInt().coerceIn(2, WifiListShaper.MAX_VISIBLE)
     }
 
     // --- Çizim ---
@@ -133,6 +169,7 @@ internal class WifiPanel(
         // Kaydırma konumu yeniden çizimde korunur.
         (box.findViewWithTag<ScrollView>(TAG_SCROLL))?.let { scrollY = it.scrollY }
         box.removeAllViews()
+        maxRows = rowsThatFit()
         val enabled = backend.isEnabled()
         box.addView(titleRow(enabled), sheetFullWidth())
         status?.let { msg ->
@@ -148,8 +185,69 @@ internal class WifiPanel(
             if (cur != null) box.addView(currentRow(cur.first, cur.second), sheetFullWidth())
             if (backend.canList) renderNetworks(box, cur?.first) else box.addView(messageRow(ctx.getString(R.string.launcher_wifi_list_in_settings)), sheetFullWidth())
         }
+        if (features.available) {
+            box.addView(divider())
+            renderWeb(box)
+        }
         box.addView(divider())
         box.addView(settingsRow(), sheetFullWidth())
+    }
+
+    // --- Web paneli ---
+
+    private fun readWeb() {
+        webIo.runSafely {
+            val s = try { features.readWebPanel() } catch (e: RuntimeException) { WebPanelState(false, null, false) }
+            val qr = if (s.url != webQrUrl) s.url?.let { features.qr(it) } else webQr
+            main.post {
+                onWebState(s.running)
+                if (s == web && qr === webQr) return@post
+                web = s
+                webQrUrl = s.url
+                webQr = qr
+                render()
+            }
+        }
+    }
+
+    /**
+     * "Web paneli" satırı: ad ve sunucunun durumunu gösteren anahtar. Açıkken aynı satır büyür: adın altında adres ve not,
+     * anahtarın solunda QR (tek blok; ağ listesine ve "Wi-Fi ayarları…" satırına ekranda yer kalsın).
+     */
+    private fun renderWeb(box: LinearLayout) {
+        val ctx = activity
+        val s = web
+        val on = s?.running == true
+        box.addView(baseRow().apply {
+            if (on) setPadding(ctx.dp(12), ctx.dp(8), ctx.dp(12), ctx.dp(8))
+            addView(LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(text(ctx, LauncherTheme.BODY_SP, medium = true).apply { setText(R.string.launcher_widget_web_panel) })
+                if (on) {
+                    addView(text(ctx, LauncherTheme.BODY_SP, LauncherTheme.TEXT).apply { text = s?.url?.removePrefix("http://") },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = ctx.dp(6) })
+                    addView(text(ctx, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+                        setText(if (s?.reachable == false) R.string.launcher_fn_web_local else R.string.launcher_fn_web_scan)
+                    })
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val qr = webQr
+            if (on && qr != null) addView(QrView(ctx).apply {
+                setMatrix(qr)
+                contentDescription = ctx.getString(R.string.launcher_fn_qr_desc) + ", " + (s?.url ?: "")
+            }, LinearLayout.LayoutParams(ctx.dp(WEB_QR_DP), ctx.dp(WEB_QR_DP)).apply { marginEnd = ctx.dp(8) })
+            addView(switchView(on, ctx.getString(R.string.launcher_widget_web_panel)) { toggleWeb() })
+        }, sheetFullWidth())
+    }
+
+    /**
+     * Sunucu launcher'dan başlatılamaz/durdurulamaz (örneği FrostNav ekranınındır, bkz. [AppFrostNavFeatures]): web paneli
+     * widget'ıyla aynı yol, FrostNav'ın Aktar sekmesi açılır; kısa bir ipucu bunu söyler.
+     */
+    private fun toggleWeb() {
+        android.widget.Toast.makeText(activity, R.string.launcher_wifi_web_hint, android.widget.Toast.LENGTH_LONG).show()
+        dismiss()
+        features.openTab(activity, FrostNavTab.WEB)
     }
 
     private fun renderNetworks(box: LinearLayout, connectedSsid: String?) {
@@ -208,11 +306,11 @@ internal class WifiPanel(
     private fun titleRow(enabled: Boolean): View = baseRow().apply {
         addView(text(activity, LauncherTheme.SECTION_SP, bold = true).apply { setText(R.string.launcher_wifi_title) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(switchView(enabled))
+        addView(switchView(enabled, activity.getString(R.string.launcher_wifi_title)) { toggle(!enabled) })
     }
 
     /** Açma/kapama anahtarı: 88x72 dokunma alanı, ortada 72x40 hap. */
-    private fun switchView(on: Boolean): View {
+    private fun switchView(on: Boolean, description: String, onClick: () -> Unit): View {
         val ctx = activity
         val track = FrameLayout(ctx).apply {
             background = rounded(ctx, if (on) DriveAccent.buttonFill(LauncherTheme.ACCENT) else LauncherTheme.TRACK, 999f)
@@ -223,10 +321,11 @@ internal class WifiPanel(
         })
         return FrameLayout(ctx).apply {
             minimumWidth = ctx.dp(88)
-            contentDescription = ctx.getString(R.string.launcher_wifi_title)
+            contentDescription = description
+            isSelected = on
             alpha = if (toggling) 0.5f else 1f
             addView(track, FrameLayout.LayoutParams(ctx.dp(72), ctx.dp(40), Gravity.CENTER))
-            clickable(this) { toggle(!on) }
+            clickable(this) { onClick() }
             layoutParams = LinearLayout.LayoutParams(ctx.dp(88), ctx.dp(ROW_DP))
         }
     }
@@ -427,5 +526,10 @@ internal class WifiPanel(
         private const val FADE_MS = 120L
         private const val SCAN_TIMEOUT_MS = 6_000L
         private const val TAG_SCROLL = "wifi_scroll"
+        private const val WEB_POLL_MS = 2_000L
+        private const val REOPEN_GUARD_MS = 350L
+        /** QR telefonla rahat okunur, ağ listesine yer bırakır. */
+        private const val WEB_QR_DP = 124
+        private const val DIVIDER_DP = 9
     }
 }

@@ -79,8 +79,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var mockBar: View? = null
 
     private var layout: List<PlacedWidget> = emptyList()
-    /** Bu modda gösterilmeyen ama kayıtlı widget'lar (Sürüş'te parkOnly); kaydederken düzene geri eklenir. */
-    private var hiddenWidgets: List<PlacedWidget> = emptyList()
     private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
     private var resumed = false
@@ -605,10 +603,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      */
     private fun loadForMode() {
         sahne?.let { it.setMode(activeMode); return }
-        val all = store.load()
-        val shown = visibleForMode(all, activeMode)
-        hiddenWidgets = all.filter { it !in shown }
-        applyLayout(shown, persist = false)
+        applyLayout(store.load(), persist = false)
     }
 
     private fun applyLayout(newLayout: List<PlacedWidget>, persist: Boolean = true) {
@@ -629,7 +624,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         layout = newLayout
         grid.setLayout(newLayout, gridWidgets.mapValues { it.value.view })
-        if (persist) store.save(LayoutStore.mergeHidden(newLayout, hiddenWidgets))
+        if (persist) store.save(newLayout)
     }
 
     // --- Düzenleme modu ---
@@ -737,9 +732,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private fun addTile(type: WidgetType, dismiss: () -> Unit): View {
-        val parkOnlyBlocked = !isAllowedIn(type, activeMode)
-        val onScreen = !parkOnlyBlocked && !isAddable(type, layout)
-        val spot = if (onScreen || parkOnlyBlocked) null else spotFor(type)
+        val onScreen = !isAddable(type, layout)
+        val spot = if (onScreen) null else spotFor(type)
         val fits = spot != null
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -758,7 +752,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
                 text = when {
                     fits -> type.sizes.joinToString("  ·  ")
-                    parkOnlyBlocked -> getString(R.string.launcher_edit_park_only)
                     onScreen -> getString(R.string.launcher_edit_on_screen)
                     else -> getString(R.string.launcher_edit_no_room)
                 }
@@ -800,7 +793,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                     d.dismiss()
                     sahne?.let { it.resetToDefaults(); return@sheetButton }
                     store.reset()
-                    hiddenWidgets = emptyList()
                     applyLayout(store.defaults())
                 }, weightLp(1f))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.TOUCH_MIN_DP)))
@@ -827,6 +819,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             this, LauncherEdition.wifiBackend(this),
             driving = { activeMode == LayoutMode.DRIVE || LauncherSafeArea.isMoving(metrics.currentSnapshot()) },
             onSettings = { LauncherEdition.openWifi(this) },
+            features = LauncherEdition.frostNav(this),
+            onWebState = { header.setWebRunning(it) },
         ).also { wifiPanel = it }
         panel.show(anchor)
     }

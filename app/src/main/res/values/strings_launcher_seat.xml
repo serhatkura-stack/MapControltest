@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="launcher_seat_vent_later">Available after car test</string>
-    <string name="launcher_widget_seat_heat_driver">Heating · Driver</string>
-    <string name="launcher_widget_seat_heat_passenger">Heating · Passenger</string>
-    <string name="launcher_widget_seat_vent_driver">Cooling · Driver</string>
-    <string name="launcher_widget_seat_vent_passenger">Cooling · Passenger</string>
+    <string name="launcher_widget_seat_driver">Seat · driver</string>
+    <string name="launcher_widget_seat_passenger">Seat · passenger</string>
+    <string name="launcher_seat_heat_level">Heating %1$d</string>
+    <string name="launcher_seat_cool_level">Cooling %1$d</string>
+    <string name="launcher_seat_row_heat">Heating</string>
+    <string name="launcher_seat_row_cool">Cooling</string>
+    <string name="launcher_seat_level_desc" formatted="true">%1$s, level %2$d</string>
     <string name="launcher_read_only_seat">Test build: change the seat from the car\'s climate screen</string>
     <string name="launcher_read_only_lock">Test build: lock the car with the key or the car\'s own screen</string>
-    <string name="launcher_seat_title_heat_driver">Heating · Driver</string>
-    <string name="launcher_seat_title_heat_passenger">Heating · Passenger</string>
-    <string name="launcher_seat_title_vent_driver">Cooling · Driver</string>
-    <string name="launcher_seat_title_vent_passenger">Cooling · Passenger</string>
 </resources>

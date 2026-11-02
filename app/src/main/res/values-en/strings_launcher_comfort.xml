@@ -1,16 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="launcher_widget_sunshade">Sunshade</string>
-    <string name="launcher_widget_defrost">Defrost</string>
-    <string name="launcher_comfort_front">Front</string>
-    <string name="launcher_comfort_rear">Rear</string>
     <string name="launcher_comfort_on">On</string>
     <string name="launcher_comfort_off">Off</string>
-    <string name="launcher_sunshade_closed">Closed</string>
-    <string name="launcher_sunshade_opening">Opening</string>
-    <string name="launcher_sunshade_closing">Closing</string>
-    <string name="launcher_sunshade_open">Open</string>
-    <string name="launcher_sunshade_partial">Half open / stopped</string>
     <string name="launcher_read_only_comfort">Test build: change it from the car</string>
     <string name="launcher_comfort_pending">Will open after the car test</string>
     <string name="launcher_widget_trunk">Trunk</string>
@@ -21,7 +12,6 @@
     <string name="launcher_trunk_percent">%1$d%% open</string>
     <string name="launcher_trunk_unverified">Not verified yet</string>
     <string name="launcher_trunk_stop_unknown">Stop is not verified yet</string>
-    <string name="launcher_trunk_not_parked">Trunk is operated only while parked</string>
     <string name="launcher_trunk_close_title">Close the trunk?</string>
     <string name="launcher_trunk_close_message">Make sure nobody is behind the car.</string>
     <string name="launcher_trunk_close_confirm">Close</string>

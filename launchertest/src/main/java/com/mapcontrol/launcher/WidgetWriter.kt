@@ -3,17 +3,15 @@ package com.mapcontrol.launcher
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
-import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.comfort.ComfortPlan
-import com.mapcontrol.comfort.ParkGate
 import com.mapcontrol.vehicle.VehicleQuickControls
 import java.util.concurrent.Executors
 
 /**
  * Test sürümünde launcher widget'larının araca yazdığı TEK yer (yalnızca [LauncherEdition]'dan, anahtar açıkken).
- * Her deneme: beyaz liste + park kapısı ([WidgetWritePolicy.evaluate], gönderimden hemen önce, çağıranın arka plan thread'inde) →
+ * Her deneme: beyaz liste ([WidgetWritePolicy.evaluate]; sürüş kilidi yok, hareket halinde de gider) →
  * `Log.i("WidgetWrite", ...)` tek satır → gönderilirse 3 sn'lik geri okuma (ilgili sinyallerin değişimleri günlüğe).
  */
 internal object WidgetWriter {
@@ -23,7 +21,7 @@ internal object WidgetWriter {
 
     private val readbackPool = Executors.newCachedThreadPool { r -> Thread(r, "widget-readback").apply { isDaemon = true } }
 
-    /** CarInfoProxy.sendItemValue ile gönderilen yazmalar (koltuk, klima, perde, buğu, bagaj). */
+    /** CarInfoProxy.sendItemValue ile gönderilen yazmalar (koltuk, klima, bagaj). */
     fun send(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
         attempt(module, id, value, isConnected = { proxy.isServiceConnnected }) {
             proxy.sendItemValue(module, id, value)
@@ -48,7 +46,7 @@ internal object WidgetWriter {
     }
 
     private fun attempt(module: Int, id: Int, value: Int, isConnected: () -> Boolean, send: () -> Unit) {
-        val verdict = WidgetWritePolicy.evaluate(module, id, value, ::parkDecision)
+        val verdict = WidgetWritePolicy.evaluate(module, id, value)
         if (verdict !is WidgetWritePolicy.Verdict.Allowed) {
             val widget = WidgetWritePolicy.find(module, id, value)?.widget
             Log.w(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(widget, module, id, value, WidgetWritePolicy.resultText(verdict)))
@@ -64,14 +62,6 @@ internal object WidgetWriter {
         Log.i(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(entry.widget, module, id, value, "sent") +
             " before=" + before.joinToString(" ") { "${it.first.name}=${it.second}" })
         readbackPool.execute { watch(entry, before) }
-    }
-
-    /** Park kapısı: gösterge hızı 119 == 0 ve eski hız 0 (ComfortWriter.parkedNow ile aynı kural). */
-    private fun parkDecision(): ParkGate.Decision {
-        val ro = VDEventCarInfo.MODULE_READONLY_INFO
-        return ParkGate.evaluate(
-            CarSignals.readInt(ro, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), CarSignals.readInt(ro, ReadOnlyID.ID_CAR_SPEED),
-        )
     }
 
     private fun describe(s: ComfortPlan.Signal): String =

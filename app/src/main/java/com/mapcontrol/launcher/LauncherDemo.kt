@@ -162,8 +162,22 @@ internal object LauncherDemo {
     const val LOCKED = true
     const val TIRE_WARNING = false
 
-    val DRIVER_SEAT_LEVEL get() = seatOverride ?: 2
-    val PASSENGER_SEAT_LEVEL get() = seatOverride ?: 0
+    /**
+     * Demo koltuk seviyeleri (0..3): sürücü ısıtma 2, yolcu soğutma 1. Koltuk seçicisinden yazılan seviye burada tutulur ki
+     * demo okuma onu geri getirsin (araçtaki gibi). `launcher_demo_seat` ısıtmayı ikisine birden zorlar, soğutmayı kapatır.
+     */
+    private val demoSeat = intArrayOf(2, 0, 0, 1) // ısıtma sürücü, ısıtma yolcu, soğutma sürücü, soğutma yolcu
+
+    fun seatLevel(vent: Boolean, driver: Boolean): Int =
+        seatOverride?.let { if (vent) 0 else it } ?: demoSeat[(if (vent) 2 else 0) + (if (driver) 0 else 1)]
+
+    fun setSeatLevel(vent: Boolean, driver: Boolean, level: Int) {
+        seatOverride = null
+        demoSeat[(if (vent) 2 else 0) + (if (driver) 0 else 1)] = level.coerceIn(0, 3)
+    }
+
+    val DRIVER_SEAT_LEVEL get() = seatLevel(vent = false, driver = true)
+    val PASSENGER_SEAT_LEVEL get() = seatLevel(vent = false, driver = false)
     /** Klima önizlemesi: `--es launcher_demo_climate "17.5,27.5,7"` sürücü °C, yolcu °C, fan kademesi (boş alan varsayılan). */
     const val EXTRA_CLIMATE = "launcher_demo_climate"
 
@@ -173,12 +187,18 @@ internal object LauncherDemo {
     val DRIVER_TEMP: Double get() = climate.getOrNull(0) ?: 22.0
     val PASSENGER_TEMP: Double get() = climate.getOrNull(1) ?: 24.5
     val FAN_LEVEL: Int get() = climate.getOrNull(2)?.toInt() ?: 3
-    val DRIVER_VENT_LEVEL get() = seatOverride ?: 1
-    val PASSENGER_VENT_LEVEL get() = seatOverride ?: 2
+    val DRIVER_VENT_LEVEL get() = seatLevel(vent = true, driver = true)
+    val PASSENGER_VENT_LEVEL get() = seatLevel(vent = true, driver = false)
 
-    /** Konfor kutucukları: perde açık, arka cam ısıtma açık, ön cam kapalı. */
+    /** Anlık tüketim panelinin demo geçmişi (L/100 km, eskiden yeniye): şehir içi dalgalanma ve yolda düşüş. */
+    val CONSUMPTION_HISTORY: List<Float> = listOf(
+        9.8f, 11.2f, 8.4f, 7.6f, 12.4f, 9.1f, 7.2f, 6.8f, 6.4f, 7.9f, 6.6f, 6.1f,
+        5.9f, 6.3f, 7.4f, 6.9f, 6.2f, 5.8f, 6.5f, 7.1f, 6.8f, 6.4f, 6.9f, 6.8f,
+    )
+
+    /** Konfor kutucukları: bagaj kapalı, klima tuşları, ısıtmalar kapalı, arka hoparlör demo anahtarına göre. */
     fun comfort(): ComfortReading = ComfortReading(
-        connected = true, sunshade = SunshadeState.OPEN, frontDefrost = false, rearDefrost = true,
+        connected = true,
         trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
         keys = ClimateKeysReading(ac = true, auto = true, recirc = false, power = true),
         heat = HeatReading(steering = false, windshield = false),

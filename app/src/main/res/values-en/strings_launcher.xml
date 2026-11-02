@@ -197,4 +197,11 @@
     <string name="launcher_wifi_connecting">Connecting to %1$s…</string>
     <string name="launcher_wifi_connect_failed">Could not connect</string>
     <string name="launcher_wifi_list_in_settings">Open Wi-Fi settings to see networks</string>
+    <string name="launcher_break_left_label">Until break</string>
+    <string name="launcher_consumption_recent">Recent</string>
+    <string name="launcher_screen_off_title">Screen</string>
+    <string name="launcher_screen_off_action">Dim</string>
+    <string name="launcher_air_row_in">Cabin PM2.5</string>
+    <string name="launcher_air_row_out">Outside PM2.5</string>
+    <string name="launcher_air_ugm" formatted="true">%1$d µg/m³</string>
 </resources>

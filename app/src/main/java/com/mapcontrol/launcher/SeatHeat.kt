@@ -29,10 +29,11 @@ internal class SeatHeatModel(
     private val context: Context,
     /** true: koltuk soğutma (havalandırma) sinyalleri; false: ısıtma (davranış değişmez). */
     private val vent: Boolean = false,
+    /** Sıralı yazma kuyruğu; birleşik koltuk ısıtma ve soğutma için aynı kuyruğu verir ki "önce kapat, sonra aç" sırası korunsun. */
+    private val io: Executor = LauncherIo.serial(),
     private val onChange: (SeatHeatState) -> Unit,
 ) {
 
-    private val io: Executor = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
     private var startup: LauncherStartup.Deferred? = null
 
@@ -60,36 +61,59 @@ internal class SeatHeatModel(
 
     /** Dokunuş: sıradaki seviyeyi yollar. Test sürümünde yalnızca bilgi mesajı gösterir. */
     fun cycle(driver: Boolean) {
-        val current = if (driver) state.driver else state.passenger
-        val level = nextLevel(current)
-        val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_HEAT else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
+        set(driver, nextLevel(if (driver) state.driver else state.passenger))
+    }
+
+    /** Bu model şu an araca yazabilir mi (test sürümü değil; soğutmada yazma doğrulanmış ya da test anahtarı açık). */
+    val writable: Boolean
+        get() = !LauncherEdition.READ_ONLY &&
+            (!vent || WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST))
+
+    /**
+     * Seviyeyi (0..3) doğrudan yazar: ekran hemen güncellenir, komut sıralı kuyrukta gider, kısa süre sonra gerçek durum okunur.
+     * Yazılamıyorsa (test sürümü, doğrulanmamış soğutma) sakin bir bilgi mesajı gösterir ve false döner. Sürüş kilidi yoktur;
+     * araç komutu reddederse sonraki okuma eski seviyeyi geri getirir.
+     */
+    fun set(driver: Boolean, level: Int): Boolean {
+        val id = if (driver) {
+            if (vent) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_DRIVER_SEAT_HEAT
+        } else {
+            if (vent) CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
+        }
         // Test sürümünde dokunuş hiçbir şey yazmaz; sürücü boşuna basmasın diye sakin bir açıklama gösterilir.
         if (LauncherEdition.READ_ONLY) {
             Toast.makeText(context, R.string.launcher_read_only_seat, Toast.LENGTH_LONG).show()
-            return
+            return false
         }
         // Soğutma yazması araçta doğrulanana kadar kapalı: yalnızca sakin bir bilgi mesajı.
-        if (vent && !WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST)) {
+        if (!writable) {
             Toast.makeText(context, R.string.launcher_seat_vent_later, Toast.LENGTH_SHORT).show()
-            return
+            return false
         }
-        val proxy = CarInfoProxy.getInstance()
-        if (!proxy.isServiceConnnected) {
-            android.util.Log.w("WidgetWrite", "widget=Seat id=$id value=? result=refused-no-service")
-            return
-        }
-        state = if (driver) state.copy(driver = level) else state.copy(passenger = level)
-        onChange(state)
-        io.runSafely {
-            try {
-                if (vent) LauncherEdition.sendSeatVentLevel(proxy, driver, level)
-                else LauncherEdition.sendItemValue(proxy, SETTING, id, encode(level))
-            } catch (e: RuntimeException) {
-                // Okuma turu gerçek durumu geri getirir.
+        val lv = level.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
+        if (LauncherDemo.enabled) {
+            // Demo: araç yok; seviye demo durumuna yazılır ki okuma onu geri getirsin.
+            LauncherDemo.setSeatLevel(vent, driver, lv)
+        } else {
+            val proxy = CarInfoProxy.getInstance()
+            if (!proxy.isServiceConnnected) {
+                android.util.Log.w("WidgetWrite", "widget=Seat id=$id value=? result=refused-no-service")
+                return false
+            }
+            io.runSafely {
+                try {
+                    if (vent) LauncherEdition.sendSeatVentLevel(proxy, driver, lv)
+                    else LauncherEdition.sendItemValue(proxy, SETTING, id, encode(lv))
+                } catch (e: RuntimeException) {
+                    // Okuma turu gerçek durumu geri getirir.
+                }
             }
         }
+        state = if (driver) state.copy(driver = lv) else state.copy(passenger = lv)
+        onChange(state)
         main.removeCallbacks(poll)
         main.postDelayed(poll, CONFIRM_DELAY_MS)
+        return true
     }
 
     private fun refreshNow() {

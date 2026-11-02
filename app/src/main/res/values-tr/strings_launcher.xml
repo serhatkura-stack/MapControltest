@@ -103,7 +103,6 @@
     <string name="launcher_app_frostnav" translatable="false">FrostNav</string>
     <string name="launcher_app_phone">Telefon</string>
     <string name="launcher_edit_on_screen">Ekranda</string>
-    <string name="launcher_edit_park_only">Sadece Park</string>
     <string name="launcher_trip_since_reset">Sıfırlamadan beri</string>
     <string name="launcher_trip_avg_cons_label">Ort. tüketim</string>
     <string name="launcher_trip_avg_speed_label">Ort. hız</string>
@@ -198,4 +197,11 @@
     <string name="launcher_wifi_connecting">%1$s ağına bağlanılıyor…</string>
     <string name="launcher_wifi_connect_failed">Bağlanılamadı</string>
     <string name="launcher_wifi_list_in_settings">Ağ listesi için Wi-Fi ayarlarını açın</string>
+    <string name="launcher_break_left_label">Molaya kalan</string>
+    <string name="launcher_consumption_recent">Son ölçümler</string>
+    <string name="launcher_screen_off_title">Ekran</string>
+    <string name="launcher_screen_off_action">Karart</string>
+    <string name="launcher_air_row_in">Kabin içi PM2.5</string>
+    <string name="launcher_air_row_out">Dışarı PM2.5</string>
+    <string name="launcher_air_ugm" formatted="true">%1$d µg/m³</string>
 </resources>

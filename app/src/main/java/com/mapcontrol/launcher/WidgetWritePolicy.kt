@@ -6,11 +6,11 @@ import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
 import com.mapcontrol.comfort.ComfortPlan
-import com.mapcontrol.comfort.ParkGate
 
 /**
- * Launcher widget'larından araca yazma testinin SAF kuralları (JVM'de sınanır): beyaz liste, park kapısı kararı,
- * kapı birleşimi ve günlük satırı. Yalnızca test sürümü (`launchertest`, LauncherEdition) kullanır; gerçek `app` sürümünde
+ * Launcher widget'larından araca yazma testinin SAF kuralları (JVM'de sınanır): beyaz liste, kapı birleşimi ve günlük
+ * satırı. Sürüş kilidi yoktur: her widget sürerken de park halinde de kullanılır; aracın kendisi bir komutu reddederse geri
+ * okuma bunu gösterir (widget eski duruma döner). Yalnızca test sürümü (`launchertest`, LauncherEdition) kullanır; gerçek `app` sürümünde
  * hiçbir çağıran yoktur. Liste, widget'ların GÖNDEREBİLECEĞİ (modül, kimlik, değer) çiftlerinden türetildi (bkz. denetim).
  */
 internal object WidgetWritePolicy {
@@ -19,7 +19,6 @@ internal object WidgetWritePolicy {
 
     private const val CS = VDEventCarInfo.MODULE_CAR_SETTING
     private const val HV = VDEventCarInfo.MODULE_HVAC
-    private const val VR = ComfortPlan.MODULE_VR
     private const val RO = VDEventCarInfo.MODULE_READONLY_INFO
 
     /** Beyaz liste girdisi: widget adı, modül, kimlik, izinli değerler ve yazmadan sonra 3 sn izlenecek sinyaller. */
@@ -35,7 +34,6 @@ internal object WidgetWritePolicy {
 
     private fun sig(name: String, module: Int, id: Int) = ComfortPlan.Signal(name, module, id)
 
-    private val SHADE_READ = listOf(sig("cs10_sunshade", CS, CarSettingID.ID_CAR_SUNSHADE))
     private val TRUNK_READ = listOf(
         sig("ro98_plg_position", RO, ReadOnlyID.ID_PLG_POSITION),
         sig("ro19_trunk_state", RO, ReadOnlyID.ID_TRUNK_STATE),
@@ -62,13 +60,6 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (0..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
-        // Perde: yalnızca doğrulanmış VR 124 (1 aç, 2 kapat). CarSetting 10 yazmaları yok sayılıyor, listede yok.
-        Entry("Sunshade", VR, ComfortPlan.ID_VR_SUN_SHADE, setOf(1, 2), SHADE_READ),
-        // Buğu: 1 aç (doğrulandı); kapatma adayı 2 (0 kapatmıyor, listede yok).
-        Entry("DefrostFront", HV, HvacID.ID_AC_MAX_FRONT_DEFOREST, setOf(1, 2),
-            listOf(sig("hvac24_max_front_deforest", HV, HvacID.ID_AC_MAX_FRONT_DEFOREST))),
-        Entry("DefrostRear", HV, HvacID.ID_AC_REAR_DEFROST, setOf(1, 2),
-            listOf(sig("hvac80_rear_defrost", HV, HvacID.ID_AC_REAR_DEFROST))),
         // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
         Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),
         // Klima tuşları (HVAC 1 A/C, 4 Oto, 8 devridaim): 1 aç / 2 kapat; devridaimde 1 iç hava / 2 dış hava (OEM HvacModel, SVVrControl a/b.java).
@@ -90,33 +81,17 @@ internal object WidgetWritePolicy {
     private fun seat(widget: String, id: Int) =
         Entry(widget, CS, id, SEAT_VALUES, listOf(sig("cs${id}_${widget.lowercase()}", CS, id)))
 
-    /**
-     * Park kapısından MUAF widget'lar: "Uyku modu" (arka hoparlör) yalnızca ses fader'ıdır, her hızda güvenlidir ve sürücü onu
-     * sürerken dokunur (arkada uyuyan çocuk). Onay penceresi de yoktur. Gerçek sürümde yazma yine
-     * [ComfortWriter.REAR_SPEAKER_WRITE_VERIFIED] ile kapalıdır (fader yönü araç testinde doğrulanana dek "Araç testinden sonra
-     * açılacak" mesajı); doğrulanınca true yapılır ve tek dokunuşla, sürüşte de çalışır.
-     */
-    val ALLOWED_WHILE_MOVING: Set<String> = setOf("RearSpeaker")
-
     /** Girdi beyaz listede mi; değilse null. */
     fun find(module: Int, id: Int, value: Int): Entry? = ENTRIES.firstOrNull { it.matches(module, id, value) }
 
     sealed class Verdict {
         class Allowed(val entry: Entry) : Verdict()
         object NotWhitelisted : Verdict()
-        class NotParked(val reason: String) : Verdict()
     }
 
-    /**
-     * Karar: önce beyaz liste, sonra park kapısı. [park] TEMBELDİR: yalnızca liste geçilirse (ve gönderimden hemen önce) çağrılır.
-     */
-    fun evaluate(module: Int, id: Int, value: Int, park: () -> ParkGate.Decision): Verdict {
-        val entry = find(module, id, value) ?: return Verdict.NotWhitelisted
-        // Yalnızca ses dengesi olan widget'lar sürüş sırasında da çalışır: park kapısına hiç sorulmaz.
-        if (entry.widget in ALLOWED_WHILE_MOVING) return Verdict.Allowed(entry)
-        val decision = park()
-        return if (decision.allowed) Verdict.Allowed(entry) else Verdict.NotParked(decision.reason)
-    }
+    /** Karar yalnızca beyaz listedir; hız ya da vites sorulmaz (sürüşte de park halinde de aynı). */
+    fun evaluate(module: Int, id: Int, value: Int): Verdict =
+        find(module, id, value)?.let { Verdict.Allowed(it) } ?: Verdict.NotWhitelisted
 
     /** Özellik kapısı: doğrulanmış ya da test anahtarı açık. Gerçek sürümde test anahtarı hep false'tur. */
     fun gate(verified: Boolean, writeTest: Boolean): Boolean = verified || writeTest
@@ -125,7 +100,6 @@ internal object WidgetWritePolicy {
     fun resultText(v: Verdict): String = when (v) {
         is Verdict.Allowed -> "sent"
         is Verdict.NotWhitelisted -> "refused-not-whitelisted"
-        is Verdict.NotParked -> "refused-not-parked(${v.reason})"
     }
 
     /** Tek satır: `widget=… module=… id=… value=… result=…`. Beyaz liste dışıysa widget adı "?" olur. */

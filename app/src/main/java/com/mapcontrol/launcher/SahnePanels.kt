@@ -135,10 +135,10 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         setImageResource(R.drawable.ic_sahne_route)
         imageTintList = ColorStateList.valueOf(Sahne.INK_2)
     }
-    private val head = sahneText(context, 20f, Sahne.INK_2, 500).apply { setText(R.string.launcher_widget_trip) }
-    private val big = sahneText(context, 54f, Sahne.INK, 300, -0.03f)
-    private val bigUnit = sahneText(context, 24f, Sahne.INK_2, 400)
-    private val sub = sahneText(context, 17f, Sahne.INK_3, 400)
+    private val head = sahneText(context, SahneType.HEAD, Sahne.INK_2, 500).apply { setText(R.string.launcher_widget_trip) }
+    private val big = sahneText(context, TRIP_HERO_SP, Sahne.INK, 300, -0.03f)
+    private val bigUnit = sahneText(context, SahneType.HERO_UNIT.toFloat(), Sahne.INK_2, 400)
+    private val sub = sahneText(context, SahneType.SUB, Sahne.INK_3, 400)
     private val stat1 = Stat()
     private val stat2 = Stat()
     private val statsRow = LinearLayout(context).apply {
@@ -226,8 +226,8 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
                 totals.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(sahneText(context, 17f, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, WRAP, 1f))
-                    addView(sahneText(context, 20f, Sahne.INK, 500).apply { text = value })
+                    addView(sahneText(context, SahneType.ROW_LABEL, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    addView(sahneText(context, SahneType.ROW_VALUE, Sahne.INK, 500).apply { text = value })
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(28)))
             }
         }
@@ -282,12 +282,30 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     private companion object {
         const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
+        /** Yolculuk panelinde dört bölüm var: büyük değer ortak ölçeğin bir kademe altında ki "Toplam" sığsın. */
+        const val TRIP_HERO_SP = 54f
     }
 }
 
 /**
+ * Sahne panellerinin ortak tip ölçeği (sp): başlık, büyük değer (sayı / sözcük), alt satır, satır etiketi ve satır değeri.
+ * Yolculuk, değer ve koltuk panelleri aynı ölçeği kullanır.
+ */
+internal object SahneType {
+    const val HEAD = 20f
+    const val HERO = 58f
+    const val HERO_UNIT = 24
+    const val WORD = 40f
+    const val SUB = 17f
+    const val ROW_LABEL = 17f
+    const val ROW_VALUE = 20f
+    const val ROW_H_DP = 30
+}
+
+/**
  * Bilgi kutucuğunun panel biçimi: ekrana konmayan kutucuğun [StripSource] özeti, yolculuk paneliyle aynı tipografiyle
- * (başlık, büyük ince değer, alt satır, varsa seviye dilimleri). Dokunuş kutucuğunkiyle aynı ([StripSource.stripTap]).
+ * (başlık, büyük ince değer, alt satır, varsa küçük çubuk geçmişi ya da ilerleme çubuğu, ek satırlar). Dokunuş kutucuğunkiyle
+ * aynı ([StripSource.stripTap]).
  */
 internal class SahneValuePanel(
     private val context: Context,
@@ -297,14 +315,22 @@ internal class SahneValuePanel(
     private val source = tile as? StripSource
 
     private val headIcon = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-    private val head = sahneText(context, 20f, Sahne.INK_2, 500)
-    private val value = sahneText(context, VALUE_SP, Sahne.INK, 300, -0.03f).apply { maxLines = 2 }
-    private val detail = sahneText(context, 17f, Sahne.INK_3, 400).apply { maxLines = 2 }
+    private val head = sahneText(context, SahneType.HEAD, Sahne.INK_2, 500)
+    private val value = sahneText(context, SahneType.HERO, Sahne.INK, 300, -0.03f).apply { maxLines = 1 }
+    private val detail = sahneText(context, SahneType.SUB, Sahne.INK_3, 400).apply { maxLines = 2 }
+    private val chartLabel = sahneText(context, 15f, Sahne.INK_3, 400).apply { setText(R.string.launcher_consumption_recent) }
+    private val chart = HistoryBars(context)
+    private val chartBox = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(chartLabel)
+        addView(chart, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(CHART_DP)).apply { topMargin = context.dp(6) })
+    }
+    private val progress = ProgressLine(context)
     private val rowsBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val rowsDivider = View(context).apply { setBackgroundColor(Sahne.HAIR_2) }
     private val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(context.dp(30), context.dp(24), context.dp(30), context.dp(24))
+        setPadding(context.dp(30), context.dp(24), context.dp(30), context.dp(22))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -313,7 +339,9 @@ internal class SahneValuePanel(
         })
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(value, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(8) })
+        addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(6) })
+        addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(PROGRESS_DP)).apply { topMargin = context.dp(18) })
+        addView(chartBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(16) })
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(rowsDivider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)))
         addView(rowsBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(8) })
@@ -333,25 +361,37 @@ internal class SahneValuePanel(
         head.text = s.title
         // Sayısal değer büyük ve ince (birimi küçük); sözcük değer ("Araç duruyor") bir kademe küçük, tek parça.
         val numeric = s.value.any { it.isDigit() }
-        value.text = if (numeric) withUnit(context, s.value, 24) else s.value
+        value.text = if (numeric) withUnit(context, s.value, SahneType.HERO_UNIT) else s.value
         value.setTextColor(stripToneColor(s.tone, Sahne.INK).let { if (s.tone == StripTone.ALERT) Sahne.AMBER else it })
-        detail.text = s.detail ?: ""
-        detail.visibility = if (s.detail.isNullOrEmpty()) View.GONE else View.VISIBLE
-        // Ek satırlar (sağlık: akü, motor, bakım): yolculuk panelindeki "Toplam" satırlarıyla aynı dil; en çok dört.
+        val sub = s.panelDetail ?: s.detail
+        detail.text = sub ?: ""
+        detail.visibility = if (sub.isNullOrEmpty()) View.GONE else View.VISIBLE
+        val hasChart = s.history.size >= 2
+        chartBox.visibility = if (hasChart) View.VISIBLE else View.GONE
+        if (hasChart) chart.setValues(s.history)
+        val p = s.progress
+        progress.visibility = if (p == null) View.GONE else View.VISIBLE
+        if (p != null) progress.set(p, if (p >= 1f) Sahne.AMBER else Sahne.ICE)
+        // Ek satırlar (sağlık: akü, motor, bakım; tüketim: ortalama; mola: kalan süre): yolculuk panelindeki "Toplam" satırlarıyla aynı dil.
         rowsBox.removeAllViews()
         s.rows.take(MAX_ROWS).forEachIndexed { i, (label, v) ->
             rowsBox.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(sahneText(context, 17f, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                addView(sahneText(context, 20f, if (i in s.alertRows) Sahne.AMBER else Sahne.INK, 500).apply { text = v })
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(30)))
+                addView(sahneText(context, SahneType.ROW_LABEL, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(sahneText(context, SahneType.ROW_VALUE, if (i in s.alertRows) Sahne.AMBER else Sahne.INK, 500).apply { text = v })
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(SahneType.ROW_H_DP)))
         }
         val hasRows = s.rows.isNotEmpty()
         rowsBox.visibility = if (hasRows) View.VISIBLE else View.GONE
         rowsDivider.visibility = rowsBox.visibility
-        val size = if (numeric) VALUE_SP else WORD_SP
-        value.textSize = if (hasRows) minOf(size, ROWS_VALUE_SP) else size
+        val size = if (numeric) SahneType.HERO else SahneType.WORD
+        // Çok satırlı (sağlık) ya da grafikli panelde değer bir kademe küçülür ki her şey sığsın.
+        value.textSize = when {
+            s.rows.size > 2 -> minOf(size, ROWS_VALUE_SP)
+            hasChart -> minOf(size, CHART_VALUE_SP)
+            else -> size
+        }
         root.contentDescription = listOfNotNull(s.title, s.value, s.detail).joinToString(", ")
         onStripChanged?.invoke()
     }
@@ -367,24 +407,100 @@ internal class SahneValuePanel(
     override fun stripTap(part: Int) { source?.stripTap(part) }
 
     private companion object {
-        /** Sürüşte de tek bakışta okunur: sayı 72sp, sözcük 40sp. */
-        const val VALUE_SP = 72f
-        const val WORD_SP = 40f
-        /** Ek satır varken değer küçülür ki satırlar sığsın. */
+        /** Ek satır çokken (sağlık) ve grafik varken değer küçülür ki her şey sığsın. */
         const val ROWS_VALUE_SP = 36f
+        const val CHART_VALUE_SP = 48f
         const val MAX_ROWS = 4
+        const val CHART_DP = 84
+        const val PROGRESS_DP = 8
     }
 }
 
-/** "7,9 L/100 km" → sayı olduğu gibi, birim 16sp ve ikincil renkte (ilk boşluktan sonrası). */
-internal fun withUnit(context: Context, value: String, unitSp: Int = 16): CharSequence {
-    val i = value.indexOf(' ')
-    if (i < 0) return value
-    return SpannableStringBuilder(value).apply {
-        setSpan(AbsoluteSizeSpan(unitSp, true), i, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        setSpan(ForegroundColorSpan(Sahne.INK_2), i, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        setSpan(SahneTypefaceSpan(SahneFonts.get(context, Sahne.weight(400))), i, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+/**
+ * Küçük çubuk geçmişi (eskiden yeniye, soldan sağa): çubuklar en büyük değere göre ölçeklenir, en sondaki (şimdiki) vurgulu.
+ * Eksen ve sayı yok; tek bakışta "son dakikalarda nasıl gitti" der. Çizimde ayrılma yok.
+ */
+internal class HistoryBars(context: Context) : View(context) {
+    private var values: List<Float> = emptyList()
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val rect = android.graphics.RectF()
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    fun setValues(v: List<Float>) {
+        if (v == values) return
+        values = v
+        invalidate()
     }
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val n = values.size
+        if (n == 0 || width == 0) return
+        val gap = context.dpF(4f)
+        val barW = ((width - gap * (n - 1)) / n).coerceAtLeast(1f)
+        val max = (values.maxOrNull() ?: 1f).coerceAtLeast(1f)
+        val r = minOf(barW / 2f, context.dpF(4f))
+        values.forEachIndexed { i, v ->
+            val h = (v / max).coerceIn(0.06f, 1f) * height
+            val l = i * (barW + gap)
+            rect.set(l, height - h, l + barW, height.toFloat())
+            paint.color = if (i == n - 1) Sahne.ICE else Sahne.TRACK
+            canvas.drawRoundRect(rect, r, r, paint)
+        }
+    }
+}
+
+/** İnce ilerleme çubuğu: iz üstünde [set] ile verilen oran ve renk; uçlar yuvarlak. */
+internal class ProgressLine(context: Context) : View(context) {
+    private var fraction = 0f
+    private var color = 0
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val rect = android.graphics.RectF()
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    fun set(f: Float, c: Int) {
+        if (f == fraction && c == color) return
+        fraction = f.coerceIn(0f, 1f)
+        color = c
+        invalidate()
+    }
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val r = height / 2f
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        paint.color = Sahne.TRACK
+        canvas.drawRoundRect(rect, r, r, paint)
+        if (fraction <= 0f) return
+        rect.set(0f, 0f, maxOf(height.toFloat(), width * fraction), height.toFloat())
+        paint.color = color
+        canvas.drawRoundRect(rect, r, r, paint)
+    }
+}
+
+/**
+ * "7,9 L/100 km" → sayı olduğu gibi, birim [unitSp] boyunda ve ikincil renkte. Yalnızca rakamdan oluşan sözcükler büyük kalır,
+ * harf içeren sözcükler birimdir: "1 sa 12 dk" → "1" ve "12" büyük, "sa" ve "dk" küçük.
+ */
+internal fun withUnit(context: Context, value: String, unitSp: Int = 16): CharSequence {
+    if (value.indexOf(' ') < 0) return value
+    val out = SpannableStringBuilder(value)
+    var start = 0
+    var first = true
+    for (word in value.split(' ')) {
+        val end = start + word.length
+        val number = word.isNotEmpty() && word.all { it.isDigit() || it == ',' || it == '.' || it == '+' }
+        if (!first && !number && word.isNotEmpty()) {
+            // Birimi önündeki boşlukla birlikte küçült (boşluk da küçük kalsın).
+            val from = start - 1
+            out.setSpan(AbsoluteSizeSpan(unitSp, true), from, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(ForegroundColorSpan(Sahne.INK_2), from, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(SahneTypefaceSpan(SahneFonts.get(context, Sahne.weight(400))), from, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        first = false
+        start = end + 1
+    }
+    return out
 }
 
 /** Yazı tipi aralığı (API 28+ TypefaceSpan(Typeface) yerine; minSdk 29'da da çalışır). */

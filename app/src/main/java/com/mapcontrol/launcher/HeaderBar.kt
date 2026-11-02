@@ -62,6 +62,28 @@ class HeaderBar(
     private val wifiGlyph = WifiGlyph(context)
     private var wifiUi = WifiUi(WifiUi.Kind.OFF)
     private val wifiStatus = WifiStatus(context) { bindWifi(it) }
+
+    /**
+     * FrostNav web paneli sunucusu çalışıyorsa Wi-Fi simgesinde küçük nokta. Durum yerel porta kısa bir bağlantı denemesiyle
+     * okunur ([FrostNavFeatures.readWebPanel]); yalnızca başlık görünürken [WEB_POLL_MS]'de bir, arka planda.
+     */
+    private val features = LauncherEdition.frostNav(context)
+    private val webIo = LauncherIo.serial()
+    private val webHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val webPoll = object : Runnable {
+        override fun run() {
+            webIo.runSafely {
+                val on = try { features.readWebPanel().running } catch (e: RuntimeException) { false }
+                webHandler.post { setWebRunning(on) }
+            }
+            webHandler.postDelayed(this, WEB_POLL_MS)
+        }
+    }
+
+    /** Web paneli durumu biliniyorsa (ör. Wi-Fi paneli okudu) noktayı hemen günceller. */
+    fun setWebRunning(on: Boolean) {
+        wifiGlyph.webDot = on
+    }
     private val wifiButton = LinearLayout(context).apply {
         gravity = Gravity.CENTER
         isClickable = true
@@ -375,6 +397,8 @@ class HeaderBar(
         wifiStatus.start()
         btStatus.start()
         ExtraSource.add(context, extraListener)
+        webHandler.removeCallbacks(webPoll)
+        if (features.available) webHandler.post(webPoll)
     }
 
     override fun onHidden() {
@@ -388,9 +412,11 @@ class HeaderBar(
         wifiStatus.stop()
         btStatus.stop()
         ExtraSource.remove(extraListener)
+        webHandler.removeCallbacks(webPoll)
     }
 
     override fun release() {
+        webHandler.removeCallbacks(webPoll)
         wifiStatus.stop()
         btStatus.stop()
         ExtraSource.remove(extraListener)
@@ -461,3 +487,4 @@ private const val OEM_PHONE_PACKAGE = "com.desaysv.bluetooth.phone"
 private const val NOTICE_RESTORE_FADE_MS = 250L
 private const val CLUSTER_ICON_DP = 28
 private const val CLUSTER_TEXT_SP = 24f
+private const val WEB_POLL_MS = 5_000L

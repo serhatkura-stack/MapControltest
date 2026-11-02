@@ -18,9 +18,23 @@ internal class WifiGlyph(context: Context) : View(context) {
     }
     private var ui = WifiUi(WifiUi.Kind.OFF)
 
+    /** Sağ üstte küçük nokta: FrostNav web paneli sunucusu çalışıyor (başlık kapsülü). */
+    var webDot: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
     fun bind(state: WifiUi) {
         ui = state
         invalidate()
+    }
+
+    override fun onDrawForeground(canvas: Canvas) {
+        super.onDrawForeground(canvas)
+        if (!webDot) return
+        // Simgenin sağ üst köşesi: yaylardan ayrık, kapsül zemininde okunur.
+        val r = width * 0.13f
+        dotPaint.color = if (LauncherTheme.sahne) Sahne.OK else LauncherTheme.ACCENT
+        canvas.drawCircle(width - r, r, r, dotPaint)
     }
 
     override fun onDraw(canvas: Canvas) {

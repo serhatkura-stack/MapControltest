@@ -37,13 +37,13 @@ class AppIdentityTest {
     @Test
     fun onScreenWidgetsAreNotAddableAgainButAppIs() {
         val layout = listOf(
-            placed("a", WidgetType.MEDIA), placed("b", WidgetType.SEAT_HEAT_DRIVER),
+            placed("a", WidgetType.MEDIA), placed("b", WidgetType.SEAT_DRIVER),
             placed("c", WidgetType.APP), placed("d", WidgetType.APP),
         )
         val addable = addableWidgetTypes(layout)
         assertFalse(WidgetType.MEDIA in addable)
-        assertFalse(WidgetType.SEAT_HEAT_DRIVER in addable)
-        assertTrue(WidgetType.SEAT_HEAT_PASSENGER in addable)
+        assertFalse(WidgetType.SEAT_DRIVER in addable)
+        assertTrue(WidgetType.SEAT_PASSENGER in addable)
         assertTrue(WidgetType.APP in addable)
         assertFalse(isAddable(WidgetType.MEDIA, layout))
     }

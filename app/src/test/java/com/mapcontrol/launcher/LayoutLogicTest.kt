@@ -156,8 +156,8 @@ class LayoutLogicTest {
             val got = l.map { "${it.type.key}@${it.col},${it.row}:${it.span}" }.sorted()
             val want = listOf(
                 "vehicle@0,0:4×4", "media@4,0:4×2", "health@4,2:2×2", "air@6,2:2×2", "trip@8,0:4×4",
-                "seat_heat_driver@0,4:2×2", "sunshade@2,4:2×2", "trunk@4,4:2×2", "defrost@6,4:2×2",
-                "app@8,4:1×2", "app@9,4:1×2", "seat_heat_passenger@10,4:2×2",
+                "seat_driver@0,4:2×2", "trunk@2,4:2×2", "rear_speaker@4,4:2×2", "lock@6,4:1×2", "screen_off@7,4:1×2",
+                "app@8,4:1×2", "app@9,4:1×2", "seat_passenger@10,4:2×2",
             ).sorted()
             assertEquals("oem=$oem", want, got)
             // Uygulama kutucukları sırayla kurulu varsayılanlarla dolar; APP dışında tür tekrarı yok.
@@ -175,7 +175,7 @@ class LayoutLogicTest {
         for (r in 0 until GRID_ROWS) for (c in 0 until GRID_COLS) {
             assertTrue("$name boş hücre $c,$r", l.any { c in it.col until it.col + it.span.w && r in it.row until it.row + it.span.h })
         }
-        assertTrue("$name mod", l.all { isAllowedIn(it.type, mode) })
+        assertTrue("$name kaldırılmış tür yok", l.none { it.type.key in setOf("sunshade", "defrost") })
     }
 
     @Test
@@ -191,9 +191,9 @@ class LayoutLogicTest {
         listOf(false, true).forEach { oem ->
             val l = defaultDriveLayout(oem)
             assertTrue(l.size <= 7)
-            assertTrue(l.none { it.type.parkOnly || it.type == WidgetType.APP })
-            val d = l.single { it.type == WidgetType.SEAT_HEAT_DRIVER }
-            val p = l.single { it.type == WidgetType.SEAT_HEAT_PASSENGER }
+            assertTrue(l.none { it.type == WidgetType.APP })
+            val d = l.single { it.type == WidgetType.SEAT_DRIVER }
+            val p = l.single { it.type == WidgetType.SEAT_PASSENGER }
             assertEquals(0, d.col)
             assertEquals(GRID_COLS, p.col + p.span.w)
         }
@@ -224,7 +224,7 @@ class LayoutLogicTest {
             widget("service", WidgetType.HEALTH, 0, 0, Span(1, 1)),
             widget("trip", WidgetType.TRIP, 3, 0, Span(2, 1)),
             widget("lock", WidgetType.LOCK, 1, 1, Span(1, 1)),
-            widget("seat", WidgetType.SEAT_HEAT_DRIVER, 0, 2, Span(1, 1)),
+            widget("seat", WidgetType.SEAT_DRIVER, 0, 2, Span(1, 1)),
             PlacedWidget("app", WidgetType.APP, 5, 2, Span(1, 1), "pkg.a"),
         )
         // Çift katı boyutlar artık hep izinli değildir: kayıt yüklenirken snapSpans ile en yakın izinli boyuta çekilir.
@@ -262,9 +262,10 @@ class LayoutLogicTest {
         assertEquals(listOf(Span(2, 2)), WidgetType.CONSUMPTION.sizes)
         assertEquals(listOf(Span(2, 2), Span(3, 2), Span(4, 4)), WidgetType.TRIP.sizes)
         assertEquals(listOf(Span(2, 2), Span(4, 4)), WidgetType.HEALTH.sizes)
-        listOf(WidgetType.DRIVE_MODE, WidgetType.CONSUMPTION, WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_VENT_DRIVER,
-            WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_PASSENGER)
+        listOf(WidgetType.DRIVE_MODE, WidgetType.CONSUMPTION)
             .forEach { assertEquals("$it", listOf(Span(2, 2)), it.sizes) }
+        listOf(WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER)
+            .forEach { assertEquals("$it", listOf(Span(2, 2), Span(4, 4)), it.sizes) }
         assertEquals(listOf(Span(2, 2), Span(4, 2)), WidgetType.AIR.sizes)
         assertEquals(listOf(Span(4, 2), Span(6, 4), Span(6, 6)), WidgetType.MEDIA.sizes)
     }
@@ -342,7 +343,7 @@ class LayoutLogicTest {
     @Test
     fun legacySeatSingleBecomesDriver() {
         val out = LayoutStore.resolveRaw(listOf(raw("v", "seat_vent", 0, 0, 2, 2)))
-        assertEquals(listOf(widget("v", WidgetType.SEAT_VENT_DRIVER, 0, 0, Span(2, 2))), out)
+        assertEquals(listOf(widget("v", WidgetType.SEAT_DRIVER, 0, 0, Span(2, 2))), out)
     }
 
     @Test
@@ -350,8 +351,8 @@ class LayoutLogicTest {
         val out = LayoutStore.resolveRaw(listOf(raw("seat_heat", "seat_heat", 4, 4, 4, 2)))
         assertEquals(
             listOf(
-                widget("seat_heat", WidgetType.SEAT_HEAT_DRIVER, 4, 4, Span(2, 2)),
-                widget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 6, 4, Span(2, 2)),
+                widget("seat_heat", WidgetType.SEAT_DRIVER, 4, 4, Span(2, 2)),
+                widget("seat_heat_passenger", WidgetType.SEAT_PASSENGER, 6, 4, Span(2, 2)),
             ),
             out,
         )
@@ -365,7 +366,7 @@ class LayoutLogicTest {
             raw("s", "seat_heat", 0, 4, 4, 2),
             raw("n", "air", 2, 4, 4, 2),
         ))
-        assertEquals(listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.AIR), out.map { it.type })
+        assertEquals(listOf(WidgetType.SEAT_DRIVER, WidgetType.AIR), out.map { it.type })
         assertTrue(LayoutStore.isValid(out))
     }
 
@@ -377,28 +378,32 @@ class LayoutLogicTest {
     }
 
     @Test
-    fun saveKeepsHiddenParkOnlyWidgets() {
-        val saved = listOf(
-            widget("media", WidgetType.MEDIA, 0, 0, Span(4, 2)),
-            widget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)),
-            widget("clock", WidgetType.CLOCK, 6, 0, Span(2, 2)),
+    fun separateHeatAndVentSeatsMergeIntoOneSeatPerSide() {
+        // Eski kayıt: sürücü ısıtma + sürücü soğutma + yolcu soğutma. Taraf başına tek birleşik koltuk kalır (ilki).
+        val raws = listOf(
+            raw("hd", "seat_heat_driver", 0, 4, 2, 2),
+            raw("vd", "seat_vent_driver", 2, 4, 2, 2),
+            raw("vp", "seat_vent_passenger", 10, 4, 2, 2),
         )
-        val shown = visibleForMode(saved, LayoutMode.DRIVE)
-        val hidden = saved.filter { it !in shown }
-        val edited = listOf(widget("media", WidgetType.MEDIA, 0, 2, Span(4, 2)))
-        val out = LayoutStore.mergeHidden(edited, hidden)
-        assertEquals(setOf("media", "photo", "clock"), out.map { it.id }.toSet())
-        assertEquals(hidden, out.filter { it.id != "media" })
+        val out = LayoutStore.dedupeSingleInstance(LayoutStore.resolveRaw(raws))
+        assertEquals(listOf("hd" to WidgetType.SEAT_DRIVER, "vp" to WidgetType.SEAT_PASSENGER), out.map { it.id to it.type })
         assertTrue(LayoutStore.isValid(out))
+        assertTrue(LayoutStore.needsRewrite(raws))
     }
 
     @Test
-    fun saveRelocatesHiddenWidgetWhenEditedLayoutCoversIt() {
-        val hidden = listOf(widget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)))
-        val edited = listOf(widget("media", WidgetType.MEDIA, 4, 0, Span(4, 2)))
-        val out = LayoutStore.mergeHidden(edited, hidden)
-        assertEquals(2, out.size)
-        assertTrue(LayoutStore.isValid(out))
+    fun removedSunshadeAndDefrostAreDroppedAndCellFreed() {
+        val raws = listOf(
+            raw("m", "media", 0, 0, 4, 2),
+            raw("s", "sunshade", 4, 0, 2, 2),
+            raw("d", "defrost", 6, 0, 2, 2),
+        )
+        val out = LayoutStore.resolveRaw(raws)
+        assertEquals(listOf("m"), out.map { it.id })
+        assertTrue(LayoutStore.needsRewrite(raws))
+        // Boşalan hücreye yeni widget konabilir.
+        assertTrue(LayoutStore.canPlace(out, widget("t", WidgetType.TRUNK, 4, 0, Span(2, 2))))
+        assertFalse(LayoutStore.needsRewrite(listOf(raw("m", "media", 0, 0, 4, 2))))
     }
 
     @Test
@@ -408,8 +413,8 @@ class LayoutLogicTest {
             widget("b", WidgetType.MEDIA, 4, 0, Span(4, 2)),
             widget("app1", WidgetType.APP, 0, 4, Span(1, 2)),
             widget("app2", WidgetType.APP, 1, 4, Span(1, 2)),
-            widget("sd", WidgetType.SEAT_HEAT_DRIVER, 8, 0, Span(2, 2)),
-            widget("sp", WidgetType.SEAT_HEAT_PASSENGER, 10, 0, Span(2, 2)),
+            widget("sd", WidgetType.SEAT_DRIVER, 8, 0, Span(2, 2)),
+            widget("sp", WidgetType.SEAT_PASSENGER, 10, 0, Span(2, 2)),
         )
         assertEquals(listOf("a", "app1", "app2", "sd", "sp"), LayoutStore.dedupeSingleInstance(layout).map { it.id })
     }
@@ -420,6 +425,6 @@ class LayoutLogicTest {
         val offered = addableWidgetTypes(layout)
         assertFalse(WidgetType.MEDIA in offered)
         assertTrue(WidgetType.APP in offered)
-        assertTrue(WidgetType.SEAT_HEAT_DRIVER in offered)
+        assertTrue(WidgetType.SEAT_DRIVER in offered)
     }
 }

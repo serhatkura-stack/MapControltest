@@ -35,6 +35,11 @@ internal class AirQualityTile(context: Context) :
         )
         // Geniş: en çok 2 satır (dış hava kötüyse içeri satırı ipucuna yer açar). Dar: ortalı tek küçük satır, yalnızca iç PM2.5.
         val shown = if (outPoor) lines.drop(1) else lines
+        // Panel (Sahne): iç ve dış PM2.5 satırlarda; alt satırda yalnızca öneri (varsa).
+        setPanelExtras(listOfNotNull(
+            context.getString(R.string.launcher_air_row_in) to context.getString(R.string.launcher_air_ugm, inside),
+            outside?.let { context.getString(R.string.launcher_air_row_out) to context.getString(R.string.launcher_air_ugm, it) },
+        ), null, panelDetail = if (outPoor) context.getString(R.string.launcher_air_recirc_hint) else "")
         showDetail(if (tier >= 2) shown.joinToString("\n") else context.getString(R.string.launcher_air_pm, inside))
         // Geniş boyutta kelimenin yanına üç dilimli ölçek: iyi / orta / kötü; dolu dilim sayısı derece + 1.
         showSegments(grade(inside) + 1, GRADES, if (poor) LauncherTheme.ALERT else LauncherTheme.ACCENT)

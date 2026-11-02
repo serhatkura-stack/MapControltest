@@ -21,9 +21,10 @@
     <string name="launcher_fn_open_settings">Open settings</string>
     <string name="launcher_fn_split_start">Start</string>
     <string name="launcher_fn_split_starting">Starting…</string>
-    <string name="launcher_fn_split_choose">Choose apps</string>
+    <string name="launcher_fn_split_none">Not set</string>
     <string name="launcher_fn_split_no_pair">Choose two apps in FrostNav</string>
     <string name="launcher_fn_cluster_start">Mirror</string>
     <string name="launcher_fn_cluster_stop">Stop</string>
     <string name="launcher_fn_cluster_no_target">No target app chosen</string>
+    <string name="launcher_wifi_web_hint">The web panel is turned on and off in FrostNav\'s Transfer tab</string>
 </resources>

@@ -242,6 +242,21 @@ internal abstract class FrostNavTile<S : Any>(
         body()
     }
 
+    /**
+     * Büyük biçimde boş alanı dolduran illüstrasyon (`launcher_art_<key>`, [SahneArt]); yoksa null. Kapalıyken renksiz ve soluk;
+     * gece görsel filtresi Sahne şeridiyle aynı.
+     */
+    protected fun heroArt(key: String, on: Boolean): View? {
+        val d = SahneArt.drawable(activity, key) ?: return null
+        return ImageView(activity).apply {
+            setImageDrawable(d)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            colorFilter = SahneArt.filter(!on)
+            imageAlpha = if (on) 255 else SahneArt.DIM_ALPHA
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+    }
+
     /** Sağ üstte durum yazısı ("Açık" vurgu rengiyle). */
     protected fun stateLabel(on: Boolean): TextView =
         text(activity, LauncherTheme.LABEL_SP, if (on) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY, medium = true).apply {
@@ -368,6 +383,8 @@ internal abstract class FrostNavTile<S : Any>(
         const val ROW_MIN_DP = 72
         const val DISABLED_ALPHA = 0.45f
         const val TALL_MIN_ROWS = 4
+        /** Büyük biçimde illüstrasyon yüksekliği: panelin üçte biri, düğmeye ve yazıya yer kalır. */
+        const val HERO_ART_DP = 100
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
@@ -491,9 +508,8 @@ internal class WebPanelTile(activity: Activity) :
         val s = state?.state
         if (s == null || !s.running) {
             addView(View(activity), LinearLayout.LayoutParams(1, 0, 1f))
-            addView(icon(activity, R.drawable.ic_sahne_qr, 96, LauncherTheme.TEXT_SECONDARY).apply {
-                layoutParams = LinearLayout.LayoutParams(activity.dp(96), activity.dp(96)).apply { gravity = Gravity.CENTER_HORIZONTAL }
-            })
+            addView(heroArt("web_panel", on = false) ?: icon(activity, R.drawable.ic_sahne_qr, 96, LauncherTheme.TEXT_SECONDARY),
+                LinearLayout.LayoutParams(MATCH, activity.dp(HERO_ART_DP)).apply { gravity = Gravity.CENTER_HORIZONTAL })
             addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY).apply {
                 setText(R.string.launcher_fn_web_off_detail)
                 gravity = Gravity.CENTER
@@ -797,7 +813,7 @@ internal class SplitScreenTile(activity: Activity) :
         activity.getString(when {
             starting -> R.string.launcher_fn_split_starting
             ready -> R.string.launcher_fn_split_start
-            else -> R.string.launcher_fn_split_choose
+            else -> R.string.launcher_fn_split_none
         }),
         if (ready) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY,
         pairText() ?: activity.getString(R.string.launcher_fn_split_no_pair),
@@ -815,9 +831,14 @@ internal class SplitScreenTile(activity: Activity) :
                 addView(app(s.pair.second, s.secondLabel), LinearLayout.LayoutParams(0, WRAP, 1f))
             }, LinearLayout.LayoutParams(MATCH, WRAP))
         } else {
-            addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            // Çift seçilmemiş: sakin "Seçilmedi" ve ikincil açıklama; büyük çağrı yok.
+            heroArt("split_screen", on = false)?.let { addView(it, LinearLayout.LayoutParams(MATCH, activity.dp(HERO_ART_DP))) }
+            addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
+                setText(R.string.launcher_fn_split_none); gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = activity.dp(10) })
+            addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
                 setText(R.string.launcher_fn_split_no_pair); gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(MATCH, WRAP))
+            }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = activity.dp(2) })
         }
         addView(View(activity), LinearLayout.LayoutParams(1, 0, 1f))
         addView(pill(activity.getString(when {
@@ -828,7 +849,7 @@ internal class SplitScreenTile(activity: Activity) :
     }
 
     override fun buildWide(): View = wide(
-        pairText() ?: activity.getString(R.string.launcher_fn_split_choose),
+        pairText() ?: activity.getString(R.string.launcher_fn_split_none),
         if (ready) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY,
         if (ready) null else activity.getString(R.string.launcher_fn_split_no_pair),
         pill(activity.getString(when {
@@ -855,9 +876,11 @@ internal class SplitScreenTile(activity: Activity) :
     override fun strip(): StripState = StripState(
         activity.getString(labelRes),
         if (starting) activity.getString(R.string.launcher_fn_split_starting)
-        else pairText() ?: activity.getString(R.string.launcher_fn_split_choose),
+        else pairText() ?: activity.getString(R.string.launcher_fn_split_none),
         iconRes,
         if (ready) StripTone.NORMAL else StripTone.MUTED,
+        detail = if (ready) null else activity.getString(R.string.launcher_fn_split_no_pair),
+        active = ready,
     )
 }
 
@@ -908,9 +931,10 @@ internal class ClusterMirrorTile(activity: Activity) :
 
     override fun buildLarge(): View = largeFrame(stateLabel(open)) {
         addView(View(activity), LinearLayout.LayoutParams(1, 0, 1f))
-        addView(text(activity, LauncherTheme.SECTION_SP, if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT, medium = true).apply {
+        heroArt("cluster_mirror", on = open)?.let { addView(it, LinearLayout.LayoutParams(MATCH, activity.dp(HERO_ART_DP))) }
+        addView(text(activity, LauncherTheme.SECTION_SP - 4f, if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT, medium = true).apply {
             text = target(); gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(MATCH, WRAP))
+        }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = activity.dp(8) })
         addView(View(activity), LinearLayout.LayoutParams(1, 0, 1f))
         addView(pill(activity.getString(if (open) R.string.launcher_fn_cluster_stop else R.string.launcher_fn_cluster_start), primary = !open) { toggle() },
             LinearLayout.LayoutParams(WRAP, WRAP).apply { gravity = Gravity.CENTER_HORIZONTAL })

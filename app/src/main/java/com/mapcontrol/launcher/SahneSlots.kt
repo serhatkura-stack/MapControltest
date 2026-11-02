@@ -33,14 +33,32 @@ data class SahneSlotRef(val kind: SahneSlotKind, val index: Int)
 const val STRIP_SLOTS = 6
 
 /**
- * Hangi tür hangi yuvaya konabilir. Panel: büyük boyutu olan her widget; büyük boyutu olmayanlar kutucuklarının
- * büyütülmüş hâliyle (uygulama kısayolu hariç, o yalnızca şeritte). Şerit: fotoğraf hariç hepsi (fotoğraf alan ister).
- * Her tür en az birine sığar (bkz. SahneSlotsTest).
+ * Hangi tür hangi yuvaya konabilir: iki seçilmiş liste (sahibin kararı). Şerit, tek dokunuşla iş gören küçük kontrollerdir;
+ * panel, büyük alanı dolduran bilgi ve kontrollerdir. Listede olmayan tür Sahne seçicisinde hiç gösterilmez (araç kartı
+ * sahnenin kendisidir); Serbest ızgara tüm kataloğu kullanmaya devam eder. Her listelenen tür en az birine sığar (SahneSlotsTest).
  */
 object SahneForm {
-    fun fitsPanel(type: WidgetType): Boolean = type != WidgetType.APP
-    fun fitsStrip(type: WidgetType): Boolean = type != WidgetType.PHOTO
+    /** Şerit (küçük) için izinli türler, seçicideki sırayla. */
+    val STRIP_TYPES: List<WidgetType> = listOf(
+        WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
+        WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
+        WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
+        WidgetType.CLUSTER_MIRROR,
+    )
+
+    /** Panel (büyük) için izinli türler, seçicideki sırayla. Koltuk her iki taraftan da panele konabilir. */
+    val PANEL_TYPES: List<WidgetType> = listOf(
+        WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.HEALTH, WidgetType.AIR, WidgetType.AWD,
+        WidgetType.PHOTO, WidgetType.CLOCK, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION,
+        WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR, WidgetType.BREAK_REMINDER, WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER,
+    )
+
+    fun fitsPanel(type: WidgetType): Boolean = type in PANEL_TYPES
+    fun fitsStrip(type: WidgetType): Boolean = type in STRIP_TYPES
     fun fits(type: WidgetType, kind: SahneSlotKind): Boolean = if (kind == SahneSlotKind.PANEL) fitsPanel(type) else fitsStrip(type)
+
+    /** Seçicide [kind] yuvası için sunulan türler. */
+    fun offered(kind: SahneSlotKind): List<WidgetType> = if (kind == SahneSlotKind.PANEL) PANEL_TYPES else STRIP_TYPES
 
     /** Türün panelde kendi büyük biçimi var mı (yoksa kutucuğu büyütülür). */
     fun hasLargeForm(type: WidgetType): Boolean = type.sizes.any { it.w >= 4 || it.h >= 4 }
@@ -52,11 +70,11 @@ object SahneForm {
     fun stripSpan(type: WidgetType): Span = type.sizes.first()
 
     /**
-     * Seçicide [type] [ref] yuvasına konabilir mi: yuvaya sığmalı, düzen moduna izinli olmalı ve (APP hariç) düzende
-     * başka bir yuvada olmamalı ([ref]'teki mevcut widget'ın yerine konabilir).
+     * Seçicide [type] [ref] yuvasına konabilir mi: yuvaya sığmalı ve (APP hariç) düzende başka bir yuvada olmamalı ([ref]'teki
+     * mevcut widget'ın yerine konabilir). Park ve Sürüş aynı kuralı kullanır: her widget sürüşte de çalışır.
      */
-    fun canPlace(layout: SahneLayout, ref: SahneSlotRef, type: WidgetType, mode: LayoutMode): Boolean {
-        if (!fits(type, ref.kind) || !isAllowedIn(type, mode)) return false
+    fun canPlace(layout: SahneLayout, ref: SahneSlotRef, type: WidgetType): Boolean {
+        if (!fits(type, ref.kind)) return false
         if (type == WidgetType.APP) return true
         val here = SahneSlots.get(layout, ref)
         return layout.slots().none { it.type == type && it !== here }
@@ -89,50 +107,45 @@ object SahneSlots {
     const val APP_SEP = "+"
 
     /**
-     * Park varsayılanı (taslak): solda medya, sağda "Toplam" bölümlü yolculuk; şeritte sürücü koltuk ısıtma · tavan
-     * perdesi · bagaj · buğu giderme · iki uygulama · yolcu koltuk ısıtma (sol direksiyonlu kabine göre).
+     * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şeritte iki uçta koltuklar (sol direksiyonlu kabine
+     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), arka hoparlör
+     * (arkada uyuyan çocukla beklerken), iki uygulama (yola çıkmadan müzik/harita) ve kapı kilidi (inerken/beklerken).
      */
     fun defaultPark(appPackages: List<String> = emptyList()): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
         right = SahneSlot("trip", WidgetType.TRIP),
         strip = listOf(
-            SahneSlot("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER),
-            SahneSlot("sunshade", WidgetType.SUNSHADE),
+            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
             SahneSlot("trunk", WidgetType.TRUNK),
-            SahneSlot("defrost", WidgetType.DEFROST),
+            SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
-            SahneSlot("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER),
+            SahneSlot("lock", WidgetType.LOCK),
+            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
         ),
     )
 
     /**
-     * Sürüş varsayılanı: solda medya, sağda anlık tüketim (sürüşte akan tek büyük değer); şeritte sürücü koltuk ısıtma ·
-     * uyku modu · buğu giderme · iki uygulama · mola hatırlatıcı · yolcu koltuk ısıtma. Park'a özel widget yok.
+     * Sürüş varsayılanı: solda medya, sağda anlık tüketim (sürüşte akan tek büyük değer); şeritte sürücü koltuğu · arka
+     * hoparlör · iki uygulama · mola hatırlatıcı · sürüş modu · yolcu koltuğu.
      */
     fun defaultDrive(appPackages: List<String> = emptyList()): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
         right = SahneSlot("consumption", WidgetType.CONSUMPTION),
         strip = listOf(
-            SahneSlot("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER),
+            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
             SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER),
-            SahneSlot("defrost", WidgetType.DEFROST),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
             SahneSlot("break_reminder", WidgetType.BREAK_REMINDER),
-            SahneSlot("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER),
+            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
+            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
         ),
     )
 
     fun defaults(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
         if (mode == LayoutMode.DRIVE) defaultDrive(appPackages) else defaultPark(appPackages)
 
-    /** Sürüş'te Park'a özel widget'lar çizilmez (yuva boş görünür; kayıt silinmez). */
-    fun visibleForMode(layout: SahneLayout, mode: LayoutMode): SahneLayout {
-        fun keep(s: SahneSlot?) = s?.takeIf { isAllowedIn(it.type, mode) }
-        return SahneLayout(keep(layout.left), keep(layout.right), layout.strip.map { keep(it) })
-    }
-
     /**
-     * Okunan düzeni temizler: yuvaya sığmayan türler boşalır, şerit tam [STRIP_SLOTS] yuvaya tamamlanır/kırpılır,
+     * Okunan düzeni temizler: yuvaya sığmayan (seçkide olmayan) türler boşalır, şerit tam [STRIP_SLOTS] yuvaya tamamlanır/kırpılır,
      * tekil türlerin ikincisi ve yinelenen kimlikler atılır (ilk kalır).
      */
     fun sanitize(layout: SahneLayout): SahneLayout {
@@ -161,7 +174,10 @@ object SahneSlots {
         return listOf(VERSION, slot(layout.left), slot(layout.right), layout.strip.joinToString(",") { slot(it) }).joinToString("|")
     }
 
-    /** Çözülemeyen kayıt null (çağıran varsayılana döner); bilinmeyen tür yalnızca o yuvayı boşaltır. */
+    /**
+     * Çözülemeyen kayıt null (çağıran varsayılana döner); bilinmeyen ya da kaldırılmış tür (perde, buğu) yalnızca o yuvayı
+     * boşaltır. Ayrı ısıtma/soğutma koltukları o tarafın birleşik koltuğuna döner; ikisi de varsa ilki kalır ([sanitize]).
+     */
     fun decode(raw: String?): SahneLayout? {
         if (raw.isNullOrEmpty()) return null
         val parts = raw.split("|")

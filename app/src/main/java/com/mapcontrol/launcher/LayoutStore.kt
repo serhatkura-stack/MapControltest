@@ -58,7 +58,7 @@ class LayoutStore(
             val migrated = snapSpans(resolved)
             if (migrated.isNotEmpty() && isValid(migrated)) {
                 // Eski ızgara, eski koltuk anahtarları ya da boyut uyarlaması olduysa yeni biçim bir kez yazılır (tekrar yüklemede işlem kalmaz).
-                if (oldGrid || migrated != resolved || resolved.size != resolvedAll.size || raws.any { it.typeKey in LEGACY_SEAT_KEYS || it.typeKey in HealthMath.REMOVED_KEYS }) save(migrated)
+                if (oldGrid || migrated != resolved || resolved.size != resolvedAll.size || needsRewrite(raws)) save(migrated)
                 migrated
             } else fallback()
         } catch (e: org.json.JSONException) {
@@ -92,13 +92,21 @@ class LayoutStore(
 
         /** Eski tek koltuk widget'ı anahtarları (ısıtma / soğutma; iki koltuğu birlikte gösterirdi). */
         private val LEGACY_SEAT_KEYS = mapOf(
-            "seat_heat" to (WidgetType.SEAT_HEAT_DRIVER to WidgetType.SEAT_HEAT_PASSENGER),
-            "seat_vent" to (WidgetType.SEAT_VENT_DRIVER to WidgetType.SEAT_VENT_PASSENGER),
+            "seat_heat" to (WidgetType.SEAT_DRIVER to WidgetType.SEAT_PASSENGER),
+            "seat_vent" to (WidgetType.SEAT_DRIVER to WidgetType.SEAT_PASSENGER),
         )
 
         /**
-         * Kayıtları widget'lara çevirir: bilinmeyen türler atlanır; eski "seat_heat"/"seat_vent" sürücü
-         * koltuğuna döner. Eskiden 4 hücre ve üzeri geniş olan (iki koltuk) kayıt, sürücü 2×2 olarak aynı yerde
+         * Kayıt yeni biçimde bir kez yeniden yazılmalı mı: eski tek koltuk, birleştirilmiş/yeniden adlandırılmış anahtar
+         * ([WidgetType.MERGED_KEYS]) ya da kaldırılmış/bilinmeyen tür (atlanır, hücresi serbest kalır) var.
+         */
+        fun needsRewrite(raws: List<RawWidget>): Boolean = raws.any {
+            it.typeKey in LEGACY_SEAT_KEYS || it.typeKey in WidgetType.MERGED_KEYS || WidgetType.fromKey(it.typeKey) == null
+        }
+
+        /**
+         * Kayıtları widget'lara çevirir: bilinmeyen/kaldırılmış türler atlanır; eski "seat_heat"/"seat_vent" sürücü
+         * koltuğuna döner (ayrı ısıtma/soğutma koltukları [WidgetType.fromKey] ile o tarafın birleşik koltuğuna). Eskiden 4 hücre ve üzeri geniş olan (iki koltuk) kayıt, sürücü 2×2 olarak aynı yerde
          * kalır ve sağındaki hücreler boşsa yolcu 2×2 de eklenir. Tekrar çalıştırmak aynı sonucu verir.
          */
         fun resolveRaw(raws: List<RawWidget>): List<PlacedWidget> {
@@ -127,19 +135,6 @@ class LayoutStore(
         fun dedupeSingleInstance(layout: List<PlacedWidget>): List<PlacedWidget> {
             val seen = mutableSetOf<WidgetType>()
             return layout.filter { it.type == WidgetType.APP || seen.add(it.type) }
-        }
-
-        /**
-         * Kaydederken: ekranda gösterilmeyen (Sürüş'te gizli parkOnly) widget'lar düzene aynen eklenir. Görünen
-         * yeni düzenle çakışırsa [findSpot] ile yer aranır, yer yoksa o widget düşer; kimliği çakışan atlanır.
-         */
-        fun mergeHidden(visible: List<PlacedWidget>, hidden: List<PlacedWidget>): List<PlacedWidget> {
-            val result = visible.toMutableList()
-            hidden.forEach { h ->
-                if (result.any { it.id == h.id } || (h.type != WidgetType.APP && result.any { it.type == h.type })) return@forEach
-                (if (canPlace(result, h)) h else findSpot(result, h))?.let { result += it }
-            }
-            return result
         }
 
         /**

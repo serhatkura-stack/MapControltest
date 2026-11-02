@@ -1,7 +1,6 @@
 package com.mapcontrol.launcher
 
 import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
-import com.mapcontrol.comfort.ParkGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -13,9 +12,8 @@ import org.junit.Test
 class OemWidgetsTest {
     private val cs = com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo.MODULE_CAR_SETTING
     private val hv = com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo.MODULE_HVAC
-    private val parked = { ParkGate.Decision(true, "park") }
 
-    private fun allowed(m: Int, i: Int, v: Int) = WidgetWritePolicy.evaluate(m, i, v, parked) is WidgetWritePolicy.Verdict.Allowed
+    private fun allowed(m: Int, i: Int, v: Int) = WidgetWritePolicy.evaluate(m, i, v) is WidgetWritePolicy.Verdict.Allowed
 
     // --- Klima tuşları ---
 

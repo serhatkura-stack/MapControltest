@@ -63,7 +63,6 @@ class FrostNavWidgetMathTest {
             assertTrue("$it panel", SahneForm.fitsPanel(it))
             assertTrue("$it şerit", SahneForm.fitsStrip(it))
             assertTrue("$it büyük biçim", SahneForm.hasLargeForm(it))
-            assertFalse("$it sürüşte de kullanılabilir", it.parkOnly)
             assertEquals(it, WidgetType.fromKey(it.key))
         }
     }

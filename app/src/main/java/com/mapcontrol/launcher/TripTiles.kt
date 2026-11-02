@@ -280,9 +280,18 @@ internal abstract class TripCard(
 
     private var stripRows: List<Pair<String, String>> = emptyList()
     private var stripAlertRows: Set<Int> = emptySet()
+    private var stripHistory: List<Float> = emptyList()
 
     override fun stripState(): StripState =
-        StripState(context.getString(labelRes), stripValue, stripIcon, stripTone, detail = stripDetail, rows = stripRows, alertRows = stripAlertRows)
+        StripState(context.getString(labelRes), stripValue, stripIcon, stripTone, detail = stripDetail, rows = stripRows,
+            alertRows = stripAlertRows, history = stripHistory)
+
+    /** Panel biçimindeki çubuk geçmişi (eskiden yeniye); kutucukta çizilmez. */
+    protected fun setHistory(values: List<Float>) {
+        if (values == stripHistory) return
+        stripHistory = values
+        notifyStrip()
+    }
 
     override fun stripTap(part: Int) { root.performClick() }
 
@@ -547,7 +556,8 @@ internal class ConsumptionSmoother {
 
 /**
  * Anlık tüketim: yalnızca büyük, okunur bir rakam. Araç duruyorsa "Araç duruyor". Renk değişmez:
- * sürücüyü uyarmaz, bilgi verir.
+ * sürücüyü uyarmaz, bilgi verir. Panel biçiminde (Sahne) altında son ölçümlerin küçük çubuk geçmişi ([ConsumptionHistory])
+ * ve sıfırlamadan beri ortalama tüketim satırı vardır; ikisi de bu kutucuğun zaten okuduğu veriden gelir.
  */
 internal class ConsumptionTile(context: Context) :
     TripCard(context, R.drawable.ic_mdi_leaf, R.string.launcher_widget_consumption) {
@@ -555,6 +565,7 @@ internal class ConsumptionTile(context: Context) :
     private val smoother = ConsumptionSmoother()
     private var display = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
     private var fed: TripData? = null
+    private val history = ConsumptionHistory().apply { if (LauncherDemo.enabled) seed(LauncherDemo.CONSUMPTION_HISTORY) }
 
     override fun bind() {
         val d = data
@@ -567,7 +578,9 @@ internal class ConsumptionTile(context: Context) :
         if (d !== fed) {
             fed = d
             display = smoother.update(d.instantL100, d.speedKmh, d.moving)
+            history.add(display)
         }
+        setHistory(history.values())
         val title = context.getString(R.string.launcher_widget_consumption)
         when (display.mode) {
             ConsumptionSmoother.Mode.IDLE -> {
@@ -598,11 +611,41 @@ internal class ConsumptionTile(context: Context) :
             }
             ConsumptionSmoother.Mode.NONE -> showMissing()
         }
-        showRows(emptyList())
+        showRows(listOfNotNull(d.avgL100?.let {
+            context.getString(R.string.launcher_trip_avg_cons_label) to context.getString(R.string.launcher_l100_value, one(it))
+        }))
     }
 
     private companion object {
         const val IDLE_SP = 32f
+    }
+}
+
+/**
+ * Anlık tüketimin kısa geçmişi (saf, JVM'de sınanır): yalnızca gösterilen değerler (Değer ya da 30+) eklenir; ardışık aynı
+ * değer tekrar eklenmez ki duraklarda çubuklar düzleşmesin. En çok [MAX] değer, eskiden yeniye.
+ */
+internal class ConsumptionHistory {
+    private val values = ArrayDeque<Float>()
+    private var last: Double? = null
+
+    fun add(display: ConsumptionSmoother.Display) {
+        val v = display.l100 ?: return
+        if (display.mode != ConsumptionSmoother.Mode.VALUE && display.mode != ConsumptionSmoother.Mode.CAP) return
+        if (v == last) return
+        last = v
+        values.addLast(v.toFloat())
+        while (values.size > MAX) values.removeFirst()
+    }
+
+    fun seed(list: List<Float>) {
+        list.takeLast(MAX).forEach { values.addLast(it) }
+    }
+
+    fun values(): List<Float> = values.toList()
+
+    companion object {
+        const val MAX = 24
     }
 }
 

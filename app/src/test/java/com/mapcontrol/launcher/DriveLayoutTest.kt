@@ -115,12 +115,12 @@ class DriveLayoutTest {
             val got = l.map { "${it.type.key}@${it.col},${it.row}:${it.span}" }.sorted()
             val want = listOf(
                 "vehicle@0,0:4×4",
-                "seat_heat_driver@0,4:2×2",
+                "seat_driver@0,4:2×2",
                 "rear_speaker@2,4:2×2",
                 "media@4,0:6×6",
                 "consumption@10,0:2×2",
                 "break_reminder@10,2:2×2",
-                "seat_heat_passenger@10,4:2×2",
+                "seat_passenger@10,4:2×2",
             ).sorted()
             assertEquals(want, got)
         }
@@ -128,37 +128,20 @@ class DriveLayoutTest {
 }
 
 class ParkOnlyTest {
-    private val parkOnlyTypes = setOf(WidgetType.PHOTO, WidgetType.SCREEN_OFF, WidgetType.CLOCK)
 
-    @Test fun parkOnlyFlagsAreExactlyTheDistractingTypes() {
-        assertEquals(parkOnlyTypes, WidgetType.values().filter { it.parkOnly }.toSet())
+    /** Sürüş kilidi yok: her widget Park ve Sürüş seçicilerinde aynı; kayıtlı düzen her iki modda da aynen çizilir. */
+    @Test fun everyWidgetIsAddableInBothModes() {
+        val all = addableWidgetTypes()
+        assertEquals(WidgetType.values().toList(), all)
+        assertTrue(all.containsAll(listOf(WidgetType.PHOTO, WidgetType.SCREEN_OFF, WidgetType.CLOCK)))
     }
 
-    @Test fun pickerHidesParkOnlyInDriveOnly() {
-        val drive = addableWidgetTypes(LayoutMode.DRIVE)
-        val park = addableWidgetTypes(LayoutMode.PARK)
-        assertTrue(drive.none { it in parkOnlyTypes })
-        assertTrue(park.containsAll(parkOnlyTypes))
-        assertTrue(drive.contains(WidgetType.MEDIA))
-        assertTrue(isAllowedIn(WidgetType.PHOTO, LayoutMode.PARK))
-        assertTrue(!isAllowedIn(WidgetType.PHOTO, LayoutMode.DRIVE))
-    }
-
-    @Test fun driveLoadSkipsParkOnlyButKeepsOthers() {
-        val saved = listOf(
-            PlacedWidget("media", WidgetType.MEDIA, 0, 0, Span(4, 2)),
-            PlacedWidget("photo", WidgetType.PHOTO, 4, 0, Span(2, 2)),
-            PlacedWidget("clock", WidgetType.CLOCK, 6, 0, Span(2, 2)),
-        )
-        assertEquals(listOf("media"), visibleForMode(saved, LayoutMode.DRIVE).map { it.id })
-        assertEquals(saved, visibleForMode(saved, LayoutMode.PARK))
-        assertEquals(3, saved.size) // kaynak liste (depo) değişmez
-    }
-
-    @Test fun defaultDriveLayoutsHaveNoParkOnly() {
-        listOf(false, true).forEach { oem ->
-            assertTrue(defaultDriveLayout(oem, listOf("a", "b", "c", "d")).none { it.type.parkOnly })
-        }
+    @Test fun noParkOnlyFlagOrModeFilterLeft() {
+        // Eski "parkOnly" alanı ve mod filtresi kaldırıldı (yansımayla denetlenir: kod yeniden eklenirse test düşer).
+        assertTrue(WidgetType::class.java.declaredFields.none { it.name == "parkOnly" })
+        val kit = Class.forName("com.mapcontrol.launcher.WidgetKitKt").declaredMethods.map { it.name }
+        assertTrue(kit.none { it == "isAllowedIn" || it == "visibleForMode" })
+        assertTrue(SahneSlots::class.java.declaredMethods.none { it.name == "visibleForMode" })
     }
 
     // --- Park sinyali kapılı okuma (layoutTick'i taklit eder; sahte saat, 500 ms tur) ---

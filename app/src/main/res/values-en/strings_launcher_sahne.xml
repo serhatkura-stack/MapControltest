@@ -3,10 +3,6 @@
     <!-- Stage home screen layout -->
     <string name="launcher_sahne_car">Car view</string>
     <string name="launcher_sahne_km">km</string>
-    <string name="launcher_sahne_seat_heat_driver">Heating driver</string>
-    <string name="launcher_sahne_seat_heat_passenger">Heating passenger</string>
-    <string name="launcher_sahne_seat_vent_driver">Cooling driver</string>
-    <string name="launcher_sahne_seat_vent_passenger">Cooling passenger</string>
     <string name="launcher_sahne_pick_panel">Widget for the panel</string>
     <string name="launcher_sahne_pick_strip">Widget for the strip</string>
     <string name="launcher_sahne_in_slot" formatted="true">In this slot: %1$s</string>

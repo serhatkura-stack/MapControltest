@@ -13,10 +13,30 @@ class SahneSlotsTest {
     private val apps = listOf("com.google.android.apps.youtube.music", "com.google.android.apps.maps")
 
     @Test
-    fun everyWidgetTypeHasAPanelOrStripForm() {
+    fun curatedSlotListsMatchTheOwnerDecision() {
+        val strip = setOf(
+            WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
+            WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
+            WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
+            WidgetType.CLUSTER_MIRROR,
+        )
+        val panel = setOf(
+            WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.HEALTH, WidgetType.AIR, WidgetType.AWD,
+            WidgetType.PHOTO, WidgetType.CLOCK, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION,
+            WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR, WidgetType.BREAK_REMINDER, WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER,
+        )
+        assertEquals(strip, SahneForm.STRIP_TYPES.toSet())
+        assertEquals(panel, SahneForm.PANEL_TYPES.toSet())
+        assertEquals(SahneForm.STRIP_TYPES.size, strip.size) // yinelenen yok
+        assertEquals(SahneForm.PANEL_TYPES.size, panel.size)
         WidgetType.values().forEach { t ->
-            assertTrue("$t sahnede yer bulamıyor", SahneForm.fitsPanel(t) || SahneForm.fitsStrip(t))
+            assertEquals("$t şerit", t in strip, SahneForm.fitsStrip(t))
+            assertEquals("$t panel", t in panel, SahneForm.fitsPanel(t))
         }
+        // Seçici yalnızca listeyi sunar: araç kartı (sahnenin kendisi) hiçbir yuvada yok.
+        assertFalse(WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.PANEL) || WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.STRIP))
+        assertEquals(SahneForm.STRIP_TYPES, SahneForm.offered(SahneSlotKind.STRIP))
+        assertEquals(SahneForm.PANEL_TYPES, SahneForm.offered(SahneSlotKind.PANEL))
     }
 
     @Test
@@ -41,6 +61,8 @@ class SahneSlotsTest {
         assertTrue(SahneForm.hasLargeForm(WidgetType.TRIP))
         assertFalse(SahneForm.hasLargeForm(WidgetType.CONSUMPTION))
         assertFalse(SahneForm.hasLargeForm(WidgetType.LOCK))
+        assertTrue(SahneForm.hasLargeForm(WidgetType.SEAT_DRIVER))
+        assertTrue(SahneForm.hasLargeForm(WidgetType.SEAT_PASSENGER))
     }
 
     @Test
@@ -49,20 +71,32 @@ class SahneSlotsTest {
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(
-            listOf(WidgetType.SEAT_HEAT_DRIVER, WidgetType.SUNSHADE, WidgetType.TRUNK, WidgetType.DEFROST, WidgetType.APP, WidgetType.SEAT_HEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.LOCK, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
-        assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[4]?.extra))
+        assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[3]?.extra))
     }
 
     @Test
-    fun driveDefaultHasNoParkOnlyWidgets() {
+    fun driveDefaultMatchesTheOwnerDecision() {
         val d = SahneSlots.defaultDrive(apps)
         assertEquals(STRIP_SLOTS, d.strip.size)
-        assertTrue(d.slots().none { it.type.parkOnly })
         assertEquals(WidgetType.MEDIA, d.left?.type)
-        assertEquals(WidgetType.REAR_SPEAKER, d.strip[1]?.type)
-        assertEquals(WidgetType.BREAK_REMINDER, d.strip[4]?.type)
+        assertEquals(WidgetType.CONSUMPTION, d.right?.type)
+        assertEquals(
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.BREAK_REMINDER, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            d.strip.map { it?.type },
+        )
+    }
+
+    @Test
+    fun defaultsUseOnlyCuratedTypesWithSeatsAtBothEnds() {
+        listOf(SahneSlots.defaultPark(apps), SahneSlots.defaultDrive(apps)).forEach { d ->
+            assertTrue(d.left!!.type in SahneForm.PANEL_TYPES && d.right!!.type in SahneForm.PANEL_TYPES)
+            assertTrue(d.strip.all { it!!.type in SahneForm.STRIP_TYPES })
+            assertEquals(WidgetType.SEAT_DRIVER, d.strip.first()?.type)
+            assertEquals(WidgetType.SEAT_PASSENGER, d.strip.last()?.type)
+        }
     }
 
     @Test
@@ -92,7 +126,7 @@ class SahneSlotsTest {
         assertNull(d.left)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(STRIP_SLOTS, d.strip.size)
-        assertEquals(WidgetType.SEAT_HEAT_DRIVER, d.strip[0]?.type)
+        assertEquals(WidgetType.SEAT_DRIVER, d.strip[0]?.type)
         assertTrue(d.strip.drop(1).all { it == null })
     }
 
@@ -124,11 +158,24 @@ class SahneSlotsTest {
     }
 
     @Test
-    fun visibleForModeHidesParkOnlyWhileDriving() {
-        val d = SahneSlots.set(SahneSlots.defaultPark(apps), SahneSlotRef(SahneSlotKind.PANEL, 1), SahneSlot("photo", WidgetType.PHOTO))
-        assertEquals(WidgetType.PHOTO, SahneSlots.visibleForMode(d, LayoutMode.PARK).right?.type)
-        assertNull(SahneSlots.visibleForMode(d, LayoutMode.DRIVE).right)
-        assertEquals(d.left, SahneSlots.visibleForMode(d, LayoutMode.DRIVE).left)
+    fun oldRecordMigratesSeatsAndDropsRemovedWidgets() {
+        // Eski Park varsayılanı: ısıtma sürücü · perde · bagaj · buğu · uygulamalar · ısıtma yolcu (+ panelde soğutma yolcu).
+        val old = "v1|media~media~|seat_vent_passenger~vp~|seat_heat_driver~seat_heat_driver~,sunshade~sunshade~,trunk~trunk~," +
+            "defrost~defrost~,app~app_pair~a.b+c.d,seat_heat_passenger~seat_heat_passenger~"
+        val d = SahneSlots.decode(old)!!
+        assertEquals(WidgetType.MEDIA, d.left?.type)
+        assertEquals(WidgetType.SEAT_PASSENGER, d.right?.type) // soğutma yolcu → birleşik yolcu koltuğu (panelde)
+        assertEquals(
+            listOf(WidgetType.SEAT_DRIVER, null, WidgetType.TRUNK, null, WidgetType.APP, null),
+            d.strip.map { it?.type },
+        ) // perde ve buğu boşaldı; yolcu ısıtma ikinci yolcu koltuğu olduğundan atıldı (ilki kalır)
+        assertEquals(d, SahneSlots.decode(SahneSlots.encode(d))) // yeniden yazınca aynı
+    }
+
+    @Test
+    fun heatAndVentOfOneSideKeepOnlyOneMergedSeat() {
+        val d = SahneSlots.decode("v1|||seat_heat_driver~h~,seat_vent_driver~v~,,,,")!!
+        assertEquals(listOf("h" to WidgetType.SEAT_DRIVER), d.slots().map { it.id to it.type })
     }
 
     @Test
@@ -137,26 +184,33 @@ class SahneSlotsTest {
         val right = SahneSlotRef(SahneSlotKind.PANEL, 1)
         val strip0 = SahneSlotRef(SahneSlotKind.STRIP, 0)
         // Ekranda başka yuvada olan tekil tür konamaz; kendi yerine yeniden konabilir.
-        assertFalse(SahneForm.canPlace(d, right, WidgetType.MEDIA, LayoutMode.PARK))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.TRIP, LayoutMode.PARK))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.HEALTH, LayoutMode.PARK))
-        // Biçim ve mod kuralları.
-        assertFalse(SahneForm.canPlace(d, right, WidgetType.APP, LayoutMode.PARK))
-        assertTrue(SahneForm.canPlace(d, strip0, WidgetType.APP, LayoutMode.PARK))
-        assertFalse(SahneForm.canPlace(d, strip0, WidgetType.PHOTO, LayoutMode.PARK))
-        assertFalse(SahneForm.canPlace(d, right, WidgetType.PHOTO, LayoutMode.DRIVE))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.PHOTO, LayoutMode.PARK))
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.MEDIA))
+        assertTrue(SahneForm.canPlace(d, right, WidgetType.TRIP))
+        assertTrue(SahneForm.canPlace(d, right, WidgetType.HEALTH))
+        // Biçim kuralları (seçki); Park/Sürüş ayrımı yok, fotoğraf da sürüşte konabilir.
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.APP))
+        assertTrue(SahneForm.canPlace(d, strip0, WidgetType.APP))
+        assertFalse(SahneForm.canPlace(d, strip0, WidgetType.PHOTO))
+        assertTrue(SahneForm.canPlace(d, right, WidgetType.PHOTO))
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.LOCK))     // kilit yalnızca şeritte
+        assertFalse(SahneForm.canPlace(d, strip0, WidgetType.HEALTH))  // sağlık yalnızca panelde
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.VEHICLE))
+        // Koltuk her iki taraftan panele de konabilir (şeritte zaten olan taraf hariç).
+        val noSeats = SahneSlots.set(d, strip0, null)
+        assertTrue(SahneForm.canPlace(noSeats, right, WidgetType.SEAT_DRIVER))
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.SEAT_PASSENGER))
     }
 
     @Test
     fun setGetAndNewIds() {
         val d = SahneSlots.defaultPark(apps)
         val ref = SahneSlotRef(SahneSlotKind.STRIP, 3)
-        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.LOCK), WidgetType.LOCK)
+        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.DRIVE_MODE), WidgetType.DRIVE_MODE)
         val e = SahneSlots.set(d, ref, slot)
         assertEquals(slot, SahneSlots.get(e, ref))
         assertEquals(d.left, e.left)
-        assertEquals("lock", slot.id)
+        assertEquals("drive_mode", slot.id)
+        assertEquals("lock_2", SahneSlots.newId(d, WidgetType.LOCK)) // kilit zaten Park şeridinde
         assertEquals("app_2", SahneSlots.newId(SahneSlots.set(d, ref, SahneSlot("app", WidgetType.APP)), WidgetType.APP))
         assertNull(SahneSlots.get(SahneSlots.set(e, ref, null), ref))
     }
