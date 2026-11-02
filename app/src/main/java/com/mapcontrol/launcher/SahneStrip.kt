@@ -71,6 +71,40 @@ object SahneArt {
         android.graphics.ColorMatrix().apply { setSaturation(0.15f) })
     const val DIM_ALPHA = 140
 
+    /** Gece: koyu grafit malzemeyi kaldırır (kontrast 1.3, +46 parlaklık); renk tonu korunur. Tek örnek. */
+    private fun liftMatrix() = android.graphics.ColorMatrix(floatArrayOf(
+        1.3f, 0f, 0f, 0f, 46f,
+        0f, 1.3f, 0f, 0f, 46f,
+        0f, 0f, 1.3f, 0f, 46f,
+        0f, 0f, 0f, 1.25f, -45f))
+    val NIGHT_LIFT: android.graphics.ColorFilter = android.graphics.ColorMatrixColorFilter(liftMatrix())
+    /** Gece + kapalı: önce renksizleştir, sonra kaldır (kapalı öğeler yine açıklardan soluk kalır). */
+    val NIGHT_LIFT_DESAT: android.graphics.ColorFilter = android.graphics.ColorMatrixColorFilter(
+        android.graphics.ColorMatrix().apply { setSaturation(0.15f); postConcat(liftMatrix()) })
+
+    /** Görsel filtresi: gece ve Sahne'de kaldırma, kapalıysa ayrıca renksiz; gündüz değişmez (null / DESATURATE). */
+    fun filter(off: Boolean): android.graphics.ColorFilter? =
+        if (LauncherTheme.night) (if (off) NIGHT_LIFT_DESAT else NIGHT_LIFT) else (if (off) DESATURATE else null)
+
+    /** Gece: görselin arkasına yumuşak ışık lekesi (beyaz ~%9, kenarda sönümlenir); gündüz null. View başına bir kez üretilir. */
+    fun spotlight(): Drawable? = if (!LauncherTheme.night) null else SpotDrawable()
+
+    /** Sınırlar değişince bir kez RadialGradient kurar (çizimde ayrılma yok); merkez beyaz ~%9 → kenarda saydam. */
+    private class SpotDrawable : Drawable() {
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        override fun onBoundsChange(b: android.graphics.Rect) {
+            val r = maxOf(b.width(), b.height()) / 2f
+            paint.shader = if (r <= 0f) null else android.graphics.RadialGradient(
+                b.exactCenterX(), b.exactCenterY(), r,
+                intArrayOf(0x17FFFFFF, 0x0AFFFFFF, 0x00FFFFFF), floatArrayOf(0f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP)
+        }
+        override fun draw(canvas: android.graphics.Canvas) { if (paint.shader != null) canvas.drawRect(bounds, paint) }
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+    }
+
     /** Panel zemini görseli (varsa); camın üstüne, içeriğin altına serilir. */
     fun panelBackground(context: android.content.Context, type: WidgetType): Drawable? = drawable(context, "panel_" + type.key)
 }
@@ -167,6 +201,7 @@ internal class StripItemView(
     private var last: StripState? = null
     private var sizing = SIZE_ICON
     private var artKey: String? = null
+    private var spot = false
 
     init {
         orientation = HORIZONTAL
@@ -224,6 +259,13 @@ internal class StripItemView(
     private fun applyArtLook(mirror: Boolean, dim: Boolean) {
         iconView.scaleX = if (mirror) -1f else 1f
         iconView.imageAlpha = if (dim) SahneArt.DIM_ALPHA else 255
+        val art = artKey != null
+        iconView.colorFilter = if (art) SahneArt.filter(false) else null
+        val night = art && LauncherTheme.night
+        if (night != spot) {
+            spot = night
+            iconView.background = if (night) SahneArt.spotlight() else null
+        }
     }
 
     private fun resizeIcon(mode: Int) {
@@ -290,6 +332,7 @@ internal class StripItemView(
         private val state = text(context, 14f).apply { SahneFonts.apply(this, 400) }
         private var artKey: String? = null
         private var artSized = false
+        private var spot = false
 
         private fun sizeIcon(art: Boolean) {
             icon.adjustViewBounds = art
@@ -325,11 +368,13 @@ internal class StripItemView(
                 if (art != artKey) { artKey = art; icon.setImageDrawable(SahneArt.drawable(context, art)) }
                 icon.imageTintList = null
                 // Açıkken tam renk; kapalı/bilinmiyorken renksiz ve soluk.
-                icon.colorFilter = if (on) null else SahneArt.DESATURATE
+                icon.colorFilter = SahneArt.filter(!on)
                 icon.imageAlpha = if (on) 255 else SahneArt.DIM_ALPHA
+                val night = LauncherTheme.night
+                if (night != spot) { spot = night; icon.background = if (night) SahneArt.spotlight() else null }
                 if (!artSized) { artSized = true; sizeIcon(true) }
             } else {
-                if (artSized) { artSized = false; artKey = null; icon.colorFilter = null; icon.imageAlpha = 255; sizeIcon(false) }
+                if (artSized) { artSized = false; artKey = null; icon.colorFilter = null; icon.imageAlpha = 255; icon.background = null; spot = false; sizeIcon(false) }
                 icon.setImageResource(sahneIconFor(p.icon))
                 icon.imageTintList = ColorStateList.valueOf(if (on) Sahne.AMBER else Sahne.INK_2)
             }
