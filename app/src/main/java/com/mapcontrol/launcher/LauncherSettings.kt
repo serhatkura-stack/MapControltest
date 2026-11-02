@@ -61,7 +61,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
     /**
      * [appearanceOnly]: "Görünüm" paneli (düzenleme modundaki düğme ve FrostNav'daki bağlantı); yalnızca tema, sürüş rengi,
-     * alt çubuk ve otomatik sürüş düzeni. Tam panel yalnızca test sürümünün başlık düğmesinde açılır.
+     * alt çubuk, otomatik sürüş düzeni ve araç rengi. Tam panel yalnızca test sürümünün başlık düğmesinde açılır.
      */
     fun show(appearanceOnly: Boolean = false) {
         if (dialog?.isShowing == true) return
@@ -112,6 +112,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
         addView(gap(activity, 12, vertical = true))
         addView(autoDriveLayoutToggle(d), fullWidth())
+
+        // Araç rengi (Sahne'nin ortasındaki araç): seçim hemen uygulanır, ekran yeniden kurulmaz.
+        addView(gap(activity, 12, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_car_color) }, fullWidth())
+        addView(gap(activity, 8, vertical = true))
+        addView(CarColorSwatches.build(activity, LauncherTheme.ACCENT, LauncherTheme.TEXT, if (LauncherTheme.night) 0x40FFFFFF else 0x30000000,
+            LauncherTheme.LABEL_SP, SWATCH_DP) { d.dismiss() }, fullWidth())
 
         if (appearanceOnly) return
         addView(gap(activity, 24, vertical = true))
@@ -358,6 +365,8 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         const val ROW_HEIGHT_DP = 80
         /** Açık | Kapalı parçasının genişliği (etiket kalan alanı alır). */
         const val TOGGLE_WIDTH_DP = 300
+        /** Araç rengi örneğinin çapı (halka dahil); adıyla birlikte dokunma hedefi 72dp'yi aşar. */
+        const val SWATCH_DP = 56
         /** Başlık, iç boşluk ve ekran kenarı için ayrılan yükseklik. */
         /** Başlık + kart dolgusu + sistem çubuğu (1920x720 ekranda 48 px) düşülür; aksi halde son satır pencere altında kırpılır. */
         const val SCROLL_RESERVED_DP = 212

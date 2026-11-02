@@ -57,6 +57,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         /** Lastik / cam / yakıt kapağı uyarı satırı; yoksa null. */
         val alertsText: String?,
         val locked: Boolean?,
+        /** Sahne aracında açık çizilecek parçalar (kapılar, bagaj, kaput); şemayla aynı sinyaller. */
+        val openParts: Set<CarPart> = emptySet(),
     )
 
     var onSummary: ((Summary) -> Unit)? = null
@@ -425,6 +427,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
             },
             alertsText = if (alerts.isEmpty()) null else alertsText(alerts, tireLow, windows, open.isNotEmpty()),
             locked = locked,
+            openParts = ui.car.let { CarPart.fromSignals(it.doorLf, it.doorRf, it.doorLr, it.doorRr, it.trunk, it.hood) },
         )
         if (sum != summary) {
             summary = sum

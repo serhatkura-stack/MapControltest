@@ -17,4 +17,12 @@
     <string name="home_screen_style_serbest">Free</string>
     <string name="home_screen_style_help_sahne">The car in the middle, two panels and a strip of controls.</string>
     <string name="home_screen_style_help_serbest">A free 12-column grid; place and resize widgets yourself.</string>
+    <string name="launcher_car_color">Car colour</string>
+    <string name="launcher_car_color_help">Colour of the car in the middle of the Stage home screen.</string>
+    <string name="car_color_grafit">Graphite</string>
+    <string name="car_color_siyah">Black</string>
+    <string name="car_color_beyaz">White</string>
+    <string name="car_color_gumus">Silver</string>
+    <string name="car_color_kirmizi">Red</string>
+    <string name="car_color_mavi">Blue</string>
 </resources>

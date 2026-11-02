@@ -3,8 +3,6 @@ package com.mapcontrol.launcher
 import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -38,11 +36,16 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private val sources: List<LauncherWidget> = listOf(vehicle, lock, health, air)
 
     private val floor = FloorView(activity)
-    private val car = ImageView(activity).apply {
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        setImageBitmap(carBitmap(activity))
+    /** Araç ve açılan parçaları (kapı/bagaj/kaput animasyonu); görünüm gövdenin dışına taşan açık parçaları da kapsar. */
+    private val car = CarStageView(activity).apply {
         contentDescription = activity.getString(R.string.launcher_sahne_car)
+        // Kapı hareketi sürerken her kare yeniden çizilir; arkadaki statik zemin (8 tam alan gradyan) bu sürede donanım
+        // katmanından tek doku olarak basılır, hareket bitince katman bırakılır.
+        onAnimatingChanged = { on -> floor.setLayerType(if (on) View.LAYER_TYPE_HARDWARE else View.LAYER_TYPE_NONE, null) }
     }
+    /** İlk özet animasyonsuz uygulanır (ekran açıldığında kapı zaten açıksa açık çizilir). */
+    private var carSeeded = false
+    private var carW = 0
 
     // --- Menzil ---
     // Sahibinin isteği: taslaktaki 84'ten küçük menzil bloğu (76 / 24 / 18, yakıt çubuğu 110), araç ortada dengelensin.
@@ -157,6 +160,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             range?.let { activity.getString(R.string.launcher_range_value, it) + " " + activity.getString(R.string.launcher_range_label) },
             fuel?.let { activity.getString(if (s.lowFuel) R.string.launcher_fuel_low else R.string.launcher_fuel_short, it) },
         ).joinToString(", ")
+        car.setOpen(s?.openParts.orEmpty(), animate = carSeeded)
+        if (s != null) carSeeded = true
         doorsChip.bind(s?.doorsText)
         alertsChip.bind(s?.alertsText)
         alertRow.visibility = if (s?.doorsText != null || s?.alertsText != null) View.VISIBLE else View.GONE
@@ -185,8 +190,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         setMeasuredDimension(w, h)
         val k = w / DESIGN_W
         floor.measure(exactly(w), exactly(h))
-        val carW = (CAR_W * k).toInt()
-        car.measure(exactly(carW), exactly((carW * CAR_ASPECT).toInt()))
+        carW = (CAR_W * k).toInt()
+        car.measure(exactly(CarStageView.widthFor(carW)), exactly(CarStageView.heightFor(carW)))
         val loose = MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST)
         val looseH = MeasureSpec.makeMeasureSpec(h, MeasureSpec.AT_MOST)
         rangeBlock.measure(loose, looseH)
@@ -204,14 +209,17 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         floor.layout(0, 0, w, h)
         val cx = (CAR_X * k).toInt()
         val cy = y(CAR_Y - CAR_LIFT)
-        car.layout(cx, cy, cx + car.measuredWidth, cy + car.measuredHeight)
+        val carL = cx - CarStageView.carLeft(carW)
+        val carT = cy - CarStageView.carTop(carW)
+        car.layout(carL, carT, carL + car.measuredWidth, carT + car.measuredHeight)
+        val carH = (carW * CAR_ASPECT).toInt()
         val side = (SIDE * k).toInt()
         rangeBlock.layout(side, y(RANGE_TOP), side + rangeBlock.measuredWidth, y(RANGE_TOP) + rangeBlock.measuredHeight)
         val lockTop = y(LOCK_TOP)
         lockChip.layout(w - side - lockChip.measuredWidth, lockTop, w - side, lockTop + lockChip.measuredHeight)
         // Uyarılar aracın hemen altında, ortada (iki not arasında; araç yukarı alındığı için yer var).
         val bottom = h - (NOTE_BOTTOM * k).toInt()
-        val aTop = maxOf(cy + car.measuredHeight - context.dp(14), bottom - alertRow.measuredHeight)
+        val aTop = maxOf(cy + carH - context.dp(14), bottom - alertRow.measuredHeight)
         val aLeft = (w - alertRow.measuredWidth) / 2
         alertRow.layout(aLeft, aTop, aLeft + alertRow.measuredWidth, aTop + alertRow.measuredHeight)
         healthNote.layout(side, bottom - healthNote.measuredHeight, side + healthNote.measuredWidth, bottom)
@@ -300,11 +308,18 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             label.text = text
             label.setTextColor(Sahne.AMBER)
             icon.imageTintList = ColorStateList.valueOf(Sahne.AMBER)
-            background = GradientDrawable().apply {
-                cornerRadius = context.dpF(999f)
-                setColor(Sahne.AMBER_SOFT)
-                setStroke(context.dp(1), Sahne.AMBER_LINE)
-            }
+            // Açık kapılar hapın altına uzanabilir: yarı saydam turuncu, zemin renginde dolu bir hapın üstünde (okunur kalsın).
+            background = android.graphics.drawable.LayerDrawable(arrayOf(
+                GradientDrawable().apply {
+                    cornerRadius = context.dpF(999f)
+                    setColor(Sahne.GROUND)
+                },
+                GradientDrawable().apply {
+                    cornerRadius = context.dpF(999f)
+                    setColor(Sahne.AMBER_SOFT)
+                    setStroke(context.dp(1), Sahne.AMBER_LINE)
+                },
+            ))
             contentDescription = text
             visibility = VISIBLE
         }
@@ -408,7 +423,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         const val CAR_X = 225f
         const val CAR_Y = 146f
         const val CAR_W = 510f
-        const val CAR_ASPECT = 559f / 1205f
+        const val CAR_ASPECT = CarAnimSpec.BASE_H / CarAnimSpec.BASE_W
         const val SIDE = 30f
         const val RANGE_TOP = 22f
         const val LOCK_TOP = 26f
@@ -418,18 +433,5 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         const val RANGE_SP = 76f
         /** Araç taslaktaki yerinden bu kadar (tasarım birimi) yukarıda: menzil satırı ile alt notlar arasında ortalı. */
         const val CAR_LIFT = 30f
-
-        /** Araç görseli süreç boyunca bir kez çözülür (her yeniden kurulumda değil). */
-        @Volatile private var cached: Bitmap? = null
-
-        fun carBitmap(context: Context): Bitmap? {
-            cached?.let { return it }
-            return try {
-                BitmapFactory.decodeResource(context.resources, R.drawable.launcher_stage_car, BitmapFactory.Options().apply { inScaled = false })
-                    .also { cached = it }
-            } catch (e: OutOfMemoryError) {
-                null
-            }
-        }
     }
 }

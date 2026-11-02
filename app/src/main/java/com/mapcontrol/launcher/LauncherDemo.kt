@@ -47,6 +47,7 @@ internal object LauncherDemo {
         if (intent?.hasExtra(EXTRA) != true) return
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
+        if (!enabled) main.removeCallbacks(cycle)
         if (enabled && intent.hasExtra(VehicleProfile.EXTRA_PROFILE)) VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
         if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
@@ -98,7 +99,8 @@ internal object LauncherDemo {
 
     /**
      * Gövde animasyonu önizlemesi: `--es launcher_demo_open "lf,rf,lr,rr,trunk,sunroof,hood"` (virgülle; boş = hepsi kapalı).
-     * Çalışırken yeni istekle de değiştirilebilir; araç kartı anında yeniden çizer.
+     * Sahne görsellerindeki adlar da geçer (fl, rl, fr, rr, door_fl …; bkz. [CarPart.parse]).
+     * Çalışırken yeni istekle de değiştirilebilir; araç kartı ve Sahne aracı anında yeniden çizer.
      */
     const val EXTRA_OPEN = "launcher_demo_open"
 
@@ -134,13 +136,48 @@ internal object LauncherDemo {
     fun applyPreview(intent: Intent?) {
         if (!enabled || intent == null) return
         if (intent.hasExtra(EXTRA_OPEN)) {
-            openParts = intent.getStringExtra(EXTRA_OPEN).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            onBodyChanged?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
+            openParts = parseOpen(intent.getStringExtra(EXTRA_OPEN))
+            onBodyChanged?.let { main.post(it) }
         }
+        if (intent.hasExtra(EXTRA_DOORS_CYCLE)) setDoorsCycle(intent.getBooleanExtra(EXTRA_DOORS_CYCLE, false))
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
         if (intent.hasExtra(EXTRA_HEALTH)) healthProblem = intent.getStringExtra(EXTRA_HEALTH)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
+    }
+
+    /** Virgüllü parça listesi → kart anahtarları (lf, lr, rf, rr, trunk, hood; tanınmayan olduğu gibi, ör. sunroof). */
+    internal fun parseOpen(raw: String?): Set<String> =
+        raw.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { CarPart.parse(it)?.demoKey ?: it }.toSet()
+
+    /**
+     * Kapı animasyonu döngüsü (`--ez launcher_demo_doors_cycle true`): ~1,5 sn arayla parçalar sırayla açılır, sonra aynı
+     * sırayla kapanır; kayıt/izleme içindir. `false` döngüyü durdurur (son durum kalır).
+     */
+    const val EXTRA_DOORS_CYCLE = "launcher_demo_doors_cycle"
+    const val DOORS_CYCLE_STEP_MS = 1_500L
+
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private var cycleStep = 0
+    private val cycle = object : Runnable {
+        override fun run() {
+            val all = CarPart.values()
+            val part = all[cycleStep % all.size]
+            val opening = cycleStep / all.size % 2 == 0
+            openParts = if (opening) openParts + part.demoKey else openParts - part.demoKey
+            cycleStep++
+            onBodyChanged?.run()
+            main.postDelayed(this, DOORS_CYCLE_STEP_MS)
+        }
+    }
+
+    private fun setDoorsCycle(on: Boolean) {
+        main.removeCallbacks(cycle)
+        if (!on) return
+        cycleStep = 0
+        openParts = emptySet()
+        onBodyChanged?.let { main.post(it) }
+        main.postDelayed(cycle, DOORS_CYCLE_STEP_MS)
     }
 
     private fun open(key: String) = if (key in openParts) 1 else 0

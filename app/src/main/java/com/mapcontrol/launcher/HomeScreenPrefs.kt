@@ -40,6 +40,16 @@ object HomeScreenPrefs {
         BottomBarMode.values().getOrNull(index)?.let { LauncherBottomBar.setMode(context, it) }
     }
 
+    /**
+     * "Araç rengi" (sıra [CarColor] sırası: Grafit, Siyah, Beyaz, Gümüş, Kırmızı, Mavi). İmzaya girmez: açık launcher
+     * tercih dinleyicisiyle görselleri canlı değiştirir, yeniden kurulmaz.
+     */
+    @JvmStatic fun carColorIndex(context: Context): Int = CarColorPrefs.get(context).ordinal
+
+    @JvmStatic fun setCarColorIndex(context: Context, index: Int) {
+        CarColor.values().getOrNull(index)?.let { CarColorPrefs.set(context, it) }
+    }
+
     /** "Ana ekran düzeni": true Sahne (varsayılan), false Serbest ızgara. Launcher bir sonraki öne gelişinde yeniden kurulur. */
     @JvmStatic fun sahneStyle(context: Context): Boolean = HomeStylePrefs.get(context) == HomeStyle.SAHNE
 

@@ -92,6 +92,7 @@ public class HomeScreenTabBuilder {
         createBottomBarSection(appearanceGrid);
         createAutoLayoutSection(appearanceGrid);
         createVehicleScreenSection(appearanceGrid);
+        createCarColorSection(appearanceGrid);
 
         addSectionTitle(R.string.home_screen_layout_title);
         FeatureGridLayout layoutGrid = new FeatureGridLayout(context);
@@ -275,6 +276,36 @@ public class HomeScreenTabBuilder {
                     HomeScreenPrefs.setVehicleProfileIndex(context, index);
                     callback.log("Ana ekran araç ekranı: " + index);
                 });
+    }
+
+    /**
+     * Araç rengi: Sahne'nin ortasındaki aracın boyası (Grafit / Siyah / Beyaz / Gümüş / Kırmızı / Mavi), renk örnekleri
+     * satırı. Launcher açıksa araç hemen yeni renge geçer (yeniden kurulmaz).
+     */
+    private void createCarColorSection(FeatureGridLayout grid) {
+        LinearLayout card = createCard(grid);
+        int hPad = UiStyles.dimenPx(context, R.dimen.spacing_medium);
+        TextView title = createText(card, context.getString(R.string.launcher_car_color),
+                R.dimen.text_size_medium, R.color.textPrimary);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(hPad, UiStyles.dimenPx(context, R.dimen.spacing_medium), hPad,
+                UiStyles.dimenPx(context, R.dimen.spacing_small));
+        float labelSp = context.getResources().getDimension(R.dimen.text_size_small)
+                / context.getResources().getDisplayMetrics().scaledDensity;
+        int outline = (UiStyles.color(context, R.color.textPrimary) & 0x00FFFFFF) | 0x40000000;
+        card.addView(com.mapcontrol.launcher.CarColorSwatches.build(context,
+                UiStyles.color(context, R.color.accentHighlight),
+                UiStyles.color(context, R.color.textPrimary),
+                outline, labelSp, 52,
+                () -> {
+                    callback.log("Ana ekran araç rengi: " + HomeScreenPrefs.carColorIndex(context));
+                    rebuild();
+                }), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView help = createText(card, context.getString(R.string.launcher_car_color_help),
+                R.dimen.text_size_small, R.color.textHint);
+        help.setPadding(hPad, UiStyles.dimenPx(context, R.dimen.spacing_small), hPad,
+                UiStyles.dimenPx(context, R.dimen.spacing_medium));
     }
 
     private void createAutoLayoutSection(FeatureGridLayout grid) {
