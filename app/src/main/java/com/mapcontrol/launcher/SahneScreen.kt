@@ -175,7 +175,7 @@ class SahneScreen(
         val item = StripItemView(activity,
             onTap = { part -> if (source != null) source.stripTap(part) else widget.view.performClick() },
             onLong = { source?.stripLongPress() ?: false },
-            art = SahneArt.illustration(activity, slot.type),
+            type = slot.type,
         )
         if (source != null) source.onStripChanged = { item.bind(source.stripState() ?: fallback) }
         item.bind(source?.stripState() ?: fallback)

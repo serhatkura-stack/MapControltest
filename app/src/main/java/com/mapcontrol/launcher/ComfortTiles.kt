@@ -256,7 +256,7 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
         root.contentDescription = context.getString(R.string.launcher_widget_sunshade) + ", " + str
         root.isEnabled = known || LauncherEdition.READ_ONLY
         notifyStrip(StripState(context.getString(R.string.launcher_widget_sunshade), str, R.drawable.ic_mdi_car_sunroof,
-            if (known || pending != null) StripTone.NORMAL else StripTone.MUTED))
+            if (known || pending != null) StripTone.NORMAL else StripTone.MUTED, active = open))
     }
 
     /** Şerit dokunuşu kutucuktaki dokunuşla aynı adımı atar (sürükleme şeritte yok). */
@@ -571,7 +571,7 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
         root.contentDescription = context.getString(R.string.launcher_widget_trunk) + ", " + str
         root.isEnabled = known || LauncherEdition.READ_ONLY
         notifyStrip(StripState(context.getString(R.string.launcher_widget_trunk), str, R.drawable.ic_mdi_car_trunk,
-            when { !(known || pending != null) -> StripTone.MUTED; open -> StripTone.ON; else -> StripTone.NORMAL }))
+            when { !(known || pending != null) -> StripTone.MUTED; open -> StripTone.ON; else -> StripTone.NORMAL }, active = open))
     }
 
     override fun stripTap(part: Int) = onTap()

@@ -47,6 +47,30 @@ object SahneArt {
     /** Şerit/panel öğesinin illüstrasyonu (varsa). */
     fun illustration(context: android.content.Context, type: WidgetType): Drawable? = drawable(context, type.key)
 
+    /**
+     * Duruma bağlı şerit görseli anahtarı (yoksa null): koltuk ısıtma/havalandırma açıkken kendi görseli, kapalıyken
+     * "seat_off"; diğer türlerde türün anahtarı. Kaynak yoksa null (vektör ikon kullanılır). Ayrılmış nesne üretmez.
+     */
+    fun stripKey(context: android.content.Context, type: WidgetType, s: StripState): String? {
+        val key = when (type) {
+            WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_HEAT_PASSENGER -> if (s.level > 0) "seat_heat_on" else "seat_off"
+            WidgetType.SEAT_VENT_DRIVER, WidgetType.SEAT_VENT_PASSENGER -> if (s.level > 0) "seat_vent_on" else "seat_off"
+            else -> type.key
+        }
+        return if (resId(context, key) == 0) null else key
+    }
+
+    /** Yolcu koltukları yatay çevrilir (görsel sürücü koltuğuna bakar). */
+    fun mirrored(type: WidgetType): Boolean = type == WidgetType.SEAT_HEAT_PASSENGER || type == WidgetType.SEAT_VENT_PASSENGER
+
+    /** Koltuk görselleri kendi açık/kapalı halini taşır; sunroof perdesi ve bagaj kapalıyken soluk çizilir. */
+    fun dimmed(type: WidgetType, s: StripState): Boolean = (type == WidgetType.SUNSHADE || type == WidgetType.TRUNK) && s.active != true
+
+    /** Kapalı/pasif görsel (buğu giderme kapalıyken): renksizleştirilmiş. Tek örnek, çizimde ayrılma yok. */
+    val DESATURATE: android.graphics.ColorFilter = android.graphics.ColorMatrixColorFilter(
+        android.graphics.ColorMatrix().apply { setSaturation(0.15f) })
+    const val DIM_ALPHA = 140
+
     /** Panel zemini görseli (varsa); camın üstüne, içeriğin altına serilir. */
     fun panelBackground(context: android.content.Context, type: WidgetType): Drawable? = drawable(context, "panel_" + type.key)
 }
@@ -68,6 +92,8 @@ data class StripState(
     /** Panel biçiminde değerin altında gösterilen ek satırlar (etiket, değer); [alertRows] uyarı renginde olanlar. */
     val rows: List<Pair<String, String>> = emptyList(),
     val alertRows: Set<Int> = emptySet(),
+    /** Açık/etkin mi (perde, bagaj); null = bilinmiyor/ilgisiz. Duruma bağlı görsel için. */
+    val active: Boolean? = null,
 )
 
 /**
@@ -114,8 +140,8 @@ internal class StripItemView(
     context: Context,
     private val onTap: (Int) -> Unit,
     private val onLong: () -> Boolean,
-    /** Değiştirilebilir illüstrasyon ([SahneArt]); varsa vektör ikonun yerine renklendirilmeden çizilir. */
-    private val art: Drawable? = null,
+    /** Widget türü: varsa duruma bağlı illüstrasyon ([SahneArt.stripKey]) vektör ikonun yerine renklendirilmeden çizilir. */
+    private val type: WidgetType? = null,
 ) : LinearLayout(context) {
 
     private val iconView = ImageView(context).apply {
@@ -139,7 +165,8 @@ internal class StripItemView(
         gravity = Gravity.CENTER_VERTICAL
     }
     private var last: StripState? = null
-    private var iconIsApp = false
+    private var sizing = SIZE_ICON
+    private var artKey: String? = null
 
     init {
         orientation = HORIZONTAL
@@ -147,7 +174,7 @@ internal class StripItemView(
         setPadding(context.dp(PAD_DP), 0, context.dp(PAD_DP), 0)
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
         addView(iconView, LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-        addView(texts, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(16) })
+        addView(texts, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(12) })
         addView(View(context), LayoutParams(0, 1, 1f))
         addView(pips, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
         addView(partsRow, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
@@ -164,14 +191,24 @@ internal class StripItemView(
         last = s
         val tint = stripToneColor(s.tone, Sahne.INK)
         val active = s.tone == StripTone.HEAT || s.tone == StripTone.COOL || s.tone == StripTone.ON || s.tone == StripTone.ALERT
-        if (s.iconDrawable != null || art != null) {
-            iconView.setImageDrawable(s.iconDrawable ?: art)
+        val key = if (s.iconDrawable == null && type != null) SahneArt.stripKey(context, type, s) else null
+        if (s.iconDrawable != null) {
+            iconView.setImageDrawable(s.iconDrawable)
             iconView.imageTintList = null
-            if (!iconIsApp) { iconIsApp = true; resizeIcon(APP_ICON_DP) }
+            artKey = null
+            applyArtLook(false, false)
+            resizeIcon(SIZE_APP)
+        } else if (key != null && type != null) {
+            if (key != artKey) { artKey = key; iconView.setImageDrawable(SahneArt.drawable(context, key)) }
+            iconView.imageTintList = null
+            applyArtLook(SahneArt.mirrored(type), SahneArt.dimmed(type, s))
+            resizeIcon(SIZE_ART)
         } else {
-            if (prev?.icon != s.icon || prev.iconDrawable != null) iconView.setImageResource(sahneIconFor(s.icon))
+            if (artKey != null || prev?.icon != s.icon || prev.iconDrawable != null) iconView.setImageResource(sahneIconFor(s.icon))
+            artKey = null
+            applyArtLook(false, false)
             iconView.imageTintList = ColorStateList.valueOf(if (active) tint else Sahne.INK_2)
-            if (iconIsApp) { iconIsApp = false; resizeIcon(ICON_DP) }
+            resizeIcon(SIZE_ICON)
         }
         title.text = s.title
         title.setTextColor(Sahne.INK_3)
@@ -184,8 +221,22 @@ internal class StripItemView(
         contentDescription = listOf(s.title, s.value, s.detail).filter { !it.isNullOrEmpty() }.joinToString(", ")
     }
 
-    private fun resizeIcon(dp: Int) {
-        iconView.layoutParams = (iconView.layoutParams as LayoutParams).apply { width = context.dp(dp); height = context.dp(dp) }
+    private fun applyArtLook(mirror: Boolean, dim: Boolean) {
+        iconView.scaleX = if (mirror) -1f else 1f
+        iconView.imageAlpha = if (dim) SahneArt.DIM_ALPHA else 255
+    }
+
+    private fun resizeIcon(mode: Int) {
+        if (mode == sizing && iconView.layoutParams != null && iconView.tag == mode) return
+        sizing = mode
+        iconView.tag = mode
+        val dp = when (mode) { SIZE_ART -> ART_DP; SIZE_APP -> APP_ICON_DP; else -> ICON_DP }
+        iconView.adjustViewBounds = mode == SIZE_ART
+        iconView.maxWidth = if (mode == SIZE_ART) context.dp(ART_MAX_W_DP) else Int.MAX_VALUE
+        iconView.layoutParams = (iconView.layoutParams as LayoutParams).apply {
+            width = if (mode == SIZE_ART) LayoutParams.WRAP_CONTENT else context.dp(dp)
+            height = context.dp(dp)
+        }
     }
 
     private fun bindPips(s: StripState) {
@@ -237,11 +288,23 @@ internal class StripItemView(
         private val icon = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
         private val name = text(context, 18f).apply { SahneFonts.apply(this, 600) }
         private val state = text(context, 14f).apply { SahneFonts.apply(this, 400) }
+        private var artKey: String? = null
+        private var artSized = false
+
+        private fun sizeIcon(art: Boolean) {
+            icon.adjustViewBounds = art
+            icon.maxWidth = if (art) context.dp(MINI_ART_MAX_W_DP) else Int.MAX_VALUE
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.layoutParams = (icon.layoutParams as LayoutParams).apply {
+                width = if (art) LayoutParams.WRAP_CONTENT else context.dp(26)
+                height = context.dp(if (art) MINI_ART_DP else 26)
+            }
+        }
 
         init {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(18), 0, context.dp(18), 0)
+            setPadding(context.dp(12), 0, context.dp(14), 0)
             minimumWidth = context.dp(LauncherTheme.TOUCH_MIN_DP)
             addView(icon, LayoutParams(context.dp(26), context.dp(26)))
             addView(LinearLayout(context).apply {
@@ -257,11 +320,16 @@ internal class StripItemView(
 
         fun bind(p: StripPart) {
             val on = p.on == true
-            val art = SahneArt.drawable(context, p.artKey)
+            val art = if (p.artKey != null && SahneArt.resId(context, p.artKey) != 0) p.artKey else null
             if (art != null) {
-                icon.setImageDrawable(art)
+                if (art != artKey) { artKey = art; icon.setImageDrawable(SahneArt.drawable(context, art)) }
                 icon.imageTintList = null
+                // Açıkken tam renk; kapalı/bilinmiyorken renksiz ve soluk.
+                icon.colorFilter = if (on) null else SahneArt.DESATURATE
+                icon.imageAlpha = if (on) 255 else SahneArt.DIM_ALPHA
+                if (!artSized) { artSized = true; sizeIcon(true) }
             } else {
+                if (artSized) { artSized = false; artKey = null; icon.colorFilter = null; icon.imageAlpha = 255; sizeIcon(false) }
                 icon.setImageResource(sahneIconFor(p.icon))
                 icon.imageTintList = ColorStateList.valueOf(if (on) Sahne.AMBER else Sahne.INK_2)
             }
@@ -282,8 +350,16 @@ internal class StripItemView(
         const val PAD_DP = 22
         const val ICON_DP = 30
         const val APP_ICON_DP = 40
+        /** Illüstrasyon yüksekliği (şerit 92dp; büyütmez) ve en geniş hali. */
+        const val ART_DP = 62
+        const val ART_MAX_W_DP = 72
+        private const val SIZE_ICON = 0
+        private const val SIZE_APP = 1
+        private const val SIZE_ART = 2
         const val TITLE_SP = 15f
         const val VALUE_SP = 21f
+        const val MINI_ART_DP = 34
+        const val MINI_ART_MAX_W_DP = 46
         const val PIP_W_DP = 22
         const val PIP_H_DP = 6
     }
