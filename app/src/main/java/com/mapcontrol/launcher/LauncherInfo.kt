@@ -66,6 +66,7 @@ object LauncherInfo {
             "yoğunluk" to "${dm.densityDpi} dpi",
             "en küçük genişlik" to "${context.resources.configuration.smallestScreenWidthDp} dp",
             "ızgara" to if (cw > 0f && ch > 0f) "$GRID_COLS×$GRID_ROWS, hücre ${cw.toInt()}×${ch.toInt()} px" else "$GRID_COLS×$GRID_ROWS, hücre henüz ölçülmedi",
+            "araç profili" to VehicleProfile.active.name,
             "düzen modu" to mode.name,
         )
     }

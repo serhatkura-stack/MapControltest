@@ -90,6 +90,7 @@ public class HomeScreenTabBuilder {
         createDriveAccentSection(appearanceGrid);
         createBottomBarSection(appearanceGrid);
         createAutoLayoutSection(appearanceGrid);
+        createVehicleScreenSection(appearanceGrid);
 
         addSectionTitle(R.string.home_screen_layout_title);
         FeatureGridLayout layoutGrid = new FeatureGridLayout(context);
@@ -238,6 +239,26 @@ public class HomeScreenTabBuilder {
                 index -> {
                     HomeScreenPrefs.setBottomBarIndex(context, index);
                     callback.log("Ana ekran alt çubuk: " + index);
+                });
+    }
+
+    /** Araç ekranı: Otomatik / Tiggo 7 / Tiggo 8 (sıra {@code HomeScreenPrefs.vehicleProfileIndex}); launcher bir sonraki açılışta yeniden kurulur. */
+    private void createVehicleScreenSection(FeatureGridLayout grid) {
+        UiStyles.addTernarySegmentedControl(context, createCard(grid),
+                context.getString(R.string.home_screen_vehicle_screen),
+                new String[]{
+                        context.getString(R.string.home_screen_vehicle_auto),
+                        context.getString(R.string.home_screen_vehicle_t7),
+                        context.getString(R.string.home_screen_vehicle_t8)},
+                new String[]{
+                        context.getString(R.string.home_screen_vehicle_help_auto),
+                        context.getString(R.string.home_screen_vehicle_help_t7),
+                        context.getString(R.string.home_screen_vehicle_help_t8)},
+                new int[]{0, 1, 2},
+                HomeScreenPrefs.vehicleProfileIndex(context),
+                index -> {
+                    HomeScreenPrefs.setVehicleProfileIndex(context, index);
+                    callback.log("Ana ekran araç ekranı: " + index);
                 });
     }
 

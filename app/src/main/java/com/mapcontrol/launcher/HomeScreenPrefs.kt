@@ -5,7 +5,7 @@ import android.content.Intent
 
 /**
  * FrostNav'ın "Ana ekran" sekmesi için Java'dan çağrılan ince katman: launcher ayarlarını aynı tercih
- * anahtarlarıyla (ThemeMode, DriveAccent, LauncherBottomBar, DriveLayoutPrefs, LayoutStore) okur ve yazar.
+ * anahtarlarıyla (ThemeMode, DriveAccent, LauncherBottomBar, DriveLayoutPrefs, LayoutStore, VehicleProfile) okur ve yazar.
  * Launcher bu değerlerin [signature]'ı değişmişse öne gelirken kendini yeniden kurar (bkz. HomeLauncherActivity.onResume).
  */
 object HomeScreenPrefs {
@@ -14,6 +14,15 @@ object HomeScreenPrefs {
     const val EXTRA_OPEN_EDIT = "launcher_open_edit"
     private const val PREFS_NAME = "launcher_settings"
     private const val KEY_LAYOUT_RESET_GEN = "layout_reset_gen"
+    private const val KEY_VEHICLE_PROFILE = "vehicle_profile"
+
+    /** "Araç ekranı": 0 = Otomatik (ekrandan), 1 = Tiggo 7, 2 = Tiggo 8. Launcher bir sonraki öne gelişinde yeniden kurulur. */
+    @JvmStatic fun vehicleProfileIndex(context: Context): Int =
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_VEHICLE_PROFILE, VehicleProfile.OVERRIDE_AUTO).coerceIn(0, 2)
+
+    @JvmStatic fun setVehicleProfileIndex(context: Context, index: Int) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_VEHICLE_PROFILE, index.coerceIn(0, 2)).apply()
+    }
 
     @JvmStatic fun themeIndex(context: Context): Int = ThemeMode.read(context).ordinal
 
@@ -45,7 +54,7 @@ object HomeScreenPrefs {
     /** Launcher'ın kurulumda okuduğu tercihlerin özeti; farklıysa açık launcher yeniden kurulmalıdır. */
     @JvmStatic fun signature(context: Context): String {
         val gen = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_LAYOUT_RESET_GEN, 0)
-        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen"
+        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen|${VehicleProfile.compute(context).key}"
     }
 
     /** Ana ekranı doğrudan düzenleme modunda açar. */

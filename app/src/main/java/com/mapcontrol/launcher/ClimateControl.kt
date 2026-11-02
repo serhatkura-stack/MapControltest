@@ -40,6 +40,7 @@ internal class ClimateControl(
     private val io: Executor,
     private val main: Handler,
 ) {
+    private val flatBar = VehicleProfile.active.barStyle == BarStyle.FLAT
     private var readout = ClimateReadout()
     private var pendingDriver: Double? = null
     private var pendingPassenger: Double? = null
@@ -139,7 +140,7 @@ internal class ClimateControl(
     // --- Sıcaklık hücresi ---
 
     private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, TEMP_SP, medium = true).apply {
+        private val label = text(context, if (flatBar) FLAT_TEMP_SP else TEMP_SP, medium = true).apply {
             gravity = Gravity.CENTER
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
@@ -315,7 +316,7 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, FAN_SP, medium = true).apply {
+        private val number = text(context, if (flatBar) FLAT_FAN_SP else FAN_SP, medium = true).apply {
             gravity = Gravity.CENTER
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
@@ -578,6 +579,9 @@ internal class ClimateControl(
     companion object {
         private const val DASH = "—"
         private const val TEMP_SP = 56f
+        /** Düz (Tiggo 8) ince şeritte küçültülmüş yazılar. */
+        private const val FLAT_TEMP_SP = 38f
+        private const val FLAT_FAN_SP = 30f
         private const val BUBBLE_SP = 56f
         private const val DEGREE_SCALE = 0.8f
         private const val CHEVRON_DP = 32

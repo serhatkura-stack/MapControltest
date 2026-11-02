@@ -210,6 +210,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
     private var shownPlaying: Boolean? = null
     private var lastArtworkSize = -1
     private var lastCompact: Boolean? = null
+    private var lastTall: Boolean? = null
     private var lastPlayDp = -1
     private var lastTiny: Boolean? = null
     private var lastShort: Boolean? = null
@@ -324,7 +325,9 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         if (layoutCompact) return
         val density = context.resources.displayMetrics.density
         val showArtwork = contentHeight >= context.dp(180)
-        val size = if (showArtwork) minOf(contentHeight, context.dp(300)) else 0
+        // Uzun kartta (ör. 12×8 ızgarada 6×6) kapak ve yazılar büyür; boş orta bant kalmaz.
+        val tall = contentHeight >= context.dp(TALL_HEIGHT_DP)
+        val size = if (showArtwork) minOf(contentHeight, context.dp(if (tall) 360 else 300), if (tall) (width * 0.4f).toInt() else Int.MAX_VALUE) else 0
         if (size != lastArtworkSize) {
             lastArtworkSize = size
             val lp = artworkBox.layoutParams as LinearLayout.LayoutParams
@@ -341,9 +344,12 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
             placeholderIcon.layoutParams = ilp
         }
         val compact = width / density < 700f
-        if (compact != lastCompact) {
+        if (compact != lastCompact || tall != lastTall) {
+            lastTall = tall
             lastCompact = compact
-            titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 40f else LauncherTheme.TITLE_SP)
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 40f else if (tall) TALL_TITLE_SP else LauncherTheme.TITLE_SP)
+            titleView.maxLines = if (tall && !compact) 2 else 1
+            artistView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (tall && !compact) TALL_ARTIST_SP else 28f)
         }
         // Çok kısa kartta (ör. 3×2) kaynak ve sanatçı satırları, daha kısada süre satırı gizlenir.
         // İzin yok / boşta durumunda ikincil satır asıl mesajdır; çok kısa değilse kalır.
@@ -365,7 +371,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
             timesGap.visibility = timesVis
         }
         // Düğmeler kalan yüksekliğe sığacak kadar küçülür (en çok tam boy, en az 56dp); kontroller kesilmez.
-        var reserved = titleView.lineHeight + context.dp(16) + context.dp(8) + context.dp(PROGRESS_GAP_DP)
+        var reserved = titleView.lineHeight * (if (tall) 2 else 1) + context.dp(16) + context.dp(8) + context.dp(PROGRESS_GAP_DP)
         if (!tiny) reserved += context.dp(8) + elapsedView.lineHeight
         if (showSource) reserved += sourceLabel.lineHeight + context.dp(4)
         if (showArtist) reserved += artistView.lineHeight + context.dp(4)
@@ -584,6 +590,10 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         const val ARTWORK_MAX_PX = 480
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */
         const val SHORT_HEIGHT_DP = 250
+        /** Bu yüksekliğin üstünde kapak ve başlık büyür. */
+        const val TALL_HEIGHT_DP = 380
+        const val TALL_TITLE_SP = 56f
+        const val TALL_ARTIST_SP = 36f
         /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
         const val TINY_HEIGHT_DP = 190
         const val PROGRESS_GAP_DP = 12

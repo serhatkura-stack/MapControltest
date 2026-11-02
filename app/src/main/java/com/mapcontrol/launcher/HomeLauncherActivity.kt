@@ -101,6 +101,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
+        // Izgara kurulmadan önce: satır sayısı ve düzen deposu etkin araç profiline göre.
+        VehicleProfile.resolve(this)
         LauncherDemo.applyPreview(intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
@@ -157,7 +159,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             if (ourBar != null) {
                 addView(gap(context, 16, vertical = true))
                 addView(ourBar.view, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.HEIGHT_DP)))
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.heightDp(this@HomeLauncherActivity))))
             }
 
             // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın. Bizimki'nde en altta
@@ -202,6 +204,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
+        // Demo: çalışırken araç profili değişirse (satır sayısı değişir) yeniden kurulur.
+        if (LauncherDemo.enabled && intent?.hasExtra(VehicleProfile.EXTRA_PROFILE) == true) {
+            VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
+            if (VehicleProfile.compute(this) != VehicleProfile.active) ThemeTransition.recreate(this)
+        }
     }
 
     /** FrostNav Ayarlar'daki "Ana ekran görünümü" bağlantısı: [EXTRA_OPEN_APPEARANCE] ile gelince Görünüm panelini açar. */

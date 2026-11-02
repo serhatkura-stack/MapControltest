@@ -124,7 +124,8 @@ class AppShortcutTile(
         val iconPx = context.dp(if (compact) ICON_COMPACT_DP else ICON_DP)
         iconView.layoutParams = LinearLayout.LayoutParams(iconPx, iconPx)
         labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) LABEL_COMPACT_SP else LauncherTheme.LABEL_SP)
-        labelView.maxLines = 1
+        // Dar kutucukta uzun ad ("YouTube Music") kesilmesin: iki satıra kadar sarılır.
+        labelView.maxLines = if (compact) 2 else 1
         val p = context.dp(if (compact) 4 else 10)
         root.setPadding(p, p, p, p)
         if (shown is Shown.Empty) bindEmpty()

@@ -11,7 +11,12 @@ data class RawWidget(val id: String, val typeKey: String, val col: Int, val row:
  * Ana ekran düzenini SharedPreferences'ta JSON olarak saklar.
  * Okunan düzen geçersizse (ızgara dışı, çakışan) varsayılan düzene dönülür.
  */
-class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PARK) {
+class LayoutStore(
+    context: Context,
+    private val mode: LayoutMode = LayoutMode.PARK,
+    /** Düzenin ait olduğu araç ekranı; saklama dosyasını ve varsayılanları belirler. */
+    private val vehicle: VehicleProfile = VehicleProfile.compute(context),
+) {
 
     /** OEM alt çubuğu olan araçta (Desay) varsayılan düzen farklıdır. */
     private val oemBar = LauncherSafeArea.hasOemBar(context)
@@ -19,12 +24,12 @@ class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PA
     /** Varsayılan uygulama kutucukları alt çubuktaki uygulama şeridinin varsayılanlarıyla dolar. */
     private val appPackages = AppDock.installedDefaults(context, DEFAULT_APP_SLOTS)
 
-    private val prefs = context.applicationContext.getSharedPreferences(LayoutKeys.prefsName(Profiles.current(context)), Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(LayoutKeys.prefsName(Profiles.current(context), vehicle), Context.MODE_PRIVATE)
 
     private val key = LayoutKeys.key(mode)
 
     private fun fallback(): List<PlacedWidget> =
-        if (mode == LayoutMode.DRIVE) defaultDriveLayout(oemBar, appPackages) else defaultLayout(oemBar, appPackages)
+        if (mode == LayoutMode.DRIVE) defaultDriveLayout(oemBar, appPackages, vehicle) else defaultLayout(oemBar, appPackages, vehicle)
 
     fun load(): List<PlacedWidget> {
         val raw = prefs.getString(key, null) ?: return fallback()
@@ -44,7 +49,7 @@ class LayoutStore(context: Context, private val mode: LayoutMode = LayoutMode.PA
                 )
             }
             // Sürüm anahtarı yoksa kayıt eski 6×3 biçimindedir: bir kez ×2 taşınır ve yeni biçimde yazılır.
-            val oldGrid = mode == LayoutMode.PARK && prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
+            val oldGrid = vehicle == VehicleProfile.TIGGO7 && mode == LayoutMode.PARK && prefs.getInt(KEY_GRID_VERSION, 1) < GRID_VERSION
             val scaled = if (oldGrid) raws.map { it.copy(col = it.col * 2, row = it.row * 2, w = it.w * 2, h = it.h * 2) } else raws
             val resolvedAll = resolveRaw(scaled)
             // Aynı tekil türden ikincisi (eski/hatalı kayıt) atılır; ilki kalır.

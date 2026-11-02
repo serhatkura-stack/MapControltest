@@ -83,7 +83,9 @@ object LayoutKeys {
     const val DRIVE = "widgets_drive_v1"
 
     fun key(mode: LayoutMode): String = if (mode == LayoutMode.DRIVE) DRIVE else PARK
-    fun prefsName(profile: Int): String = Profiles.key(PREFS, profile)
+    /** Tiggo 8 düzenleri ayrı dosyada tutulur (12×6 bir düzen 12×8'e ya da tersine asla yüklenmez); Tiggo 7 adı değişmez. */
+    fun prefsName(profile: Int, vehicle: VehicleProfile = VehicleProfile.TIGGO7): String =
+        Profiles.key(PREFS, profile) + if (vehicle == VehicleProfile.TIGGO8) "_t8" else ""
 }
 
 /** "Otomatik sürüş düzeni" seçeneği (profil başına, varsayılan açık). Ayarlar satırı için: [get] / [set]. */
@@ -153,12 +155,34 @@ internal object DriveSignals {
  * Uygulama kutucuğu yoktur ([oemBar] ve [appPackages] yalnızca imza uyumu içindir); ızgara boşluksuz dolar.
  */
 @Suppress("UNUSED_PARAMETER")
-fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = listOf(
+fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList(), profile: VehicleProfile = VehicleProfile.TIGGO7): List<PlacedWidget> =
+    if (profile == VehicleProfile.TIGGO8) defaultDriveLayoutT8() else listOf(
+        PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
+        PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
+        PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 4, Span(2, 2)),
+        PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 6)),
+        PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
+        PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 10, 2, Span(2, 2)),
+        PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
+    )
+
+/**
+ * Tiggo 8 (12×8) Sürüş varsayılanı (yer tutucu): Tiggo 7 ile aynı iskelet, iki ek satırla. Sol sütun: araç kartı 4×4,
+ * altında iki satır koltuk/arka hoparlör/sürüş modu (sürücü ısıtma sol alt köşede). Orta: medya 6×6, altında
+ * yolculuk · sağlık · buğu giderme. Sağ sütun: tüketim, mola, yolcu soğutma, yolcu ısıtma (sağ alt köşe).
+ */
+private fun defaultDriveLayoutT8(): List<PlacedWidget> = listOf(
     PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
-    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 4, Span(2, 2)),
+    PlacedWidget("seat_vent_driver", WidgetType.SEAT_VENT_DRIVER, 0, 4, Span(2, 2)),
     PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 4, Span(2, 2)),
+    PlacedWidget("seat_heat_driver", WidgetType.SEAT_HEAT_DRIVER, 0, 6, Span(2, 2)),
+    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 2, 6, Span(2, 2)),
     PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 6)),
+    PlacedWidget("trip", WidgetType.TRIP, 4, 6, Span(2, 2)),
+    PlacedWidget("health", WidgetType.HEALTH, 6, 6, Span(2, 2)),
+    PlacedWidget("defrost", WidgetType.DEFROST, 8, 6, Span(2, 2)),
     PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
     PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 10, 2, Span(2, 2)),
-    PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)),
+    PlacedWidget("seat_vent_passenger", WidgetType.SEAT_VENT_PASSENGER, 10, 4, Span(2, 2)),
+    PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 6, Span(2, 2)),
 )

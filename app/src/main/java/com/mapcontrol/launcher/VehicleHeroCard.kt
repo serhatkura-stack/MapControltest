@@ -70,7 +70,10 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
 
     private val rangeText = text(context, LauncherTheme.TIME_SP, medium = true)
     /** Büyük sayının "kalan yakıt menzili" olduğunu söyleyen küçük ikincil etiket. */
-    private val rangeLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_range_label) }
+    private val rangeLabel = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+        setText(R.string.launcher_range_label)
+        ellipsize = null
+    }
     private val fuelText = text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
     private val fuelBar = FuelBar(context)
     /** Araç şeması: markasız kuşbakışı SUV; açık kapı/bagaj/cam tavan ve lastik uyarısı yerinde gösterilir. */
@@ -155,9 +158,14 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             maxOf(fuelText.lineHeight, context.dp(FUEL_BAR_DP))
         // Boyutlar yazıya dokunmadan ölçülür; yalnızca değişince uygulanır, yoksa her yerleşim yenisini tetikler.
         val paint = android.text.TextPaint(rangeText.paint)
+        // Sayı ile "menzil" etiketi sütun genişliğine de sığmalı (geniş ekranda etiket "men…" diye kesilmesin).
+        val colWidth = ((rangeText.parent as? View)?.parent as? View)?.width ?: 0
+        val labelWidth = rangeLabel.paint.measureText(rangeLabel.text.toString()) + context.dp(LauncherTheme.GAP_S_DP)
+        val numberText = rangeText.text.toString()
         val size = RANGE_SIZES_SP.firstOrNull { sp ->
             paint.textSize = sp * context.resources.displayMetrics.scaledDensity
-            fixed + paint.getFontMetricsInt(null) <= avail
+            fixed + paint.getFontMetricsInt(null) <= avail &&
+                (colWidth <= 0 || paint.measureText(numberText) + labelWidth <= colWidth)
         } ?: RANGE_SIZES_SP.last()
         val px = size * context.resources.displayMetrics.scaledDensity
         if (Math.abs(rangeText.textSize - px) > 0.5f) {
@@ -488,7 +496,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
         const val FADE_IN_MS = 250L
         const val FUEL_HYSTERESIS_TENTHS = 6
         /** Menzil yazısı boyutları, büyükten küçüğe; kart alçaldıkça ilk sığan seçilir. */
-        val RANGE_SIZES_SP = listOf(LauncherTheme.TIME_SP, 44f, 36f)
+        val RANGE_SIZES_SP = listOf(LauncherTheme.TIME_SP, 44f, 36f, 30f)
         const val TIRE_POLL_MS = 10_000L
     }
 }

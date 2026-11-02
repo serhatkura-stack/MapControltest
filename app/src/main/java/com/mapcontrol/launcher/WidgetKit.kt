@@ -8,11 +8,13 @@ import com.mapcontrol.R
 /**
  * Düzenlenebilir ana ekran ızgarasının modeli.
  *
- * Orta alan [GRID_COLS] × [GRID_ROWS] hücrelik bir ızgaradır. Üst şerit (saat, Ayarlar) ve
+ * Orta alan [GRID_COLS] × [GRID_ROWS] hücrelik bir ızgaradır (satır sayısı araç profiline göre). Üst şerit (saat, Ayarlar) ve
  * alt çubuk (klima, uygulamalar) ızgaranın dışındadır ve sabittir.
  */
 const val GRID_COLS = 12
-const val GRID_ROWS = 6
+
+/** Izgaranın satır sayısı: etkin [VehicleProfile]'a göre (Tiggo 7: 6, Tiggo 8: 8). */
+val GRID_ROWS: Int get() = VehicleProfile.active.gridRows
 
 /** Kayıtlı düzenin ızgara sürümü: 1 = eski 6×3, 2 = 12×6 (her değer tam iki katı). */
 const val GRID_VERSION = 2
@@ -106,7 +108,7 @@ data class PlacedWidget(
         col < other.col + other.span.w && other.col < col + span.w &&
             row < other.row + other.span.h && other.row < row + span.h
 
-    fun fits(): Boolean = col >= 0 && row >= 0 && col + span.w <= GRID_COLS && row + span.h <= GRID_ROWS
+    fun fits(rows: Int = GRID_ROWS): Boolean = col >= 0 && row >= 0 && col + span.w <= GRID_COLS && row + span.h <= rows
 }
 
 /** Düzenleme moduna göre görünümünü değiştiren widget (ör. boş uygulama kutusunun artısı yalnız düzenlemede görünür). */
@@ -128,7 +130,7 @@ interface SizedWidget : LauncherWidget {
  * Izgara boşluksuz dolar. [oemBar] iki durumda da aynı düzeni verir (her iki alt çubukta da uygulamalar düğmesi var);
  * imza [LayoutStore] ile uyum içindir. Uygulama kutucukları [appPackages] ile dolar.
  */
-fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList()): List<PlacedWidget> = listOf(
+fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList(), profile: VehicleProfile = VehicleProfile.TIGGO7): List<PlacedWidget> = listOf(
     PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
     PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(4, 2)),
     PlacedWidget("health", WidgetType.HEALTH, 4, 2, Span(2, 2)),
@@ -140,7 +142,21 @@ fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList
     PlacedWidget("defrost", WidgetType.DEFROST, 6, 4, Span(2, 2)),
 ) + (0 until DEFAULT_PARK_APP_TILES).map { i ->
     PlacedWidget("app_dock_$i", WidgetType.APP, 8 + i, 4, Span(1, 2), appPackages.getOrNull(i))
-} + PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2))
+} + PlacedWidget("seat_heat_passenger", WidgetType.SEAT_HEAT_PASSENGER, 10, 4, Span(2, 2)) +
+    if (profile == VehicleProfile.TIGGO8) parkExtraBandT8() else emptyList()
+
+/**
+ * Tiggo 8 (12×8) Park'ın ek bandı: Tiggo 7 düzeninin altına 2 satırlık bir 2×2 kutucuk bandı. Üstteki iki bant
+ * (kahraman kartlar dahil) Tiggo 7 ile aynı kalır; kahramanlar 4×4'te zaten orantılıdır. Yer tutucudur.
+ */
+private fun parkExtraBandT8(): List<PlacedWidget> = listOf(
+    PlacedWidget("seat_vent_driver", WidgetType.SEAT_VENT_DRIVER, 0, 6, Span(2, 2)),
+    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 6, Span(2, 2)),
+    PlacedWidget("consumption", WidgetType.CONSUMPTION, 4, 6, Span(2, 2)),
+    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 6, 6, Span(2, 2)),
+    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 8, 6, Span(2, 2)),
+    PlacedWidget("seat_vent_passenger", WidgetType.SEAT_VENT_PASSENGER, 10, 6, Span(2, 2)),
+)
 
 /** Park varsayılanındaki ince uygulama kutucuğu sayısı (her biri 1×2, yan yana tek şerit). */
 const val DEFAULT_PARK_APP_TILES = 2

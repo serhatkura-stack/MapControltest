@@ -67,7 +67,14 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
-    private val surface = DockSurface(context)
+    /** Çubuk biçimi araç profilinden gelir: Tiggo 7 mevcut çubuk, Tiggo 8 ince düz şerit. */
+    private val style = VehicleProfile.active.barStyle
+    private val flat = style == BarStyle.FLAT
+    private val barHeightDp = heightDp(context)
+    private val radiusDp = if (flat) FLAT_RADIUS_DP else LauncherTheme.CARD_RADIUS_DP
+    private val navIconDp = if (flat) FLAT_NAV_ICON_DP else NAV_ICON_DP
+    private val surface = DockSurface(context, radiusDp)
+    private val dividerInsetDp = if (flat) FLAT_DIVIDER_INSET_DP else DIVIDER_INSET_DP
 
     // --- Klima ---
     private val climateControl = ClimateControl(context, io, main)
@@ -82,21 +89,21 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         clipToOutline = true
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) {
-                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(LauncherTheme.CARD_RADIUS_DP))
+                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(radiusDp))
                 outline.alpha = 1f
             }
         }
-        theme.bind { elevation = context.dpF(LauncherTheme.DOCK_ELEVATION_DP) }
+        theme.bind { elevation = if (flat) 0f else context.dpF(LauncherTheme.DOCK_ELEVATION_DP) }
         var first = true
         fun add(v: View, lp: LinearLayout.LayoutParams) {
             if (!first) addView(divider(), LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
-                topMargin = context.dp(DIVIDER_INSET_DP)
-                bottomMargin = context.dp(DIVIDER_INSET_DP)
+                topMargin = context.dp(dividerInsetDp)
+                bottomMargin = context.dp(dividerInsetDp)
             })
             first = false
             addView(v, lp)
         }
-        fun square() = LinearLayout.LayoutParams(context.dp(HEIGHT_DP), LinearLayout.LayoutParams.MATCH_PARENT)
+        fun square() = LinearLayout.LayoutParams(context.dp(barHeightDp), LinearLayout.LayoutParams.MATCH_PARENT)
         // Ana ekran: sistemin ana ekranına çıkar (launcher varsayılan değilken OEM ana ekranı); varsayılan bizsek bir şey yapmaz.
         add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, square())
         add(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() }, square())
@@ -164,18 +171,18 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             isClickable = true
             isFocusable = true
             if (active) {
-                val inset = context.dp(PILL_INSET_DP)
+                val inset = context.dp(if (flat) FLAT_PILL_INSET_DP else PILL_INSET_DP)
                 addView(View(context).apply {
-                    theme.bind { background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), PILL_RADIUS_DP) }
+                    theme.bind { background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), if (flat) FLAT_PILL_RADIUS_DP else PILL_RADIUS_DP) }
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
                     setMargins(inset, inset, inset, inset)
                 })
             }
             addView(
-                icon(context, iconRes, NAV_ICON_DP).also { ic ->
+                icon(context, iconRes, navIconDp).also { ic ->
                     theme.bind { ic.setTint(if (active) LauncherTheme.ON_ACCENT else LauncherTheme.DOCK_TEXT) }
                 },
-                FrameLayout.LayoutParams(context.dp(NAV_ICON_DP), context.dp(NAV_ICON_DP), Gravity.CENTER),
+                FrameLayout.LayoutParams(context.dp(navIconDp), context.dp(navIconDp), Gravity.CENTER),
             )
             setOnClickListener { onClick() }
         }
@@ -305,7 +312,14 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
     }
 
     companion object {
-        const val HEIGHT_DP = 104
+        /** Tiggo 7 çubuk yüksekliği; profile göre gerçek yükseklik için [heightDp]. */
+        const val HEIGHT_DP = VehicleProfile.TIGGO7_BAR_DP
+
+        /** Etkin profilin çubuk yüksekliği (dp): Tiggo 7 sabit, Tiggo 8 ekran yüksekliğinin kendi dock oranı. */
+        fun heightDp(context: Context): Int {
+            val dm = context.resources.displayMetrics
+            return VehicleProfile.active.barHeightDp(dm.heightPixels / dm.density)
+        }
         /** Çubuğun alt kenarında bırakılan boşluk: alttan kaydırma hareketi (OEM çubuğunu çağırır) çubuğa takılmasın. */
         const val BOTTOM_GAP_DP = 12
 
@@ -319,6 +333,13 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         private const val DIVIDER_INSET_DP = 22
         private const val PILL_INSET_DP = 12
         private const val PILL_RADIUS_DP = 18f
+
+        /** Düz (Tiggo 8) şerit: daha ince, küçük köşe yarıçapı, küçük ikon ve içeri paylar. */
+        private const val FLAT_RADIUS_DP = 14f
+        private const val FLAT_NAV_ICON_DP = 30
+        private const val FLAT_DIVIDER_INSET_DP = 16
+        private const val FLAT_PILL_INSET_DP = 8
+        private const val FLAT_PILL_RADIUS_DP = 14f
 
         /** Bölüm ağırlıkları (kare düğmeler sabit): sıcaklıklar geniş, fan biraz dar. */
         private const val W_TEMP = 1.4f
@@ -353,7 +374,7 @@ internal fun dockPressOverlay(context: Context): Drawable = StateListDrawable().
  * Dock yüzeyi: üstü hafif açık düşey gradyan, kart yarıçapında köşeler. Gündüz 1dp koyu ince kenar çizgisi; gecede üst kenarda 1dp parıltı çizgisi
  * (köşelerden aşağı doğru solar). Gölgeler bir kez [onBoundsChange]'de kurulur; çizimde ayırma yok.
  */
-private class DockSurface(private val context: Context) : Drawable() {
+private class DockSurface(private val context: Context, radiusDp: Float) : Drawable() {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -365,7 +386,7 @@ private class DockSurface(private val context: Context) : Drawable() {
         strokeWidth = context.dpF(1f)
         color = LauncherTheme.DOCK_BORDER
     }
-    private val radius = context.dpF(LauncherTheme.CARD_RADIUS_DP)
+    private val radius = context.dpF(radiusDp)
 
     /** Tema değişti: kenar rengi ve gradyanlar yeni renklerle kurulur (sınırlar aynı kalır). */
     fun applyTheme() {

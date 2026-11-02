@@ -24,4 +24,11 @@
     <string name="home_screen_about_title">Hakkında</string>
     <string name="home_screen_version_line">Ana ekran sürümü %1$s (%2$s)</string>
     <string name="home_screen_reset_button">Sıfırla</string>
+    <string name="home_screen_vehicle_screen">Araç ekranı</string>
+    <string name="home_screen_vehicle_auto">Otomatik</string>
+    <string name="home_screen_vehicle_t7">Tiggo 7</string>
+    <string name="home_screen_vehicle_t8">Tiggo 8</string>
+    <string name="home_screen_vehicle_help_auto">Ekran boyutundan otomatik seçilir. Değişiklik ana ekran bir sonraki açılışında uygulanır.</string>
+    <string name="home_screen_vehicle_help_t7">12×6 ızgara ve mevcut alt çubuk. Ana ekran bir sonraki açılışında uygulanır.</string>
+    <string name="home_screen_vehicle_help_t8">12×8 ızgara ve ince düz alt çubuk; düzenleri Tiggo 7\'den ayrıdır. Ana ekran bir sonraki açılışında uygulanır.</string>
 </resources>
