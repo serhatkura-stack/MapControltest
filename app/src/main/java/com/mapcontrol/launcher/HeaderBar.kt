@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.mapcontrol.R
 import com.mapcontrol.weather.OpenMeteoWeatherClient
@@ -17,7 +18,8 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Üst şerit: solda saat ve tarih; sağda hava durumu, Wi-Fi, düzenle ve ayarlar (dişli).
+ * Üst şerit (sol direksiyonlu araç için): solda dokunma işleri (ayarlar, Wi-Fi, düzenle), ortada saat,
+ * sağda yalnızca bakılan bilgi (tarih, hava durumu). Wi-Fi ve Bluetooth tek kapsülde, iki ayrı dokunma alanı; telefon pedde şarj olurken kapsüle üçüncü bir gösterge eklenir.
  * Saat sistemin dakika yayınıyla (ACTION_TIME_TICK) güncellenir; kendi zamanlayıcısı yok.
  */
 class HeaderBar(
@@ -56,13 +58,11 @@ class HeaderBar(
         }
     }
 
-    /** Wi-Fi durumu (bağlı + seviye, bağlı değil, hotspot); dokununca Wi-Fi sekmesi. Olaylarla güncellenir, polling yok. */
+    /** Wi-Fi durumu (bağlı + seviye, bağlı değil, hotspot); dokununca Wi-Fi paneli. Olaylarla güncellenir, polling yok. */
     private val wifiGlyph = WifiGlyph(context)
-    private val wifiName = text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, medium = true)
     private var wifiUi = WifiUi(WifiUi.Kind.OFF)
     private val wifiStatus = WifiStatus(context) { bindWifi(it) }
     private val wifiButton = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true
@@ -70,142 +70,196 @@ class HeaderBar(
         pressFeedback()
     }
 
-    override val view: View = LinearLayout(context).apply {
+    /** Bluetooth durumu (kapalı, açık, telefon bağlı); dokununca OEM telefon uygulaması ya da sistem Bluetooth ayarları. Olaylarla güncellenir. */
+    private var btUi = BtUi.OFF
+    private val btImage = icon(context, R.drawable.ic_mdi_bluetooth_off, LauncherTheme.ICON_M_DP + 4)
+    private val btStatus = BluetoothStatus(context) { bindBluetooth(it) }
+    /** Kablosuz şarj göstergesi: yalnızca telefon pedde şarj olurken görünür (dokunulmaz); [ExtraSource]'tan beslenir. */
+    private val chargeImage = icon(context, R.drawable.ic_mdi_cellphone_charging, LauncherTheme.ICON_M_DP + 4)
+    private val chargeBox = LinearLayout(context).apply {
+        gravity = Gravity.CENTER
+        visibility = View.GONE
+        contentDescription = context.getString(R.string.launcher_phone_charging_icon)
+    }
+    private val chargeDivider = View(context).apply { visibility = View.GONE }
+    private val extraListener = ExtraSource.Listener { bindCharging(ReadOnlyDecode.phoneCharging(it.padState)) }
+    private val btButton = LinearLayout(context).apply {
+        gravity = Gravity.CENTER
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { openBluetooth() }
+        pressFeedback()
+    }
+
+    /** Sol grup (dokunma): ayarlar, Wi-Fi, düzenle. Sürücü tarafı. */
+    private val leftGroup = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+    }
+
+    /** Sağ grup (yalnızca bakılır): sürüş rozeti, tarih, hava. */
+    private val rightGroup = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
+    override val view: View = FrameLayout(context).apply {
+        // Saat, sol/sağ grupların genişliğinden bağımsız olarak ekranın tam ortasında durur.
+        addView(leftGroup, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL))
+        addView(time, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        addView(rightGroup, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END or Gravity.CENTER_VERTICAL))
         fill()
     }
 
-    /** Başlığın çocuklarını kurar; saat/hava metin görünümleri korunur, düğmeler ve rozet o anki temayla yeniden kurulur. */
-    private fun LinearLayout.fill() {
-        addView(time)
-        addView(gap(context, 24))
-        addView(date)
-        addView(View(context), weightLp(1f))
+    /** Grupların çocuklarını kurar; saat/tarih/hava metin görünümleri korunur, düğmeler ve rozet o anki temayla yeniden kurulur. */
+    private fun fill() {
+        leftGroup.removeAllViews()
+        rightGroup.removeAllViews()
 
-        driveBadge()?.let { addView(it) }
-        if (HEADER_STATUS_CLUSTER) addView(statusCluster()) else addSeparateStatus()
-        addView(gap(context, 16))
         if (SHOW_PROFILE_IN_HEADER) {
-            addView(profileButton())
-            addView(gap(context, 16))
+            leftGroup.addView(profileButton())
+            leftGroup.addView(gap(context, 16))
         }
-        addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
-        addView(gap(context, 16))
-        addView(settingsButton())
+        leftGroup.addView(settingsButton())
+        leftGroup.addView(gap(context, 16))
+        leftGroup.addView(connectivityCapsule())
+        leftGroup.addView(gap(context, 16))
+        leftGroup.addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
+
+        driveBadge()?.let { rightGroup.addView(it) }
+        rightGroup.addView(date)
+        rightGroup.addView(gap(context, 24))
+        rightGroup.addView(weatherCapsule())
     }
 
-    /** Eski görünüm: hap, hava ve Wi-Fi ayrı ayrı. */
-    private fun LinearLayout.addSeparateStatus() {
-        weatherBox.addView(weatherIcon)
-        weatherBox.addView(gap(context, 12))
-        weatherBox.addView(weatherTemp)
-        weatherBox.addView(gap(context, 10))
-        weatherBox.addView(weatherLabel)
-        addView(weatherBox)
-        addView(gap(context, 24))
-        buildWifiButton()
-        addView(wifiButton)
-    }
-
-    /**
-     * Durum kümesi (macOS menü çubuğu gibi): hava ve Wi-Fi tek sakin kapsülde; öğeler arası ince çizgi.
-     * Her öğe kendi dokunuşunu korur; Wi-Fi paneli Wi-Fi öğesinin altında açılır.
-     */
-    private fun statusCluster(): View {
+    /** Hava kapsülü: yalnızca hava; veri gelene kadar gizli kalır. Dokunma işi yok, sağ grupta bakılır. */
+    private fun weatherCapsule(): View {
         val h = context.dp(LauncherTheme.TOUCH_MIN_DP)
         val icon = context.dp(CLUSTER_ICON_DP)
-        val capsule = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, h)
-            setPadding(context.dp(8), 0, context.dp(8), 0)
-        }
-        fun divider() = View(context).apply {
-            setBackgroundColor(LauncherTheme.TEXT_SECONDARY)
-            alpha = 0.3f
-            layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
-        }
         weatherTemp.textSize = CLUSTER_TEXT_SP
         weatherLabel.textSize = CLUSTER_TEXT_SP
-        weatherBox.setPadding(context.dp(16), 0, context.dp(16), 0)
+        weatherBox.setPadding(context.dp(24), 0, context.dp(24), 0)
+        weatherBox.background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
         weatherBox.addView(weatherIcon, LinearLayout.LayoutParams(icon, icon))
         weatherBox.addView(gap(context, 8))
         weatherBox.addView(weatherTemp)
         weatherBox.addView(gap(context, 8))
         weatherBox.addView(weatherLabel)
-        capsule.addView(weatherBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT))
-        // Hava verisi gelene kadar hava kutusu gizlidir; ayırıcı da onunla birlikte görünür.
-        weatherDivider = divider().also {
-            it.visibility = weatherBox.visibility
-            capsule.addView(it)
-        }
-
-        buildWifiButton()
-        capsule.addView(wifiButton)
-        return capsule
+        weatherBox.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, h)
+        return weatherBox
     }
 
-    /** Wi-Fi düğmesi kare ya da (ağ adı sığıyorsa) yatay hap; en az 72 px dokunma alanı. */
-    private fun buildWifiButton() {
-        (wifiGlyph.parent as? android.view.ViewGroup)?.removeView(wifiGlyph)
-        (wifiName.parent as? android.view.ViewGroup)?.removeView(wifiName)
-        wifiButton.removeAllViews()
+    /**
+     * Bağlantı kapsülü: Wi-Fi ve Bluetooth tek sakin hapta, aralarında ince çizgi. Her yarı kendi dokunma alanını
+     * (en az [LauncherTheme.TOUCH_MIN_DP] genişlik) ve basma geri bildirimini korur; Wi-Fi paneli Wi-Fi yarısının altında açılır.
+     */
+    private fun connectivityCapsule(): View {
         val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        wifiButton.minimumWidth = size
-        val glyph: Int
-        if (HEADER_STATUS_CLUSTER) {
-            // Kapsülün içinde: kendi zemini yok, kapsül kadar yüksek.
-            wifiButton.background = null
-            wifiButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT)
-            glyph = context.dp(CLUSTER_ICON_DP)
-        } else {
-            wifiButton.background = cardSurface(context)
-            wifiButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size)
-            glyph = context.dp(LauncherTheme.ICON_M_DP + 4)
-        }
+        val glyph = context.dp(LauncherTheme.ICON_M_DP + 4)
+        (wifiGlyph.parent as? android.view.ViewGroup)?.removeView(wifiGlyph)
+        (btImage.parent as? android.view.ViewGroup)?.removeView(btImage)
+        (chargeImage.parent as? android.view.ViewGroup)?.removeView(chargeImage)
+        (chargeBox.parent as? android.view.ViewGroup)?.removeView(chargeBox)
+        (chargeDivider.parent as? android.view.ViewGroup)?.removeView(chargeDivider)
+        wifiButton.removeAllViews()
+        btButton.removeAllViews()
+        chargeBox.removeAllViews()
         wifiButton.addView(wifiGlyph, LinearLayout.LayoutParams(glyph, glyph))
-        wifiButton.addView(wifiName)
+        btButton.addView(btImage, LinearLayout.LayoutParams(glyph, glyph))
+        chargeBox.addView(chargeImage, LinearLayout.LayoutParams(glyph, glyph))
+        chargeImage.imageTintList = android.content.res.ColorStateList.valueOf(LauncherTheme.TEXT)
+        val half = { LinearLayout.LayoutParams(size, LinearLayout.LayoutParams.MATCH_PARENT) }
+        fun divider() = View(context).apply {
+            setBackgroundColor(LauncherTheme.TEXT_SECONDARY)
+            alpha = 0.3f
+            layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
+        }
+        chargeDivider.apply {
+            setBackgroundColor(LauncherTheme.TEXT_SECONDARY)
+            alpha = 0.3f
+            layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
+        }
         bindWifi(wifiUi)
+        bindBluetooth(btUi)
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size)
+            addView(wifiButton, half())
+            addView(divider())
+            addView(btButton, half())
+            addView(chargeDivider)
+            addView(chargeBox, half())
+        }
     }
 
     private fun bindWifi(ui: WifiUi) {
         wifiUi = ui
         wifiGlyph.bind(ui)
         // Ağ adı başlıkta gösterilmez (yalnızca simge durumu); ad Wi-Fi panelindeki bağlı ağ satırındadır.
-        val name: String? = null
-        wifiName.text = name
-        wifiName.setTextColor(LauncherTheme.TEXT_SECONDARY)
-        wifiName.visibility = if (name == null) View.GONE else View.VISIBLE
-        (wifiName.layoutParams as? LinearLayout.LayoutParams)?.marginStart = context.dp(8)
-        val h = if (name == null) 0 else context.dp(LauncherTheme.GAP_L_DP)
-        wifiButton.setPadding(if (name == null) 0 else context.dp(LauncherTheme.GAP_SM_DP + 4), 0, h, 0)
         wifiButton.alpha = if (ui.kind == WifiUi.Kind.OFF) 0.85f else 1f
         wifiButton.contentDescription = context.getString(when (ui.kind) {
             WifiUi.Kind.OFF -> R.string.launcher_wifi_off
             WifiUi.Kind.HOTSPOT -> R.string.launcher_wifi_hotspot
             WifiUi.Kind.CONNECTED -> R.string.launcher_wifi_connected
-        }) + (name?.let { ": $it" } ?: "")
+        })
     }
 
-    private var weatherDivider: View? = null
+    private fun bindBluetooth(ui: BtUi) {
+        btUi = LauncherDemo.bluetooth() ?: ui
+        btImage.setImageResource(when (btUi) {
+            BtUi.OFF -> R.drawable.ic_mdi_bluetooth_off
+            BtUi.ON -> R.drawable.ic_mdi_bluetooth
+            BtUi.CONNECTED -> R.drawable.ic_mdi_bluetooth_connect
+        })
+        btImage.imageTintList = android.content.res.ColorStateList.valueOf(
+            if (btUi == BtUi.OFF) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+        btButton.alpha = if (btUi == BtUi.OFF) 0.85f else 1f
+        btButton.contentDescription = context.getString(when (btUi) {
+            BtUi.OFF -> R.string.launcher_bt_off
+            BtUi.ON -> R.string.launcher_bt_on
+            BtUi.CONNECTED -> R.string.launcher_bt_connected
+        })
+    }
+
+    /** Şarj göstergesi ve kendi ayırıcısı birlikte görünür/gizlenir. */
+    private fun bindCharging(charging: Boolean) {
+        val v = if (charging) View.VISIBLE else View.GONE
+        chargeBox.visibility = v
+        chargeDivider.visibility = v
+    }
+
+    /** OEM Bluetooth telefon uygulaması varsa onu, yoksa sistem Bluetooth ayarlarını açar; ikisi de yoksa bir şey yapmaz. */
+    private fun openBluetooth() {
+        val pm = context.packageManager
+        val intent = pm.getLaunchIntentForPackage(OEM_PHONE_PACKAGE)
+            ?: Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).takeIf { it.resolveActivity(pm) != null }
+            ?: return
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: RuntimeException) {
+            // Açılamadı: sessizce vazgeçilir.
+        }
+    }
+
     private var lastWeather: OpenMeteoWeatherSnapshot? = null
 
     /** Tema değişti: metin renkleri, hap, hava ikonu ve düğmeler yeni renkle; etkinlik yeniden kurulmaz. */
     override fun applyTheme() {
         time.setTextColor(LauncherTheme.TEXT)
-        date.setTextColor(LauncherTheme.TEXT_SECONDARY)
+        date.setTextColor(if (noticeText == null) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherLabel.setTextColor(LauncherTheme.TEXT_SECONDARY)
         weatherTemp.setTextColor(LauncherTheme.TEXT)
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(LauncherTheme.TEXT)
         lastWeather?.let { bindWeather(it) }
-        val row = view as LinearLayout
         weatherBox.removeAllViews()
         weatherBox.setPadding(0, 0, 0, 0)
-        row.removeAllViews()
-        row.fill()
-        row.invalidate()
+        fill()
+        view.invalidate()
     }
 
     /**
@@ -223,7 +277,7 @@ class HeaderBar(
             addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, medium = true).apply {
                 setText(DriveAccent.label(mode))
             })
-            addView(gap(context, 32))
+            addView(gap(context, 24))
             contentDescription = context.getString(DriveAccent.label(mode))
         }
     }
@@ -285,6 +339,8 @@ class HeaderBar(
         weatherStart?.cancel()
         weatherStart = LauncherStartup.later { weatherClient.start() }
         wifiStatus.start()
+        btStatus.start()
+        ExtraSource.add(context, extraListener)
     }
 
     override fun onHidden() {
@@ -296,19 +352,49 @@ class HeaderBar(
         weatherClient.stop()
         weatherClient.setListener(null)
         wifiStatus.stop()
+        btStatus.stop()
+        ExtraSource.remove(extraListener)
     }
 
     override fun release() {
         wifiStatus.stop()
+        btStatus.stop()
+        ExtraSource.remove(extraListener)
         weatherClient.destroy()
     }
+
+    private val noticeRestore = Runnable { crossFadeDate(null, 0L) }
+
+    /**
+     * Kısa bilgi (ör. otomatik düzen geçişi): tarih metni [fadeMs] sürede soluklaşıp [res] metnine döner, [holdMs] kadar
+     * durur, sonra tarih geri gelir. Ayrı görünüm yok; başlıktaki yer değişmez, kartların üstüne bir şey binmez.
+     */
+    fun showNotice(@androidx.annotation.StringRes res: Int, holdMs: Long, fadeMs: Long) {
+        date.removeCallbacks(noticeRestore)
+        crossFadeDate(context.getString(res), fadeMs)
+        date.postDelayed(noticeRestore, holdMs + 2 * fadeMs)
+    }
+
+    /** [notice] null ise tarihe döner. */
+    private fun crossFadeDate(notice: String?, fadeMs: Long) {
+        val ms = if (fadeMs > 0) fadeMs else NOTICE_RESTORE_FADE_MS
+        date.animate().cancel()
+        date.animate().alpha(0f).setDuration(ms).withEndAction {
+            noticeText = notice
+            date.setTextColor(if (notice == null) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+            updateClock()
+            date.animate().alpha(1f).setDuration(ms).start()
+        }.start()
+    }
+
+    private var noticeText: String? = null
 
     private fun updateClock() {
         val now = Date()
         // Saat dilimi değişmiş olabilir (ACTION_TIMEZONE_CHANGED); biçimleyiciler her seferinde güncellenir.
         java.util.TimeZone.getDefault().let { timeFormat.timeZone = it; dateFormat.timeZone = it }
         time.text = timeFormat.format(now)
-        date.text = dateFormat.format(now).replaceFirstChar { it.titlecase(Locale.getDefault()) }
+        date.text = noticeText ?: dateFormat.format(now).replaceFirstChar { it.titlecase(Locale.getDefault()) }
     }
 
     private fun bindWeather(snapshot: OpenMeteoWeatherSnapshot) {
@@ -325,7 +411,6 @@ class HeaderBar(
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(
             if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherBox.visibility = View.VISIBLE
-        weatherDivider?.visibility = View.VISIBLE
     }
 }
 
@@ -335,9 +420,7 @@ class HeaderBar(
  */
 private const val SHOW_PROFILE_IN_HEADER = false
 
-/**
- * Hava ve Wi-Fi tek kapsülde (macOS menü çubuğu gibi). false: eski ayrı görünüm; karşılaştırma için.
- */
-private const val HEADER_STATUS_CLUSTER = true
+private const val OEM_PHONE_PACKAGE = "com.desaysv.bluetooth.phone"
+private const val NOTICE_RESTORE_FADE_MS = 250L
 private const val CLUSTER_ICON_DP = 28
 private const val CLUSTER_TEXT_SP = 24f

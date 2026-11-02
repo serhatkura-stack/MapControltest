@@ -47,14 +47,25 @@ internal object LauncherDemo {
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
         if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
+        if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
         if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
     }
+
+    /** Demo kablosuz şarj: varsayılan telefon pedde şarj oluyor; `--ez launcher_demo_charging false` pedi boş gösterir. */
+    const val EXTRA_CHARGING = "launcher_demo_charging"
+
+    @Volatile
+    var charging = true
+        private set
 
     /** Wi-Fi paneli önizlemesi: `--ez launcher_demo_wifi true` listeye örnek ağlar ekler (emülatörde tek sanal ağ var). */
     const val EXTRA_WIFI = "launcher_demo_wifi"
 
     @Volatile
     private var wifi = false
+
+    /** Demo Bluetooth durumu: `launcher_demo_wifi` açıkken telefon bağlı görünür (emülatörde bağdaştırıcı yok); aksi halde null (gerçek durum). */
+    internal fun bluetooth(): BtUi? = if (enabled && wifi) BtUi.CONNECTED else null
 
     internal fun wifiScans(): List<WifiScan> = if (!enabled || !wifi) emptyList() else listOf(
         WifiScan("Ev_5G", 4, "[WPA2-PSK-CCMP][ESS]"),

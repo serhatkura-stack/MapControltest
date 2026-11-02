@@ -95,6 +95,12 @@ internal object ReadOnlyDecode {
     }
 
     /**
+     * Telefon pedde şarj oluyor mu (başlık göstergesi): pedde telefon var demek, yani 0 dışındaki her değer.
+     * 0 araçta ölçüldü (pedde telefon yok); sıfırdan farklı değerlerin (1 şarj, 2..7 ?) anlamı araç testinde doğrulanmalı.
+     */
+    fun phoneCharging(raw: Int?): Boolean = raw != null && raw != PAD_EMPTY
+
+    /**
      * Telefon unutuldu mu: gerçek bayrak PHONE_FORGOT_ON_WIRLESS_BOARD (46) = 1 ("pedde unutuldu").
      * PHONE_FORGOT (47) araçta pedde telefon yokken de hep 1 okundu; bu yüzden hatırlatma AÇIK ayarı sayılır:
      * 47 = 0 ise hatırlatma kapalıdır ve uyarı çıkmaz. Bayrak okunamadıysa null.
@@ -320,7 +326,7 @@ internal object ReadOnlyDemo {
         driveMinutes = 72,
         batteryV = 14.1,
         batterySoc = 85,
-        padState = ReadOnlyDecode.PAD_CHARGING,
+        padState = if (LauncherDemo.charging) ReadOnlyDecode.PAD_CHARGING else ReadOnlyDecode.PAD_EMPTY,
         phoneForgotten = false,
         handbrakeOn = true,
         // Demo: `launcher_demo_open` içinde wlf/wrf/wlr/wrr (camlar) ve fuel (yakıt kapağı) açık sayılır.

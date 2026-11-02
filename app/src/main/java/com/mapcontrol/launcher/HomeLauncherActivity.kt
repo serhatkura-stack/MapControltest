@@ -376,31 +376,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }.start()
     }
 
-    private var noticeView: android.widget.TextView? = null
-    private val noticeHide = Runnable { noticeView?.animate()?.alpha(0f)?.setDuration(NOTICE_FADE_MS)?.start() }
-
-    /** Otomatik düzen geçişinde kısa, sessiz, dokunmayı engellemeyen bilgi: üst ortada küçük hap. */
+    /** Otomatik düzen geçişinde kısa, sessiz bilgi: başlıkta tarihin yerinde çapraz geçişle gösterilir. */
     private fun showLayoutNotice(mode: LayoutMode) {
-        val v = noticeView ?: text(this, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
-            background = rounded(this@HomeLauncherActivity, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
-            setPadding(dp(28), dp(12), dp(28), dp(12))
-            elevation = dpF(4f)
-            alpha = 0f
-            isClickable = false
-            isFocusable = false
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            addContentView(this, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(28) })
-            noticeView = this
-        }
-        v.background = rounded(this, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
-        v.setTextColor(LauncherTheme.TEXT)
-        v.setText(if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit)
-        v.removeCallbacks(noticeHide)
-        v.animate().cancel()
-        v.animate().alpha(1f).setDuration(NOTICE_FADE_MS).start()
-        v.postDelayed(noticeHide, NOTICE_SHOW_MS)
+        header.showNotice(if (mode == LayoutMode.DRIVE) R.string.launcher_layout_drive_edit else R.string.launcher_layout_park_edit,
+            NOTICE_SHOW_MS, NOTICE_FADE_MS)
     }
 
     /** Düzenleme çubuğundaki Park | Sürüş seçici: düzenlenen/etkin düzeni elle değiştirir. */

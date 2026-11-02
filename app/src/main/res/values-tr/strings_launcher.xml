@@ -175,6 +175,10 @@
     <string name="launcher_toggle_on">Açık</string>
     <string name="launcher_toggle_off">Kapalı</string>
     <string name="launcher_wifi_connected">Wi-Fi bağlı</string>
+    <string name="launcher_phone_charging_icon">Telefon şarj oluyor</string>
+    <string name="launcher_bt_off">Bluetooth kapalı</string>
+    <string name="launcher_bt_on">Bluetooth açık</string>
+    <string name="launcher_bt_connected">Bluetooth bağlı</string>
     <string name="launcher_wifi_off">Wi-Fi bağlı değil</string>
     <string name="launcher_wifi_hotspot">Hotspot açık</string>
     <string name="launcher_wifi_title">Wi-Fi</string>

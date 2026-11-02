@@ -80,7 +80,7 @@ internal class WifiPanel(
         popup = pw
         render()
         box.alpha = 0f
-        pw.showAsDropDown(anchor, 0, ctx.dp(8), Gravity.END)
+        pw.showAsDropDown(anchor, 0, ctx.dp(8), Gravity.START)
         box.animate().alpha(1f).setDuration(FADE_MS).start()
         ctx.registerReceiver(receiver, IntentFilter().apply {
             addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
