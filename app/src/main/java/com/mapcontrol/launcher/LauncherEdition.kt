@@ -95,6 +95,9 @@ internal object LauncherEdition {
 
     /** Wi-Fi paneli arka ucu: FrostNav'ın Wi-Fi sekmesiyle paylaşılan [WifiController] (tara, bağlan, kes, aç/kapa). */
     fun wifiBackend(context: Context): WifiBackend = AppWifiBackend(context.applicationContext)
+
+    /** FrostNav widget'larının arka ucu: FrostNav'ın kendi yöneticileri, tercihleri ve servisi ([AppFrostNavFeatures]). */
+    fun frostNav(context: Context): FrostNavFeatures = AppFrostNavFeatures(context.applicationContext)
 }
 
 private class AppWifiBackend(private val context: Context) : WifiBackend {

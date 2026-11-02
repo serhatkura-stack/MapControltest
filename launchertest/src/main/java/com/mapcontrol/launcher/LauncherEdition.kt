@@ -82,6 +82,10 @@ internal object LauncherEdition {
 
     /** Bu derlemede ağ listesi/bağlanma yok: panel yalnızca aç/kapa ve geçerli ağı gösterir. */
     fun wifiBackend(context: Context): WifiBackend = TestWifiBackend(context.applicationContext)
+
+    /** Bu derlemede FrostNav yok: web paneli, ekolayzer, otomasyon, bölünmüş ekran ve yansıtma widget'ları "yok" gösterir. */
+    @Suppress("UNUSED_PARAMETER")
+    fun frostNav(context: Context): FrostNavFeatures = FrostNavFeatures.NONE
 }
 
 @Suppress("DEPRECATION")

@@ -506,5 +506,10 @@ internal fun sahneIconFor(@DrawableRes res: Int): Int = when (res) {
     R.drawable.ic_mdi_car -> R.drawable.ic_sahne_car
     R.drawable.ic_mdi_air_filter -> R.drawable.ic_sahne_wind
     R.drawable.ic_mdi_fan -> R.drawable.ic_sahne_fan
+    R.drawable.ic_mdi_web -> R.drawable.ic_sahne_qr
+    R.drawable.ic_mdi_equalizer -> R.drawable.ic_sahne_eq
+    R.drawable.ic_mdi_restart -> R.drawable.ic_sahne_auto
+    R.drawable.ic_mdi_view_split -> R.drawable.ic_sahne_split
+    R.drawable.ic_mdi_speedometer -> R.drawable.ic_sahne_cluster
     else -> res
 }

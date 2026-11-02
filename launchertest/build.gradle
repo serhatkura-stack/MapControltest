@@ -13,6 +13,8 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
     from(appJava) {
         include 'com/mapcontrol/launcher/**'
         exclude 'com/mapcontrol/launcher/LauncherEdition.kt'
+        // FrostNav widget'larının gerçek arka ucu (web sunucusu, ekolayzer, otomasyon, bölünmüş ekran, yansıtma) yalnızca :app'te.
+        exclude 'com/mapcontrol/launcher/AppFrostNavFeatures.kt'
         include 'com/mapcontrol/weather/OpenMeteoWeather*.java'
         include 'com/mapcontrol/media/LauncherMediaController.java'
         include 'com/mapcontrol/vehicle/VehicleMetricsRepository.java'

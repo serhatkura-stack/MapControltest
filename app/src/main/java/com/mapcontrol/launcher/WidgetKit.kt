@@ -84,7 +84,13 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     BREAK_REMINDER("break_reminder", R.string.launcher_widget_break, R.drawable.ic_mdi_timer_sand, listOf(Span(2, 2))),
     PHONE_REMINDER("phone_reminder", R.string.launcher_widget_phone, R.drawable.ic_mdi_cellphone, listOf(Span(2, 2))),
     CLOCK("clock", R.string.launcher_widget_clock, R.drawable.ic_mdi_clock_outline, listOf(Span(2, 2), Span(4, 2)), parkOnly = true),
-    REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2), Span(2, 1)));
+    REAR_SPEAKER("rear_speaker", R.string.launcher_widget_rear_speaker, R.drawable.ic_mdi_volume_high, listOf(Span(2, 2), Span(2, 1))),
+    // FrostNav özellikleri ([FrostNavTile]): 4 sütunlu boyut büyük biçimdir ve Sahne panelinde kullanılır.
+    WEB_PANEL("web_panel", R.string.launcher_widget_web_panel, R.drawable.ic_mdi_web, listOf(Span(2, 2), Span(4, 4))),
+    EQUALIZER("equalizer", R.string.launcher_widget_equalizer, R.drawable.ic_mdi_equalizer, listOf(Span(2, 2), Span(4, 4))),
+    AUTOMATION("automation", R.string.launcher_widget_automation, R.drawable.ic_mdi_restart, listOf(Span(2, 2), Span(4, 4))),
+    SPLIT_SCREEN("split_screen", R.string.launcher_widget_split_screen, R.drawable.ic_mdi_view_split, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
+    CLUSTER_MIRROR("cluster_mirror", R.string.launcher_widget_cluster_mirror, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(4, 2), Span(4, 4)));
 
     companion object {
         /** Kaldırılan "battery"/"service" -> HEALTH, "trip_totals" -> TRIP ([HealthMath.REMOVED_KEYS]); bilinmeyen anahtar null. */
@@ -198,5 +204,10 @@ object WidgetFactory {
         WidgetType.PHONE_REMINDER -> PhoneTile(activity)
         WidgetType.CLOCK -> ClockTile(activity)
         WidgetType.REAR_SPEAKER -> RearSpeakerTile(activity)
+        WidgetType.WEB_PANEL -> WebPanelTile(activity)
+        WidgetType.EQUALIZER -> EqualizerTile(activity)
+        WidgetType.AUTOMATION -> AutomationTile(activity)
+        WidgetType.SPLIT_SCREEN -> SplitScreenTile(activity)
+        WidgetType.CLUSTER_MIRROR -> ClusterMirrorTile(activity)
     }
 }
