@@ -223,7 +223,11 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         diagram.setRearOn(sleep?.not())
         root.contentDescription = context.getString(R.string.launcher_widget_rear_speaker) + ": " + state
         root.isEnabled = sleep != null || LauncherEdition.READ_ONLY
+        notifyStrip(StripState(context.getString(R.string.launcher_widget_rear_speaker), state, R.drawable.ic_mdi_weather_night,
+            when (sleep) { null -> StripTone.MUTED; true -> StripTone.ON; false -> StripTone.NORMAL }))
     }
+
+    override fun stripTap(part: Int) = onTap()
 
     private fun onTap() {
         val fade = SoundFieldMath.valid(reading.sound?.fade)

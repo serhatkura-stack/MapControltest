@@ -51,6 +51,15 @@ object LauncherTheme {
     @Volatile
     var driveMode: Int = DriveAccent.NORMAL
 
+    /**
+     * Sahne düzeni etkin mi ([HomeStyle.SAHNE]); etkinlik başında [HomeStylePrefs]'ten atanır. Açıkken aşağıdaki
+     * jetonlar Sahne paletine ([Sahne]) döner ve [text] Manrope kullanır; böylece başlık, alt çubuk ve panellerdeki
+     * mevcut widget'lar ayrı kod olmadan Sahne diline geçer.
+     */
+    @JvmStatic
+    @Volatile
+    var sahne: Boolean = false
+
     private const val NIGHT_GROUND = 0xFF0F1115.toInt()
     private const val DAY_GROUND = 0xFFE6E9EE.toInt()
     private const val NIGHT_CARD = 0xFF1A1D23.toInt()
@@ -84,40 +93,40 @@ object LauncherTheme {
     private const val NIGHT_DOCK_TOP = 0xFF232938.toInt()
     private const val NIGHT_DOCK_BOTTOM = 0xFF1D2331.toInt()
 
-    val GROUND: Int get() = if (night) NIGHT_GROUND else DAY_GROUND
-    val CARD: Int get() = if (night) NIGHT_CARD else DAY_CARD
-    val CONTROL: Int get() = if (night) NIGHT_CONTROL else DAY_CONTROL
+    val GROUND: Int get() = if (sahne) Sahne.GROUND else if (night) NIGHT_GROUND else DAY_GROUND
+    val CARD: Int get() = if (sahne) (if (night) 0xFF13171E.toInt() else 0xFFF9F8F7.toInt()) else if (night) NIGHT_CARD else DAY_CARD
+    val CONTROL: Int get() = if (sahne) (if (night) 0xFF1D2128.toInt() else 0xFFEDECEA.toInt()) else if (night) NIGHT_CONTROL else DAY_CONTROL
     /** Kart kenar çizgisi rengi; gecede 0 (çizgi yok). */
-    val CARD_BORDER: Int get() = if (night) 0 else DAY_BORDER
-    val TRACK: Int get() = if (night) NIGHT_TRACK else DAY_TRACK
-    val ACCENT: Int get() = DriveAccent.accentFor(driveMode, night) ?: if (night) NIGHT_ACCENT else DAY_ACCENT
+    val CARD_BORDER: Int get() = if (sahne) (if (night) 0 else 0x17181E28) else if (night) 0 else DAY_BORDER
+    val TRACK: Int get() = if (sahne) (if (night) 0xFF2C2E33.toInt() else 0xFFD3D3D2.toInt()) else if (night) NIGHT_TRACK else DAY_TRACK
+    val ACCENT: Int get() = DriveAccent.accentFor(driveMode, night) ?: if (sahne) (if (night) 0xFF4C82D0.toInt() else 0xFF1D5FC4.toInt()) else if (night) NIGHT_ACCENT else DAY_ACCENT
     val ALERT: Int get() = if (night) NIGHT_ALERT else DAY_ALERT
     /** Isıtma anlamı: sürüş moduna bağlı değil, yalnızca gündüz/gece değişir. */
-    val HEAT: Int get() = if (night) NIGHT_HEAT else DAY_HEAT
+    val HEAT: Int get() = if (sahne) Sahne.AMBER else if (night) NIGHT_HEAT else DAY_HEAT
     /** Soğutma/havalandırma anlamı (bkz. [HEAT]). */
-    val COOL: Int get() = if (night) NIGHT_COOL else DAY_COOL
-    val TEXT: Int get() = if (night) NIGHT_TEXT else DAY_TEXT
-    val TEXT_SECONDARY: Int get() = if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
+    val COOL: Int get() = if (sahne) Sahne.COOL else if (night) NIGHT_COOL else DAY_COOL
+    val TEXT: Int get() = if (sahne) (if (night) 0xFFEEF2F7.toInt() else 0xFF111419.toInt()) else if (night) NIGHT_TEXT else DAY_TEXT
+    val TEXT_SECONDARY: Int get() = if (sahne) (if (night) 0xFFA7AFB7.toInt() else 0xFF4D4F53.toInt()) else if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
 
     /** Alt çubuk yüzeyi, üst ve alt gradyan uçları (gece koyu, gündüz açık buzlu). */
-    val DOCK_TOP: Int get() = if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
-    val DOCK_BOTTOM: Int get() = if (night) NIGHT_DOCK_BOTTOM else DAY_DOCK_BOTTOM
+    val DOCK_TOP: Int get() = if (sahne) Sahne.GLASS_TOP else if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
+    val DOCK_BOTTOM: Int get() = if (sahne) Sahne.GLASS_BOTTOM else if (night) NIGHT_DOCK_BOTTOM else DAY_DOCK_BOTTOM
     /** Alt çubuk kenar çizgisi (1dp); gecede 0 (çizgi yok), gündüz koyu ince çizgi. */
-    val DOCK_BORDER: Int get() = if (night) 0 else DAY_DOCK_BORDER
+    val DOCK_BORDER: Int get() = if (sahne) Sahne.GLASS_BORDER else if (night) 0 else DAY_DOCK_BORDER
     /** Gündüz dock'u kendi bölgesi gibi okunsun diye yükselti (dp); gecede 0. */
-    val DOCK_ELEVATION_DP: Float get() = if (night) 0f else 6f
+    val DOCK_ELEVATION_DP: Float get() = if (sahne || night) 0f else 6f
     /**
      * Alt çubuk üstündeki yazı/ikon. Gece: beyaza yakın, ikincil %65 beyaz, ayraç %10, basış %12, pasif iz %25 beyaz.
      * Gündüz: [TEXT] rengi, ikincil %60, ayraç %10, basış %8, pasif iz %20 koyu.
      */
-    val DOCK_TEXT: Int get() = if (night) 0xFFF5F7FA.toInt() else DAY_TEXT
-    val DOCK_TEXT_SECONDARY: Int get() = if (night) 0xA6FFFFFF.toInt() else (DAY_TEXT and 0x00FFFFFF) or 0x99000000.toInt()
-    val DOCK_DIVIDER: Int get() = if (night) 0x1AFFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x1A000000
+    val DOCK_TEXT: Int get() = if (sahne) Sahne.INK else if (night) 0xFFF5F7FA.toInt() else DAY_TEXT
+    val DOCK_TEXT_SECONDARY: Int get() = if (sahne) Sahne.INK_2 else if (night) 0xA6FFFFFF.toInt() else (DAY_TEXT and 0x00FFFFFF) or 0x99000000.toInt()
+    val DOCK_DIVIDER: Int get() = if (sahne) Sahne.HAIR_2 else if (night) 0x1AFFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x1A000000
     val DOCK_PRESS: Int get() = if (night) 0x1FFFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x14000000
     /** Pasif nokta/iz. */
-    val DOCK_TRACK: Int get() = if (night) 0x40FFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x33000000
+    val DOCK_TRACK: Int get() = if (sahne) Sahne.TRACK else if (night) 0x40FFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x33000000
     /** Üst kenar parıltısı (%8 beyaz); yalnızca gecede, gündüz 0. */
-    val DOCK_HIGHLIGHT: Int get() = if (night) 0x14FFFFFF else 0
+    val DOCK_HIGHLIGHT: Int get() = if (sahne) Sahne.GLASS_HIGHLIGHT else if (night) 0x14FFFFFF else 0
     /** Klima sürükleme tonları: serin mavi, sıcak turuncu, fan mavisi; gündüz açık yüzeyde biraz daha doygun. */
     val DOCK_TINT_COOL: Int get() = if (night) 0x403B82F6 else 0x382563EB
     val DOCK_TINT_WARM: Int get() = if (night) 0x3DFB923C else 0x40F97316

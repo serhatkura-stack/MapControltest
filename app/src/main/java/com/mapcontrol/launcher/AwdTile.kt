@@ -108,7 +108,12 @@ internal object AwdDemo {
 }
 
 /** Kutucuk: dolu boyutta (>= 4 sütun) üstten görünüm şeması + güç akışı, küçükte yalnızca ön/arka yüzde çubuğu. */
-internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
+internal class AwdTile(private val context: Context) : SizedWidget, Themeable, StripSource {
+
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    override fun stripTap(part: Int) { root.performClick() }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
@@ -249,16 +254,18 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
             flow.setRear(0)
             flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
             status.textSize = LauncherTheme.WAITING_SP
-            status.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            status.typeface = launcherTypeface(context)
             status.setTextSmooth(context.getString(R.string.launcher_waiting_data), animate = false)
             status.setTextColor(LauncherTheme.TEXT_SECONDARY)
             val none = "—"
             split.setTextSmooth(none, animate = false)
             root.contentDescription = context.getString(R.string.launcher_waiting_data)
+            stripNow = StripState(context.getString(R.string.launcher_widget_awd), none, R.drawable.ic_mdi_car_cog, StripTone.MUTED)
+            onStripChanged?.invoke()
             return
         }
         status.textSize = STATUS_SP
-        status.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        status.typeface = launcherTypeface(context, medium = true)
         flow.setRear(rearPct)
         flow.labels = context.getString(R.string.launcher_awd_front_short) to context.getString(R.string.launcher_awd_rear_short)
         val active = rearPct > 0
@@ -267,6 +274,10 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable {
         val front = AwdMath.frontPercent(rearPct)
         split.setTextSmooth(context.getString(R.string.launcher_awd_split, front, rearPct), animate = false)
         root.contentDescription = context.getString(R.string.launcher_awd_split, front, rearPct)
+        stripNow = StripState(context.getString(R.string.launcher_widget_awd),
+            context.getString(if (active) R.string.launcher_awd_active else R.string.launcher_awd_front), R.drawable.ic_mdi_car_cog,
+            if (active) StripTone.ON else StripTone.NORMAL, detail = context.getString(R.string.launcher_awd_split, front, rearPct))
+        onStripChanged?.invoke()
     }
 
     private companion object {

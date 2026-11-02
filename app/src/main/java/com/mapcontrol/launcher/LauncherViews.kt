@@ -63,6 +63,14 @@ fun card(context: Context, orientation: Int = LinearLayout.VERTICAL, paddingDp: 
         setPadding(p, p, p, p)
     }
 
+/** [text] ile aynı yazı ailesi (Sahne'de Manrope); yazı tipini sonradan değiştiren widget'lar için. */
+fun launcherTypeface(context: Context, bold: Boolean = false, medium: Boolean = false): Typeface = when {
+    LauncherTheme.sahne -> SahneFonts.get(context, Sahne.weight(if (bold) 700 else if (medium) 600 else 400))
+    bold -> Typeface.create("sans-serif", Typeface.BOLD)
+    medium -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
+    else -> Typeface.create("sans-serif", Typeface.NORMAL)
+}
+
 /** Rakamlar sabit genişlikte (tnum) olsun ki saat ve sıcaklık değişirken metin zıplamasın. */
 fun text(
     context: Context,
@@ -75,6 +83,8 @@ fun text(
     setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
     setTextColor(color)
     typeface = when {
+        // Sahne: Manrope; gündüz bir kademe kalın (bkz. Sahne.weight).
+        LauncherTheme.sahne -> SahneFonts.get(context, Sahne.weight(if (bold) 700 else if (medium) 600 else 400))
         bold -> Typeface.create("sans-serif", Typeface.BOLD)
         medium -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
         else -> Typeface.create("sans-serif", Typeface.NORMAL)

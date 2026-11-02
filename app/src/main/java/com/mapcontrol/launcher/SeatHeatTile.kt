@@ -20,7 +20,21 @@ internal class SeatHeatTile(
     private val context: Context,
     private val vent: Boolean = false,
     private val driverSeat: Boolean = true,
-) : SizedWidget, Themeable {
+) : SizedWidget, Themeable, StripSource {
+
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    /** Şerit dokunuşu kutucuktakiyle aynı: sıradaki seviye ([SeatHeatModel.cycle]; yazma kuralları orada). */
+    override fun stripTap(part: Int) = model.cycle(driverSeat)
+
+    /** Şerit başlığı (orta noktasız kısa ad). */
+    private val stripTitle = when {
+        vent && driverSeat -> R.string.launcher_sahne_seat_vent_driver
+        vent -> R.string.launcher_sahne_seat_vent_passenger
+        driverSeat -> R.string.launcher_sahne_seat_heat_driver
+        else -> R.string.launcher_sahne_seat_heat_passenger
+    }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
@@ -162,6 +176,13 @@ internal class SeatHeatTile(
             // Test sürümünde veri okunamasa da dokunuş açıklama göstermeli (sessiz kalmasın).
             root.isEnabled = known || LauncherEdition.READ_ONLY
             root.contentDescription = context.getString(labelRes) + ", " + levelText
+            stripNow = StripState(
+                context.getString(stripTitle), levelText,
+                if (vent) R.drawable.ic_mdi_car_seat_vent else R.drawable.ic_mdi_car_seat_heater,
+                when { !known -> StripTone.MUTED; active -> if (vent) StripTone.COOL else StripTone.HEAT; else -> StripTone.NORMAL },
+                level = lv, levels = SEGMENTS,
+            )
+            onStripChanged?.invoke()
         }
     }
 

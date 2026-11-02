@@ -83,7 +83,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
      * Tek parça dock: koyu cam yüzeyli tek yuvarlak şerit (köşeler yalnızca iki uçta, kart yarıçapında), bölümler
      * arası boşluksuz; ayrım 1dp ince ayraçlarla (üstten/alttan içeride). Genişlik ağırlıkla dolar.
      */
-    override val view: View = LinearLayout(context).apply {
+    override val view: View = if (LauncherTheme.sahne) sahneBar() else LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         background = surface
         clipToOutline = true
@@ -114,6 +114,58 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         add(navButton(R.drawable.ic_mdi_cog, R.string.launcher_bar_settings) { openAndroidSettings() }, square())
         add(navButton(R.drawable.ic_mdi_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, square())
     }
+
+    /**
+     * Sahne çubuğu (taslak): cam şerit, solda ana ekran · uygulamalar · araç (88 × 80 düğmeler, etkin ana ekran gece beyaz,
+     * gündüz grafit), ince çizgilerle ayrılmış sürücü sıcaklığı · fan · yolcu sıcaklığı, sağda ayarlar · telefon.
+     * Dokunma davranışları aynı.
+     */
+    private fun sahneBar(): View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, control = true)
+        setPadding(context.dp(12), 0, context.dp(12), 0)
+        fun sep() = View(context).apply { setBackgroundColor(Sahne.CONTROL_BORDER) }
+        fun sepLp() = LinearLayout.LayoutParams(context.dp(1), context.dp(52)).apply { marginStart = context.dp(10); marginEnd = context.dp(10) }
+        fun btnLp(first: Boolean) = LinearLayout.LayoutParams(context.dp(88), context.dp(80)).apply { if (!first) marginStart = context.dp(6) }
+        addView(sahneButton(R.drawable.ic_sahne_home, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, btnLp(true))
+        addView(sahneButton(R.drawable.ic_sahne_grid, R.string.launcher_bar_apps) { showApps() }, btnLp(false))
+        addView(sahneButton(R.drawable.ic_sahne_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, btnLp(false))
+        addView(sep(), sepLp())
+        addView(climateControl.driverView, LinearLayout.LayoutParams(0, context.dp(80), 1f))
+        addView(sep(), sepLp())
+        addView(climateControl.fanView, LinearLayout.LayoutParams(context.dp(330), context.dp(80)))
+        addView(sep(), sepLp())
+        addView(climateControl.passengerView, LinearLayout.LayoutParams(0, context.dp(80), 1f))
+        addView(sep(), sepLp())
+        addView(sahneButton(R.drawable.ic_sahne_gear, R.string.launcher_bar_settings) { openAndroidSettings() }, btnLp(true))
+        addView(sahneButton(R.drawable.ic_sahne_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, btnLp(false))
+    }
+
+    /** Sahne düğmesi: 22dp köşeli; etkin olan birincil (CTA) gradyan zeminli ve gölgeli, diğerleri zeminsiz. */
+    private fun sahneButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
+        FrameLayout(context).apply {
+            val radius = context.dpF(Sahne.SQUARE_RADIUS_DP)
+            if (active) {
+                background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.CTA_TOP, Sahne.CTA_BOTTOM),
+                ).apply { cornerRadius = radius }
+                elevation = context.dpF(8f)
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, outline: Outline) = outline.setRoundRect(0, 0, v.width, v.height, radius)
+                }
+            }
+            foreground = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(LauncherTheme.DOCK_PRESS), null,
+                android.graphics.drawable.GradientDrawable().apply { cornerRadius = radius; setColor(0xFFFFFFFF.toInt()) },
+            )
+            contentDescription = context.getString(labelRes)
+            isClickable = true
+            isFocusable = true
+            addView(icon(context, iconRes, 30, if (active) Sahne.CTA_INK else Sahne.CONTROL_ICON),
+                FrameLayout.LayoutParams(context.dp(30), context.dp(30), Gravity.CENTER))
+            setOnClickListener { onClick() }
+        }
 
     /** Tema değişti: yüzey, ayraçlar, düğmeler ve klima bölümleri yeni renklerle yenilenir; görünümler korunur. */
     override fun applyTheme() {

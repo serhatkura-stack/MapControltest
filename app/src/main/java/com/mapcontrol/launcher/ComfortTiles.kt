@@ -30,7 +30,17 @@ import java.util.concurrent.Executor
  * komut yalnızca [ComfortWriter] kapısı açıksa gider. Kapı kapalıyken (araç testi öncesi) ekran ~1,5 sn sonra aracın
  * gerçek durumuna döner ve bilgi mesajı gösterilir; klima kapsülüyle aynı davranış.
  */
-internal abstract class ComfortTile(protected val context: Context) : SizedWidget, Themeable {
+internal abstract class ComfortTile(protected val context: Context) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne): alt sınıflar [render] sonunda [stripNow]'ı doldurup [notifyStrip] çağırır ---
+    override var onStripChanged: (() -> Unit)? = null
+    protected var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    override fun stripTap(part: Int) { view.performClick() }
+    protected fun notifyStrip(state: StripState) {
+        stripNow = state
+        onStripChanged?.invoke()
+    }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     protected val theme = ThemeBindings()
@@ -245,7 +255,12 @@ internal class SunshadeTile(context: Context) : ComfortTile(context) {
         stateText.setTextColor(if (known || pending != null) (if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT) else LauncherTheme.TEXT_SECONDARY)
         root.contentDescription = context.getString(R.string.launcher_widget_sunshade) + ", " + str
         root.isEnabled = known || LauncherEdition.READ_ONLY
+        notifyStrip(StripState(context.getString(R.string.launcher_widget_sunshade), str, R.drawable.ic_mdi_car_sunroof,
+            if (known || pending != null) StripTone.NORMAL else StripTone.MUTED))
     }
+
+    /** Şerit dokunuşu kutucuktaki dokunuşla aynı adımı atar (sürükleme şeritte yok). */
+    override fun stripTap(part: Int) = onTap()
 
     // --- Dokunma / sürükleme ---
 
@@ -555,7 +570,11 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
         stateText.setTextColor(if (known || pending != null) (if (open) LauncherTheme.ACCENT else LauncherTheme.TEXT) else LauncherTheme.TEXT_SECONDARY)
         root.contentDescription = context.getString(R.string.launcher_widget_trunk) + ", " + str
         root.isEnabled = known || LauncherEdition.READ_ONLY
+        notifyStrip(StripState(context.getString(R.string.launcher_widget_trunk), str, R.drawable.ic_mdi_car_trunk,
+            when { !(known || pending != null) -> StripTone.MUTED; open -> StripTone.ON; else -> StripTone.NORMAL }))
     }
+
+    override fun stripTap(part: Int) = onTap()
 
     // --- Dokunma ---
 
@@ -804,7 +823,18 @@ internal class DefrostTile(context: Context) : ComfortTile(context) {
     override fun render() {
         front.bind(frontOn())
         rear.bind(rearOn())
+        fun part(on: Boolean?, label: Int, icon: Int, art: String) = StripPart(context.getString(label),
+            context.getString(if (on == null) R.string.launcher_unavailable else if (on) R.string.launcher_comfort_on else R.string.launcher_comfort_off), on, icon, art)
+        val f = frontOn()
+        val r = rearOn()
+        notifyStrip(StripState(context.getString(R.string.launcher_widget_defrost), "", R.drawable.ic_mdi_defrost_front,
+            if (f == true || r == true) StripTone.HEAT else StripTone.NORMAL,
+            parts = listOf(part(f, R.string.launcher_comfort_front, R.drawable.ic_mdi_defrost_front, "defrost_front"),
+                part(r, R.string.launcher_comfort_rear, R.drawable.ic_mdi_defrost_rear, "defrost_rear"))))
     }
+
+    /** Şeritte iki ayrı düğme: 0 = ön cam, 1 = arka cam (kutucuktaki "Ön" / "Arka" ile aynı yol). */
+    override fun stripTap(part: Int) = toggle(front = part == 0)
 
     private fun toggle(front: Boolean) {
         val current = (if (front) frontOn() else rearOn())

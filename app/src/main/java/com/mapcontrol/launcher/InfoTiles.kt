@@ -32,7 +32,20 @@ class AppShortcutTile(
     private val activity: Activity,
     private val packageName: String?,
     private val tileId: String = "app",
-) : SizedWidget, Themeable {
+) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne): ikon + ad; dokunuş açar (boşsa seçici), uzun basış seçici ---
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    override fun stripTap(part: Int) {
+        when (val current = shown) {
+            is Shown.App -> launch(current.pkg)
+            Shown.Empty -> openPicker()
+            Shown.Loading -> Unit
+        }
+    }
+    override fun stripLongPress(): Boolean { openPicker(); return true }
 
     /** Ekranda şu an ne gösterildiği; tıklamanın ne yapacağını belirler. */
     private sealed class Shown {
@@ -45,6 +58,8 @@ class AppShortcutTile(
     private class AppEntry(val label: String, val icon: Drawable)
 
     private val context: Context = activity
+    /** Arka plan sonuçları ana iş parçacığına bununla döner: kutucuk ekrana konmadan (Sahne şeridi) da çalışır. */
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val prefs = context.getSharedPreferences(Profiles.key(PREFS_NAME, Profiles.current(context)), Context.MODE_PRIVATE)
     private val executor = LauncherIo.serial()
     private val iconRadius = context.dpF(ICON_RADIUS_DP)
@@ -159,7 +174,7 @@ class AppShortcutTile(
         }
         executor.runSafely {
             val entry = resolve(pkg)
-            root.post {
+            mainHandler.post {
                 if (token != generation) return@post
                 if (entry == null) bindEmpty() else bindApp(pkg, entry)
             }
@@ -176,6 +191,8 @@ class AppShortcutTile(
         labelView.setTextColor(LauncherTheme.TEXT)
         root.contentDescription = entry.label
         applyEmptyVisibility()
+        stripNow = StripState("", entry.label, R.drawable.ic_mdi_plus, iconDrawable = entry.icon)
+        onStripChanged?.invoke()
     }
 
     /** Boş kutu: CONTROL renkli yuvarlak kare içinde artı ikonu. */
@@ -191,6 +208,8 @@ class AppShortcutTile(
         labelView.setTextColor(LauncherTheme.TEXT_SECONDARY)
         root.contentDescription = emptyLabel
         applyEmptyVisibility()
+        stripNow = StripState("", emptyLabel, R.drawable.ic_mdi_plus, StripTone.MUTED)
+        onStripChanged?.invoke()
     }
 
     /** Uygulamayı varsayılan ekranda açar. Java yardımcısı senkron olduğu için arka planda çalışır. */
@@ -204,7 +223,7 @@ class AppShortcutTile(
     private fun openPicker() {
         executor.runSafely {
             val rows = ProjectionTargetApps.loadAllLaunchableRows(context)
-            root.post {
+            mainHandler.post {
                 if (rows.isEmpty()) return@post
                 AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle(R.string.launcher_app_pick_title)

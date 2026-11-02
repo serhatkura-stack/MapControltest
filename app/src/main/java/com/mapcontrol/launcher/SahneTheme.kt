@@ -1,0 +1,292 @@
+package com.mapcontrol.launcher
+
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.LinearGradient
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.RadialGradient
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.widget.TextView
+import com.mapcontrol.R
+
+/** Ana ekran düzeni: [SAHNE] sabit sahne (iki panel, ortada araç, altta şerit), [SERBEST] 12 sütunlu serbest ızgara. */
+enum class HomeStyle(val key: String) {
+    SAHNE("sahne"),
+    SERBEST("serbest");
+
+    companion object {
+        /** Kayıtlı anahtar; bilinmeyen ya da boşsa varsayılan [SAHNE]. */
+        fun parse(value: String?): HomeStyle = values().firstOrNull { it.key == value?.trim()?.lowercase() } ?: SAHNE
+    }
+}
+
+/** "Ana ekran düzeni" tercihi (Sahne / Serbest); FrostNav "Ana ekran" sekmesinden yazılır, launcher kurulumda okur. */
+object HomeStylePrefs {
+    private const val PREFS_NAME = "launcher_settings"
+    private const val KEY = "home_style"
+
+    @JvmStatic fun get(context: Context): HomeStyle =
+        HomeStyle.parse(context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY, null))
+
+    @JvmStatic fun set(context: Context, style: HomeStyle) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY, style.key).apply()
+    }
+}
+
+/**
+ * Sahne görünümünün renk jetonları: gece grafit cam, gündüz buzlu inci. Değerler onaylı tasarım taslağından
+ * (premium-b) alındı; yarı saydam cam renkleri koyu/açık zemin üstünde önceden harmanlanmış opak tonlardır, böylece
+ * gölge camın altından görünmez ve çizimde bulanıklık (blur) gerekmez. Gündüz/gece [LauncherTheme.night]'tan okunur.
+ */
+object Sahne {
+    private val n get() = LauncherTheme.night
+
+    /** Zemin: düz renk ve dikey gradyanın üç durağı. */
+    val GROUND: Int get() = if (n) 0xFF05070A.toInt() else 0xFFE4E2DD.toInt()
+    val GROUND_TOP: Int get() = if (n) 0xFF080B10.toInt() else 0xFFEFEEEA.toInt()
+    val GROUND_MID: Int get() = if (n) 0xFF05070A.toInt() else 0xFFE6E4DF.toInt()
+    val GROUND_BOTTOM: Int get() = if (n) 0xFF040508.toInt() else 0xFFDAD8D2.toInt()
+    /** Ortadaki ve üstteki yumuşak ortam ışığı (radyal, merkezde bu renk, kenarda saydam). */
+    val AMBIENT_CENTER: Int get() = if (n) 0x335C769E else 0x73FFFDF8
+    val AMBIENT_TOP: Int get() = if (n) 0x383C4E68 else 0xE6FFFFFF.toInt()
+
+    val INK: Int get() = if (n) 0xFFEEF2F7.toInt() else 0xFF111419.toInt()
+    val INK_2: Int get() = if (n) 0xB8E4ECF6.toInt() else 0xBD111419.toInt()
+    val INK_3: Int get() = if (n) 0x8FE4ECF6.toInt() else 0x9E111419.toInt()
+    val HAIR: Int get() = if (n) 0x12FFFFFF else 0x17181E28
+    val HAIR_2: Int get() = if (n) 0x1CFFFFFF else 0x21181E28
+
+    val AMBER: Int get() = if (n) 0xFFFFA24A.toInt() else 0xFFB4500A.toInt()
+    val AMBER_HI: Int get() = if (n) 0xFFFFC07E.toInt() else 0xFFE2852F.toInt()
+    val AMBER_SOFT: Int get() = if (n) 0x24FFA24A else 0x24E2852F
+    val AMBER_LINE: Int get() = if (n) 0x52FFA24A else 0x4DB4500A
+    val AMBER_SUB: Int get() = if (n) 0xCCFFC896.toInt() else 0xD18C3E08.toInt()
+    val AMBER_GLOW: Int get() = if (n) 0x59FFA24A else 0x47E2852F
+    val ICE: Int get() = if (n) 0xFFA9D1FF.toInt() else 0xFF1D5FC4.toInt()
+    val ICE_LO: Int get() = if (n) 0xFF6F9FD8.toInt() else 0xFF5F94DE.toInt()
+    val COOL: Int get() = if (n) 0xFF7FE0F0.toInt() else 0xFF0E7C93.toInt()
+    val OK: Int get() = if (n) 0xFF86E3B0.toInt() else 0xFF17935A.toInt()
+    val OK_RING: Int get() = if (n) 0x2486E3B0 else 0x2917935A
+    val ALERT: Int get() = if (n) 0xFFFF7A6E.toInt() else 0xFFC4352B.toInt()
+
+    /** Cam: üst/alt (opak, zemine harmanlanmış), üst kenar parıltısı, kenar çizgisi. */
+    val GLASS_TOP: Int get() = if (n) 0xFF1A1F27.toInt() else 0xFFFDFCFB.toInt()
+    val GLASS_BOTTOM: Int get() = if (n) 0xFF0D1014.toInt() else 0xFFF3F2EF.toInt()
+    val GLASS_HIGHLIGHT: Int get() = if (n) 0x12FFFFFF else 0xF2FFFFFF.toInt()
+    val GLASS_BORDER: Int get() = if (n) 0x12FFFFFF else 0x14181E28
+    /** Geniş yumuşak gölge ve sıkı temas gölgesi. */
+    val SHADOW: Int get() = if (n) 0xB3000000.toInt() else 0x42262A34
+    val SHADOW_TIGHT: Int get() = if (n) 0x73000000 else 0x1A262A34
+
+    /**
+     * Başlık ve alt çubuk denetimleri (sahibinin isteği): gecede panellerden bir ton açık cam, net 1dp üst parıltı,
+     * belirgin kenar ve ~%85 beyaz ikonlar; gündüz panel camıyla aynı.
+     */
+    val CONTROL_TOP: Int get() = if (n) 0xFF252C37.toInt() else GLASS_TOP
+    val CONTROL_BOTTOM: Int get() = if (n) 0xFF161B23.toInt() else GLASS_BOTTOM
+    val CONTROL_BORDER: Int get() = if (n) 0x29FFFFFF else GLASS_BORDER
+    val CONTROL_HIGHLIGHT: Int get() = if (n) 0x40FFFFFF else GLASS_HIGHLIGHT
+    val CONTROL_ICON: Int get() = if (n) 0xD9FFFFFF.toInt() else INK_2
+    /** Gece başlıktaki saat/tarih: tam ve %85 mürekkep (ince saat koyu zeminde silik kalmasın). */
+    val HEADER_DATE: Int get() = if (n) 0xD9EEF2F7.toInt() else INK_2
+
+    val SOFT_FILL: Int get() = if (n) 0x0DFFFFFF else 0x0B141A24
+    val TRACK: Int get() = if (n) 0x1FFFFFFF else 0x26141A24
+
+    /** Birincil düğme (oynat, etkin ana ekran tuşu): gece beyaz, gündüz grafit. */
+    val CTA_TOP: Int get() = if (n) 0xFFFFFFFF.toInt() else 0xFF2A2F37.toInt()
+    val CTA_BOTTOM: Int get() = if (n) 0xFFD9E1EA.toInt() else 0xFF14171C.toInt()
+    val CTA_INK: Int get() = if (n) 0xFF0B0E13.toInt() else 0xFFFFFFFF.toInt()
+    val KNOB: Int get() = if (n) 0xFFF4F7FB.toInt() else 0xFFFFFFFF.toInt()
+
+    /** Sahne zemini: ışık havuzu, halkalar ve temas gölgesi. */
+    val FLOOR_INNER: Int get() = if (n) 0x29BED0EC else 0xF2FFFFFF.toInt()
+    val FLOOR_OUTER: Int get() = if (n) 0x1F6E84A8 else 0x8CFFFFFF.toInt()
+    val CONE: Int get() = if (n) 0x14AAC3EB else 0x8CFFFFFF.toInt()
+    val RING_1: Int get() = if (n) 0x12BED2F0 else 0x1A1E2838
+    val RING_2: Int get() = if (n) 0x0DBED2F0 else 0x121E2838
+    val CAR_SHADOW: Int get() = if (n) 0x99000000.toInt() else 0x52282620
+    val CAR_CONTACT: Int get() = if (n) 0xB3000000.toInt() else 0x611E1C18
+    /** Gece far ve stop ışığının zemindeki yansıması; gündüz yok. */
+    val HEAD_GLOW: Int get() = if (n) 0x24DCE8FF else 0
+    val TAIL_GLOW: Int get() = if (n) 0x0DFF3B30 else 0
+
+    /** Gündüz yazı ağırlıkları gece olandan bir kademe kalındır (açık zeminde ince yazı soluk durur). */
+    fun weight(base: Int): Int = if (n) base else minOf(700, base + 100)
+
+    const val PANEL_RADIUS_DP = 30f
+    const val STRIP_RADIUS_DP = 26f
+    const val SQUARE_RADIUS_DP = 22f
+    const val PILL_RADIUS_DP = 999f
+}
+
+/**
+ * Manrope (OFL, res/font) yazı ailesi; her ağırlık bir kez yüklenir. Rakamlar sabit genişlikte ("tnum").
+ * Yüklenemezse sistem yazısına düşülür.
+ */
+object SahneFonts {
+    private val cache = HashMap<Int, Typeface>()
+
+    fun get(context: Context, weight: Int): Typeface {
+        val w = when {
+            weight <= 300 -> 300
+            weight <= 400 -> 400
+            weight <= 500 -> 500
+            weight <= 600 -> 600
+            else -> 700
+        }
+        cache[w]?.let { return it }
+        val res = when (w) {
+            300 -> R.font.manrope_light
+            400 -> R.font.manrope_regular
+            500 -> R.font.manrope_medium
+            600 -> R.font.manrope_semibold
+            else -> R.font.manrope_bold
+        }
+        val tf = try {
+            context.resources.getFont(res)
+        } catch (e: RuntimeException) {
+            Typeface.create("sans-serif", if (w >= 600) Typeface.BOLD else Typeface.NORMAL)
+        }
+        cache[w] = tf
+        return tf
+    }
+
+    /** Yazıya Sahne ağırlığını verir (gündüz bir kademe kalın, bkz. [Sahne.weight]; [dayBump] false ise iki temada aynı). */
+    fun apply(tv: TextView, baseWeight: Int, letterSpacingEm: Float = 0f, dayBump: Boolean = true) {
+        tv.typeface = get(tv.context, if (dayBump) Sahne.weight(baseWeight) else baseWeight)
+        tv.fontFeatureSettings = "tnum"
+        tv.letterSpacing = letterSpacingEm
+    }
+}
+
+/**
+ * Sahne camı: opak dikey gradyan, 1dp kenar, üst kenarda ince parıltı ve dışa taşan yumuşak gölge. Gölge
+ * [Paint.setShadowLayer] ile donanımda çizilir (blur shader yok); taşabilmesi için ebeveynin `clipChildren=false`
+ * olması gerekir. Boyalar ve gradyan yalnızca boyut değişince kurulur; çizimde ayırma yok.
+ */
+class GlassDrawable(
+    private val context: Context,
+    private val radiusDp: Float = Sahne.PANEL_RADIUS_DP,
+    /** Gölge gücü (0 = yok). Küçük düğmelerde düşük tutulur. */
+    private val shadow: Float = 1f,
+    /** Doluluk renkleri; null ise cam jetonları. */
+    private val top: Int? = null,
+    private val bottom: Int? = null,
+    private val border: Int? = null,
+    /** Denetim camı (başlık, alt çubuk): [Sahne.CONTROL_TOP] dolgu, net üst parıltı ve belirgin kenar. */
+    private val control: Boolean = false,
+) : Drawable() {
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val tightPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val highlight = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val rect = RectF()
+    private val inner = RectF()
+    private var radius = 0f
+
+    init { refresh() }
+
+    /** Tema değişti: renkler yeniden okunur. */
+    fun refresh() {
+        val d = context.resources.displayMetrics.density
+        stroke.strokeWidth = d
+        stroke.color = border ?: if (control) Sahne.CONTROL_BORDER else Sahne.GLASS_BORDER
+        highlight.strokeWidth = d
+        shadowPaint.color = Sahne.GLASS_BOTTOM
+        tightPaint.color = Sahne.GLASS_BOTTOM
+        if (shadow > 0f) {
+            shadowPaint.setShadowLayer(22f * d * shadow, 0f, 14f * d * shadow, Sahne.SHADOW)
+            tightPaint.setShadowLayer(4f * d * shadow, 0f, 2f * d * shadow, Sahne.SHADOW_TIGHT)
+        } else {
+            shadowPaint.clearShadowLayer()
+            tightPaint.clearShadowLayer()
+        }
+        if (!bounds.isEmpty) onBoundsChange(bounds)
+        invalidateSelf()
+    }
+
+    override fun onBoundsChange(b: Rect) {
+        val d = context.resources.displayMetrics.density
+        rect.set(b)
+        radius = minOf(context.dpF(radiusDp), rect.height() / 2f, rect.width() / 2f)
+        fill.shader = LinearGradient(0f, rect.top, 0f, rect.bottom,
+            top ?: if (control) Sahne.CONTROL_TOP else Sahne.GLASS_TOP, bottom ?: if (control) Sahne.CONTROL_BOTTOM else Sahne.GLASS_BOTTOM, Shader.TileMode.CLAMP)
+        inner.set(rect.left + d / 2, rect.top + d / 2, rect.right - d / 2, rect.bottom - d / 2)
+        // Üst parıltı yalnızca üst kenarda: köşelerden aşağı doğru söner.
+        val hl = if (control) Sahne.CONTROL_HIGHLIGHT else Sahne.GLASS_HIGHLIGHT
+        // Denetimlerde parıltı net: üst kenarda tam renk, kısa mesafede söner.
+        val fadeTo = rect.top + (if (control) minOf(radius * 0.45f, 10f * d) else radius * 0.9f) + d
+        highlight.shader = LinearGradient(0f, rect.top, 0f, fadeTo, intArrayOf(hl, hl, hl and 0x00FFFFFF),
+            floatArrayOf(0f, if (control) 0.35f else 0f, 1f), Shader.TileMode.CLAMP)
+    }
+
+    override fun draw(canvas: Canvas) {
+        if (shadow > 0f) {
+            canvas.drawRoundRect(rect, radius, radius, shadowPaint)
+            canvas.drawRoundRect(rect, radius, radius, tightPaint)
+        }
+        canvas.drawRoundRect(rect, radius, radius, fill)
+        canvas.drawRoundRect(inner, radius, radius, highlight)
+        if (stroke.color != 0) canvas.drawRoundRect(inner, radius, radius, stroke)
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+/**
+ * Sahne zemini: dikey gradyan ve iki eliptik ortam ışığı (ortada sahne, üstte tavan). Gradyanlar yalnızca boyut
+ * değişince kurulur; zemin statiktir, hiçbir kare yeniden hesaplanmaz.
+ */
+class SahneGround : Drawable() {
+    private val base = Paint()
+    private val center = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val top = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onBoundsChange(b: Rect) {
+        val w = b.width().toFloat()
+        val h = b.height().toFloat()
+        if (w <= 0f || h <= 0f) return
+        base.shader = LinearGradient(0f, 0f, 0f, h, intArrayOf(Sahne.GROUND_TOP, Sahne.GROUND_MID, Sahne.GROUND_BOTTOM),
+            floatArrayOf(0f, if (LauncherTheme.night) 0.55f else 0.46f, 1f), Shader.TileMode.CLAMP)
+        // Taslak 1920x720 içindir; ölçüler genişliğe oranlanır.
+        val s = w / 1920f
+        // CSS radial-gradient(900px 420px at ...): ölçüler yarıçaptır.
+        center.shader = ellipse(w / 2f, (if (LauncherTheme.night) 360f else 380f) * s, 900f * s, (if (LauncherTheme.night) 420f else 400f) * s, Sahne.AMBIENT_CENTER, if (LauncherTheme.night) 0.70f else 0.72f)
+        top.shader = ellipse(w / 2f, (if (LauncherTheme.night) -120f else -170f) * s, (if (LauncherTheme.night) 1400f else 1500f) * s, (if (LauncherTheme.night) 500f else 480f) * s, Sahne.AMBIENT_TOP, 0.70f)
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        canvas.drawRect(b, base)
+        canvas.drawRect(b, top)
+        canvas.drawRect(b, center)
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.OPAQUE
+
+    companion object {
+        /** (cx, cy) merkezli, rx × ry yarıçaplı eliptik radyal gradyan: merkezde [color], [stop] oranında saydam. */
+        fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float, color: Int, stop: Float): Shader =
+            RadialGradient(0f, 0f, rx, intArrayOf(color, color and 0x00FFFFFF), floatArrayOf(0f, stop), Shader.TileMode.CLAMP).apply {
+                setLocalMatrix(Matrix().apply {
+                    setScale(1f, ry / rx)
+                    postTranslate(cx, cy)
+                })
+            }
+    }
+}

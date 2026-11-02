@@ -42,7 +42,38 @@ internal fun VehicleMetricsSnapshot.fuelPercentOrNull(): Int? =
  *
  * Yalnızca okur: kilit durumu dinleyiciden, kapılar ve menzil anlık görüntüden, lastik bayrağı 10 sn'de bir.
  */
-class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
+class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, StripSource {
+
+    /**
+     * Kartın gösterdiği her şeyin özeti; Sahne'nin araç sahnesi kartı ekrana koymadan bunu çizer (aynı kaynaklar,
+     * aynı hesap: menzil, yakıt, açık kapı/bagaj/cam/kaput, lastik ve yakıt kapağı uyarıları, kilit).
+     */
+    data class Summary(
+        val rangeKm: Int?,
+        val fuel: Int?,
+        val lowFuel: Boolean,
+        /** Açık gövde parçaları satırı ("Bagaj açık", "2 kapı açık"); yoksa null. */
+        val doorsText: String?,
+        /** Lastik / cam / yakıt kapağı uyarı satırı; yoksa null. */
+        val alertsText: String?,
+        val locked: Boolean?,
+    )
+
+    var onSummary: ((Summary) -> Unit)? = null
+    var summary: Summary? = null
+        private set
+
+    override var onStripChanged: (() -> Unit)? = null
+    override fun stripState(): StripState? = summary?.let { m ->
+        StripState(
+            context.getString(R.string.launcher_range_label).replaceFirstChar { it.titlecase(java.util.Locale.getDefault()) },
+            m.rangeKm?.let { context.getString(R.string.launcher_range_value, it) } ?: context.getString(R.string.launcher_unavailable),
+            R.drawable.ic_mdi_car,
+            when { m.doorsText != null || m.alertsText != null || m.lowFuel -> StripTone.ALERT; m.rangeKm == null -> StripTone.MUTED; else -> StripTone.NORMAL },
+            detail = m.doorsText ?: m.alertsText ?: m.fuel?.let { context.getString(R.string.launcher_percent, it) },
+        )
+    }
+    override fun stripTap(part: Int) = Unit
 
     private val appContext = context.applicationContext
     private val metrics = VehicleMetricsRepository.getInstance(appContext)
@@ -385,6 +416,21 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable {
             if (tireWarning == false && !tireAlert) add(context.getString(R.string.launcher_tires_ok))
         }.joinToString(", ")
         calmRow.contentDescription = spoken
+        val sum = Summary(
+            rangeKm = range, fuel = fuel, lowFuel = ui.lowFuel,
+            doorsText = when {
+                open.isEmpty() -> null
+                open.size == 1 -> context.getString(R.string.launcher_part_open, context.getString(open[0]))
+                else -> context.getString(R.string.launcher_doors_open_count, open.size)
+            },
+            alertsText = if (alerts.isEmpty()) null else alertsText(alerts, tireLow, windows, open.isNotEmpty()),
+            locked = locked,
+        )
+        if (sum != summary) {
+            summary = sum
+            onSummary?.invoke(sum)
+            onStripChanged?.invoke()
+        }
     }
 
     /** Kırmızı satırın metni: bölümler " · " ile; kapı satırı da görünürse lastik metni kısa (dar kartta sığması için). */

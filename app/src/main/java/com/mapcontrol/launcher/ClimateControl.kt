@@ -41,6 +41,8 @@ internal class ClimateControl(
     private val main: Handler,
 ) {
     private val flatBar = VehicleProfile.active.barStyle == BarStyle.FLAT
+    /** Sahne: ince Manrope rakamlar (gece 300), buz mavisi fan noktaları, taslak ölçüleri. */
+    private val sahne = LauncherTheme.sahne
     private var readout = ClimateReadout()
     private var pendingDriver: Double? = null
     private var pendingPassenger: Double? = null
@@ -140,8 +142,9 @@ internal class ClimateControl(
     // --- Sıcaklık hücresi ---
 
     private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, if (flatBar) FLAT_TEMP_SP else TEMP_SP, medium = true).apply {
+        private val label = text(context, if (sahne) SAHNE_TEMP_SP else if (flatBar) FLAT_TEMP_SP else TEMP_SP, medium = true).apply {
             gravity = Gravity.CENTER
+            if (sahne) SahneFonts.apply(this, 400, -0.02f, dayBump = false)
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
         private val tint = GradientDrawable().apply { alpha = 0 }
@@ -161,24 +164,26 @@ internal class ClimateControl(
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(text(context, LauncherTheme.LABEL_SP).apply {
+                addView(text(context, if (sahne) 16f else LauncherTheme.LABEL_SP).apply {
                     text = context.getString(shortRes)
                     gravity = Gravity.CENTER
-                    theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
+                    if (sahne) SahneFonts.apply(this, 400)
+                    theme.bind { setTextColor(if (sahne) Sahne.HEADER_DATE else LauncherTheme.DOCK_TEXT_SECONDARY) }
                 })
                 addView(gap(context, 2, vertical = true))
                 addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
-            val chev = context.dp(CHEVRON_DP)
-            val edge = context.dp(CHEVRON_EDGE_DP)
-            addView(icon(context, R.drawable.ic_mdi_chevron_left, CHEVRON_DP).apply {
-                alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+            val chevDp = if (sahne) SAHNE_CHEVRON_DP else CHEVRON_DP
+            val chev = context.dp(chevDp)
+            val edge = context.dp(if (sahne) SAHNE_CHEVRON_EDGE_DP else CHEVRON_EDGE_DP)
+            addView(icon(context, if (sahne) R.drawable.ic_sahne_chev_left else R.drawable.ic_mdi_chevron_left, chevDp).apply {
+                alpha = if (sahne) 1f else CHEVRON_ALPHA
+                theme.bind { setTint(if (sahne) Sahne.CONTROL_ICON else LauncherTheme.DOCK_TEXT_SECONDARY) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
-            addView(icon(context, R.drawable.ic_mdi_chevron_right, CHEVRON_DP).apply {
-                alpha = CHEVRON_ALPHA
-                theme.bind { setTint(LauncherTheme.DOCK_TEXT_SECONDARY) }
+            addView(icon(context, if (sahne) R.drawable.ic_sahne_chev_right else R.drawable.ic_mdi_chevron_right, chevDp).apply {
+                alpha = if (sahne) 1f else CHEVRON_ALPHA
+                theme.bind { setTint(if (sahne) Sahne.CONTROL_ICON else LauncherTheme.DOCK_TEXT_SECONDARY) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
@@ -316,12 +321,13 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, if (flatBar) FLAT_FAN_SP else FAN_SP, medium = true).apply {
+        private val number = text(context, if (sahne) SAHNE_FAN_SP else if (flatBar) FLAT_FAN_SP else FAN_SP, medium = true).apply {
             gravity = Gravity.CENTER
+            if (sahne) SahneFonts.apply(this, 400, dayBump = false)
             theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
         }
         private val segments = List(ClimateMath.FAN_MAX) {
-            View(context).apply { background = rounded(context, inactiveSegment(), SEGMENT_RADIUS_DP) }
+            View(context).apply { background = rounded(context, inactiveSegment(), if (sahne) SAHNE_SEGMENT_H_DP / 2f else SEGMENT_RADIUS_DP) }
         }
         private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
@@ -354,16 +360,18 @@ internal class ClimateControl(
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(icon(context, R.drawable.ic_mdi_fan, FAN_ICON_DP).also { ic -> theme.bind { ic.setTint(LauncherTheme.DOCK_TEXT_SECONDARY) } })
-                    addView(gap(context, LauncherTheme.GAP_S_DP))
-                    addView(number, LinearLayout.LayoutParams(context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
+                    addView(icon(context, if (sahne) R.drawable.ic_sahne_fan else R.drawable.ic_mdi_fan, if (sahne) SAHNE_FAN_ICON_DP else FAN_ICON_DP).also { ic ->
+                        theme.bind { ic.setTint(if (sahne) Sahne.ICE else LauncherTheme.DOCK_TEXT_SECONDARY) }
+                    })
+                    addView(gap(context, if (sahne) 14 else LauncherTheme.GAP_S_DP))
+                    addView(number, LinearLayout.LayoutParams(if (sahne) LinearLayout.LayoutParams.WRAP_CONTENT else context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-                addView(gap(context, LauncherTheme.GAP_SM_DP, vertical = true))
+                addView(gap(context, if (sahne) 10 else LauncherTheme.GAP_SM_DP, vertical = true))
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     segments.forEachIndexed { i, v ->
-                        if (i > 0) addView(gap(context, SEGMENT_GAP_DP))
-                        addView(v, LinearLayout.LayoutParams(context.dp(SEGMENT_W_DP), context.dp(SEGMENT_H_DP)))
+                        if (i > 0) addView(gap(context, if (sahne) SAHNE_SEGMENT_GAP_DP else SEGMENT_GAP_DP))
+                        addView(v, LinearLayout.LayoutParams(context.dp(if (sahne) SAHNE_SEGMENT_W_DP else SEGMENT_W_DP), context.dp(if (sahne) SAHNE_SEGMENT_H_DP else SEGMENT_H_DP)))
                     }
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
@@ -408,7 +416,7 @@ internal class ClimateControl(
             if (n == level) return
             level = n
             segments.forEachIndexed { i, v ->
-                (v.background as GradientDrawable).setColor(if (i < n) LauncherTheme.ACCENT else inactiveSegment())
+                (v.background as GradientDrawable).setColor(if (i < n) (if (sahne) Sahne.ICE else LauncherTheme.ACCENT) else inactiveSegment())
             }
         }
 
@@ -565,7 +573,8 @@ internal class ClimateControl(
         endLabel(c)?.let { return it }
         val num = String.format(Locale.US, "%.1f", c)
         return SpannableStringBuilder(num).append('°').apply {
-            setSpan(RelativeSizeSpan(DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(RelativeSizeSpan(if (sahne) 0.52f else DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (sahne) setSpan(android.text.style.SuperscriptSpan(), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(ForegroundColorSpan(LauncherTheme.DOCK_TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
@@ -578,6 +587,15 @@ internal class ClimateControl(
 
     companion object {
         private const val DASH = "—"
+        /** Sahne ölçüleri (taslak): sıcaklık 46, fan 40, fan noktaları 18 × 6 / 7 aralık, ok ikonları 30 ve kenardan 21. */
+        private const val SAHNE_TEMP_SP = 46f
+        private const val SAHNE_FAN_SP = 40f
+        private const val SAHNE_FAN_ICON_DP = 30
+        private const val SAHNE_SEGMENT_W_DP = 18
+        private const val SAHNE_SEGMENT_H_DP = 6
+        private const val SAHNE_SEGMENT_GAP_DP = 7
+        private const val SAHNE_CHEVRON_DP = 30
+        private const val SAHNE_CHEVRON_EDGE_DP = 21
         private const val TEMP_SP = 56f
         /** Düz (Tiggo 8) ince şeritte küçültülmüş yazılar. */
         private const val FLAT_TEMP_SP = 38f

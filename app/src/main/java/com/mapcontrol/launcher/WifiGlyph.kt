@@ -28,7 +28,7 @@ internal class WifiGlyph(context: Context) : View(context) {
         val h = height.toFloat()
         val stroke = w * 0.085f
         paint.strokeWidth = stroke
-        val on = LauncherTheme.TEXT
+        val on = if (LauncherTheme.sahne) Sahne.CONTROL_ICON else LauncherTheme.TEXT
         val connectedNow = ui.kind == WifiUi.Kind.CONNECTED
         // Bağlıyken dolmayan dilimler iz renginde; bağlı değilken tüm simge soluk ama zeminden ayırt edilir.
         val off = if (connectedNow) LauncherTheme.TRACK else (LauncherTheme.TEXT_SECONDARY and 0x00FFFFFF) or 0x80000000.toInt()

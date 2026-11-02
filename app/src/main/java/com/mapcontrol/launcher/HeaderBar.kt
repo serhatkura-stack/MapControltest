@@ -104,6 +104,12 @@ class HeaderBar(
     }
 
     override val view: View = FrameLayout(context).apply {
+        // Sahne: cam düğmelerin gölgesi başlığın dışına taşar.
+        if (LauncherTheme.sahne) {
+            clipChildren = false
+            leftGroup.clipChildren = false
+            rightGroup.clipChildren = false
+        }
         // Saat, sol/sağ grupların genişliğinden bağımsız olarak ekranın tam ortasında durur.
         addView(leftGroup, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL))
@@ -114,10 +120,32 @@ class HeaderBar(
         fill()
     }
 
+    /** Sahne: cam yüzey (kare 22dp köşe, kapsül hap); Serbest: düz kart yüzeyi. */
+    private fun surface(radiusDp: Float): android.graphics.drawable.Drawable =
+        if (LauncherTheme.sahne) GlassDrawable(context, radiusDp, shadow = 0.55f, control = true)
+        else rounded(context, LauncherTheme.CARD, radiusDp, LauncherTheme.CARD_BORDER)
+
+    /** Sahne yazı stilleri: ince büyük saat, orta ağırlıkta tarih ve hava (taslak ölçüleri). */
+    private fun styleTexts() {
+        if (!LauncherTheme.sahne) return
+        time.textSize = 58f
+        // Gece ince (300) saat koyu zeminde silikti: iki temada 400.
+        SahneFonts.apply(time, 400, -0.02f, dayBump = false)
+        date.textSize = 22f
+        SahneFonts.apply(date, 400)
+        SahneFonts.apply(weatherTemp, 600, dayBump = false)
+        SahneFonts.apply(weatherLabel, 400, dayBump = false)
+        time.setTextColor(Sahne.INK)
+        date.setTextColor(if (noticeText == null) Sahne.HEADER_DATE else Sahne.INK)
+        weatherLabel.setTextColor(Sahne.HEADER_DATE)
+        weatherTemp.setTextColor(Sahne.INK)
+    }
+
     /** Grupların çocuklarını kurar; saat/tarih/hava metin görünümleri korunur, düğmeler ve rozet o anki temayla yeniden kurulur. */
     private fun fill() {
         leftGroup.removeAllViews()
         rightGroup.removeAllViews()
+        styleTexts()
 
         if (SHOW_PROFILE_IN_HEADER) {
             leftGroup.addView(profileButton())
@@ -127,11 +155,11 @@ class HeaderBar(
         leftGroup.addView(gap(context, 16))
         leftGroup.addView(connectivityCapsule())
         leftGroup.addView(gap(context, 16))
-        leftGroup.addView(squareButton(R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
+        leftGroup.addView(squareButton(if (LauncherTheme.sahne) R.drawable.ic_sahne_pen else R.drawable.ic_mdi_pencil, context.getString(R.string.launcher_edit_title), onEditHome))
 
         driveBadge()?.let { rightGroup.addView(it) }
         rightGroup.addView(date)
-        rightGroup.addView(gap(context, 24))
+        rightGroup.addView(gap(context, if (LauncherTheme.sahne) 20 else 24))
         rightGroup.addView(weatherCapsule())
     }
 
@@ -139,14 +167,15 @@ class HeaderBar(
     private fun weatherCapsule(): View {
         val h = context.dp(LauncherTheme.TOUCH_MIN_DP)
         val icon = context.dp(CLUSTER_ICON_DP)
-        weatherTemp.textSize = CLUSTER_TEXT_SP
-        weatherLabel.textSize = CLUSTER_TEXT_SP
-        weatherBox.setPadding(context.dp(24), 0, context.dp(24), 0)
-        weatherBox.background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+        val sahne = LauncherTheme.sahne
+        weatherTemp.textSize = if (sahne) 26f else CLUSTER_TEXT_SP
+        weatherLabel.textSize = if (sahne) 22f else CLUSTER_TEXT_SP
+        weatherBox.setPadding(context.dp(if (sahne) 22 else 24), 0, context.dp(if (sahne) 26 else 24), 0)
+        weatherBox.background = surface(999f)
         weatherBox.addView(weatherIcon, LinearLayout.LayoutParams(icon, icon))
-        weatherBox.addView(gap(context, 8))
+        weatherBox.addView(gap(context, if (sahne) 12 else 8))
         weatherBox.addView(weatherTemp)
-        weatherBox.addView(gap(context, 8))
+        weatherBox.addView(gap(context, if (sahne) 12 else 8))
         weatherBox.addView(weatherLabel)
         weatherBox.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, h)
         return weatherBox
@@ -158,7 +187,7 @@ class HeaderBar(
      */
     private fun connectivityCapsule(): View {
         val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
-        val glyph = context.dp(LauncherTheme.ICON_M_DP + 4)
+        val glyph = context.dp(if (LauncherTheme.sahne) 28 else LauncherTheme.ICON_M_DP + 4)
         (wifiGlyph.parent as? android.view.ViewGroup)?.removeView(wifiGlyph)
         (btImage.parent as? android.view.ViewGroup)?.removeView(btImage)
         (chargeImage.parent as? android.view.ViewGroup)?.removeView(chargeImage)
@@ -170,16 +199,17 @@ class HeaderBar(
         wifiButton.addView(wifiGlyph, LinearLayout.LayoutParams(glyph, glyph))
         btButton.addView(btImage, LinearLayout.LayoutParams(glyph, glyph))
         chargeBox.addView(chargeImage, LinearLayout.LayoutParams(glyph, glyph))
-        chargeImage.imageTintList = android.content.res.ColorStateList.valueOf(LauncherTheme.TEXT)
-        val half = { LinearLayout.LayoutParams(size, LinearLayout.LayoutParams.MATCH_PARENT) }
+        if (LauncherTheme.sahne) chargeImage.setImageResource(R.drawable.ic_sahne_charge)
+        chargeImage.imageTintList = android.content.res.ColorStateList.valueOf(if (LauncherTheme.sahne) Sahne.CONTROL_ICON else LauncherTheme.TEXT)
+        val half = { LinearLayout.LayoutParams(if (LauncherTheme.sahne) context.dp(68) else size, LinearLayout.LayoutParams.MATCH_PARENT) }
         fun divider() = View(context).apply {
-            setBackgroundColor(LauncherTheme.TEXT_SECONDARY)
-            alpha = 0.3f
+            setBackgroundColor(if (LauncherTheme.sahne) Sahne.CONTROL_BORDER else LauncherTheme.TEXT_SECONDARY)
+            alpha = if (LauncherTheme.sahne) 1f else 0.3f
             layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
         }
         chargeDivider.apply {
-            setBackgroundColor(LauncherTheme.TEXT_SECONDARY)
-            alpha = 0.3f
+            setBackgroundColor(if (LauncherTheme.sahne) Sahne.HAIR_2 else LauncherTheme.TEXT_SECONDARY)
+            alpha = if (LauncherTheme.sahne) 1f else 0.3f
             layoutParams = LinearLayout.LayoutParams(context.dp(1), context.dp(28))
         }
         bindWifi(wifiUi)
@@ -187,7 +217,8 @@ class HeaderBar(
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(context, LauncherTheme.CARD, 999f, LauncherTheme.CARD_BORDER)
+            background = surface(999f)
+            if (LauncherTheme.sahne) setPadding(context.dp(6), 0, context.dp(6), 0)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size)
             addView(wifiButton, half())
             addView(divider())
@@ -213,11 +244,14 @@ class HeaderBar(
         btUi = LauncherDemo.bluetooth() ?: ui
         btImage.setImageResource(when (btUi) {
             BtUi.OFF -> R.drawable.ic_mdi_bluetooth_off
-            BtUi.ON -> R.drawable.ic_mdi_bluetooth
+            BtUi.ON -> if (LauncherTheme.sahne) R.drawable.ic_sahne_bluetooth else R.drawable.ic_mdi_bluetooth
             BtUi.CONNECTED -> R.drawable.ic_mdi_bluetooth_connect
         })
-        btImage.imageTintList = android.content.res.ColorStateList.valueOf(
-            if (btUi == BtUi.OFF) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+        btImage.imageTintList = android.content.res.ColorStateList.valueOf(when {
+            LauncherTheme.sahne -> if (btUi == BtUi.OFF) Sahne.INK_3 else Sahne.CONTROL_ICON
+            btUi == BtUi.OFF -> LauncherTheme.TEXT_SECONDARY
+            else -> LauncherTheme.TEXT
+        })
         btButton.alpha = if (btUi == BtUi.OFF) 0.85f else 1f
         btButton.contentDescription = context.getString(when (btUi) {
             BtUi.OFF -> R.string.launcher_bt_off
@@ -310,10 +344,10 @@ class HeaderBar(
     private fun squareButton(@androidx.annotation.DrawableRes res: Int, label: String, onClick: () -> Unit): LinearLayout =
         LinearLayout(context).apply {
             gravity = Gravity.CENTER
-            background = cardSurface(context)
+            background = if (LauncherTheme.sahne) surface(Sahne.SQUARE_RADIUS_DP) else cardSurface(context)
             val size = context.dp(LauncherTheme.TOUCH_MIN_DP)
             layoutParams = LinearLayout.LayoutParams(size, size)
-            addView(icon(context, res, LauncherTheme.ICON_M_DP))
+            addView(if (LauncherTheme.sahne) icon(context, res, 28, Sahne.CONTROL_ICON) else icon(context, res, LauncherTheme.ICON_M_DP))
             contentDescription = label
             isClickable = true
             isFocusable = true
@@ -323,7 +357,7 @@ class HeaderBar(
 
     /** Yalnızca dişli simgesi; diğer düğmelerle aynı kare boyut (en az 72 px dokunma alanı). */
     private fun settingsButton(): View =
-        squareButton(R.drawable.ic_mdi_cog, context.getString(R.string.launcher_settings), onSettings)
+        squareButton(if (LauncherTheme.sahne) R.drawable.ic_sahne_gear else R.drawable.ic_mdi_cog, context.getString(R.string.launcher_settings), onSettings)
 
     override fun onVisible() {
         updateClock()
@@ -381,7 +415,7 @@ class HeaderBar(
         date.animate().cancel()
         date.animate().alpha(0f).setDuration(ms).withEndAction {
             noticeText = notice
-            date.setTextColor(if (notice == null) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+            date.setTextColor(if (notice == null) (if (LauncherTheme.sahne) Sahne.HEADER_DATE else LauncherTheme.TEXT_SECONDARY) else LauncherTheme.TEXT)
             updateClock()
             date.animate().alpha(1f).setDuration(ms).start()
         }.start()
@@ -402,14 +436,17 @@ class HeaderBar(
         weatherTemp.text = context.getString(R.string.launcher_degrees, snapshot.temperatureC.roundToInt())
         weatherLabel.text = OpenMeteoWeatherLabels.labelFor(context, snapshot.weatherCode, snapshot.day)
         // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.
-        weatherIcon.setImageResource(
-            if (snapshot.weatherCode in 1..3) R.drawable.ic_mdi_weather_partly_cloudy else R.drawable.ic_mdi_thermometer)
+        weatherIcon.setImageResource(when {
+            LauncherTheme.sahne && snapshot.weatherCode in 45..48 -> R.drawable.ic_sahne_fog
+            snapshot.weatherCode in 1..3 -> R.drawable.ic_mdi_weather_partly_cloudy
+            else -> R.drawable.ic_mdi_thermometer
+        })
         // Eski veri ikincil tonda; veri hiç yoksa grup gizli kalır.
         val updatedAt = weatherClient.lastUpdatedMs
         val stale = updatedAt > 0L && System.currentTimeMillis() - updatedAt > WEATHER_STALE_MS
         weatherTemp.setTextColor(if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(
-            if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+            if (LauncherTheme.sahne) Sahne.CONTROL_ICON else if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherBox.visibility = View.VISIBLE
     }
 }

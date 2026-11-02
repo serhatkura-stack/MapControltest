@@ -18,7 +18,16 @@ import java.util.concurrent.Executor
  * Merkezi kilit düğmesi (1×2, uygulama kutucuğuyla aynı ayak izi): yolcunun da kolayca uzanacağı net bir düğme.
  * Büyük, ortalanmış kilit ikonu; altında küçük durum etiketi ("Kilitli" / "Kilit açık"). Dokununca kilidi açar/kapatır.
  */
-internal class LockTile(private val context: Context) : SizedWidget, Themeable {
+internal class LockTile(private val context: Context) : SizedWidget, Themeable, StripSource {
+
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    /** Sahne kilit hapı ve şerit: kutucuktaki dokunuşla aynı yol ([toggle]). */
+    override fun stripTap(part: Int) = toggle()
+
+    /** Son bilinen kilit durumu (null: bilinmiyor); Sahne kilit hapı için. */
+    val isLocked: Boolean? get() = locked
 
     private val appContext = context.applicationContext
 
@@ -107,6 +116,9 @@ internal class LockTile(private val context: Context) : SizedWidget, Themeable {
         lockIcon.imageTintList = ColorStateList.valueOf(tint)
         stateText.setTextSmooth(label)
         root.contentDescription = context.getString(R.string.launcher_widget_lock) + ", " + label
+        stripNow = StripState(context.getString(R.string.launcher_widget_lock), label, res,
+            if (tint == LauncherTheme.TEXT_SECONDARY) StripTone.MUTED else StripTone.NORMAL)
+        onStripChanged?.invoke()
     }
 
     /** Kilit komutu senkron binder çağrısı; ana thread'i bloklamasın diye arka planda gönderilir. */

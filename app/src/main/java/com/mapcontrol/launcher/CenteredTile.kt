@@ -22,8 +22,32 @@ import com.mapcontrol.R
 internal abstract class CenteredTile(
     protected val context: Context,
     @DrawableRes iconRes: Int,
-    @StringRes labelRes: Int,
-) : SizedWidget, Themeable {
+    @StringRes private val labelRes: Int,
+) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne) özeti: değer, detay, ikon ve dilimler bağlanırken burada da tutulur ---
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripIcon = iconRes
+    private var stripValue = ""
+    private var stripTone = StripTone.MUTED
+    private var stripDetail: String? = null
+    private var stripLevel = 0
+    private var stripLevels = 0
+
+    override fun stripState(): StripState = StripState(
+        title = context.getString(labelRes),
+        value = stripValue,
+        icon = stripIcon,
+        tone = stripTone,
+        level = stripLevel,
+        levels = stripLevels,
+        detail = stripDetail,
+    )
+
+    /** Kutucukta dokunma işi varsa (kök tıklanabilirse) aynısı. */
+    override fun stripTap(part: Int) { root.performClick() }
+
+    private fun notifyStrip() { onStripChanged?.invoke() }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     protected val theme = ThemeBindings()
@@ -219,6 +243,8 @@ internal abstract class CenteredTile(
         detailSet = detail
         detailText.setTextColor(color)
         applyDetail()
+        stripDetail = detail?.toString()
+        notifyStrip()
     }
 
     /**
@@ -230,6 +256,7 @@ internal abstract class CenteredTile(
             segmentCount = 0
             segmentRow.removeAllViews()
             applyDetail()
+            if (stripLevels != 0) { stripLevel = 0; stripLevels = 0; notifyStrip() }
             return
         }
         if (segmentRow.childCount != total) {
@@ -245,11 +272,15 @@ internal abstract class CenteredTile(
             segmentRow.getChildAt(i).background = rounded(context, if (i < filled) color else LauncherTheme.TRACK, SEGMENT_H_DP / 2f)
         }
         applyDetail()
+        stripLevel = filled
+        stripLevels = total
+        notifyStrip()
     }
 
     protected fun setIcon(@DrawableRes res: Int, tint: Int) {
         headerIcon.setImageResource(res)
         headerIcon.imageTintList = ColorStateList.valueOf(tint)
+        stripIcon = res
     }
 
     /** Dar kademede büyük, ortalı ikon (sürüş modu gibi); verilince küçük başlık ikonu gizlenir. [res] null ise kaldırılır. */
@@ -268,6 +299,9 @@ internal abstract class CenteredTile(
         valueText.setTextColor(color)
         valueText.setTextSmooth(unitStyled(value), animate)
         root.contentDescription = value
+        stripValue = value.toString()
+        stripTone = stripToneFor(color)
+        notifyStrip()
     }
 
     /** Veri yok: değer yerine soluk bir çizgi, nedeni küçük satırda. */

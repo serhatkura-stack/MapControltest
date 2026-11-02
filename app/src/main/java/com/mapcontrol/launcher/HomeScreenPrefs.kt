@@ -40,13 +40,20 @@ object HomeScreenPrefs {
         BottomBarMode.values().getOrNull(index)?.let { LauncherBottomBar.setMode(context, it) }
     }
 
+    /** "Ana ekran düzeni": true Sahne (varsayılan), false Serbest ızgara. Launcher bir sonraki öne gelişinde yeniden kurulur. */
+    @JvmStatic fun sahneStyle(context: Context): Boolean = HomeStylePrefs.get(context) == HomeStyle.SAHNE
+
+    @JvmStatic fun setSahneStyle(context: Context, sahne: Boolean) =
+        HomeStylePrefs.set(context, if (sahne) HomeStyle.SAHNE else HomeStyle.SERBEST)
+
     @JvmStatic fun autoDriveLayout(context: Context): Boolean = DriveLayoutPrefs.get(context)
 
     @JvmStatic fun setAutoDriveLayout(context: Context, on: Boolean) = DriveLayoutPrefs.set(context, on)
 
-    /** Park ya da Sürüş düzenini varsayılana döndürür (düzenleme modundaki "Varsayılan" ile aynı depo). */
+    /** Etkin düzen türünün (Sahne ya da Serbest) Park ya da Sürüş düzenini varsayılana döndürür (düzenleme modundaki "Varsayılan" ile aynı depo). */
     @JvmStatic fun resetLayout(context: Context, drive: Boolean) {
-        LayoutStore(context, if (drive) LayoutMode.DRIVE else LayoutMode.PARK).reset()
+        val mode = if (drive) LayoutMode.DRIVE else LayoutMode.PARK
+        if (sahneStyle(context)) SahneStore(context, mode).reset() else LayoutStore(context, mode).reset()
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putInt(KEY_LAYOUT_RESET_GEN, prefs.getInt(KEY_LAYOUT_RESET_GEN, 0) + 1).apply()
     }
@@ -54,7 +61,7 @@ object HomeScreenPrefs {
     /** Launcher'ın kurulumda okuduğu tercihlerin özeti; farklıysa açık launcher yeniden kurulmalıdır. */
     @JvmStatic fun signature(context: Context): String {
         val gen = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_LAYOUT_RESET_GEN, 0)
-        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen|${VehicleProfile.compute(context).key}"
+        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen|${VehicleProfile.compute(context).key}|${HomeStylePrefs.get(context).key}"
     }
 
     /** Ana ekranı doğrudan düzenleme modunda açar. */

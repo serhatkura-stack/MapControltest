@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sahne ana ekran düzeni -->
+    <string name="launcher_sahne_car">Araç görünümü</string>
+    <string name="launcher_sahne_km">km</string>
+    <string name="launcher_sahne_seat_heat_driver">Isıtma sürücü</string>
+    <string name="launcher_sahne_seat_heat_passenger">Isıtma yolcu</string>
+    <string name="launcher_sahne_seat_vent_driver">Soğutma sürücü</string>
+    <string name="launcher_sahne_seat_vent_passenger">Soğutma yolcu</string>
+    <string name="launcher_sahne_pick_panel">Panel için widget</string>
+    <string name="launcher_sahne_pick_strip">Şerit için widget</string>
+    <string name="launcher_sahne_in_slot" formatted="true">Bu yuvada: %1$s</string>
+    <string name="launcher_sahne_in_this_slot">Bu yuvada</string>
+    <string name="launcher_sahne_enlarged">Büyütülmüş kutucuk</string>
+    <string name="launcher_sahne_change">Değiştir</string>
+    <string name="launcher_sahne_add_here">Widget ekle</string>
+    <string name="launcher_sahne_helper_park">Park ekranı: değiştirmek için bir yuvaya dokunun</string>
+    <string name="launcher_sahne_helper_drive">Sürüş ekranı: değiştirmek için bir yuvaya dokunun</string>
+    <string name="home_screen_style">Ana ekran düzeni</string>
+    <string name="home_screen_style_sahne">Sahne</string>
+    <string name="home_screen_style_serbest">Serbest</string>
+    <string name="home_screen_style_help_sahne">Araç ortada, iki panel ve altta kontrol şeridi.</string>
+    <string name="home_screen_style_help_serbest">12 sütunlu serbest ızgara; widget\'ları kendiniz yerleştirip boyutlandırın.</string>
+</resources>

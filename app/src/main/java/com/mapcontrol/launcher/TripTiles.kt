@@ -268,8 +268,25 @@ internal object TripSource {
 internal abstract class TripCard(
     protected val context: Context,
     @DrawableRes iconRes: Int,
-    @StringRes labelRes: Int,
-) : SizedWidget, Themeable {
+    @StringRes private val labelRes: Int,
+) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne) özeti ---
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripIcon = iconRes
+    private var stripValue = ""
+    private var stripTone = StripTone.MUTED
+    private var stripDetail: String? = null
+
+    private var stripRows: List<Pair<String, String>> = emptyList()
+    private var stripAlertRows: Set<Int> = emptySet()
+
+    override fun stripState(): StripState =
+        StripState(context.getString(labelRes), stripValue, stripIcon, stripTone, detail = stripDetail, rows = stripRows, alertRows = stripAlertRows)
+
+    override fun stripTap(part: Int) { root.performClick() }
+
+    private fun notifyStrip() { onStripChanged?.invoke() }
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
@@ -370,6 +387,7 @@ internal abstract class TripCard(
     protected fun setIcon(@DrawableRes res: Int, tint: Int) {
         headerIcon.setImageResource(res)
         headerIcon.imageTintList = ColorStateList.valueOf(tint)
+        stripIcon = res
     }
 
     protected fun setValue(value: CharSequence, color: Int, sizeSp: Float = VALUE_SP) {
@@ -377,6 +395,9 @@ internal abstract class TripCard(
         valueText.setTextColor(color)
         // Tüketim, yolculuk ve sağlık değerleri sürüşte sürekli akar: geçişsiz.
         valueText.setTextSmooth(unitStyled(value), animate = false)
+        stripValue = value.toString()
+        stripTone = stripToneFor(color)
+        notifyStrip()
     }
 
     protected fun setSubtitle(subtitle: CharSequence?, color: Int = LauncherTheme.TEXT_SECONDARY) {
@@ -384,6 +405,8 @@ internal abstract class TripCard(
         subtitleText.textSize = TITLE_SP
         subtitleText.text = subtitle
         subtitleText.visibility = if (subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
+        stripDetail = subtitle?.toString()
+        notifyStrip()
     }
 
     /**
@@ -392,6 +415,9 @@ internal abstract class TripCard(
      * (yolculukta "Toplam"). Dar boyutta ya da satır yoksa blok ve ayraç gizlenir ve sol sütun tüm kartı alır.
      */
     protected fun showRows(rows: List<Pair<String?, String>>, alert: Set<Int> = emptySet(), section: Section? = null) {
+        stripRows = rows.map { (it.first ?: "") to it.second } + (section?.rows ?: emptyList())
+        stripAlertRows = alert
+        notifyStrip()
         rightBlock.removeAllViews()
         val show = wide && (rows.isNotEmpty() || section != null)
         rows.forEachIndexed { i, (label, value) ->

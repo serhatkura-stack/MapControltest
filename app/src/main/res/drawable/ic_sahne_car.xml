@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sahne ikon seti: ince çizgili, taslaktaki (premium-b) sembollerden. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:pathData="M5 17H3.5a1 1 0 0 1-1-1v-3.2a2 2 0 0 1 .4-1.2L5 8.6A3 3 0 0 1 7.4 7.4h9.2a3 3 0 0 1 2.4 1.2l2.1 3a2 2 0 0 1 .4 1.2V16a1 1 0 0 1-1 1H19"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:pathData="M3 12h18"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:pathData="M5.0,17.0a2.0,2.0 0 1,0 4.0,0a2.0,2.0 0 1,0 -4.0,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:pathData="M15.0,17.0a2.0,2.0 0 1,0 4.0,0a2.0,2.0 0 1,0 -4.0,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:pathData="M9 17h6"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

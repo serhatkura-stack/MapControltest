@@ -464,7 +464,29 @@ internal class PhoneTile(context: Context) :
  * Büyük saat: ortalı saat ve tarih. Araç verisi yok; [TextClock] dakikada bir sistem yayınıyla güncellenir
  * (kendi zamanlayıcımız ya da animasyon yok). 2x2'de saat 56sp, 4x2'de 88sp.
  */
-internal class ClockTile(private val context: Context) : SizedWidget, Themeable {
+internal class ClockTile(private val context: Context) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne): saat dakikada bir, yalnızca şeritte gösterilirken ([onStripChanged] atanmışsa) ---
+    override var onStripChanged: (() -> Unit)? = null
+    private val stripHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val stripTick = object : Runnable {
+        override fun run() {
+            onStripChanged?.invoke()
+            val now = System.currentTimeMillis()
+            stripHandler.postDelayed(this, 60_000L - now % 60_000L + 50L)
+        }
+    }
+
+    override fun stripState(): StripState {
+        val now = java.util.Date()
+        return StripState(
+            android.text.format.DateFormat.format(datePattern, now).toString().replaceFirstChar { it.titlecase(Locale.getDefault()) },
+            android.text.format.DateFormat.format("HH:mm", now).toString(),
+            R.drawable.ic_mdi_clock_outline,
+        )
+    }
+
+    override fun stripTap(part: Int) = Unit
 
     /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
@@ -473,7 +495,7 @@ internal class ClockTile(private val context: Context) : SizedWidget, Themeable 
         format12Hour = "HH:mm"
         format24Hour = "HH:mm"
         theme.bind { setTextColor(LauncherTheme.TEXT) }
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        typeface = launcherTypeface(context, medium = true)
         fontFeatureSettings = "tnum"
         includeFontPadding = false
         gravity = Gravity.CENTER
@@ -489,7 +511,7 @@ internal class ClockTile(private val context: Context) : SizedWidget, Themeable 
         format12Hour = datePattern
         format24Hour = datePattern
         theme.bind { setTextColor(LauncherTheme.TEXT_SECONDARY) }
-        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        typeface = launcherTypeface(context)
         includeFontPadding = false
         gravity = Gravity.CENTER
         maxLines = 2
@@ -536,9 +558,14 @@ internal class ClockTile(private val context: Context) : SizedWidget, Themeable 
         }
     }
 
-    override fun onVisible() {}
+    override fun onVisible() {
+        stripHandler.removeCallbacks(stripTick)
+        if (onStripChanged != null) stripTick.run()
+    }
 
-    override fun onHidden() {}
+    override fun onHidden() {
+        stripHandler.removeCallbacks(stripTick)
+    }
 
     private companion object {
         const val PADDING_DP = 16

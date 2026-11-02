@@ -27,7 +27,23 @@ import com.mapcontrol.media.LauncherMediaController.MediaState
  * 1 satırsa (2×1) kapaksız, ilerlemesiz kompakt yatay yerleşim. [applySpan] ikisi arasında
  * kartı yeniden yaratmadan görünürlük değiştirir; kontrol satırı tek örnektir ve taşınır.
  */
-class MediaCard(private val context: Context) : SizedWidget, Themeable {
+class MediaCard(
+    private val context: Context,
+    /** Sahne sol paneli: kapak + bilgi üstte, ilerleme ve ortalı kontroller altta (taslak düzeni); veri mantığı aynı. */
+    private val sahne: Boolean = false,
+) : SizedWidget, Themeable, StripSource {
+
+    // --- Şerit (Sahne): başlık, sanatçı; dokunuş oynat/duraklat (boştayken son kaynağı açar) ---
+    override var onStripChanged: (() -> Unit)? = null
+    private var stripNow: StripState? = null
+    override fun stripState(): StripState? = stripNow
+    override fun stripTap(part: Int) {
+        when (mode) {
+            Mode.IDLE -> controller.launchLastSource()
+            Mode.SESSION -> controller.playPause()
+            else -> controller.openNotificationAccessSettings()
+        }
+    }
 
     private enum class Mode { NO_ACCESS, IDLE, SESSION }
 
@@ -185,7 +201,16 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         addView(controlsRow)
     }
 
-    override val view: View = card(context, LinearLayout.HORIZONTAL).apply {
+    // Sahne paneli parçaları (görünüm kurulmadan önce hazır olmalı).
+    private val sourceIcon = ImageView(context).apply {
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        visibility = View.GONE
+    }
+    private val knob = View(context)
+    private var shownSourceIcon: String? = null
+
+    override val view: View = if (sahne) buildSahneView() else card(context, LinearLayout.HORIZONTAL).apply {
         theme.bind { background = cardSurface(context) }
         addView(artworkBox, LinearLayout.LayoutParams(0, 0))
         addView(artworkGap)
@@ -239,6 +264,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
     /** Tema değişti: yüzeyler, metin/ikon tonları ve düğme zeminleri yeniden atanır; kapak, ilerleme ve oturum korunur. */
     override fun applyTheme() {
         theme.reapply()
+        if (sahne) styleSahne()
         view.invalidate()
     }
 
@@ -267,6 +293,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
      * yerleşime, aksi halde tam yerleşime geçer; yalnızca yerleşim türü değişince çalışır.
      */
     override fun applySpan(span: Span) {
+        if (sahne) return
         val compact = span.h < 4
         if (compact == layoutCompact) return
         layoutCompact = compact
@@ -322,7 +349,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
     /** Kart yüksekliğine göre kapak boyutu, genişliğe göre başlık boyutu. Yalnızca değişince dokunur. */
     private fun applySizes(width: Int, contentHeight: Int) {
         lastContentHeight = contentHeight
-        if (layoutCompact) return
+        if (layoutCompact || sahne) return
         val density = context.resources.displayMetrics.density
         val showArtwork = contentHeight >= context.dp(180)
         // Uzun kartta (ör. 12×8 ızgarada 6×6) kapak ve yazılar büyür; boş orta bant kalmaz.
@@ -447,6 +474,13 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
             artistView.text = artist ?: ""
             compactTitle.text = title ?: ""
             compactArtist.text = artist ?: ""
+            if (sahne) bindSourceIcon(source)
+            stripNow = StripState(
+                if (source.isNullOrEmpty()) context.getString(R.string.launcher_widget_media) else appLabel(source),
+                title ?: "", R.drawable.ic_mdi_music_note,
+                if (newMode == Mode.SESSION) StripTone.NORMAL else StripTone.MUTED, detail = artist,
+            )
+            onStripChanged?.invoke()
         }
         if (modeChanged) {
             // Görünürlük ve düğme boyutu yeni moda göre yeniden hesaplanır.
@@ -523,7 +557,8 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         val previous = shownPlaying
         if (previous == isPlaying) return
         shownPlaying = isPlaying
-        val res = if (isPlaying) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play
+        val res = if (sahne) (if (isPlaying) R.drawable.ic_sahne_pause else R.drawable.ic_sahne_play)
+        else if (isPlaying) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play
         playButton.contentDescription = context.getString(
             if (isPlaying) R.string.launcher_media_pause else R.string.launcher_media_play,
         )
@@ -568,6 +603,7 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         if (permille != lastFillPermille) {
             lastFillPermille = permille
             progressFill.scaleX = permille / 1000f
+            if (sahne) placeKnob()
         }
     }
 
@@ -585,7 +621,156 @@ class MediaCard(private val context: Context) : SizedWidget, Themeable {
         pkg
     }
 
+    // --- Sahne yerleşimi ---
+
+    /**
+     * Taslaktaki medya paneli: üstte 112dp kapak ve yanında kaynak (uygulama ikonu + adı), başlık, sanatçı; altında ince
+     * ilerleme çizgisi, topuzu ve süreler; en altta ortalı önceki / oynat / sonraki. Görünümler tam yerleşimdekilerle
+     * aynı örneklerdir; yalnızca yeniden dizilir.
+     */
+    private fun buildSahneView(): View {
+        listOf(sourceLabel, titleView, artistView, progressBox, controlsRow, artworkBox).forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        mainBox.removeAllViews()
+        sourceLabel.textSize = 16f
+        SahneFonts.apply(sourceLabel, 500)
+        titleView.textSize = 32f
+        titleView.maxLines = 1
+        SahneFonts.apply(titleView, 600, -0.01f)
+        artistView.textSize = 20f
+        SahneFonts.apply(artistView, 400)
+        elapsedView.textSize = 16f
+        totalView.textSize = 16f
+        SahneFonts.apply(elapsedView, 400)
+        SahneFonts.apply(totalView, 400)
+        val meta = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, context.dp(4), 0, 0)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(sourceIcon, LinearLayout.LayoutParams(context.dp(18), context.dp(18)).apply { marginEnd = context.dp(8) })
+                addView(sourceLabel)
+            })
+            // Taslakta başlık satır yüksekliği 1.1: doğal satırdan kısa, bu yüzden aralıklar biraz daraltıldı.
+            addView(titleView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(5) })
+            addView(artistView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(1) })
+        }
+        val top = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(artworkBox, LinearLayout.LayoutParams(context.dp(ART_DP), context.dp(ART_DP)))
+            addView(meta, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(22) })
+        }
+        // İlerleme: 4dp iz, dolgu ve üzerinde 14dp topuz (topuz izin dışına taşar).
+        progressTrack.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(4))
+        progressTrack.clipChildren = false
+        progressTrack.clipToPadding = false
+        progressTrack.addView(knob, FrameLayout.LayoutParams(context.dp(KNOB_DP), context.dp(KNOB_DP), Gravity.CENTER_VERTICAL or Gravity.START))
+        (timesGap.layoutParams as LinearLayout.LayoutParams).height = context.dp(12)
+        progressBox.clipChildren = false
+        // Kontroller: 84 / 100 / 84, aralarında 28dp.
+        resize(prevButton, 84)
+        resize(nextButton, 84)
+        resize(playButton, 100)
+        setGapWidth(controlsGap1, 28)
+        setGapWidth(controlsGap2, 28)
+        (playIcon.layoutParams as FrameLayout.LayoutParams).apply { width = context.dp(34); height = context.dp(34) }
+        (prevButton.getChildAt(0).layoutParams as FrameLayout.LayoutParams).apply { width = context.dp(30); height = context.dp(30) }
+        (nextButton.getChildAt(0).layoutParams as FrameLayout.LayoutParams).apply { width = context.dp(30); height = context.dp(30) }
+        controlsRow.gravity = Gravity.CENTER
+        playButton.elevation = context.dpF(10f)
+        (prevButton.getChildAt(0) as ImageView).setImageResource(R.drawable.ic_sahne_prev)
+        (nextButton.getChildAt(0) as ImageView).setImageResource(R.drawable.ic_sahne_next)
+        playIcon.setImageResource(R.drawable.ic_sahne_play)
+        placeholderIcon.setImageResource(R.drawable.ic_sahne_note)
+        (placeholderIcon.layoutParams as FrameLayout.LayoutParams).apply { width = context.dp(44); height = context.dp(44) }
+        styleSahne()
+        return FrameLayout(context).apply {
+            clipChildren = false
+            clipToPadding = false
+            val p = context.dp(28)
+            setPadding(p, p, p, context.dp(26))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                clipChildren = false
+                addView(top)
+                addView(progressBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(34) })
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            addView(controlsRow, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+            addView(grantButton.also { (it.parent as? ViewGroup)?.removeView(it) },
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(GRANT_BUTTON_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = context.dp(12) })
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeKnob() }
+        }
+    }
+
+    /** Sahne renkleri: kapak yer tutucusu gradyan, düğmeler (oynat birincil), ilerleme dolgusu ve topuz. */
+    private fun styleSahne() {
+        artworkBox.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF3A1D4F.toInt(), 0xFF7A2F57.toInt(), 0xFFD0654A.toInt()),
+        ).apply { cornerRadius = context.dpF(18f) }
+        artworkBox.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(v: View, outline: Outline) = outline.setRoundRect(0, 0, v.width, v.height, context.dpF(18f))
+        }
+        artworkBox.elevation = context.dpF(8f)
+        placeholderIcon.setTint(0xD1FFFFFF.toInt())
+        sourceLabel.setTextColor(Sahne.INK_3)
+        titleView.setTextColor(Sahne.INK)
+        artistView.setTextColor(Sahne.INK_2)
+        elapsedView.setTextColor(Sahne.INK_3)
+        totalView.setTextColor(Sahne.INK_3)
+        progressTrack.background = rounded(context, Sahne.TRACK, 2f)
+        progressFill.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Sahne.INK and 0x00FFFFFF or 0x99000000.toInt(), Sahne.INK),
+        ).apply { cornerRadius = context.dpF(2f) }
+        knob.background = oval(Sahne.KNOB)
+        knob.elevation = context.dpF(3f)
+        for (b in arrayOf(prevButton, nextButton)) {
+            b.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Sahne.SOFT_FILL)
+                setStroke(context.dp(1), Sahne.HAIR)
+            }
+            (b.getChildAt(0) as ImageView).setTint(Sahne.INK)
+        }
+        playButton.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.CTA_TOP, Sahne.CTA_BOTTOM),
+        ).apply { shape = android.graphics.drawable.GradientDrawable.OVAL }
+        playIcon.setTint(Sahne.CTA_INK)
+        grantButton.setTextColor(Sahne.INK)
+        grantButton.background = rounded(context, Sahne.SOFT_FILL, 20f, Sahne.HAIR)
+    }
+
+    /** Topuz dolgunun ucunda: iz genişliği × ilerleme. */
+    private fun placeKnob() {
+        val w = progressTrack.width
+        if (w <= 0) return
+        val half = context.dp(KNOB_DP) / 2f
+        knob.translationX = w * (lastFillPermille.coerceAtLeast(0) / 1000f) - half
+        knob.visibility = if (mode == Mode.SESSION) View.VISIBLE else View.INVISIBLE
+    }
+
+    /** Kaynağın küçük uygulama ikonu (kapak bilgisinin yanında); arka planda çözülür, değişince yenilenir. */
+    private fun bindSourceIcon(pkg: String?) {
+        if (pkg == shownSourceIcon) return
+        shownSourceIcon = pkg
+        if (pkg.isNullOrEmpty()) {
+            sourceIcon.visibility = View.GONE
+            sourceIcon.setImageDrawable(null)
+            return
+        }
+        artworkIo.runSafely {
+            val d = try { com.mapcontrol.util.AppIconHelper.load(context, pkg) } catch (e: Exception) { null }
+            handler.post {
+                if (shownSourceIcon != pkg) return@post
+                sourceIcon.setImageDrawable(d)
+                sourceIcon.visibility = if (d != null) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
     private companion object {
+        /** Sahne: kapak kenarı ve ilerleme topuzu (dp). */
+        const val ART_DP = 112
+        const val KNOB_DP = 14
         /** Görüntü boyutu henüz bilinmiyorsa kapak kenarı üst sınırı (px). */
         const val ARTWORK_MAX_PX = 480
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */
