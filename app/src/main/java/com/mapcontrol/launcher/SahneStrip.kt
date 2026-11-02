@@ -183,12 +183,12 @@ internal class StripItemView(
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
     private val title = text(context, TITLE_SP).apply { SahneFonts.apply(this, 400) }
-    private val value = text(context, VALUE_SP).apply { SahneFonts.apply(this, 600) }
-    private val texts = LinearLayout(context).apply {
-        orientation = VERTICAL
-        gravity = Gravity.CENTER_VERTICAL
-        addView(title, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-        addView(value, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2) })
+    private val value = text(context, VALUE_SP).apply {
+        SahneFonts.apply(this, 500)
+        maxLines = 1
+        // Uzun değer ("Tüm hoparlörler") şeritte kesilmez: 28sp'den küçülerek sığar.
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+            this, VALUE_MIN_SP, VALUE_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
     }
     private val pips = LinearLayout(context).apply {
         orientation = HORIZONTAL
@@ -197,6 +197,15 @@ internal class StripItemView(
     private val partsRow = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+    }
+    /** Başlık, değer ve altında seviye dilimleri (ya da buğu giderme düğmeleri) dikey sütunu. */
+    private val texts = LinearLayout(context).apply {
+        orientation = VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        addView(value, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(1) })
+        addView(pips, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(5) })
+        addView(partsRow, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(PART_H_DP)).apply { topMargin = context.dp(3) })
     }
     private var last: StripState? = null
     private var sizing = SIZE_ICON
@@ -209,10 +218,7 @@ internal class StripItemView(
         setPadding(context.dp(PAD_DP), 0, context.dp(PAD_DP), 0)
         minimumHeight = context.dp(LauncherTheme.TOUCH_MIN_DP)
         addView(iconView, LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-        addView(texts, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(12) })
-        addView(View(context), LayoutParams(0, 1, 1f))
-        addView(pips, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-        addView(partsRow, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+        addView(texts, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(12) })
         isClickable = true
         isFocusable = true
         setOnClickListener { onTap(0) }
@@ -309,16 +315,15 @@ internal class StripItemView(
             iconView.visibility = View.VISIBLE
             return
         }
-        // Parçalı öğede (buğu giderme) büyük ikon yok: başlık solda, düğmeler kendi ikonlarıyla.
+        // Parçalı öğede (buğu giderme) büyük ikon yok: başlık üstte, altında iki düğme yan yana (eşit pay).
         iconView.visibility = View.GONE
         (texts.layoutParams as LayoutParams).marginStart = 0
         partsRow.visibility = View.VISIBLE
         if (partsRow.childCount != s.parts.size) {
             partsRow.removeAllViews()
             s.parts.forEachIndexed { i, _ ->
-                partsRow.addView(MiniButton(context) { onTap(i) }, LayoutParams(LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP)).apply {
-                    marginStart = context.dp(if (i == 0) 0 else 14)
-                    gravity = Gravity.CENTER_VERTICAL
+                partsRow.addView(MiniButton(context) { onTap(i) }, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
+                    marginStart = context.dp(if (i == 0) 0 else 8)
                 })
             }
         }
@@ -347,8 +352,7 @@ internal class StripItemView(
         init {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(12), 0, context.dp(14), 0)
-            minimumWidth = context.dp(LauncherTheme.TOUCH_MIN_DP)
+            setPadding(context.dp(10), 0, context.dp(8), 0)
             addView(icon, LayoutParams(context.dp(26), context.dp(26)))
             addView(LinearLayout(context).apply {
                 orientation = VERTICAL
@@ -392,17 +396,19 @@ internal class StripItemView(
     }
 
     companion object {
-        const val PAD_DP = 22
-        const val ICON_DP = 30
-        const val APP_ICON_DP = 40
-        /** Illüstrasyon yüksekliği (şerit 92dp; büyütmez) ve en geniş hali. */
-        const val ART_DP = 62
-        const val ART_MAX_W_DP = 72
+        const val PAD_DP = 16
+        const val ICON_DP = 36
+        const val APP_ICON_DP = 48
+        /** Illüstrasyon yüksekliği (şerit 92dp: 10dp pay) ve en geniş hali. */
+        const val ART_DP = 72
+        const val ART_MAX_W_DP = 84
+        const val PART_H_DP = 52
         private const val SIZE_ICON = 0
         private const val SIZE_APP = 1
         private const val SIZE_ART = 2
         const val TITLE_SP = 15f
-        const val VALUE_SP = 21f
+        const val VALUE_SP = 28f
+        const val VALUE_MIN_SP = 17
         const val MINI_ART_DP = 34
         const val MINI_ART_MAX_W_DP = 46
         const val PIP_W_DP = 22
@@ -425,9 +431,9 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(context.dp(12), 0, context.dp(12), 0)
-        // Ad uzunluğu kadar (taslakta "YouTube Music" ve "Maps" yan yana); yer kalmazsa ad kısalır.
+        // İki uygulama tek yuvada eşit paylı: üstte ikon, altında ad.
         buttons.forEachIndexed { i, b ->
-            addView(b, LayoutParams(LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP), 1f).apply { if (i > 0) marginStart = context.dp(4) })
+            addView(b, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply { if (i > 0) marginStart = context.dp(4) })
         }
         tiles.forEachIndexed { i, t ->
             t.onStripChanged = { t.stripState()?.let { buttons[i].bind(it) } }
@@ -440,14 +446,19 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
             scaleType = ImageView.ScaleType.FIT_CENTER
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        private val label = text(context, 18f).apply { SahneFonts.apply(this, 500) }
+        private val label = text(context, 18f).apply {
+            SahneFonts.apply(this, 500)
+            maxLines = 1
+            gravity = Gravity.CENTER
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12, 18, 1, TypedValue.COMPLEX_UNIT_SP)
+        }
 
         init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(12), 0, context.dp(12), 0)
-            addView(icon, LayoutParams(context.dp(40), context.dp(40)))
-            addView(label, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(12) })
+            orientation = VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(context.dp(6), context.dp(6), context.dp(6), context.dp(6))
+            addView(icon, LayoutParams(context.dp(46), context.dp(46)))
+            addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2) })
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
@@ -471,7 +482,6 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
             }
             label.text = s.value
             label.setTextColor(if (s.tone == StripTone.MUTED) Sahne.INK_3 else Sahne.INK)
-            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             contentDescription = s.value
         }
     }

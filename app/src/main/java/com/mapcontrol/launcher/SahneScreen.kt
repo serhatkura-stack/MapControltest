@@ -405,16 +405,8 @@ class SahneScreen(
         fun slotView(index: Int): View? = slots[index]
     }
 
-    /** Şerit yuvası genişliği (taslaktaki oranlar): koltuk 290, buğu 430, uygulama çifti 370; diğerleri 236. */
-    private fun stripWeight(type: WidgetType?): Float = when (type) {
-        WidgetType.SEAT_HEAT_DRIVER, WidgetType.SEAT_HEAT_PASSENGER, WidgetType.SEAT_VENT_DRIVER, WidgetType.SEAT_VENT_PASSENGER -> 295f
-        WidgetType.DEFROST -> 430f
-        WidgetType.APP -> 370f
-        WidgetType.TRUNK -> 196f
-        WidgetType.MEDIA -> 330f
-        null -> 200f
-        else -> 236f
-    }
+    /** Şerit yuvaları eşit genişlikte (6 eşit pay), her tür ve düzenleme kipinde aynı. */
+    private fun stripWeight(@Suppress("UNUSED_PARAMETER") type: WidgetType?): Float = 1f
 
     // --- Yerleşim (taslak 1872 genişlik: panel 440, boşluk 16, sahne 960; şerit 92, aralık 12) ---
 

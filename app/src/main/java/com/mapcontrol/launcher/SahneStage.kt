@@ -230,7 +230,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private class Note(context: Context, iconRes: Int, private val end: Boolean) : LinearLayout(context) {
         private val icon = ImageView(context).apply { setImageResource(iconRes); importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
         private val title = sahneText(context, 16f, Sahne.INK_3, 400)
-        private val value = sahneText(context, 22f, Sahne.INK, 600)
+        private val value = sahneText(context, 26f, Sahne.INK, 500)
         private val dot = View(context)
         private val sub = sahneText(context, 17f, Sahne.INK_2, 400)
 

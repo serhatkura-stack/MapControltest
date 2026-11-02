@@ -634,7 +634,7 @@ class MediaCard(
         sourceLabel.textSize = 16f
         SahneFonts.apply(sourceLabel, 500)
         titleView.textSize = 32f
-        titleView.maxLines = 1
+        titleView.maxLines = 2
         SahneFonts.apply(titleView, 600, -0.01f)
         artistView.textSize = 20f
         SahneFonts.apply(artistView, 400)
@@ -668,8 +668,8 @@ class MediaCard(
         (timesGap.layoutParams as LinearLayout.LayoutParams).height = context.dp(12)
         progressBox.clipChildren = false
         // Kontroller: 84 / 100 / 84, aralarında 28dp.
-        resize(prevButton, 84)
-        resize(nextButton, 84)
+        resize(prevButton, 76)
+        resize(nextButton, 76)
         resize(playButton, 100)
         setGapWidth(controlsGap1, 28)
         setGapWidth(controlsGap2, 28)
@@ -688,14 +688,15 @@ class MediaCard(
             clipChildren = false
             clipToPadding = false
             val p = context.dp(28)
-            setPadding(p, p, p, context.dp(26))
+            setPadding(p, context.dp(20), p, context.dp(20))
+            // İçerik panelde dikey ortalı: kapak + başlık, ilerleme, kontroller (boş boşluk yok).
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 clipChildren = false
                 addView(top)
-                addView(progressBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(34) })
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-            addView(controlsRow, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+                addView(progressBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(22) })
+                addView(controlsRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(14) })
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL))
             addView(grantButton.also { (it.parent as? ViewGroup)?.removeView(it) },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(GRANT_BUTTON_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = context.dp(12) })
             addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeKnob() }
@@ -769,7 +770,7 @@ class MediaCard(
 
     private companion object {
         /** Sahne: kapak kenarı ve ilerleme topuzu (dp). */
-        const val ART_DP = 112
+        const val ART_DP = 156
         const val KNOB_DP = 14
         /** Görüntü boyutu henüz bilinmiyorsa kapak kenarı üst sınırı (px). */
         const val ARTWORK_MAX_PX = 480
