@@ -196,7 +196,8 @@ internal object LauncherDemo {
         driveMode,     // sürüş modu (varsayılan Normal)
     )
 
-    const val LOCKED = true
+    /** Demo kilit: kapılardan biri açıksa kilit açık (araçta kapı açıkken kilitli görünmez), değilse kilitli. */
+    val LOCKED: Boolean get() = listOf("lf", "rf", "lr", "rr").none { it in openParts }
     const val TIRE_WARNING = false
 
     /**
@@ -236,7 +237,9 @@ internal object LauncherDemo {
     /** Konfor kutucukları: bagaj kapalı, klima tuşları, ısıtmalar kapalı, arka hoparlör demo anahtarına göre. */
     fun comfort(): ComfortReading = ComfortReading(
         connected = true,
-        trunk = TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
+        // Bagaj, sahne aracıyla aynı demo anahtarından (`launcher_demo_open "trunk"`): tek kaynak.
+        trunk = if ("trunk" in openParts) TrunkReading(position = TrunkMath.FULL_OPEN, latchOpen = 1, motion = TrunkMath.MOTION_STOPPED)
+        else TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
         keys = ClimateKeysReading(ac = true, auto = true, recirc = false, power = true),
         heat = HeatReading(steering = false, windshield = false),
         sound = SoundFieldReading(balance = SoundFieldMath.CENTER, fade = if (rearOff) SoundFieldMath.FRONT_EXTREME else SoundFieldMath.CENTER),

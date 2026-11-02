@@ -258,7 +258,7 @@ internal class SeatTile(
         inlineChooser?.bind(s)
         (popup?.contentView?.tag as? Chooser)?.bind(s)
         stripNow = StripState(activity.getString(titleRes), text, R.drawable.ic_mdi_car_seat_heater, tone,
-            level = if (s.mode == SeatMode.OFF) 0 else s.level, levels = SeatChoice.MAX)
+            level = if (s.mode == SeatMode.OFF) 0 else s.level)
         onStripChanged?.invoke()
     }
 
@@ -300,59 +300,94 @@ internal class SeatTile(
 
     // --- Seçici ---
 
-    /** Öğenin üstünde (yer yoksa altında) küçük seçici; dışına dokununca kapanır. */
+    private val autoDismiss = Runnable { popup?.dismiss() }
+    /** Sahne'de kutucuğun kök görünümü pencereye bağlı değildir: zamanlayıcı ana iş parçacığı işleyicisinde. */
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * Öğenin üstünde (yer yoksa altında) başlıklı küçük seçici; ekranın 24dp kenar payı içinde kalır. Arkasında hafif bir
+     * perde vardır: dışarı dokunuş kapatır. Dokunulmazsa [AUTO_DISMISS_MS] sonra kendiliğinden kapanır.
+     */
     private fun openChooser(anchor: View) {
         if (activity.isFinishing || activity.isDestroyed || !anchor.isAttachedToWindow) return
         if (popup?.isShowing == true) { popup?.dismiss(); return }
         // Öğeye ikinci dokunuş: önce dışarı dokunuşla kapandı, hemen yeniden açılmasın (aç/kapa gibi davranır).
         if (android.os.SystemClock.uptimeMillis() - dismissedAt < REOPEN_GUARD_MS) return
-        val chooser = Chooser(onPicked = { popup?.dismiss() })
+        val chooser = Chooser(onPicked = { popup?.dismiss() }, titled = true)
         chooser.bind(shown)
-        val content = chooser.view.apply {
+        val card = chooser.view.apply {
             tag = chooser
-            background = if (LauncherTheme.sahne) GlassDrawable(activity, Sahne.STRIP_RADIUS_DP) else rounded(activity, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
+            background = if (LauncherTheme.sahne) GlassDrawable(activity, Sahne.PANEL_RADIUS_DP, shadow = 0.6f) else rounded(activity, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
             val p = activity.dp(CHOOSER_PAD_DP)
             setPadding(p, p, p, p)
+            isClickable = true // karta dokunuş perdeye geçmesin
         }
         val w = activity.dp(CHOOSER_W_DP)
-        content.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        val h = content.measuredHeight
-        // Odak almayan pencere: sistem gezinme çubuğu geri gelmez, ekran kaymaz; dışarı dokunuş seçiciyi kapatır.
-        val pw = PopupWindow(content, w, h, false).apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            isTouchable = true
-            isOutsideTouchable = true
-            elevation = activity.dpF(12f)
-            setOnDismissListener { popup = null; dismissedAt = android.os.SystemClock.uptimeMillis() }
-        }
-        popup = pw
+        card.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val h = card.measuredHeight
+        val decor = activity.window.decorView
         val loc = IntArray(2)
         anchor.getLocationInWindow(loc)
-        val screenW = activity.window.decorView.width
-        val x = (loc[0] + anchor.width / 2 - w / 2).coerceIn(activity.dp(12), maxOf(activity.dp(12), screenW - w - activity.dp(12)))
+        val gutter = activity.dp(GUTTER_DP)
+        val screenW = decor.width
+        // Yuvanın kenarına hizalı: sol yarıdaki yuvada sol kenar, sağ yarıdakinde sağ kenar; 24dp kenar payı içinde.
+        val preferred = if (loc[0] + anchor.width / 2 < screenW / 2) loc[0] else loc[0] + anchor.width - w
+        val x = preferred.coerceIn(gutter, maxOf(gutter, screenW - w - gutter))
         val gapPx = activity.dp(CHOOSER_GAP_DP)
         val above = loc[1] - h - gapPx
-        val y = if (above >= activity.dp(8)) above else loc[1] + anchor.height + gapPx
-        content.alpha = 0f
-        pw.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y)
-        content.animate().alpha(1f).setDuration(FADE_MS).start()
+        val y = if (above >= gutter) above else loc[1] + anchor.height + gapPx
+        // Tam pencere: hafif perde (dokununca kapanır) ve üstünde kart. Odak almaz: sistem gezinme çubuğu geri gelmez.
+        val scrim = FrameLayout(activity).apply {
+            clipChildren = false
+            setBackgroundColor(if (LauncherTheme.night) SCRIM_NIGHT else SCRIM_DAY)
+            isClickable = true
+            setOnClickListener { popup?.dismiss() }
+            addView(card, FrameLayout.LayoutParams(w, h).apply { leftMargin = x; topMargin = y })
+        }
+        val pw = PopupWindow(scrim, decor.width, decor.height, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isTouchable = true
+            isClippingEnabled = false
+            setOnDismissListener {
+                popup = null
+                main.removeCallbacks(autoDismiss)
+                dismissedAt = android.os.SystemClock.uptimeMillis()
+            }
+        }
+        popup = pw
+        scrim.alpha = 0f
+        pw.showAtLocation(anchor, Gravity.NO_GRAVITY, 0, 0)
+        scrim.animate().alpha(1f).setDuration(FADE_MS).start()
+        main.removeCallbacks(autoDismiss)
+        main.postDelayed(autoDismiss, AUTO_DISMISS_MS)
     }
 
     /** "Isıtma" 1·2·3, "Soğutma" 1·2·3 ve "Kapalı"; şu anki durum vurgulu. Dokunuş yazar ve [onPicked] çağırır. */
-    private inner class Chooser(private val onPicked: () -> Unit, private val stacked: Boolean = false) {
+    private inner class Chooser(
+        private val onPicked: () -> Unit,
+        private val stacked: Boolean = false,
+        /** Açılır seçici: başlık ("Sürücü koltuğu") ve 96 × 80dp hücreler. */
+        private val titled: Boolean = false,
+    ) {
         private val buttons = ArrayList<Pair<SeatTarget, TextView>>()
         val view: LinearLayout = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        private val cellH = activity.dp(if (titled) CELL_H_DP else BTN_DP)
 
         init {
+            if (titled) view.addView(sahneOrText(CHOOSER_TITLE_SP, 600).apply {
+                setText(titleRes)
+                setTextColor(ink())
+                maxLines = 1
+            }, LinearLayout.LayoutParams(MATCH, WRAP).apply { bottomMargin = activity.dp(16) })
             addMode(R.string.launcher_seat_row_heat, SeatMode.HEAT, first = true)
             addMode(R.string.launcher_seat_row_cool, SeatMode.COOL, first = false)
             view.addView(button(SeatTarget(SeatMode.OFF), activity.getString(R.string.launcher_seat_off)),
-                LinearLayout.LayoutParams(MATCH, activity.dp(BTN_DP)).apply { topMargin = activity.dp(ROW_GAP_DP) })
+                LinearLayout.LayoutParams(MATCH, activity.dp(if (titled) OFF_BTN_DP else BTN_DP)).apply { topMargin = activity.dp(if (titled) 16 else ROW_GAP_DP) })
         }
 
         /** Yan yana (seçici: etiket solda) ya da üst üste (panel: etiket üstte, düğmeler tam genişlikte). */
         private fun addMode(labelRes: Int, mode: SeatMode, first: Boolean) {
-            val label = sahneOrText(if (stacked) STACKED_LABEL_SP else LABEL_SP, 500).apply {
+            val label = sahneOrText(if (stacked) STACKED_LABEL_SP else if (titled) CHOOSER_LABEL_SP else LABEL_SP, 500).apply {
                 setText(labelRes)
                 setTextColor(if (mode == SeatMode.HEAT) heatColor() else coolColor())
                 maxLines = 1
@@ -360,15 +395,16 @@ internal class SeatTile(
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                if (!stacked) addView(label, LinearLayout.LayoutParams(activity.dp(LABEL_W_DP), WRAP))
+                if (!stacked) addView(label, if (titled) LinearLayout.LayoutParams(0, WRAP, 1f) else LinearLayout.LayoutParams(activity.dp(LABEL_W_DP), WRAP))
                 for (l in 1..SeatChoice.MAX) {
-                    addView(button(SeatTarget(mode, l), l.toString()), LinearLayout.LayoutParams(0, MATCH, 1f).apply {
-                        if (l > 1 || !stacked) marginStart = activity.dp(BTN_GAP_DP)
-                    })
+                    addView(button(SeatTarget(mode, l), l.toString()),
+                        (if (titled) LinearLayout.LayoutParams(activity.dp(CELL_W_DP), MATCH) else LinearLayout.LayoutParams(0, MATCH, 1f)).apply {
+                            if (l > 1 || !stacked) marginStart = activity.dp(BTN_GAP_DP)
+                        })
                 }
             }
             if (stacked) view.addView(label, LinearLayout.LayoutParams(MATCH, WRAP).apply { if (!first) topMargin = activity.dp(ROW_GAP_DP) })
-            view.addView(row, LinearLayout.LayoutParams(MATCH, activity.dp(BTN_DP)).apply {
+            view.addView(row, LinearLayout.LayoutParams(MATCH, cellH).apply {
                 topMargin = activity.dp(if (stacked) 4 else if (first) 0 else ROW_GAP_DP)
             })
         }
@@ -392,15 +428,24 @@ internal class SeatTile(
             buttons += target to this
         }
 
+        /**
+         * Etkin hücre tam dolgulu (ısıtma turuncu, soğutma mavi, beyaz rakam; iki temada aynı), diğerleri sakin. "Kapalı" bir
+         * eylem düğmesidir: denetim dolgusu ve kenar; koltuk zaten kapalıysa ince mürekkep çerçeveyle işaretli.
+         */
         fun bind(s: SeatShown) {
             val fill = if (LauncherTheme.sahne) Sahne.SOFT_FILL else LauncherTheme.CONTROL
             val hair = if (LauncherTheme.sahne) Sahne.HAIR_2 else 0
             buttons.forEach { (t, b) ->
                 val current = SeatChoice.isCurrent(s, t)
-                val c = when (t.mode) { SeatMode.HEAT -> heatColor(); SeatMode.COOL -> coolColor(); SeatMode.OFF -> ink() }
-                b.background = if (current) rounded(activity, (c and 0x00FFFFFF) or 0x2E000000, BTN_RADIUS_DP, c)
-                else rounded(activity, fill, BTN_RADIUS_DP, hair)
-                b.setTextColor(if (current) c else ink())
+                if (t.mode == SeatMode.OFF) {
+                    b.background = rounded(activity, if (LauncherTheme.sahne) Sahne.TRACK else LauncherTheme.CONTROL, BTN_RADIUS_DP,
+                        if (current) ink3() else hair)
+                    b.setTextColor(ink())
+                } else {
+                    val solid = if (t.mode == SeatMode.HEAT) ACTIVE_HEAT else ACTIVE_COOL
+                    b.background = if (current) rounded(activity, solid, BTN_RADIUS_DP) else rounded(activity, fill, BTN_RADIUS_DP, hair)
+                    b.setTextColor(if (current) 0xFFFFFFFF.toInt() else ink())
+                }
                 b.isSelected = current
             }
         }
@@ -418,7 +463,7 @@ internal class SeatTile(
         const val SMALL_ART_W_DP = 80
         const val BIG_PAD_DP = 18
         const val BIG_PAD_TOP_DP = 12
-        const val TITLE_SP = 15f
+        const val TITLE_SP = 20f
         const val VALUE_SP = 26f
         const val VALUE_H_DP = 34
         const val BIG_VALUE_H_DP = 46
@@ -426,15 +471,27 @@ internal class SeatTile(
         const val BIG_TITLE_SP = 20f
         const val PIP_W_DP = 22
         const val PIP_H_DP = 6
-        const val CHOOSER_W_DP = 440
-        const val CHOOSER_PAD_DP = 14
+        /** Seçici: 20 + etiket 120 + 3 × (8 + 96) + 20. */
+        const val CHOOSER_W_DP = 472
+        const val CHOOSER_PAD_DP = 20
+        const val CHOOSER_TITLE_SP = 24f
+        const val CHOOSER_LABEL_SP = 22f
+        const val CELL_W_DP = 96
+        const val CELL_H_DP = 80
+        const val OFF_BTN_DP = 72
+        const val GUTTER_DP = 24
+        const val AUTO_DISMISS_MS = 6_000L
+        const val SCRIM_NIGHT = 0x66000000
+        const val SCRIM_DAY = 0x26000000
+        const val ACTIVE_HEAT = 0xFFF97316.toInt()
+        const val ACTIVE_COOL = 0xFF3B82F6.toInt()
         const val CHOOSER_GAP_DP = 10
         const val LABEL_W_DP = 108
         const val BIG_CHOOSER_W_DP = 236
-        const val STACKED_LABEL_SP = 15f
+        const val STACKED_LABEL_SP = 20f
         const val LABEL_SP = 18f
         const val BTN_DP = LauncherTheme.TOUCH_MIN_DP
-        const val BTN_SP = 22f
+        const val BTN_SP = 24f
         const val BTN_GAP_DP = 8
         const val BTN_RADIUS_DP = 16f
         const val ROW_GAP_DP = 8

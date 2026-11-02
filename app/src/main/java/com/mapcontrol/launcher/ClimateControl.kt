@@ -145,7 +145,7 @@ internal class ClimateControl(
         private val label = text(context, if (sahne) SAHNE_TEMP_SP else if (flatBar) FLAT_TEMP_SP else TEMP_SP, medium = true).apply {
             gravity = Gravity.CENTER
             if (sahne) SahneFonts.apply(this, 400, -0.02f, dayBump = false)
-            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+            theme.bind { setTextColor(if (sahne) Sahne.NUMERAL else LauncherTheme.DOCK_TEXT) }
         }
         private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
@@ -164,7 +164,7 @@ internal class ClimateControl(
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(text(context, if (sahne) 16f else LauncherTheme.LABEL_SP).apply {
+                addView(text(context, if (sahne) 20f else LauncherTheme.LABEL_SP).apply {
                     text = context.getString(shortRes)
                     gravity = Gravity.CENTER
                     if (sahne) SahneFonts.apply(this, 400)
@@ -324,9 +324,11 @@ internal class ClimateControl(
         private val number = text(context, if (sahne) SAHNE_FAN_SP else if (flatBar) FLAT_FAN_SP else FAN_SP, medium = true).apply {
             gravity = Gravity.CENTER
             if (sahne) SahneFonts.apply(this, 400, dayBump = false)
-            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+            theme.bind { setTextColor(if (sahne) Sahne.NUMERAL else LauncherTheme.DOCK_TEXT) }
         }
-        private val segments = List(ClimateMath.FAN_MAX) {
+        /** Sahne: noktalar yerine tek 220 × 8dp iz ve dolgu (tek bakışta okunur). */
+        private val track = if (sahne) FanTrack(context) else null
+        private val segments = if (sahne) emptyList() else List(ClimateMath.FAN_MAX) {
             View(context).apply { background = rounded(context, inactiveSegment(), if (sahne) SAHNE_SEGMENT_H_DP / 2f else SEGMENT_RADIUS_DP) }
         }
         private val tint = GradientDrawable().apply { alpha = 0 }
@@ -342,6 +344,7 @@ internal class ClimateControl(
             val l = level
             level = -1
             if (l >= 0) setLevel(l)
+            track?.invalidate()
         }
 
         fun resetTint() {
@@ -367,7 +370,8 @@ internal class ClimateControl(
                     addView(number, LinearLayout.LayoutParams(if (sahne) LinearLayout.LayoutParams.WRAP_CONTENT else context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
                 addView(gap(context, if (sahne) 10 else LauncherTheme.GAP_SM_DP, vertical = true))
-                addView(LinearLayout(context).apply {
+                if (track != null) addView(track, LinearLayout.LayoutParams(context.dp(SAHNE_TRACK_W_DP), context.dp(SAHNE_TRACK_H_DP)))
+                else addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     segments.forEachIndexed { i, v ->
                         if (i > 0) addView(gap(context, if (sahne) SAHNE_SEGMENT_GAP_DP else SEGMENT_GAP_DP))
@@ -415,6 +419,7 @@ internal class ClimateControl(
             val n = l.coerceIn(0, ClimateMath.FAN_MAX)
             if (n == level) return
             level = n
+            track?.set(n / ClimateMath.FAN_MAX.toFloat())
             segments.forEachIndexed { i, v ->
                 (v.background as GradientDrawable).setColor(if (i < n) (if (sahne) Sahne.ICE else LauncherTheme.ACCENT) else inactiveSegment())
             }
@@ -557,7 +562,7 @@ internal class ClimateControl(
     }
 
     /** Uçlar "LO" / "HI" yazılır (derece işareti yok); aradaki değerler 0,5 °C adımlı. */
-    private fun format(c: Double): String = endLabel(c) ?: String.format(Locale.US, "%.1f°", c)
+    private fun format(c: Double): String = endLabel(c) ?: String.format(Locale.getDefault(), "%.1f°", c)
 
     private fun endLabel(c: Double): String? = when {
         ClimateMath.isLo(c) -> context.getString(R.string.launcher_climate_lo)
@@ -571,7 +576,7 @@ internal class ClimateControl(
     /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
     private fun styled(c: Double): CharSequence {
         endLabel(c)?.let { return it }
-        val num = String.format(Locale.US, "%.1f", c)
+        val num = String.format(Locale.getDefault(), "%.1f", c)
         return SpannableStringBuilder(num).append('°').apply {
             setSpan(RelativeSizeSpan(if (sahne) 0.52f else DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             if (sahne) setSpan(android.text.style.SuperscriptSpan(), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -594,6 +599,8 @@ internal class ClimateControl(
         private const val SAHNE_SEGMENT_W_DP = 18
         private const val SAHNE_SEGMENT_H_DP = 6
         private const val SAHNE_SEGMENT_GAP_DP = 7
+        private const val SAHNE_TRACK_W_DP = 220
+        private const val SAHNE_TRACK_H_DP = 8
         private const val SAHNE_CHEVRON_DP = 30
         private const val SAHNE_CHEVRON_EDGE_DP = 21
         private const val TEMP_SP = 56f
@@ -631,5 +638,32 @@ internal class ClimateControl(
         private val TINT_COOL get() = LauncherTheme.DOCK_TINT_COOL
         private val TINT_WARM get() = LauncherTheme.DOCK_TINT_WARM
         private val TINT_FAN get() = LauncherTheme.DOCK_TINT_FAN
+    }
+}
+
+/** Sahne fan göstergesi: yuvarlak uçlu iz (gece #2A2F38, gündüz #DAD8D3) ve buz mavisi dolgu; yalnızca değişince çizilir. */
+private class FanTrack(context: android.content.Context) : View(context) {
+    private var fraction = 0f
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val rect = android.graphics.RectF()
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    fun set(f: Float) {
+        val v = f.coerceIn(0f, 1f)
+        if (v == fraction) return
+        fraction = v
+        invalidate()
+    }
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val r = height / 2f
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        paint.color = if (LauncherTheme.night) 0xFF2A2F38.toInt() else 0xFFDAD8D3.toInt()
+        canvas.drawRoundRect(rect, r, r, paint)
+        if (fraction <= 0f) return
+        rect.set(0f, 0f, maxOf(height.toFloat(), width * fraction), height.toFloat())
+        paint.color = Sahne.ICE
+        canvas.drawRoundRect(rect, r, r, paint)
     }
 }

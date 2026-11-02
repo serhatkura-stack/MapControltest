@@ -49,9 +49,9 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
 
     // --- Menzil ---
     // Sahibinin isteği: taslaktaki 84'ten küçük menzil bloğu (76 / 24 / 18, yakıt çubuğu 110), araç ortada dengelensin.
-    private val rangeNumber = sahneText(activity, RANGE_SP, Sahne.INK, 300, -0.04f)
+    private val rangeNumber = sahneText(activity, RANGE_SP, Sahne.NUMERAL, 300, -0.04f)
     private val rangeUnit = sahneText(activity, 24f, Sahne.INK_2, 500)
-    private val rangeLabel = sahneText(activity, 18f, Sahne.INK_3, 400).apply { setText(R.string.launcher_range_label) }
+    private val rangeLabel = sahneText(activity, 20f, Sahne.INK_3, 400).apply { setText(R.string.launcher_range_label) }
     private val fuelIcon = sahneIcon(R.drawable.ic_sahne_fuel, Sahne.INK_3)
     private val gauge = FuelGauge(activity)
     private val fuelText = sahneText(activity, 20f, Sahne.INK, 500)
@@ -91,19 +91,32 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         pressFeedback()
     }
 
-    // --- Uyarı hapları (açık gövde parçası, lastik/cam/yakıt kapağı) ---
-    private val doorsChip = AlertChip(activity, R.drawable.ic_mdi_car_door)
+    // --- Uyarı hapı (lastik / yakıt kapağı); açık kapı/bagaj/kaput/cam sağlık satırının yerinde adlandırılır ---
     private val alertsChip = AlertChip(activity, R.drawable.ic_mdi_alert)
     private val alertRow = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        addView(doorsChip)
-        addView(alertsChip, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+        addView(alertsChip)
     }
 
     // --- Notlar ---
     private val healthNote = Note(activity, R.drawable.ic_sahne_shield, end = false)
     private val airNote = Note(activity, R.drawable.ic_sahne_wind, end = true)
+    /** Açık parça satırı: sağlık notunun yerine, turuncu, kapı ikonlu ("Sol ön kapı ve bagaj açık"). */
+    private val openLine = OpenLine(activity)
+    private val words = ResourceOpeningWords(activity)
+    private var openings: Openings? = null
+    private var lastHealth: StripState? = null
+
+    // --- Veri yok ---
+    /** Araç verisi gelmeden: menzil yerine sabit iskelet çubuklar ve aracın altında tek mesaj (köşe değerleri gizli). */
+    private val skeleton = Skeleton(activity)
+    private val waitNote = sahneText(activity, 22f, Sahne.INK_3, 400).apply {
+        setText(R.string.launcher_stage_waiting)
+        gravity = Gravity.CENTER
+        visibility = View.GONE
+    }
+    private var waiting = false
 
     /** Düzenleme modunda sahne dokunulmaz (yalnızca yuvalar düzenlenir). */
     var locked = false
@@ -118,13 +131,16 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         addView(alertRow)
         addView(healthNote)
         addView(airNote)
+        addView(openLine)
+        addView(skeleton)
+        addView(waitNote)
         vehicle.onSummary = { bindVehicle(it) }
-        lock.onStripChanged = { lock.stripState()?.let { bindLock(it) } }
-        health.onStripChanged = { healthNote.bind(health.stripState()) }
+        lock.onStripChanged = { bindLock(lock.stripState()) }
+        health.onStripChanged = { bindHealth(health.stripState()) }
         air.onStripChanged = { airNote.bind(air.stripState()) }
         bindVehicle(vehicle.summary)
-        lock.stripState()?.let { bindLock(it) } ?: bindLock(null)
-        healthNote.bind(health.stripState())
+        bindLock(lock.stripState())
+        bindHealth(health.stripState())
         airNote.bind(air.stripState())
         SahneFonts.apply(rangeNumber, 300, -0.04f)
         rangeNumber.includeFontPadding = false
@@ -149,7 +165,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private fun bindVehicle(s: VehicleHeroCard.Summary?) {
         val range = s?.rangeKm
         rangeNumber.setTextSmooth(range?.toString() ?: activity.getString(R.string.launcher_unavailable), animate = false)
-        rangeNumber.setTextColor(if (range != null) Sahne.INK else Sahne.INK_3)
+        rangeNumber.setTextColor(if (range != null) Sahne.NUMERAL else Sahne.INK_3)
         rangeUnit.text = activity.getString(R.string.launcher_sahne_km)
         rangeUnit.visibility = if (range != null) View.VISIBLE else View.GONE
         val fuel = s?.fuel
@@ -160,20 +176,50 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             range?.let { activity.getString(R.string.launcher_range_value, it) + " " + activity.getString(R.string.launcher_range_label) },
             fuel?.let { activity.getString(if (s.lowFuel) R.string.launcher_fuel_low else R.string.launcher_fuel_short, it) },
         ).joinToString(", ")
-        car.setOpen(s?.openParts.orEmpty(), animate = carSeeded)
+        val o = s?.openings
+        car.setOpen(o?.carParts() ?: s?.openParts.orEmpty(), animate = carSeeded)
         if (s != null) carSeeded = true
-        doorsChip.bind(s?.doorsText)
-        alertsChip.bind(s?.alertsText)
-        alertRow.visibility = if (s?.doorsText != null || s?.alertsText != null) View.VISIBLE else View.GONE
-        floor.alert = s?.doorsText != null
+        alertsChip.bind(s?.otherAlertsText)
+        alertRow.visibility = if (s?.otherAlertsText != null) View.VISIBLE else View.GONE
+        floor.alert = o?.any == true
+        openings = o
+        waiting = s == null || (s.rangeKm == null && s.fuel == null && s.locked == null && o == null)
+        rangeBlock.visibility = if (waiting) View.INVISIBLE else View.VISIBLE
+        skeleton.visibility = if (waiting) View.VISIBLE else View.GONE
+        waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
+        airNote.visibility = if (waiting) View.GONE else View.VISIBLE
+        bindHealth(lastHealth)
+        bindLock(lock.stripState())
         requestLayout()
     }
 
+    /** Sağlık notu ya da (bir şey açıksa) onun yerinde turuncu açıklık satırı; veri yokken ikisi de gizli. */
+    private fun bindHealth(st: StripState?) {
+        lastHealth = st
+        val phrase = openings?.let { OpeningsText.phrase(it, words) }
+        openLine.bind(phrase)
+        openLine.visibility = if (phrase != null && !waiting) View.VISIBLE else View.GONE
+        healthNote.visibility = if (phrase == null && !waiting) View.VISIBLE else View.GONE
+        healthNote.bind(st)
+    }
+
+    /**
+     * Kilit hapı: kilit dinleyicisinden; bir kapı açıksa kilitli gösterilmez (açık kapıyla "Kilitli" çelişir). Henüz okunmadıysa
+     * nötr "Bekleniyor".
+     */
     private fun bindLock(s: StripState?) {
-        lockText.text = s?.value ?: activity.getString(R.string.launcher_unavailable)
-        lockIcon.setImageResource(if (s?.icon == R.drawable.ic_mdi_lock_open_variant) R.drawable.ic_sahne_lock_open else R.drawable.ic_sahne_lock)
-        lockIcon.imageTintList = ColorStateList.valueOf(if (s == null || s.tone == StripTone.MUTED) Sahne.INK_3 else Sahne.ICE)
-        lockText.setTextColor(if (s == null || s.tone == StripTone.MUTED) Sahne.INK_3 else Sahne.INK)
+        val known = s != null && s.tone != StripTone.MUTED
+        val doorOpen = openings?.anyDoor == true
+        val unlocked = doorOpen || s?.icon == R.drawable.ic_mdi_lock_open_variant
+        lockText.text = when {
+            doorOpen -> activity.getString(R.string.launcher_unlocked)
+            known -> s!!.value
+            else -> activity.getString(R.string.launcher_lock_waiting)
+        }
+        val live = known || doorOpen
+        lockIcon.setImageResource(if (unlocked) R.drawable.ic_sahne_lock_open else R.drawable.ic_sahne_lock)
+        lockIcon.imageTintList = ColorStateList.valueOf(if (!live) Sahne.INK_3 else Sahne.ICE)
+        lockText.setTextColor(if (!live) Sahne.INK_3 else Sahne.INK)
         lockChip.contentDescription = activity.getString(R.string.launcher_widget_lock) + ", " + lockText.text
         requestLayout()
     }
@@ -200,6 +246,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val noteW = MeasureSpec.makeMeasureSpec((w * 0.36f).toInt(), MeasureSpec.AT_MOST)
         healthNote.measure(noteW, looseH)
         airNote.measure(noteW, looseH)
+        // Açıklık satırı daha geniş: hava notu sağda kısa kalır; iki satıra kadar.
+        openLine.measure(MeasureSpec.makeMeasureSpec((w * 0.58f).toInt(), MeasureSpec.AT_MOST), looseH)
+        skeleton.measure(exactly(context.dp(Skeleton.W_DP)), exactly(context.dp(Skeleton.H_DP)))
+        waitNote.measure(MeasureSpec.makeMeasureSpec((w * 0.8f).toInt(), MeasureSpec.AT_MOST), looseH)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -224,6 +274,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         alertRow.layout(aLeft, aTop, aLeft + alertRow.measuredWidth, aTop + alertRow.measuredHeight)
         healthNote.layout(side, bottom - healthNote.measuredHeight, side + healthNote.measuredWidth, bottom)
         airNote.layout(w - side - airNote.measuredWidth, bottom - airNote.measuredHeight, w - side, bottom)
+        openLine.layout(side, bottom - openLine.measuredHeight, side + openLine.measuredWidth, bottom)
+        skeleton.layout(side, y(RANGE_TOP) + context.dp(8), side + skeleton.measuredWidth, y(RANGE_TOP) + context.dp(8) + skeleton.measuredHeight)
+        val wl = (w - waitNote.measuredWidth) / 2
+        waitNote.layout(wl, bottom - waitNote.measuredHeight, wl + waitNote.measuredWidth, bottom)
     }
 
     private fun exactly(px: Int) = MeasureSpec.makeMeasureSpec(px, MeasureSpec.EXACTLY)
@@ -237,10 +291,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** Sağlık / hava notu: ikonlu küçük başlık, nokta + değer, alt satır. Sağdaki not sağa yaslı, nokta değerin sonunda. */
     private class Note(context: Context, iconRes: Int, private val end: Boolean) : LinearLayout(context) {
         private val icon = ImageView(context).apply { setImageResource(iconRes); importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-        private val title = sahneText(context, 16f, Sahne.INK_3, 400)
+        private val title = sahneText(context, 20f, Sahne.INK_3, 400)
         private val value = sahneText(context, 26f, Sahne.INK, 500)
         private val dot = View(context)
-        private val sub = sahneText(context, 17f, Sahne.INK_2, 400)
+        private val sub = sahneText(context, 20f, Sahne.INK_3, 400)
 
         init {
             orientation = VERTICAL
@@ -286,6 +340,52 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             sub.text = s?.detail ?: ""
             sub.visibility = if (s?.detail.isNullOrEmpty()) View.GONE else View.VISIBLE
             contentDescription = listOfNotNull(s?.title, s?.value, s?.detail).joinToString(", ")
+        }
+    }
+
+    /** Açık parça satırı: 24dp kapı ikonu ve 24sp orta ağırlıkta turuncu metin (iki satıra kadar); sağlık notunun yerinde. */
+    private class OpenLine(context: Context) : LinearLayout(context) {
+        private val icon = ImageView(context).apply {
+            setImageResource(R.drawable.ic_mdi_car_door)
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        private val label = sahneText(context, 24f, Sahne.WARN, 500).apply { maxLines = 2 }
+
+        init {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon, LayoutParams(context.dp(24), context.dp(24)))
+            addView(label, LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+            visibility = GONE
+        }
+
+        fun bind(text: String?) {
+            label.text = text ?: ""
+            label.setTextColor(Sahne.WARN)
+            icon.imageTintList = ColorStateList.valueOf(Sahne.WARN)
+            contentDescription = text
+        }
+    }
+
+    /** Veri gelmeden menzil yerinde iki sabit iskelet çubuk (parıltı döngüsü yok): gece #1A1E25, gündüz #E6E4E0. */
+    private class Skeleton(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+
+        init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; visibility = GONE }
+
+        override fun onDraw(canvas: Canvas) {
+            paint.color = if (LauncherTheme.night) 0xFF1A1E25.toInt() else 0xFFE6E4E0.toInt()
+            val r = context.dpF(6f)
+            rect.set(0f, 0f, context.dpF(200f), context.dpF(44f))
+            canvas.drawRoundRect(rect, r, r, paint)
+            rect.set(0f, context.dpF(60f), context.dpF(130f), context.dpF(72f))
+            canvas.drawRoundRect(rect, r, r, paint)
+        }
+
+        companion object {
+            const val W_DP = 200
+            const val H_DP = 72
         }
     }
 

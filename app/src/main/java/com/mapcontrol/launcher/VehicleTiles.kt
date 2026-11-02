@@ -91,9 +91,19 @@ internal class LockTile(private val context: Context) : SizedWidget, Themeable, 
         locked = if (LauncherDemo.enabled) LauncherDemo.LOCKED else null
         bind()
         controls().addListener(listener)
+        OpeningsBus.add(openingsListener)
+    }
+
+    /** Demo: kapı açılıp kapanınca kilit de ona uyar (gerçek araçta durum dinleyiciden gelir). */
+    private val openingsListener: (Openings?) -> Unit = {
+        if (LauncherDemo.enabled && locked != LauncherDemo.LOCKED) {
+            locked = LauncherDemo.LOCKED
+            bind()
+        }
     }
 
     override fun onHidden() {
+        OpeningsBus.remove(openingsListener)
         controls().removeListener(listener)
         main.removeCallbacksAndMessages(null)
     }

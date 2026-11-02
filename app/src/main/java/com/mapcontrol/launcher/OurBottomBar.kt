@@ -124,7 +124,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, control = true)
-        setPadding(context.dp(12), 0, context.dp(12), 0)
+        setPadding(context.dp(8), 0, context.dp(8), 0)
         fun sep() = View(context).apply { setBackgroundColor(Sahne.CONTROL_BORDER) }
         fun sepLp() = LinearLayout.LayoutParams(context.dp(1), context.dp(52)).apply { marginStart = context.dp(10); marginEnd = context.dp(10) }
         fun btnLp(first: Boolean) = LinearLayout.LayoutParams(context.dp(88), context.dp(80)).apply { if (!first) marginStart = context.dp(6) }
@@ -148,9 +148,10 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             val radius = context.dpF(Sahne.SQUARE_RADIUS_DP)
             if (active) {
                 background = android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.CTA_TOP, Sahne.CTA_BOTTOM),
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.HOME_TOP, Sahne.HOME_BOTTOM),
                 ).apply { cornerRadius = radius }
-                elevation = context.dpF(8f)
+                // Gece koyu dolgu gölgesiz (zeminden ayrışması için gölge gerekmez, parlak leke de olmaz).
+                elevation = if (LauncherTheme.night) 0f else context.dpF(8f)
                 outlineProvider = object : ViewOutlineProvider() {
                     override fun getOutline(v: View, outline: Outline) = outline.setRoundRect(0, 0, v.width, v.height, radius)
                 }
@@ -162,7 +163,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             contentDescription = context.getString(labelRes)
             isClickable = true
             isFocusable = true
-            addView(icon(context, iconRes, 30, if (active) Sahne.CTA_INK else Sahne.CONTROL_ICON),
+            addView(icon(context, iconRes, 30, if (active) Sahne.HOME_INK else Sahne.CONTROL_ICON),
                 FrameLayout.LayoutParams(context.dp(30), context.dp(30), Gravity.CENTER))
             setOnClickListener { onClick() }
         }

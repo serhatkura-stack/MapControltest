@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="launcher_seat_vent_later">Araç testinden sonra açılacak</string>
-    <string name="launcher_widget_seat_driver">Koltuk · sürücü</string>
-    <string name="launcher_widget_seat_passenger">Koltuk · yolcu</string>
+    <string name="launcher_widget_seat_driver">Sürücü koltuğu</string>
+    <string name="launcher_widget_seat_passenger">Yolcu koltuğu</string>
     <string name="launcher_seat_heat_level">Isıtma %1$d</string>
     <string name="launcher_seat_cool_level">Soğutma %1$d</string>
     <string name="launcher_seat_row_heat">Isıtma</string>

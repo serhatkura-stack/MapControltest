@@ -5,7 +5,6 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.res.ColorStateList
 import android.graphics.Canvas
-import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import android.view.Gravity
@@ -139,7 +138,7 @@ class SahneScreen(
                     panel.removeAllViews()
                     widgets = emptyList()
                 } else {
-                    val w = SahnePanelFactory.create(activity, slot)
+                    val w = SahnePanelFactory.create(activity, slot, calm = mode == LayoutMode.DRIVE)
                     panel.setGlow(slot.type == WidgetType.MEDIA)
                     panel.host(w.view, SahnePanelFactory.panelPaddingDp(slot.type), SahneArt.panelBackground(activity, slot.type))
                     widgets = listOf(w)
@@ -234,7 +233,7 @@ class SahneScreen(
                     addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
                         setText(R.string.launcher_edit_remove)
                         gravity = Gravity.CENTER
-                        background = rounded(context, LauncherTheme.CONTROL, 16f)
+                        background = rounded(context, LauncherTheme.CONTROL, Sahne.CONTROL_RADIUS_DP)
                         setPadding(context.dp(28), 0, context.dp(28), 0)
                         isClickable = true
                         setOnClickListener { dialog.dismiss(); apply(ref, null) }
@@ -256,39 +255,58 @@ class SahneScreen(
                     }
                 }, sheetFullWidth())
             }
-            addView(android.widget.ScrollView(context).apply {
+            // Kaydırma ipucu: liste devam ediyorsa altta 48dp solma (sayfa renginde); sona gelince kalkar.
+            val fade = View(context).apply {
+                background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(LauncherTheme.CARD and 0x00FFFFFF, LauncherTheme.CARD))
+                isClickable = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            val scroll = android.widget.ScrollView(context).apply {
                 isVerticalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
                 addView(grid, sheetFullWidth())
+                setOnScrollChangeListener { v, _, _, _, _ -> fade.visibility = if (v.canScrollVertically(1)) View.VISIBLE else View.GONE }
+            }
+            addView(FrameLayout(context).apply {
+                addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                addView(fade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(48), Gravity.BOTTOM))
+                scroll.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                    fade.visibility = if (v.canScrollVertically(1)) View.VISIBLE else View.GONE
+                }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(PICKER_LIST_DP)))
         }
         d.setOnDismissListener { onSheet(null) }
         onSheet(d)
     }
 
+    /** Seçici kutusu: tek ikon dili (ince çizgili Sahne ikonları), tek başlık ölçüsü ve her kutuda ayrılmış alt satır. */
     private fun pickerTile(ref: SahneSlotRef, type: WidgetType, current: SahneSlot?, dismiss: () -> Unit): View {
         val here = current?.type == type
         val ok = !here && SahneForm.canPlace(stored, ref, type)
+        val ink = if (ok || here) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(context, LauncherTheme.CONTROL, 16f, if (here) LauncherTheme.ACCENT else 0)
-            setPadding(context.dp(20), context.dp(14), context.dp(20), context.dp(14))
-            addView(icon(context, type.icon, 32, if (ok || here) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY))
+            background = rounded(context, LauncherTheme.CONTROL, Sahne.CONTROL_RADIUS_DP, if (here) LauncherTheme.ACCENT else 0)
+            setPadding(context.dp(18), context.dp(14), context.dp(18), context.dp(14))
+            addView(icon(context, sahneIconFor(type.icon), PICKER_ICON_DP, ink))
             addView(gap(context, 8, vertical = true))
-            addView(text(context, LauncherTheme.BODY_SP, if (ok || here) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, medium = true).apply {
-                setAutoSizeTextTypeUniformWithConfiguration(16, LauncherTheme.BODY_SP.toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            addView(text(context, PICKER_TITLE_SP, ink, medium = true, maxLines = 2).apply {
                 setText(type.label)
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(gap(context, 4, vertical = true))
-            addView(text(context, LauncherTheme.LABEL_SP - 4f, LauncherTheme.TEXT_SECONDARY).apply {
-                text = when {
-                    here -> context.getString(R.string.launcher_sahne_in_this_slot)
-                    !ok -> context.getString(R.string.launcher_edit_on_screen)
-                    ref.kind == SahneSlotKind.PANEL && !SahneForm.hasLargeForm(type) && type !in SahnePanelFactory.VALUE_PANEL_TYPES ->
-                        context.getString(R.string.launcher_sahne_enlarged)
-                    else -> ""
-                }
+            addView(gap(context, 2, vertical = true))
+            val sub = when {
+                here -> context.getString(R.string.launcher_sahne_in_this_slot)
+                !ok -> context.getString(R.string.launcher_edit_on_screen)
+                ref.kind == SahneSlotKind.PANEL && !SahneForm.hasLargeForm(type) && type !in SahnePanelFactory.VALUE_PANEL_TYPES ->
+                    context.getString(R.string.launcher_sahne_enlarged)
+                else -> ""
+            }
+            // Alt satır her kutuda yer kaplar (boşsa görünmez): başlıklar aynı hizada kalır.
+            addView(text(context, PICKER_SUB_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                text = sub
+                visibility = if (sub.isEmpty()) View.INVISIBLE else View.VISIBLE
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             alpha = if (ok || here) 1f else DISABLED_ALPHA
             contentDescription = context.getString(type.label)
@@ -304,23 +322,23 @@ class SahneScreen(
     }
 
     /**
-     * Düzenleme örtüsü: yuvanın üstünde kesikli buz mavisi çerçeve ve ortada "Değiştir" hapı; boş yuvada yalnızca
-     * sessiz bir "+". Dokunuş (her yerinde) seçiciyi açar; altındaki widget dokunuş almaz.
+     * Düzenleme örtüsü: yuvanın içeriği hafifçe karartılır, çevresinde ince düz bir buz mavisi çizgi; sağ üst köşede küçük
+     * "Değiştir" hapı (şeritte yalnızca kalem ikonlu yuvarlak düğme) içeriği örtmez. Boş yuvada ortada sessiz bir "+".
+     * Dokunuş (her yerinde) seçiciyi açar; altındaki widget dokunuş almaz.
      */
     private inner class SlotOverlay(private val ref: SahneSlotRef) : FrameLayout(activity) {
         private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = context.dpF(1.5f)
-            pathEffect = DashPathEffect(floatArrayOf(context.dpF(8f), context.dpF(6f)), 0f)
         }
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rect = RectF()
+        private val panel = ref.kind == SahneSlotKind.PANEL
         private val chipIcon = ImageView(context).apply { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-        private val chipText = sahneText(context, 18f, Sahne.INK, 600)
+        private val chipText = sahneText(context, 20f, Sahne.INK, 600)
         private val chip = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(18), context.dp(10), context.dp(20), context.dp(10))
+            gravity = Gravity.CENTER
             addView(chipIcon, LinearLayout.LayoutParams(context.dp(22), context.dp(22)))
             addView(chipText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(8) })
         }
@@ -335,32 +353,52 @@ class SahneScreen(
         }
 
         fun bind(filled: Boolean) {
-            frame.color = Sahne.ICE
-            fill.color = if (filled) (Sahne.GROUND and 0x00FFFFFF) or 0x8C000000.toInt() else 0
+            frame.color = (Sahne.ICE and 0x00FFFFFF) or 0x8C000000.toInt()
+            fill.color = if (filled) (Sahne.GROUND and 0x00FFFFFF) or 0x73000000 else 0
+            val lp = chip.layoutParams as LayoutParams
             if (filled) {
                 chipIcon.setImageResource(R.drawable.ic_sahne_pen)
-                chipText.setText(R.string.launcher_sahne_change)
-                chipText.visibility = View.VISIBLE
-                chip.background = GlassDrawable(context, Sahne.PILL_RADIUS_DP, shadow = 0.4f)
+                chip.background = GlassDrawable(context, Sahne.PILL_RADIUS_DP, shadow = 0.3f)
                 contentDescription = context.getString(R.string.launcher_sahne_change)
+                if (panel) {
+                    chipText.setText(R.string.launcher_sahne_change)
+                    chipText.visibility = View.VISIBLE
+                    chip.setPadding(context.dp(18), 0, context.dp(20), 0)
+                    lp.width = LayoutParams.WRAP_CONTENT
+                    lp.height = context.dp(CHIP_PANEL_DP)
+                } else {
+                    chipText.visibility = View.GONE
+                    chip.setPadding(0, 0, 0, 0)
+                    lp.width = context.dp(CHIP_STRIP_DP)
+                    lp.height = context.dp(CHIP_STRIP_DP)
+                }
+                lp.gravity = Gravity.TOP or Gravity.END
+                val inset = context.dp(if (panel) 16 else 6)
+                lp.setMargins(0, inset, inset, 0)
             } else {
                 chipIcon.setImageResource(R.drawable.ic_sahne_plus)
                 chipText.visibility = View.GONE
                 chip.background = null
+                chip.setPadding(0, 0, 0, 0)
+                lp.width = LayoutParams.WRAP_CONTENT
+                lp.height = LayoutParams.WRAP_CONTENT
+                lp.gravity = Gravity.CENTER
+                lp.setMargins(0, 0, 0, 0)
                 contentDescription = context.getString(R.string.launcher_sahne_add_here)
             }
+            chip.layoutParams = lp
             chipIcon.imageTintList = ColorStateList.valueOf(if (filled) Sahne.ICE else Sahne.INK_3)
             (chipIcon.layoutParams as LinearLayout.LayoutParams).apply {
-                val s = context.dp(if (filled) 22 else 34)
+                val s = context.dp(if (filled) (if (panel) 22 else 20) else 34)
                 width = s; height = s
             }
             invalidate()
         }
 
         override fun onDraw(canvas: Canvas) {
-            val inset = context.dpF(2f)
+            val inset = context.dpF(1f)
             rect.set(inset, inset, width - inset, height - inset)
-            val r = context.dpF(if (ref.kind == SahneSlotKind.PANEL) Sahne.PANEL_RADIUS_DP else 18f)
+            val r = context.dpF(if (panel) Sahne.PANEL_RADIUS_DP else Sahne.CONTROL_RADIUS_DP)
             if (fill.color != 0) canvas.drawRoundRect(rect, r, r, fill)
             canvas.drawRoundRect(rect, r, r, frame)
         }
@@ -471,12 +509,17 @@ class SahneScreen(
         const val PANEL_W = 440f
         const val GAP_H = 16f
         const val STRIP_H_DP = 92
-        const val GAP_V_DP = 12
+        const val GAP_V_DP = 16
         const val EMPTY_ALPHA = 0.45f
         const val DISABLED_ALPHA = 0.45f
         const val PICKER_COLUMNS = 5
         const val PICKER_WIDTH_DP = 1280
-        const val PICKER_TILE_DP = 136
-        const val PICKER_LIST_DP = 400
+        const val PICKER_TILE_DP = 156
+        const val PICKER_LIST_DP = 420
+        const val PICKER_ICON_DP = 32
+        const val PICKER_TITLE_SP = 22f
+        const val PICKER_SUB_SP = 20f
+        const val CHIP_PANEL_DP = 52
+        const val CHIP_STRIP_DP = 40
     }
 }

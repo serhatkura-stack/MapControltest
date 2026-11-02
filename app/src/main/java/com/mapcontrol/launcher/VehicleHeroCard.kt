@@ -48,7 +48,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
      * Kartın gösterdiği her şeyin özeti; Sahne'nin araç sahnesi kartı ekrana koymadan bunu çizer (aynı kaynaklar,
      * aynı hesap: menzil, yakıt, açık kapı/bagaj/cam/kaput, lastik ve yakıt kapağı uyarıları, kilit).
      */
-    data class Summary(
+    internal data class Summary(
         val rangeKm: Int?,
         val fuel: Int?,
         val lowFuel: Boolean,
@@ -59,10 +59,14 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         val locked: Boolean?,
         /** Sahne aracında açık çizilecek parçalar (kapılar, bagaj, kaput); şemayla aynı sinyaller. */
         val openParts: Set<CarPart> = emptySet(),
+        /** Açık parçaların tek kaynağı ([OpeningsBus] ile aynı); gövde okunamıyorsa null. */
+        val openings: Openings? = null,
+        /** Lastik / yakıt kapağı uyarısı (camlar [openings] içinde adlandırılır); yoksa null. */
+        val otherAlertsText: String? = null,
     )
 
-    var onSummary: ((Summary) -> Unit)? = null
-    var summary: Summary? = null
+    internal var onSummary: ((Summary) -> Unit)? = null
+    internal var summary: Summary? = null
         private set
 
     override var onStripChanged: (() -> Unit)? = null
@@ -257,7 +261,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         snapshot = if (LauncherDemo.enabled) LauncherDemo.vehicle() else metrics.currentSnapshot()
         if (LauncherDemo.enabled) {
             locked = LauncherDemo.LOCKED
-            LauncherDemo.onBodyChanged = Runnable { snapshot = LauncherDemo.vehicle(); render() }
+            LauncherDemo.onBodyChanged = Runnable { snapshot = LauncherDemo.vehicle(); locked = LauncherDemo.LOCKED; render() }
         }
         render()
         metrics.addListener(metricsListener)
@@ -418,6 +422,12 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
             if (tireWarning == false && !tireAlert) add(context.getString(R.string.launcher_tires_ok))
         }.joinToString(", ")
         calmRow.contentDescription = spoken
+        val openings = if (!ui.knowsBody) null else Openings(
+            doorFl = ui.car.doorLf, doorFr = ui.car.doorRf, doorRl = ui.car.doorLr, doorRr = ui.car.doorRr,
+            trunk = ui.car.trunk, hood = ui.car.hood, sunroof = ui.car.sunroof, windows = windows,
+        )
+        OpeningsBus.publish(openings)
+        val otherAlerts = alerts.filter { it != AlertSeg.WINDOWS }
         val sum = Summary(
             rangeKm = range, fuel = fuel, lowFuel = ui.lowFuel,
             doorsText = when {
@@ -428,6 +438,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
             alertsText = if (alerts.isEmpty()) null else alertsText(alerts, tireLow, windows, open.isNotEmpty()),
             locked = locked,
             openParts = ui.car.let { CarPart.fromSignals(it.doorLf, it.doorRf, it.doorLr, it.doorRr, it.trunk, it.hood) },
+            openings = openings,
+            otherAlertsText = if (otherAlerts.isEmpty()) null else alertsText(otherAlerts, tireLow, windows, open.isNotEmpty()),
         )
         if (sum != summary) {
             summary = sum

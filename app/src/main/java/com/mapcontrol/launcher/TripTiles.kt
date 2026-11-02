@@ -391,7 +391,7 @@ internal abstract class TripCard(
 
     protected abstract fun bind()
 
-    protected fun one(value: Double): String = String.format(java.util.Locale.getDefault(), "%.1f", value)
+    protected fun one(value: Double): String = String.format(java.util.Locale.getDefault(), "%,.1f", value)
 
     protected fun setIcon(@DrawableRes res: Int, tint: Int) {
         headerIcon.setImageResource(res)

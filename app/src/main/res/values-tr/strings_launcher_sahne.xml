@@ -3,15 +3,15 @@
     <!-- Sahne ana ekran düzeni -->
     <string name="launcher_sahne_car">Araç görünümü</string>
     <string name="launcher_sahne_km">km</string>
-    <string name="launcher_sahne_pick_panel">Panel için widget</string>
-    <string name="launcher_sahne_pick_strip">Şerit için widget</string>
-    <string name="launcher_sahne_in_slot" formatted="true">Bu yuvada: %1$s</string>
-    <string name="launcher_sahne_in_this_slot">Bu yuvada</string>
+    <string name="launcher_sahne_pick_panel">Panele ekle</string>
+    <string name="launcher_sahne_pick_strip">Alt sıraya ekle</string>
+    <string name="launcher_sahne_in_slot" formatted="true">Şu an: %1$s</string>
+    <string name="launcher_sahne_in_this_slot">Şu an</string>
     <string name="launcher_sahne_enlarged">Büyütülmüş kutucuk</string>
     <string name="launcher_sahne_change">Değiştir</string>
     <string name="launcher_sahne_add_here">Widget ekle</string>
-    <string name="launcher_sahne_helper_park">Park ekranı: değiştirmek için bir yuvaya dokunun</string>
-    <string name="launcher_sahne_helper_drive">Sürüş ekranı: değiştirmek için bir yuvaya dokunun</string>
+    <string name="launcher_sahne_helper_park">Değiştirmek için bir alana dokun</string>
+    <string name="launcher_sahne_helper_drive">Değiştirmek için bir alana dokun</string>
     <string name="home_screen_style">Ana ekran düzeni</string>
     <string name="home_screen_style_sahne">Sahne</string>
     <string name="home_screen_style_serbest">Serbest</string>

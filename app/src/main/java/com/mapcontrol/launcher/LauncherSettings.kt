@@ -175,7 +175,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                         d.dismiss()
                         if (mode != current) {
                             ThemeMode.write(activity, mode)
-                            ThemeTransition.retheme(activity)
+                            (activity as? HomeLauncherActivity)?.rethemeKeepingEdit() ?: ThemeTransition.retheme(activity)
                         }
                     }
                     pressFeedback()

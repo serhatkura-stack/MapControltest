@@ -102,13 +102,13 @@
     <string name="launcher_open_frostnav_failed">Could not open FrostNav</string>
     <string name="launcher_app_frostnav" translatable="false">FrostNav</string>
     <string name="launcher_app_phone">Phone</string>
-    <string name="launcher_edit_on_screen">On screen</string>
+    <string name="launcher_edit_on_screen">Already on screen</string>
     <string name="launcher_trip_since_reset">Since reset</string>
     <string name="launcher_trip_avg_cons_label">Avg. consumption</string>
     <string name="launcher_trip_avg_speed_label">Avg. speed</string>
     <string name="launcher_bottom_bar">Bottom bar</string>
     <string name="launcher_bottom_bar_original">Original</string>
-    <string name="launcher_bottom_bar_ours">Ours</string>
+    <string name="launcher_bottom_bar_ours">MapControl</string>
     <string name="launcher_bottom_bar_hidden">Hidden</string>
     <string name="launcher_bar_home">Home</string>
     <string name="launcher_bar_apps">Apps</string>
@@ -188,7 +188,7 @@
     <string name="launcher_wifi_none">No networks found</string>
     <string name="launcher_wifi_need_location">Location permission is needed to see networks</string>
     <string name="launcher_wifi_grant">Allow</string>
-    <string name="launcher_wifi_settings">Wi-Fi settings…</string>
+    <string name="launcher_wifi_settings">Wi-Fi settings</string>
     <string name="launcher_wifi_park_for_password">Stop the car to enter a password</string>
     <string name="launcher_wifi_password_title">Wi-Fi password</string>
     <string name="launcher_wifi_password_hint">Password</string>

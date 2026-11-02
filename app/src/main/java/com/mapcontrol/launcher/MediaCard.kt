@@ -475,6 +475,8 @@ class MediaCard(
             compactTitle.text = title ?: ""
             compactArtist.text = artist ?: ""
             if (sahne) bindSourceIcon(source)
+            // Sahne: izin açıklaması iki satıra kadar (kesilmesin); şarkı sanatçısı tek satır.
+            if (sahne) artistView.maxLines = if (newMode == Mode.NO_ACCESS) 2 else 1
             stripNow = StripState(
                 if (source.isNullOrEmpty()) context.getString(R.string.launcher_widget_media) else appLabel(source),
                 title ?: "", R.drawable.ic_mdi_music_note,
@@ -631,15 +633,15 @@ class MediaCard(
     private fun buildSahneView(): View {
         listOf(sourceLabel, titleView, artistView, progressBox, controlsRow, artworkBox).forEach { (it.parent as? ViewGroup)?.removeView(it) }
         mainBox.removeAllViews()
-        sourceLabel.textSize = 16f
+        sourceLabel.textSize = 20f
         SahneFonts.apply(sourceLabel, 500)
         titleView.textSize = 32f
         titleView.maxLines = 2
         SahneFonts.apply(titleView, 600, -0.01f)
         artistView.textSize = 20f
         SahneFonts.apply(artistView, 400)
-        elapsedView.textSize = 16f
-        totalView.textSize = 16f
+        elapsedView.textSize = 20f
+        totalView.textSize = 20f
         SahneFonts.apply(elapsedView, 400)
         SahneFonts.apply(totalView, 400)
         val meta = LinearLayout(context).apply {
@@ -698,7 +700,7 @@ class MediaCard(
                 addView(controlsRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(14) })
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL))
             addView(grantButton.also { (it.parent as? ViewGroup)?.removeView(it) },
-                FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(GRANT_BUTTON_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = context.dp(12) })
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(SAHNE_GRANT_DP), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = context.dp(12) })
             addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeKnob() }
         }
     }
@@ -734,10 +736,13 @@ class MediaCard(
         }
         playButton.background = android.graphics.drawable.GradientDrawable(
             android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.CTA_TOP, Sahne.CTA_BOTTOM),
-        ).apply { shape = android.graphics.drawable.GradientDrawable.OVAL }
+        ).apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            if (Sahne.CTA_RING != 0) setStroke(context.dp(1), Sahne.CTA_RING)
+        }
         playIcon.setTint(Sahne.CTA_INK)
         grantButton.setTextColor(Sahne.INK)
-        grantButton.background = rounded(context, Sahne.SOFT_FILL, 20f, Sahne.HAIR)
+        grantButton.background = rounded(context, Sahne.SOFT_FILL, Sahne.CONTROL_RADIUS_DP, Sahne.HAIR_2)
     }
 
     /** Topuz dolgunun ucunda: iz genişliği × ilerleme. */
@@ -786,6 +791,8 @@ class MediaCard(
         const val MIN_PLAY_DP = 56
         /** "Erişim ver" düğmesi yüksekliği (en az 76dp). */
         const val GRANT_BUTTON_DP = 76
+        /** Sahne izin düğmesi: 72dp dokunma yüksekliği. */
+        const val SAHNE_GRANT_DP = 72
 
         /** Kompakt (2×1) yerleşimde başlık boyutu ve kart iç boşluğu. */
         const val COMPACT_TITLE_SP = 28f

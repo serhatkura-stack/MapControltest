@@ -59,7 +59,12 @@ object Sahne {
 
     val INK: Int get() = if (n) 0xFFEEF2F7.toInt() else 0xFF111419.toInt()
     val INK_2: Int get() = if (n) 0xB8E4ECF6.toInt() else 0xBD111419.toInt()
-    val INK_3: Int get() = if (n) 0x8FE4ECF6.toInt() else 0x9E111419.toInt()
+    /** İkincil yazı (etiket, alt satır): gece ~7,5:1, gündüz ~7:1 kontrast (opak). */
+    val INK_3: Int get() = if (n) 0xFFA1A8B3.toInt() else 0xFF55575C.toInt()
+    /** Büyük rakamlar (menzil, saat, sıcaklık): gece kâğıt beyazı yerine gri-beyaz (karanlık uyumu bozulmasın). */
+    val NUMERAL: Int get() = if (n) 0xFFDCE1E8.toInt() else INK
+    /** Açık kapı / bagaj / kaput uyarısı (sahne satırı, Bagaj "Açık"). */
+    val WARN: Int get() = if (n) 0xFFF5A524.toInt() else 0xFFB45309.toInt()
     val HAIR: Int get() = if (n) 0x12FFFFFF else 0x17181E28
     val HAIR_2: Int get() = if (n) 0x1CFFFFFF else 0x21181E28
 
@@ -100,10 +105,19 @@ object Sahne {
     val SOFT_FILL: Int get() = if (n) 0x0DFFFFFF else 0x0B141A24
     val TRACK: Int get() = if (n) 0x1FFFFFFF else 0x26141A24
 
-    /** Birincil düğme (oynat, etkin ana ekran tuşu): gece beyaz, gündüz grafit. */
-    val CTA_TOP: Int get() = if (n) 0xFFFFFFFF.toInt() else 0xFF2A2F37.toInt()
-    val CTA_BOTTOM: Int get() = if (n) 0xFFD9E1EA.toInt() else 0xFF14171C.toInt()
-    val CTA_INK: Int get() = if (n) 0xFF0B0E13.toInt() else 0xFFFFFFFF.toInt()
+    /**
+     * Birincil düğme (oynat): gündüz grafit; gece parlamasın diye koyu grafit dolgu, 1dp halka ve gri-beyaz ikon
+     * (gece en parlak piksel içerik olsun, düğme değil).
+     */
+    val CTA_TOP: Int get() = if (n) 0xFF262B33.toInt() else 0xFF2A2F37.toInt()
+    val CTA_BOTTOM: Int get() = if (n) 0xFF262B33.toInt() else 0xFF14171C.toInt()
+    val CTA_INK: Int get() = if (n) 0xFFF2F4F7.toInt() else 0xFFFFFFFF.toInt()
+    /** Oynat düğmesinin gece halkası (gündüz yok). */
+    val CTA_RING: Int get() = if (n) 0xFF343A44.toInt() else 0
+    /** Etkin ana ekran tuşu: gece koyu dolgu + vurgu renkli ikon; gündüz grafit dolgu + beyaz ikon. */
+    val HOME_TOP: Int get() = if (n) 0xFF232830.toInt() else CTA_TOP
+    val HOME_BOTTOM: Int get() = if (n) 0xFF232830.toInt() else CTA_BOTTOM
+    val HOME_INK: Int get() = if (n) 0xFF3B82F6.toInt() else CTA_INK
     val KNOB: Int get() = if (n) 0xFFF4F7FB.toInt() else 0xFFFFFFFF.toInt()
 
     /** Sahne zemini: ışık havuzu, halkalar ve temas gölgesi. */
@@ -121,9 +135,11 @@ object Sahne {
     /** Gündüz yazı ağırlıkları gece olandan bir kademe kalındır (açık zeminde ince yazı soluk durur). */
     fun weight(base: Int): Int = if (n) base else minOf(700, base + 100)
 
-    const val PANEL_RADIUS_DP = 30f
-    const val STRIP_RADIUS_DP = 26f
-    const val SQUARE_RADIUS_DP = 22f
+    /** Biçim dili: kaplar (panel, şerit, alt çubuk, sayfa) 24dp, içlerindeki denetimler 16dp, haplar tam yuvarlak. */
+    const val PANEL_RADIUS_DP = 24f
+    const val STRIP_RADIUS_DP = 24f
+    const val SQUARE_RADIUS_DP = 16f
+    const val CONTROL_RADIUS_DP = 16f
     const val PILL_RADIUS_DP = 999f
 }
 

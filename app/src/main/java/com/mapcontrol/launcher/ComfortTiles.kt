@@ -193,7 +193,7 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
 
     override fun readNow(): ComfortReading = ComfortReader.read(withTrunk = true)
 
-    private fun state(): TrunkState = TrunkMath.decode(reading.trunk).takeIf { reading.connected } ?: TrunkState.UNKNOWN
+    private fun ownState(): TrunkState = TrunkMath.decode(reading.trunk).takeIf { reading.connected } ?: TrunkState.UNKNOWN
 
     override fun pollIntervalMs(): Long = if (state().moving || pendingOpening != null) FAST_POLL_MS else POLL_MS
 
@@ -218,10 +218,26 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
 
     override fun clearPending() { pendingOpening = null }
 
+    /** Sahne aracı ve uyarı satırıyla aynı kaynak: araç gövdesi bagajı açık diyorsa kutucuk da "Açık" der. */
+    private val openingsListener: (Openings?) -> Unit = { render() }
+
+    override fun onVisible() {
+        OpeningsBus.add(openingsListener)
+        super.onVisible()
+    }
+
     override fun onStopped() {
+        OpeningsBus.remove(openingsListener)
         car.cancelAnim()
         dialog?.dismiss()
         dialog = null
+    }
+
+    /** Konfor okuması kapalı/bilinmiyor derken gövde sinyali bagajı açık görüyorsa açık sayılır (tek doğruluk). */
+    private fun state(): TrunkState {
+        val own = ownState()
+        val bodyOpen = OpeningsBus.current?.trunk == true
+        return if (bodyOpen && (own == TrunkState.CLOSED || own == TrunkState.UNKNOWN)) TrunkState.OPEN else own
     }
 
     override fun render() {
@@ -254,7 +270,9 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
         root.contentDescription = context.getString(R.string.launcher_widget_trunk) + ", " + str
         root.isEnabled = known || LauncherEdition.READ_ONLY
         notifyStrip(StripState(context.getString(R.string.launcher_widget_trunk), str, R.drawable.ic_mdi_car_trunk,
-            when { !(known || pending != null) -> StripTone.MUTED; open -> StripTone.ON; else -> StripTone.NORMAL }, active = open))
+            // Açık bagaj bir uyarıdır (sahne satırıyla aynı turuncu); hareket hâlinde buz mavisi.
+            when { !(known || pending != null) -> StripTone.MUTED; state == TrunkState.OPEN && pending == null -> StripTone.ALERT; open -> StripTone.ON; else -> StripTone.NORMAL },
+            active = open))
     }
 
     override fun stripTap(part: Int) = onTap()

@@ -87,11 +87,26 @@ internal class WifiPanel(
         maxRows = rowsThatFit()
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(ctx, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
+            // Kendi yüzeyi: alttaki kartlardan ayrışan ton ve belirgin 1dp kenar (gece #1E232B / #2A3038).
+            background = if (LauncherTheme.sahne) rounded(ctx, if (LauncherTheme.night) 0xFF1E232B.toInt() else 0xFFFFFFFF.toInt(),
+                Sahne.PANEL_RADIUS_DP, if (LauncherTheme.night) 0xFF2A3038.toInt() else 0x29181E28)
+            else rounded(ctx, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
             val p = ctx.dp(PAD_DP)
             setPadding(p, p, p, p)
         }
         root = box
+        // Hafif perde: panel alttaki içerikten ayrışır; dokununca kapanır.
+        val decor = ctx.window.decorView
+        scrim = PopupWindow(View(ctx).apply {
+            setBackgroundColor(if (LauncherTheme.night) 0x66000000 else 0x26000000)
+            isClickable = true
+            setOnClickListener { dismiss() }
+        }, decor.width, decor.height, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isTouchable = true
+            isClippingEnabled = false
+            showAtLocation(anchor, Gravity.NO_GRAVITY, 0, 0)
+        }
         // Odak almayan pencere: sistem gezinme çubuğu geri gelmez, ekran kaymaz; dışarı dokunuş paneli kapatır.
         val pw = PopupWindow(box, ctx.dp(WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT, false).apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -125,7 +140,11 @@ internal class WifiPanel(
 
     private var dismissedAt = 0L
 
+    private var scrim: PopupWindow? = null
+
     private fun onDismissed() {
+        scrim?.dismiss()
+        scrim = null
         dismissedAt = android.os.SystemClock.uptimeMillis()
         main.removeCallbacks(scanTimeout)
         main.removeCallbacks(webPoll)
@@ -223,6 +242,8 @@ internal class WifiPanel(
             addView(LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(text(ctx, LauncherTheme.BODY_SP, medium = true).apply { setText(R.string.launcher_widget_web_panel) })
+                if (!on) addView(text(ctx, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_wifi_web_sub) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = ctx.dp(2) })
                 if (on) {
                     addView(text(ctx, LauncherTheme.BODY_SP, LauncherTheme.TEXT).apply { text = s?.url?.removePrefix("http://") },
                         LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = ctx.dp(6) })
@@ -394,9 +415,12 @@ internal class WifiPanel(
         })
     }
 
+    /** Tam genişlikte 72dp satır: ad solda, sağda ok (bağlantı gibi mavi yazı değil). */
     private fun settingsRow(): View = baseRow().apply {
-        addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.ACCENT, medium = true).apply { setText(R.string.launcher_wifi_settings) },
+        minimumHeight = activity.dp(LauncherTheme.TOUCH_MIN_DP)
+        addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply { setText(R.string.launcher_wifi_settings) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(icon(activity, if (LauncherTheme.sahne) R.drawable.ic_sahne_chev_right else R.drawable.ic_mdi_chevron_right, 28, LauncherTheme.TEXT_SECONDARY))
         clickable(this) { dismiss(); onSettings() }
     }
 

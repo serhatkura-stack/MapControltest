@@ -162,7 +162,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 addView(header.view)
                 addView(editBar)
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.HEADER_HEIGHT_DP)))
-            addView(gap(context, if (sahneOn) 24 else 16, vertical = true))
+            // Sahne ritmi: başlık / orta alan / şerit / alt çubuk arası hep 16dp.
+            addView(gap(context, 16, vertical = true))
             addView(middle, weightLp(1f, vertical = true))
             if (bottomBar != null) {
                 addView(gap(context, 16, vertical = true))
@@ -170,7 +171,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
             }
             if (ourBar != null) {
-                addView(gap(context, if (sahneOn) 12 else 16, vertical = true))
+                addView(gap(context, 16, vertical = true))
                 addView(ourBar.view, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.heightDp(this@HomeLauncherActivity))))
             }
@@ -250,6 +251,15 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
     }
 
+    /** Bir sonraki yerinde tema yenilemesi düzenleme modunu korusun mu ([rethemeKeepingEdit]). */
+    private var keepEditOnRetheme = false
+
+    /** Görünüm panelinden tema seçimi: düzenleme açıksa açık kalır ve panel yeni temayla yeniden gösterilir. */
+    internal fun rethemeKeepingEdit() {
+        keepEditOnRetheme = editing
+        ThemeTransition.retheme(this)
+    }
+
     /**
      * Tema değişimini etkinliği yeniden yaratmadan uygular ([ThemeTransition.retheme] üstteki anlık görüntü örtüsünün
      * altında çağırır). Jetonlar güncellenir; [Themeable] olanlar yerinde yenilenir, olmayan widget'lar tek tek yeniden
@@ -257,10 +267,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      */
     internal fun applyThemeInPlace() {
         if (isFinishing || isDestroyed || !::grid.isInitialized) return
+        // Görünüm panelinden tema değişimi düzenleme modunu bozmaz (gece/gündüz karşılaştırılabilsin); panel yeniden açılır.
+        val keepEdit = keepEditOnRetheme && editing
+        keepEditOnRetheme = false
         sheet?.dismiss()
         sheet = null
         wifiPanel?.dismiss()
-        exitEditMode()
+        if (!keepEdit) exitEditMode()
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
@@ -310,6 +323,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             swapView(old, fresh)
             sahne = fresh
             fresh.setMode(activeMode)
+            if (keepEdit) {
+                fresh.editMode = true
+                window.decorView.post { if (!isFinishing && !isDestroyed && editing) settings.show(appearanceOnly = true) }
+            }
             if (started) fresh.onVisible()
             window.decorView.invalidate()
             appliedSignature = HomeScreenPrefs.signature(this)

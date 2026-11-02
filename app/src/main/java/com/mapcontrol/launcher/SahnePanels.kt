@@ -21,13 +21,14 @@ import com.mapcontrol.R
  * cam panelin içine konur, kart zemini kaldırılır ve renkler Sahne jetonlarından gelir.
  */
 internal object SahnePanelFactory {
-    fun create(activity: Activity, slot: SahneSlot): SizedWidget = when (slot.type) {
+    /** [calm]: Sürüş düzeni; hareketli öğeler (canlı çubuk geçmişi) çizilmez, yalnızca büyük değer ve tek alt satır. */
+    fun create(activity: Activity, slot: SahneSlot, calm: Boolean = false): SizedWidget = when (slot.type) {
         WidgetType.MEDIA -> MediaCard(activity, sahne = true)
         WidgetType.TRIP -> SahneTripPanel(activity)
         in VALUE_PANEL_TYPES -> {
             val tile = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, SahneForm.panelSpan(slot.type), slot.extra))
             tile.applySpan(SahneForm.panelSpan(slot.type))
-            SahneValuePanel(activity, slot.type, tile)
+            SahneValuePanel(activity, slot.type, tile, calm)
         }
         else -> WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, SahneForm.panelSpan(slot.type), slot.extra)).also {
             it.applySpan(SahneForm.panelSpan(slot.type))
@@ -136,7 +137,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         imageTintList = ColorStateList.valueOf(Sahne.INK_2)
     }
     private val head = sahneText(context, SahneType.HEAD, Sahne.INK_2, 500).apply { setText(R.string.launcher_widget_trip) }
-    private val big = sahneText(context, TRIP_HERO_SP, Sahne.INK, 300, -0.03f)
+    private val big = sahneText(context, TRIP_HERO_SP, Sahne.NUMERAL, 300, -0.03f)
     private val bigUnit = sahneText(context, SahneType.HERO_UNIT.toFloat(), Sahne.INK_2, 400)
     private val sub = sahneText(context, SahneType.SUB, Sahne.INK_3, 400)
     private val stat1 = Stat()
@@ -188,15 +189,20 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     override fun stripState(): StripState? = stripNow
     override fun stripTap(part: Int) = Unit
 
-    private fun one(v: Double) = String.format(java.util.Locale.getDefault(), "%.1f", v)
+    /** İlk çizim veri beklemeden: boş kart çizgisiz, sakin cümleyle. */
+    init { bind() }
+
+    private fun one(v: Double) = String.format(java.util.Locale.getDefault(), "%,.1f", v)
 
     private fun bind() {
         val km = data.tripKm
         if (!data.connected || km == null) {
-            big.text = context.getString(R.string.launcher_unavailable)
-            big.setTextColor(Sahne.INK_3)
+            // Veri yok: tire ve eksen çizgileri yerine tek sakin cümle (sahnedeki "Araç verisi bekleniyor" tekrarlanmaz).
+            big.text = ""
+            big.visibility = View.GONE
             bigUnit.visibility = View.GONE
-            sub.setText(R.string.launcher_waiting_data)
+            sub.setText(R.string.launcher_trip_no_data)
+            sub.textSize = 22f
             statsRow.visibility = View.GONE
             totals.visibility = View.GONE
             totalsDivider.visibility = View.GONE
@@ -206,8 +212,10 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             onStripChanged?.invoke()
             return
         }
+        big.visibility = View.VISIBLE
+        sub.textSize = SahneType.SUB
         big.setTextSmooth(one(km), animate = false)
-        big.setTextColor(Sahne.INK)
+        big.setTextColor(Sahne.NUMERAL)
         bigUnit.text = context.getString(R.string.launcher_sahne_km)
         bigUnit.visibility = View.VISIBLE
         sub.setText(R.string.launcher_trip_since_reset)
@@ -221,14 +229,15 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         val rows = totalsRows()
         totals.removeAllViews()
         if (rows.isNotEmpty()) {
-            totals.addView(sahneText(context, 16f, Sahne.INK_2, 600).apply { setText(R.string.launcher_widget_trip_totals) })
+            // "Toplam" sessiz: başlık ve satırlar ikincil renkte, aynı küçük ölçekte (kartın tek öncü sayısı mesafe kalır).
+            totals.addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 600).apply { setText(R.string.launcher_widget_trip_totals) })
             rows.forEach { (label, value) ->
                 totals.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(sahneText(context, SahneType.ROW_LABEL, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, WRAP, 1f))
-                    addView(sahneText(context, SahneType.ROW_VALUE, Sahne.INK, 500).apply { text = value })
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(28)))
+                    addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 500).apply { text = value })
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(TOTALS_ROW_DP)))
             }
         }
         totals.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
@@ -246,11 +255,11 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin)
         return TripTotals.rows(d.totalKm, d.totalFuelL, time).map { (kind, value) ->
             when (kind) {
-                TripTotals.Kind.ODOMETER -> context.getString(R.string.launcher_totals_odometer) to
+                TripTotals.Kind.ODOMETER -> context.getString(R.string.launcher_totals_short_km) to
                     context.getString(R.string.launcher_km_value, String.format(java.util.Locale.getDefault(), "%,d", value as Int))
-                TripTotals.Kind.FUEL -> context.getString(R.string.launcher_totals_fuel_label) to
+                TripTotals.Kind.FUEL -> context.getString(R.string.launcher_totals_short_fuel) to
                     context.getString(R.string.launcher_liter_value, one(value as Double))
-                TripTotals.Kind.TIME -> context.getString(R.string.launcher_totals_time_label) to (value as Int).let { min ->
+                TripTotals.Kind.TIME -> context.getString(R.string.launcher_totals_short_time) to (value as Int).let { min ->
                     if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
                 }
             }
@@ -259,7 +268,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     /** Etiket üstte, değer altta; birim küçük ve ikincil tonda ("7,9 L/100 km"). */
     private inner class Stat {
-        private val label = sahneText(context, 16f, Sahne.INK_3, 400)
+        private val label = sahneText(context, 20f, Sahne.INK_3, 400)
         private val value = sahneText(context, 28f, Sahne.INK, 500, -0.01f)
         /** Taslaktaki gibi değerin solunda ince çizgi ve 24dp girinti. */
         val view = LinearLayout(context).apply {
@@ -282,8 +291,10 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     private companion object {
         const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
-        /** Yolculuk panelinde dört bölüm var: büyük değer ortak ölçeğin bir kademe altında ki "Toplam" sığsın. */
-        const val TRIP_HERO_SP = 54f
+        /** Öncü mesafe 40sp: ekranın tek kahramanı sahnedeki menzil kalır. */
+        const val TRIP_HERO_SP = 40f
+        const val TOTALS_SP = 20f
+        const val TOTALS_ROW_DP = 28
     }
 }
 
@@ -296,8 +307,8 @@ internal object SahneType {
     const val HERO = 58f
     const val HERO_UNIT = 24
     const val WORD = 40f
-    const val SUB = 17f
-    const val ROW_LABEL = 17f
+    const val SUB = 20f
+    const val ROW_LABEL = 20f
     const val ROW_VALUE = 20f
     const val ROW_H_DP = 30
 }
@@ -311,14 +322,16 @@ internal class SahneValuePanel(
     private val context: Context,
     private val type: WidgetType,
     private val tile: SizedWidget,
+    /** Sürüş düzeni: çubuk geçmişi yok; tüketimde ortalama tek alt satırda ("Ort. 7,9 L/100 km"). */
+    private val calm: Boolean = false,
 ) : SizedWidget, StripSource {
     private val source = tile as? StripSource
 
     private val headIcon = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
     private val head = sahneText(context, SahneType.HEAD, Sahne.INK_2, 500)
-    private val value = sahneText(context, SahneType.HERO, Sahne.INK, 300, -0.03f).apply { maxLines = 1 }
+    private val value = sahneText(context, SahneType.HERO, Sahne.NUMERAL, 300, -0.03f).apply { maxLines = 1 }
     private val detail = sahneText(context, SahneType.SUB, Sahne.INK_3, 400).apply { maxLines = 2 }
-    private val chartLabel = sahneText(context, 15f, Sahne.INK_3, 400).apply { setText(R.string.launcher_consumption_recent) }
+    private val chartLabel = sahneText(context, 20f, Sahne.INK_3, 400).apply { setText(R.string.launcher_consumption_recent) }
     private val chart = HistoryBars(context)
     private val chartBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -362,11 +375,14 @@ internal class SahneValuePanel(
         // Sayısal değer büyük ve ince (birimi küçük); sözcük değer ("Araç duruyor") bir kademe küçük, tek parça.
         val numeric = s.value.any { it.isDigit() }
         value.text = if (numeric) withUnit(context, s.value, SahneType.HERO_UNIT) else s.value
-        value.setTextColor(stripToneColor(s.tone, Sahne.INK).let { if (s.tone == StripTone.ALERT) Sahne.AMBER else it })
-        val sub = s.panelDetail ?: s.detail
+        value.setTextColor(stripToneColor(s.tone, if (numeric) Sahne.NUMERAL else Sahne.INK))
+        // Sürüşte tüketim: ortalama ayrı satır yerine büyük değerin altında tek satır.
+        val foldRows = calm && type == WidgetType.CONSUMPTION
+        val sub = if (foldRows && s.rows.isNotEmpty()) context.getString(R.string.launcher_consumption_avg_short, s.rows[0].second)
+        else s.panelDetail ?: s.detail
         detail.text = sub ?: ""
         detail.visibility = if (sub.isNullOrEmpty()) View.GONE else View.VISIBLE
-        val hasChart = s.history.size >= 2
+        val hasChart = !calm && s.history.size >= 2
         chartBox.visibility = if (hasChart) View.VISIBLE else View.GONE
         if (hasChart) chart.setValues(s.history)
         val p = s.progress
@@ -374,7 +390,8 @@ internal class SahneValuePanel(
         if (p != null) progress.set(p, if (p >= 1f) Sahne.AMBER else Sahne.ICE)
         // Ek satırlar (sağlık: akü, motor, bakım; tüketim: ortalama; mola: kalan süre): yolculuk panelindeki "Toplam" satırlarıyla aynı dil.
         rowsBox.removeAllViews()
-        s.rows.take(MAX_ROWS).forEachIndexed { i, (label, v) ->
+        val rows = if (foldRows) emptyList() else s.rows
+        rows.take(MAX_ROWS).forEachIndexed { i, (label, v) ->
             rowsBox.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -382,13 +399,13 @@ internal class SahneValuePanel(
                 addView(sahneText(context, SahneType.ROW_VALUE, if (i in s.alertRows) Sahne.AMBER else Sahne.INK, 500).apply { text = v })
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(SahneType.ROW_H_DP)))
         }
-        val hasRows = s.rows.isNotEmpty()
+        val hasRows = rows.isNotEmpty()
         rowsBox.visibility = if (hasRows) View.VISIBLE else View.GONE
         rowsDivider.visibility = rowsBox.visibility
         val size = if (numeric) SahneType.HERO else SahneType.WORD
         // Çok satırlı (sağlık) ya da grafikli panelde değer bir kademe küçülür ki her şey sığsın.
         value.textSize = when {
-            s.rows.size > 2 -> minOf(size, ROWS_VALUE_SP)
+            rows.size > 2 -> minOf(size, ROWS_VALUE_SP)
             hasChart -> minOf(size, CHART_VALUE_SP)
             else -> size
         }

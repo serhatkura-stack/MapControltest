@@ -12,7 +12,7 @@
     <string name="launcher_unlocked">Kilit açık</string>
     <string name="launcher_tires_ok">Normal</string>
     <string name="launcher_tires_warning">Lastik basıncı düşük</string>
-    <string name="launcher_tires_low_wheel">Lastik basıncı düşük · %1$s %2$d psi</string>
+    <string name="launcher_tires_low_wheel">Lastik basıncı düşük: %1$s %2$d psi</string>
     <string name="launcher_tires_warning_short">Lastik uyarısı</string>
     <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
     <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
@@ -37,8 +37,8 @@
     <string name="launcher_widget_app">Uygulama kısayolu</string>
     <string name="launcher_edit">Düzenle</string>
     <string name="launcher_edit_title">Ana ekranı düzenle</string>
-    <string name="launcher_edit_helper_park">Park ekranı · araç dururken görünür</string>
-    <string name="launcher_edit_helper_drive">Sürüş ekranı · araç hareket edince görünür</string>
+    <string name="launcher_edit_helper_park">Park ekranı, araç dururken görünür</string>
+    <string name="launcher_edit_helper_drive">Sürüş ekranı, araç hareket edince görünür</string>
     <string name="launcher_edit_reset_confirm_park">Park ekranı varsayılana dönsün mü?</string>
     <string name="launcher_edit_reset_confirm_drive">Sürüş ekranı varsayılana dönsün mü?</string>
     <string name="launcher_edit_add">Widget ekle</string>
@@ -76,7 +76,7 @@
     <string name="launcher_app_vehicle_settings">Araç ayarları</string>
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
-    <string name="launcher_fuel_low" formatted="true">Yakıt az · %%%1$d</string>
+    <string name="launcher_fuel_low" formatted="true">Yakıt az: %%%1$d</string>
     <string name="launcher_health_good">İyi</string>
     <string name="launcher_health_check">Kontrol et</string>
     <string name="launcher_health_low_fuel">Yakıt az</string>
@@ -92,7 +92,7 @@
     <string name="launcher_air_pm" formatted="true">PM2.5 %1$d µg/m³</string>
     <string name="launcher_air_in" formatted="true">İç %1$d µg/m³</string>
     <string name="launcher_air_out" formatted="true">Dışarı %1$d µg/m³</string>
-    <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³ · Kötü</string>
+    <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³, kötü</string>
     <string name="launcher_air_recirc_hint">İç sirkülasyon önerilir</string>
     <string name="launcher_seat_driver">Sürücü koltuğu</string>
     <string name="launcher_seat_passenger">Yolcu koltuğu</string>
@@ -102,13 +102,13 @@
     <string name="launcher_open_frostnav_failed">FrostNav açılamadı</string>
     <string name="launcher_app_frostnav" translatable="false">FrostNav</string>
     <string name="launcher_app_phone">Telefon</string>
-    <string name="launcher_edit_on_screen">Ekranda</string>
-    <string name="launcher_trip_since_reset">Sıfırlamadan beri</string>
+    <string name="launcher_edit_on_screen">Zaten ekranda</string>
+    <string name="launcher_trip_since_reset">Son sıfırlamadan beri</string>
     <string name="launcher_trip_avg_cons_label">Ort. tüketim</string>
     <string name="launcher_trip_avg_speed_label">Ort. hız</string>
     <string name="launcher_bottom_bar">Alt çubuk</string>
     <string name="launcher_bottom_bar_original">Orijinal</string>
-    <string name="launcher_bottom_bar_ours">Bizimki</string>
+    <string name="launcher_bottom_bar_ours">MapControl</string>
     <string name="launcher_bottom_bar_hidden">Gizli</string>
     <string name="launcher_bar_home">Ana ekran</string>
     <string name="launcher_bar_apps">Uygulamalar</string>
@@ -188,7 +188,7 @@
     <string name="launcher_wifi_none">Ağ bulunamadı</string>
     <string name="launcher_wifi_need_location">Ağları görmek için konum izni gerekiyor</string>
     <string name="launcher_wifi_grant">İzin ver</string>
-    <string name="launcher_wifi_settings">Wi-Fi ayarları…</string>
+    <string name="launcher_wifi_settings">Wi-Fi ayarları</string>
     <string name="launcher_wifi_park_for_password">Şifre girmek için aracı durdurun</string>
     <string name="launcher_wifi_password_title">Wi-Fi şifresi</string>
     <string name="launcher_wifi_password_hint">Şifre</string>

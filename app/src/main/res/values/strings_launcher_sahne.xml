@@ -3,15 +3,15 @@
     <!-- Stage home screen layout -->
     <string name="launcher_sahne_car">Car view</string>
     <string name="launcher_sahne_km">km</string>
-    <string name="launcher_sahne_pick_panel">Widget for the panel</string>
-    <string name="launcher_sahne_pick_strip">Widget for the strip</string>
-    <string name="launcher_sahne_in_slot" formatted="true">In this slot: %1$s</string>
-    <string name="launcher_sahne_in_this_slot">In this slot</string>
+    <string name="launcher_sahne_pick_panel">Add to panel</string>
+    <string name="launcher_sahne_pick_strip">Add to bottom row</string>
+    <string name="launcher_sahne_in_slot" formatted="true">Now: %1$s</string>
+    <string name="launcher_sahne_in_this_slot">Now</string>
     <string name="launcher_sahne_enlarged">Enlarged tile</string>
     <string name="launcher_sahne_change">Change</string>
     <string name="launcher_sahne_add_here">Add widget</string>
-    <string name="launcher_sahne_helper_park">Park screen: tap a slot to change it</string>
-    <string name="launcher_sahne_helper_drive">Drive screen: tap a slot to change it</string>
+    <string name="launcher_sahne_helper_park">Tap an area to change it</string>
+    <string name="launcher_sahne_helper_drive">Tap an area to change it</string>
     <string name="home_screen_style">Home screen layout</string>
     <string name="home_screen_style_sahne">Stage</string>
     <string name="home_screen_style_serbest">Free</string>

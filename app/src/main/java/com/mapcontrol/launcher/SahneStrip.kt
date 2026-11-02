@@ -176,7 +176,7 @@ internal fun stripToneColor(tone: StripTone, fallback: Int): Int = when (tone) {
     StripTone.HEAT -> Sahne.AMBER
     StripTone.COOL -> Sahne.ICE
     StripTone.ON -> Sahne.ICE
-    StripTone.ALERT -> Sahne.ALERT
+    StripTone.ALERT -> Sahne.WARN
     StripTone.MUTED -> Sahne.INK_3
     StripTone.NORMAL -> fallback
 }
@@ -261,7 +261,14 @@ internal class StripItemView(
         val tint = stripToneColor(s.tone, Sahne.INK)
         val active = s.tone == StripTone.HEAT || s.tone == StripTone.COOL || s.tone == StripTone.ON || s.tone == StripTone.ALERT
         val key = if (s.iconDrawable == null && type != null) SahneArt.stripKey(context, type, s) else null
-        if (s.iconDrawable != null) {
+        // Bagaj: sahnedeki aracın kendisi (seçili boya, açık/kapalı), başka bir araç görseli değil.
+        val trunkKey = if (type == WidgetType.TRUNK && s.iconDrawable == null) TrunkArt.key(context, s.active == true) else null
+        if (trunkKey != null) {
+            if (trunkKey != artKey) { artKey = trunkKey; iconView.setImageDrawable(TrunkArt.drawable(context, s.active == true)) }
+            iconView.imageTintList = null
+            applyArtLook(false, false, lift = false)
+            resizeIcon(SIZE_ART)
+        } else if (s.iconDrawable != null) {
             iconView.setImageDrawable(s.iconDrawable)
             iconView.imageTintList = null
             artKey = null
@@ -294,16 +301,34 @@ internal class StripItemView(
         contentDescription = listOf(s.title, s.value, s.detail).filter { !it.isNullOrEmpty() }.joinToString(", ")
     }
 
-    private fun applyArtLook(mirror: Boolean, dim: Boolean) {
+    /** [lift]: gece kaldırma filtresi (üretilmiş görseller); sahne aracının kendi fotoğrafında yok (sahnedekiyle aynı görünsün). */
+    private fun applyArtLook(mirror: Boolean, dim: Boolean, lift: Boolean = true) {
         iconView.scaleX = if (mirror) -1f else 1f
         iconView.imageAlpha = if (dim) SahneArt.DIM_ALPHA else 255
         val art = artKey != null
-        iconView.colorFilter = if (art) SahneArt.filter(dim) else null
+        iconView.colorFilter = if (art && lift) SahneArt.filter(dim) else null
         val night = art && LauncherTheme.night
         if (night != spot) {
             spot = night
             iconBox.background = if (night) SahneArt.spotlight() else null
         }
+    }
+
+    /** Bagaj görseli araç rengini izler: renk ayarı değişince yeniden çizilir. */
+    private val colorListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+        if (k == CarColorPrefs.KEY) last?.let { st -> last = null; artKey = null; bind(st) }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (type == WidgetType.TRUNK) context.getSharedPreferences(CarColorPrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(colorListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        if (type == WidgetType.TRUNK) context.getSharedPreferences(CarColorPrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(colorListener)
+        super.onDetachedFromWindow()
     }
 
     private fun resizeIcon(mode: Int) {
@@ -349,8 +374,8 @@ internal class StripItemView(
         private const val SIZE_ICON = 0
         private const val SIZE_APP = 1
         private const val SIZE_ART = 2
-        const val TITLE_SP = 15f
-        const val TITLE_MIN_SP = 12
+        const val TITLE_SP = 20f
+        const val TITLE_MIN_SP = 18
         const val VALUE_SP = 26f
         const val VALUE_MIN_SP = 16
         /** Değer satırı sabit yükseklikte: küçülen değer dikey ritmi bozmaz. */
@@ -375,10 +400,10 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(context.dp(12), 0, context.dp(12), 0)
-        // İki uygulama tek yuvada eşit paylı: üstte ikon, altında ad.
+        setPadding(context.dp(StripItemView.PAD_DP), 0, context.dp(StripItemView.PAD_DP), 0)
+        // İki uygulama tek yuvada eşit paylı; diğer öğelerle aynı dil: ikon solda, ad sağında (iki satıra kadar).
         buttons.forEachIndexed { i, b ->
-            addView(b, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply { if (i > 0) marginStart = context.dp(4) })
+            addView(b, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply { if (i > 0) marginStart = context.dp(8) })
         }
         tiles.forEachIndexed { i, t ->
             t.onStripChanged = { t.stripState()?.let { buttons[i].bind(it) } }
@@ -391,24 +416,30 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
             scaleType = ImageView.ScaleType.FIT_CENTER
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        private val label = text(context, 18f).apply {
+        private val label = text(context, LABEL_SP).apply {
             SahneFonts.apply(this, 500)
-            maxLines = 1
-            gravity = Gravity.CENTER
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12, 18, 1, TypedValue.COMPLEX_UNIT_SP)
+            maxLines = 2
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setLineSpacing(0f, 0.92f)
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 18, LABEL_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
         }
 
         init {
-            orientation = VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(context.dp(6), context.dp(6), context.dp(6), context.dp(6))
-            addView(icon, LayoutParams(context.dp(46), context.dp(46)))
-            addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2) })
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon, LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
+            addView(label, LayoutParams(0, context.dp(LABEL_BOX_DP), 1f).apply { marginStart = context.dp(10) })
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
             setOnLongClickListener { onLong() }
             pressFeedback()
+        }
+
+        private companion object {
+            const val ICON_DP = 44
+            const val LABEL_SP = 20f
+            const val LABEL_BOX_DP = 56
         }
 
         fun bind(s: StripState) {
@@ -453,5 +484,16 @@ internal fun sahneIconFor(@DrawableRes res: Int): Int = when (res) {
     R.drawable.ic_mdi_restart -> R.drawable.ic_sahne_auto
     R.drawable.ic_mdi_view_split -> R.drawable.ic_sahne_split
     R.drawable.ic_mdi_speedometer -> R.drawable.ic_sahne_cluster
+    R.drawable.ic_mdi_view_grid -> R.drawable.ic_sahne_grid
+    R.drawable.ic_mdi_volume_high -> R.drawable.ic_sahne_speaker
+    R.drawable.ic_mdi_car_sports -> R.drawable.ic_sahne_dial
+    R.drawable.ic_mdi_timer_sand -> R.drawable.ic_sahne_cup
+    R.drawable.ic_mdi_weather_night -> R.drawable.ic_sahne_moon
+    R.drawable.ic_mdi_cellphone -> R.drawable.ic_sahne_mobile
+    R.drawable.ic_mdi_leaf -> R.drawable.ic_sahne_leaf
+    R.drawable.ic_mdi_image -> R.drawable.ic_sahne_image
+    R.drawable.ic_mdi_clock_outline -> R.drawable.ic_sahne_clock
+    R.drawable.ic_mdi_car_cog -> R.drawable.ic_sahne_awd
+    R.drawable.ic_mdi_lightning_bolt -> R.drawable.ic_sahne_health
     else -> res
 }

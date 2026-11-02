@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="launcher_seat_vent_later">Available after car test</string>
-    <string name="launcher_widget_seat_driver">Seat · driver</string>
-    <string name="launcher_widget_seat_passenger">Seat · passenger</string>
+    <string name="launcher_widget_seat_driver">Driver seat</string>
+    <string name="launcher_widget_seat_passenger">Passenger seat</string>
     <string name="launcher_seat_heat_level">Heating %1$d</string>
     <string name="launcher_seat_cool_level">Cooling %1$d</string>
     <string name="launcher_seat_row_heat">Heating</string>

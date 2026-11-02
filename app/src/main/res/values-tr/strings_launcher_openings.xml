@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sahne: açık gövde parçaları satırı -->
+    <string name="launcher_open_door" formatted="true">%1$s kapı</string>
+    <string name="launcher_open_doors_n" formatted="true">%1$d kapı</string>
+    <string name="launcher_open_windows_n" formatted="true">%1$d cam</string>
+    <string name="launcher_open_two" formatted="true">%1$s ve %2$s açık</string>
+    <string name="launcher_open_many" formatted="true">%1$d yer açık: %2$s</string>
+    <string name="launcher_lock_waiting">Bekleniyor</string>
+    <string name="launcher_stage_waiting">Araç verisi bekleniyor</string>
+    <string name="launcher_trip_no_data">Henüz yolculuk verisi yok</string>
+    <string name="launcher_consumption_avg_short" formatted="true">Ort. %1$s</string>
+    <string name="launcher_wifi_web_sub">Telefondan yönet</string>
+    <string name="launcher_totals_short_km">Yol</string>
+    <string name="launcher_totals_short_fuel">Yakıt</string>
+    <string name="launcher_totals_short_time">Süre</string>
+</resources>

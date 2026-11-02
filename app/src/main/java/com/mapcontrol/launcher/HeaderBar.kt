@@ -150,14 +150,15 @@ class HeaderBar(
     /** Sahne yazı stilleri: ince büyük saat, orta ağırlıkta tarih ve hava (taslak ölçüleri). */
     private fun styleTexts() {
         if (!LauncherTheme.sahne) return
-        time.textSize = 58f
+        // Saat sakin: menzil tek kahraman kalsın (saat araçta başka yerde de var).
+        time.textSize = 44f
         // Gece ince (300) saat koyu zeminde silikti: iki temada 400.
         SahneFonts.apply(time, 400, -0.02f, dayBump = false)
         date.textSize = 22f
         SahneFonts.apply(date, 400)
         SahneFonts.apply(weatherTemp, 600, dayBump = false)
         SahneFonts.apply(weatherLabel, 400, dayBump = false)
-        time.setTextColor(Sahne.INK)
+        time.setTextColor(Sahne.NUMERAL)
         date.setTextColor(if (noticeText == null) Sahne.HEADER_DATE else Sahne.INK)
         weatherLabel.setTextColor(Sahne.HEADER_DATE)
         weatherTemp.setTextColor(Sahne.INK)
@@ -215,6 +216,9 @@ class HeaderBar(
         (chargeImage.parent as? android.view.ViewGroup)?.removeView(chargeImage)
         (chargeBox.parent as? android.view.ViewGroup)?.removeView(chargeBox)
         (chargeDivider.parent as? android.view.ViewGroup)?.removeView(chargeDivider)
+        // Yerinde tema yenilemesinde düğmeler hâlâ eski kapsüldedir: önce oradan çıkarılır (yoksa yeniden kurulum gerekirdi).
+        (wifiButton.parent as? android.view.ViewGroup)?.removeView(wifiButton)
+        (btButton.parent as? android.view.ViewGroup)?.removeView(btButton)
         wifiButton.removeAllViews()
         btButton.removeAllViews()
         chargeBox.removeAllViews()
