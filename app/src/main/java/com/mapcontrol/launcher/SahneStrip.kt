@@ -400,8 +400,8 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(context.dp(StripItemView.PAD_DP), 0, context.dp(StripItemView.PAD_DP), 0)
-        // İki uygulama tek yuvada eşit paylı; diğer öğelerle aynı dil: ikon solda, ad sağında (iki satıra kadar).
+        setPadding(context.dp(8), 0, context.dp(8), 0)
+        // İki uygulama tek yuvada eşit paylı; her biri ikon üstte, ad altta tek satır (sığmazsa küçülür).
         buttons.forEachIndexed { i, b ->
             addView(b, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply { if (i > 0) marginStart = context.dp(8) })
         }
@@ -418,17 +418,16 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
         }
         private val label = text(context, LABEL_SP).apply {
             SahneFonts.apply(this, 500)
-            maxLines = 2
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setLineSpacing(0f, 0.92f)
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 18, LABEL_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
+            maxLines = 1
+            gravity = Gravity.CENTER
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 17, LABEL_SP.toInt(), 1, TypedValue.COMPLEX_UNIT_SP)
         }
 
         init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = VERTICAL
+            gravity = Gravity.CENTER
             addView(icon, LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-            addView(label, LayoutParams(0, context.dp(LABEL_BOX_DP), 1f).apply { marginStart = context.dp(10) })
+            addView(label, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(LABEL_BOX_DP)).apply { topMargin = context.dp(2) })
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
@@ -437,9 +436,9 @@ internal class AppPairStripView(context: Context, private val tiles: List<AppSho
         }
 
         private companion object {
-            const val ICON_DP = 44
+            const val ICON_DP = 40
             const val LABEL_SP = 20f
-            const val LABEL_BOX_DP = 56
+            const val LABEL_BOX_DP = 26
         }
 
         fun bind(s: StripState) {

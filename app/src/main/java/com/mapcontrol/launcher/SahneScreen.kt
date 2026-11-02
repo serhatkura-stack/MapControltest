@@ -373,7 +373,7 @@ class SahneScreen(
                     lp.height = context.dp(CHIP_STRIP_DP)
                 }
                 lp.gravity = Gravity.TOP or Gravity.END
-                val inset = context.dp(if (panel) 16 else 6)
+                val inset = context.dp(if (panel) 16 else 4)
                 lp.setMargins(0, inset, inset, 0)
             } else {
                 chipIcon.setImageResource(R.drawable.ic_sahne_plus)
@@ -389,7 +389,7 @@ class SahneScreen(
             chip.layoutParams = lp
             chipIcon.imageTintList = ColorStateList.valueOf(if (filled) Sahne.ICE else Sahne.INK_3)
             (chipIcon.layoutParams as LinearLayout.LayoutParams).apply {
-                val s = context.dp(if (filled) (if (panel) 22 else 20) else 34)
+                val s = context.dp(if (filled) (if (panel) 22 else 16) else 34)
                 width = s; height = s
             }
             invalidate()
@@ -520,6 +520,6 @@ class SahneScreen(
         const val PICKER_TITLE_SP = 22f
         const val PICKER_SUB_SP = 20f
         const val CHIP_PANEL_DP = 52
-        const val CHIP_STRIP_DP = 40
+        const val CHIP_STRIP_DP = 30
     }
 }
