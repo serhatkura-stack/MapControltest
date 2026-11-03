@@ -904,58 +904,38 @@ public class VDConnector {
         }
     }
 
-    /* JADX WARNING: No exception handlers in catch block: Catch:{  } */
-    /* Code decompiled incorrectly, please refer to instructions dump. */
+    /**
+     * Biriken abonelikleri servise tek seferde gönderir. Gövde OEM vdbus.jar'daki VDConnector.subscribeCommit'ten
+     * taşındı (jadx temiz çözüyor). Abonelik listesi değişmediyse hiçbir şey yapmaz; dağıtım iş parçacığı bir kez açılır.
+     */
     public void subscribeCommit() {
-        /*
-            r6 = this;
-            com.desaysv.ivi.vdb.client.bind.VDServiceDef$ServiceInfo r0 = r6.mServiceInfo
-            boolean r0 = r0.isExist()
-            if (r0 != 0) goto L_0x0009
-            goto L_0x0048
-        L_0x0009:
-            java.util.ArrayList<com.desaysv.ivi.vdb.event.VDEvent> r0 = r6.mSubscribeBuffer
-            monitor-enter(r0)
-            boolean r1 = r6.mIsSubscribeModified     // Catch:{ all -> 0x0026 }
-            if (r1 == 0) goto L_0x0047
-            r1 = 0
-            r6.mIsSubscribeModified = r1     // Catch:{ all -> 0x0026 }
-            r6.createDispatchEventThread()     // Catch:{ all -> 0x0026 }
-            com.desaysv.ivi.vdb.IVDBus r1 = r6.mIVDBus     // Catch:{ all -> 0x0026 }
-            if (r1 != 0) goto L_0x002b
-            com.desaysv.ivi.vdb.client.bind.VDServiceDef$ServiceInfo r1 = r6.mServiceInfo     // Catch:{ all -> 0x0026 }
-            boolean r1 = r1.isSystemService()     // Catch:{ all -> 0x0026 }
-            if (r1 == 0) goto L_0x0028
-            r6.bindService()     // Catch:{ all -> 0x0026 }
-            goto L_0x002b
-        L_0x0026:
-            r1 = move-exception
-            goto L_0x0049
-        L_0x0028:
-            r6.sendCheckBootBroadcast()     // Catch:{ all -> 0x0026 }
-        L_0x002b:
-            com.desaysv.ivi.vdb.IVDBus r1 = r6.mIVDBus     // Catch:{ RemoteException -> 0x0043 }
-            if (r1 == 0) goto L_0x0047
-            java.util.ArrayList<com.desaysv.ivi.vdb.event.VDEvent> r2 = r6.mSubscribeBuffer     // Catch:{ RemoteException -> 0x0043 }
-            int[] r2 = r6.changeSubscribeBuffer(r2)     // Catch:{ RemoteException -> 0x0043 }
-            int r3 = r6.mPid     // Catch:{ RemoteException -> 0x0043 }
-            android.content.Context r4 = r6.mContext     // Catch:{ RemoteException -> 0x0043 }
-            java.lang.String r4 = r4.getPackageName()     // Catch:{ RemoteException -> 0x0043 }
-            com.desaysv.ivi.vdb.IVDBusCallback$Stub r5 = r6.mICallback     // Catch:{ RemoteException -> 0x0043 }
-            r1.subscribe(r2, r3, r4, r5)     // Catch:{ RemoteException -> 0x0043 }
-            goto L_0x0047
-        L_0x0043:
-            r1 = move-exception
-            r1.printStackTrace()     // Catch:{ all -> 0x0026 }
-        L_0x0047:
-            monitor-exit(r0)     // Catch:{ all -> 0x0026 }
-        L_0x0048:
-            return
-        L_0x0049:
-            monitor-exit(r0)     // Catch:{ all -> 0x0026 }
-            throw r1
-        */
-        throw new UnsupportedOperationException("Method not decompiled: com.desaysv.ivi.vdb.client.bind.VDConnector.subscribeCommit():void");
+        Log.d(TAG, "subscribeCommit: service=" + this.mServiceInfo.getServiceName() + " client=" + this.mContext.getPackageName());
+        if (!this.mServiceInfo.isExist()) {
+            Log.w(TAG, "subscribeCommit: service mevcut değil. name=" + this.mServiceInfo.getServiceName());
+            return;
+        }
+        synchronized (this.mSubscribeBuffer) {
+            if (this.mIsSubscribeModified) {
+                this.mIsSubscribeModified = false;
+                createDispatchEventThread();
+                if (this.mIVDBus == null) {
+                    Log.d(TAG, "subscribeCommit: IVDBus null");
+                    if (this.mServiceInfo.isSystemService()) {
+                        bindService();
+                    } else {
+                        sendCheckBootBroadcast();
+                    }
+                }
+                try {
+                    if (this.mIVDBus != null) {
+                        this.mIVDBus.subscribe(changeSubscribeBuffer(this.mSubscribeBuffer), this.mPid, this.mContext.getPackageName(), this.mICallback);
+                    }
+                } catch (Exception e10) {
+                    // Bizim IVDBus kopyası binder hatasını RuntimeException ile sarar (OEM'de RemoteException)
+                    Log.e(TAG, "subscribeCommit: VDBus subscribe hatası", e10);
+                }
+            }
+        }
     }
 
     public boolean unbindService() {

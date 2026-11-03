@@ -35,8 +35,8 @@ P konumu, kontak açık, USB bağlı. Komutlar Mac'te `cd ~/chery/arac-test` iç
   - Perde: `--es c shade_open $A`, `--es c shade_close $A`; yedek VR yolu (öntanımlı değil): `shade_open_vr`, `shade_close_vr`.
   - Perde dur adayları (aç, bekle, dur, 6 sn izle): `--es c shade_open_stop --ei after_ms 2000 --ei stop 3 $A`; sonra `--ei stop 6`, sonra `--ei stop 0` (hareketteki perdeye tek başına: `--es c shade_stop --ei stop 3 $A`).
   - Ön buğu: `--es c defrost_front --ei v 1 $A` / `--ei v 0`; sadece maks: `--es c defrost_front_max --ei v 1 $A` / `--ei v 0`.
-  - Arka cam: `--es c defrost_rear --ei v 1 $A` / `--ei v 0`; ikisi birden (HV 80 + CS 159): `--es c defrost_rear_both --ei v 1 $A` / `--ei v 0`.
-  - Direksiyon ısıtma: `--es c wheel_heat --ei v 1 $A` / `--ei v 0`.
+  - Arka cam: `--es c defrost_rear --ei v 1 $A` / `--ei v 0` (yalnız HVAC 80; `defrost_rear_both` kaldırıldı, OEM CS 159 yazmıyor).
+  - Direksiyon ısıtma: `--es c wheel_heat --ei v 1 $A` / `--ei v 0` (v hedef durum; araca her zaman `160 ← 1` gider, durum zaten hedefteyse hiç gönderilmez).
   - Kapanışta açtıklarını 0 ile geri kapat; OEM ekranda simge yandı mı fotoğrafla.
 
 ## Tur 5: bagaj kapağı (elektrikli) testi

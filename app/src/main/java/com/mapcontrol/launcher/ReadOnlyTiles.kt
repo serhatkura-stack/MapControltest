@@ -81,24 +81,38 @@ internal object ReadOnlyDecode {
 
     const val PAD_EMPTY = 0
     const val PAD_CHARGING = 1
-    const val PAD_PRESENT = 2
+    const val PAD_FULL = 2
+    const val PAD_ERROR = 3
+    const val PAD_OFF = 4
 
     /**
-     * Kablosuz şarj durumu (CarSetting 44): 0 pedde telefon yok (araçta ölçüldü).
-     * VARSAYIM: 1 = şarj oluyor, 2..7 = telefon pedde ama şarj olmuyor; başka değer bilinmiyor (null).
+     * Kablosuz şarj durumu (CarSetting 44), OEM durum çubuğu gibi (SystemUI StatusBarViewModel.t1):
+     * 0 boşta, 1 şarj oluyor, 2 OEM'in ayrı tuttuğu durum (şarj tamamlandı sayılır; araçta görülmedi), 3 hata.
+     * Başka değer bilinmiyor (null). 0 ve 1 araçta ölçüldü.
      */
     fun padState(raw: Int?): Int? = when (raw) {
         0 -> PAD_EMPTY
         1 -> PAD_CHARGING
-        in 2..7 -> PAD_PRESENT
+        2 -> PAD_FULL
+        3 -> PAD_ERROR
         else -> null
     }
 
     /**
-     * Telefon pedde şarj oluyor mu (başlık göstergesi): pedde telefon var demek, yani 0 dışındaki her değer.
-     * 0 araçta ölçüldü (pedde telefon yok); sıfırdan farklı değerlerin (1 şarj, 2..7 ?) anlamı araç testinde doğrulanmalı.
+     * Telefon pedde şarj oluyor mu (başlık göstergesi). Girdi [padStateWithSwitch] sonucudur: yalnız şarj oluyor ya da
+     * tamamlandı durumunda true; boşta, hata ve anahtar kapalı ([PAD_OFF]) göstergeyi yakmaz.
      */
-    fun phoneCharging(raw: Int?): Boolean = raw != null && raw != PAD_EMPTY
+    fun phoneCharging(state: Int?): Boolean = state == PAD_CHARGING || state == PAD_FULL
+
+    /**
+     * Kablosuz şarj anahtarı (CarSetting 45) okuması: 1 açık (OEM CarInfoUtil.p0; araçta hep 1 okundu). Başka bilinen
+     * değer kapalıdır ve durum yerine [PAD_OFF] gösterilir. Anahtar okunamadıysa (null) [padState] olduğu gibi kalır.
+     * Not: OEM bu anahtarı 2 = aç, 1 = kapat diye YAZAR; okunan ve yazılan değer farklıdır.
+     */
+    fun padStateWithSwitch(state: Int?, switchRaw: Int?): Int? = when (switchRaw) {
+        null, 1 -> state
+        else -> PAD_OFF
+    }
 
     /**
      * Telefon unutuldu mu: gerçek bayrak PHONE_FORGOT_ON_WIRLESS_BOARD (46) = 1 ("pedde unutuldu").
@@ -291,7 +305,10 @@ internal object ExtraSource {
                 driveMinutes = ReadOnlyDecode.driveMinutes(CarSignals.read(RO, ReadOnlyID.ID_DRIVE_TIME)),
                 batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
                 batterySoc = ReadOnlyDecode.batterySoc(ro(ReadOnlyID.ID_IBS_SOC)),
-                padState = ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
+                padState = ReadOnlyDecode.padStateWithSwitch(
+                    ReadOnlyDecode.padState(cs(CarSettingID.ID_CAR_WIRLESS_CHARGE_STATE)),
+                    cs(CarSettingID.ID_CAR_WIRLESS_CAHRGE_SET),
+                ),
                 tires = TireDecode.parse(CarSignals.read(RO, ReadOnlyIds.TIRE_PRESSURE), ro(ReadOnlyID.ID_TIRE_PRESSURE_WARNING)),
                 phoneForgotten = ReadOnlyDecode.phoneForgotten(
                     cs(CarSettingID.ID_CAR_PHONE_FORGOT_ON_WIRLESS_BOARD), cs(CarSettingID.ID_CAR_PHONE_FORGOT),
@@ -430,7 +447,7 @@ internal class BreakTile(context: Context) :
 /**
  * Telefon hatırlatıcı: kablosuz şarj padinin durumu ("Telefon şarjda" / "Şarj pedi boş"). Pedde unutulan telefon
  * bayrağı (PHONE_FORGOT_ON_WIRLESS_BOARD) kalkarsa sakin ALERT zeminiyle "Telefonunu al". Araçta yalnızca pedin
- * boş (0) ve telefon pedde (1) durumları araçta ölçüldü (CarSetting 44).
+ * boş (0) ve telefon pedde (1) durumları araçta ölçüldü (CarSetting 44); 2/3 ve anahtar (CS 45) OEM kodundan.
  */
 internal class PhoneTile(context: Context) :
     ExtraTile(context, R.drawable.ic_mdi_cellphone, R.string.launcher_widget_phone, narrowValueSp = 30f) {
@@ -454,15 +471,22 @@ internal class PhoneTile(context: Context) :
         setIcon(R.drawable.ic_mdi_cellphone, LauncherTheme.TEXT_SECONDARY)
         val state = when (pad) {
             ReadOnlyDecode.PAD_CHARGING -> R.string.launcher_phone_charging
-            ReadOnlyDecode.PAD_PRESENT -> R.string.launcher_phone_on_pad
+            ReadOnlyDecode.PAD_FULL -> R.string.launcher_phone_charge_full
+            ReadOnlyDecode.PAD_ERROR -> R.string.launcher_phone_charge_error
             ReadOnlyDecode.PAD_EMPTY -> R.string.launcher_phone_pad_empty
+            ReadOnlyDecode.PAD_OFF -> R.string.launcher_phone_pad_off
             else -> null
         }
         if (state == null) {
             showMissing()
             return
         }
-        setValue(context.getString(state), if (pad == ReadOnlyDecode.PAD_EMPTY) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
+        val color = when (pad) {
+            ReadOnlyDecode.PAD_EMPTY, ReadOnlyDecode.PAD_OFF -> LauncherTheme.TEXT_SECONDARY
+            ReadOnlyDecode.PAD_ERROR -> LauncherTheme.ALERT
+            else -> LauncherTheme.TEXT
+        }
+        setValue(context.getString(state), color)
         showDetail(null)
     }
 }

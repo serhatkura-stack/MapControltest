@@ -66,9 +66,28 @@ class ReadOnlyDecodeTest {
     @Test fun padState() {
         assertEquals(ReadOnlyDecode.PAD_EMPTY, ReadOnlyDecode.padState(0))
         assertEquals(ReadOnlyDecode.PAD_CHARGING, ReadOnlyDecode.padState(1))
-        assertEquals(ReadOnlyDecode.PAD_PRESENT, ReadOnlyDecode.padState(2))
-        assertNull(ReadOnlyDecode.padState(0xFF))
+        assertEquals(ReadOnlyDecode.PAD_FULL, ReadOnlyDecode.padState(2))
+        assertEquals(ReadOnlyDecode.PAD_ERROR, ReadOnlyDecode.padState(3))
+        for (raw in listOf(-1, 4, 5, 7, 0xFF)) assertNull(ReadOnlyDecode.padState(raw))
         assertNull(ReadOnlyDecode.padState(null))
+    }
+
+    @Test fun padStateWithSwitch() {
+        // CS 45 okuması 1 = açık: durum olduğu gibi; başka bilinen değer = kapalı; okunamadıysa durum korunur.
+        assertEquals(ReadOnlyDecode.PAD_CHARGING, ReadOnlyDecode.padStateWithSwitch(ReadOnlyDecode.PAD_CHARGING, 1))
+        assertEquals(ReadOnlyDecode.PAD_OFF, ReadOnlyDecode.padStateWithSwitch(ReadOnlyDecode.PAD_CHARGING, 0))
+        assertEquals(ReadOnlyDecode.PAD_OFF, ReadOnlyDecode.padStateWithSwitch(null, 2))
+        assertEquals(ReadOnlyDecode.PAD_EMPTY, ReadOnlyDecode.padStateWithSwitch(ReadOnlyDecode.PAD_EMPTY, null))
+        assertNull(ReadOnlyDecode.padStateWithSwitch(null, 1))
+    }
+
+    @Test fun phoneCharging() {
+        assertTrue(ReadOnlyDecode.phoneCharging(ReadOnlyDecode.PAD_CHARGING))
+        assertTrue(ReadOnlyDecode.phoneCharging(ReadOnlyDecode.PAD_FULL))
+        assertFalse(ReadOnlyDecode.phoneCharging(ReadOnlyDecode.PAD_EMPTY))
+        assertFalse(ReadOnlyDecode.phoneCharging(ReadOnlyDecode.PAD_ERROR))
+        assertFalse(ReadOnlyDecode.phoneCharging(ReadOnlyDecode.PAD_OFF))
+        assertFalse(ReadOnlyDecode.phoneCharging(null))
     }
 
     @Test fun phoneForgottenUsesBoardFlagAndReminderSetting() {

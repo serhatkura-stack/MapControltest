@@ -162,6 +162,9 @@
     <string name="launcher_phone_charging">Phone charging</string>
     <string name="launcher_phone_pad_empty">Charging pad empty</string>
     <string name="launcher_phone_on_pad">Phone on pad</string>
+    <string name="launcher_phone_charge_full">Charging complete</string>
+    <string name="launcher_phone_charge_error">Charging error</string>
+    <string name="launcher_phone_pad_off">Wireless charging off</string>
     <string name="launcher_phone_take">Take your phone</string>
     <string name="launcher_body_win_lf">Front left window</string>
     <string name="launcher_body_win_rf">Front right window</string>

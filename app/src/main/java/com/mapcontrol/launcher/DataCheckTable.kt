@@ -168,8 +168,8 @@ internal object DataCheckTable {
     /** El freni (ReadOnly 75): 1 çekili, 2 bırakılıyor, 0 inik, 3 çekiliyor. */
     val handbrake = labels(1 to "Çekili", 2 to "Bırakılıyor", 0 to "İnik", 3 to "Çekiliyor")
 
-    /** Kablosuz şarj (CarSetting 44): 0 pad boş, 1 telefon pedde. */
-    val wirelessCharge = labels(0 to "Şarj pedi boş", 1 to "Telefon şarjda")
+    /** Kablosuz şarj (CarSetting 44, OEM SystemUI): 0 pad boş, 1 şarj oluyor, 2 şarj tamamlandı, 3 hata. */
+    val wirelessCharge = labels(0 to "Şarj pedi boş", 1 to "Telefon şarjda", 2 to "Şarj tamamlandı", 3 to "Şarj hatası")
 
     /** Cam (CarSetting 100..): 2 kapalı, diğerleri açık / hareket. */
     val window: (Int) -> String? = { v -> if (v == 2) "Kapalı" else "Açık ($v)" }

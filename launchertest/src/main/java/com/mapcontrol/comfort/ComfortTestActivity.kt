@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - `info`, `shade_time`, `trunk_info`: SALT-OKUR (shade_time perdeyi elle oynatırken 30 sn, 100 ms aralıkla geçişleri zaman damgalarıyla yazar).
  *  - `shade_open`, `shade_close`, `shade_open_vr`, `shade_close_vr`, `shade_stop [--ei stop 3|6|0]`,
  *    `shade_open_stop [--ei after_ms 2000] [--ei stop 3]`.
- *  - `defrost_front`, `defrost_front_max`, `defrost_rear`, `defrost_rear_both`, `wheel_heat` (`--ei v 1|0`).
+ *  - `defrost_front`, `defrost_front_max` (`--ei v 1|0`; 0 araca OEM kapatma değeri 2 olarak gider), `defrost_rear` (`--ei v 1|0|2`).
+ *  - `wheel_heat --ei v 1|0`: v hedef durumdur; CS 160 okunur, farklıysa 160 ← 1 (anahtar, OEM gibi) gönderilir.
  *  - Bagaj kapağı (HEPSİ DOĞRULANMADI ADAY): `trunk_open_vr` (VR 121←1), `trunk_close_vr` (VR 121←2), `trunk_open_cs` (CS 92←3),
  *    `trunk_close_cs` (CS 92←4), `trunk_stop_cs` (CS 92←2), `trunk_open_stop_cs [--ei after_ms 2000]` (aç, bekle, durdur).
  *    Yazmadan sonra 10 sn boyunca PLG 98 / TRUNK 19 / CS 92 geçişleri günlüğe yazılır.
@@ -150,6 +151,27 @@ class ComfortTestActivity : Activity() {
                     val r = sender.send(step.write)
                     show(r.message)
                     if (!r.sent) return // park kapısı/servis reddi: dizi durur
+                    poll(sender, cmd, tracker, t0)
+                }
+                is ComfortPlan.Step.Toggle -> {
+                    // Anahtar: önce durum okunur; zaten hedefteyse yazılmaz, okunamazsa dizi durur.
+                    val current = sender.read(step.signal)?.firstOrNull()
+                    when (ComfortPlan.toggleAction(current, step.target)) {
+                        ComfortPlan.ToggleAction.REFUSE -> {
+                            show("REDDEDİLDİ: ${step.signal.name} okunamadı; anahtar yazması gönderilmedi")
+                            Log.w(ComfortSender.TAG, "REFUSED ${step.signal.name} okunamadı (${cmd.name})")
+                            return
+                        }
+                        ComfortPlan.ToggleAction.SKIP -> {
+                            show("${step.signal.name} zaten $current; yazma gerekmedi")
+                            Log.i(ComfortSender.TAG, "SKIP ${step.signal.name}=$current hedef=${step.target}")
+                            continue
+                        }
+                        ComfortPlan.ToggleAction.SEND -> Unit
+                    }
+                    val r = sender.send(step.write)
+                    show(r.message)
+                    if (!r.sent) return
                     poll(sender, cmd, tracker, t0)
                 }
             }

@@ -23,17 +23,26 @@ object ComfortPlan {
     /** CarSettingID.ID_CAR_SUNSHADE. Okuma (ölçüldü): 1 kapalı, 2 açılıyor, 3 yarıda durdu, 4 kapanıyor. */
     const val ID_SUNSHADE = 10
 
-    /** CarSettingID.ID_CAR_REAR_WINDOW_HEAT. */
+    /** CarSettingID.ID_CAR_REAR_WINDOW_HEAT. Yalnızca OKUNUR: hiçbir OEM uygulaması 159'a yazmıyor (arka buz çözme HVAC 80). */
     const val ID_REAR_WINDOW_HEAT = 159
 
-    /** CarSettingID.ID_CAR_STEER_WHEEL_HEAT. */
+    /**
+     * CarSettingID.ID_CAR_STEER_WHEEL_HEAT. Anahtar gibi: OEM açarken de kapatırken de 160 ← 1 yazar, 0 hiç yazmaz
+     * (SystemUI HvacModel.onCarSteerWheelHeatClick; sesli komut durumu okuyup farklıysa 1 gönderir). Okuma: 1 açık, 0 kapalı.
+     */
     const val ID_STEER_WHEEL_HEAT = 160
 
-    /** HvacID.ID_AC_FRONT_GLASS_HEAT. */
+    /** Direksiyon ısıtma anahtar değeri (aç ve kapat aynı). */
+    const val STEER_WHEEL_TOGGLE = 1
+
+    /** HvacID.ID_AC_FRONT_GLASS_HEAT. OEM: 1 aç, 2 kapat (HvacModel.onFrontHeatingClick); 0 hiç yazmaz. */
     const val ID_FRONT_GLASS_HEAT = 65
 
-    /** HvacID.ID_AC_MAX_FRONT_DEFOREST. */
+    /** HvacID.ID_AC_MAX_FRONT_DEFOREST. OEM: 1 aç, 2 kapat (HvacModel.onMaxDefrostingClick); 0 hiç yazmaz. */
     const val ID_MAX_FRONT_DEFOREST = 24
+
+    /** HVAC 65 ve 24 için OEM kapatma değeri. */
+    const val FRONT_DEFROST_OFF = 2
 
     /** HvacID.ID_AC_REAR_DEFROST. */
     const val ID_REAR_DEFROST = 80
@@ -62,7 +71,7 @@ object ComfortPlan {
     const val TRUNK_CLOSE_CS = 4
     const val TRUNK_STOP_CS = 2
 
-    /** Buğu KAPATMA adayı: 0 ve tekrar 1 kapatmadı (araçta ölçüldü); 2 denenecek. Yalnızca Hvac 24 ve 80. */
+    /** Arka buğu (Hvac 80) KAPATMA adayı: 0 ve tekrar 1 kapatmadı (araçta ölçüldü); 2 denenecek. */
     const val DEFROST_OFF_CANDIDATE = 2
 
     const val SHADE_OPEN = 2
@@ -94,15 +103,14 @@ object ComfortPlan {
         add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS))
         add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_CLOSE_CS))
         add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS))
-        add(Write(MODULE_HVAC, ID_MAX_FRONT_DEFOREST, DEFROST_OFF_CANDIDATE))
-        add(Write(MODULE_HVAC, ID_REAR_DEFROST, DEFROST_OFF_CANDIDATE))
-        for (v in 0..1) {
+        // Ön cam 65 ve maks. buğu 24: yalnızca OEM değerleri (1 aç, 2 kapat); 0 yazılmaz.
+        for (v in listOf(1, FRONT_DEFROST_OFF)) {
             add(Write(MODULE_HVAC, ID_FRONT_GLASS_HEAT, v))
             add(Write(MODULE_HVAC, ID_MAX_FRONT_DEFOREST, v))
-            add(Write(MODULE_HVAC, ID_REAR_DEFROST, v))
-            add(Write(MODULE_CAR_SETTING, ID_REAR_WINDOW_HEAT, v))
-            add(Write(MODULE_CAR_SETTING, ID_STEER_WHEEL_HEAT, v))
         }
+        // Arka buğu 80: kapatma değeri belirsiz; 0, 1 ve aday 2.
+        for (v in listOf(0, 1, DEFROST_OFF_CANDIDATE)) add(Write(MODULE_HVAC, ID_REAR_DEFROST, v))
+        add(Write(MODULE_CAR_SETTING, ID_STEER_WHEEL_HEAT, STEER_WHEEL_TOGGLE))
     }
 
     /** Listede değilse [WriteNotAllowed] fırlatır; değilse aynı yazmayı döndürür. */
@@ -131,6 +139,25 @@ object ComfortPlan {
     sealed class Step {
         data class Send(val write: Write) : Step()
         data class Wait(val ms: Long) : Step()
+
+        /**
+         * Anahtar yazması: sender önce [signal]'i okur; ilk değer [target] ise hiçbir şey göndermez, değilse [write] gider.
+         * Okunamazsa gönderilmez (anahtar yanlış yöne çevrilmesin).
+         */
+        data class Toggle(val write: Write, val signal: Signal, val target: Int) : Step()
+    }
+
+    enum class ToggleAction { SEND, SKIP, REFUSE }
+
+    /**
+     * Anahtar kararı (saf): okunamadıysa REFUSE, zaten hedefteyse SKIP, değilse SEND.
+     * OEM gibi yalnızca 1 "açık" sayılır (HvacModel.getCarSteerWheelHeat: == 1); 0, 2 vb. kapalıdır.
+     */
+    @JvmStatic
+    fun toggleAction(current: Int?, target: Int): ToggleAction = when {
+        current == null -> ToggleAction.REFUSE
+        (current == 1) == (target == 1) -> ToggleAction.SKIP
+        else -> ToggleAction.SEND
     }
 
     enum class Kind { INFO, TIMING, WRITE }
@@ -159,14 +186,14 @@ object ComfortPlan {
     val COMMANDS: Set<String> = setOf(
         "info", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
         "shade_open_stop", "shade_stop", "shade_stop_vr", "defrost_front", "defrost_front_max", "defrost_rear",
-        "defrost_rear_both", "wheel_heat",
+        "wheel_heat",
         "trunk_info", "trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs", "trunk_stop_cs", "trunk_open_stop_cs",
     )
 
     private fun send(module: Int, id: Int, value: Int) = Step.Send(validate(Write(module, id, value)))
 
     /**
-     * `--es c <ad> [--ei v 0|1 (defrost_front_max/defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
+     * `--es c <ad> [--ei v 0|1 (defrost_front/defrost_front_max: 0 ya da 2 = kapat → 2; defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
      * Bilinmeyen ad, eksik/geçersiz v, geçersiz stop veya after_ms için [IllegalArgumentException].
      */
     fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null): Command {
@@ -180,7 +207,12 @@ object ComfortPlan {
             require(s in SHADE_STOP_CANDIDATES) { "--ei stop yalnızca 3, 6 veya 0 olabilir (geldi: $s)" }
             return s
         }
-        // Yalnızca Hvac 24 ve 80 için: 0/1 ya da kapatma adayı 2.
+        // Hvac 65 ve 24: v hedef durum; 1 → 1, 0 ya da 2 → OEM kapatma değeri 2 (araca 0 gitmez).
+        fun frontDefrost(): Int {
+            require(v == 0 || v == 1 || v == FRONT_DEFROST_OFF) { "--ei v 0|1|2 gerekli (geldi: $v)" }
+            return if (v == 1) 1 else FRONT_DEFROST_OFF
+        }
+        // Yalnızca Hvac 80 için: 0/1 ya da kapatma adayı 2.
         fun onOffOrTwo(): Int {
             require(v == 0 || v == 1 || v == DEFROST_OFF_CANDIDATE) { "--ei v 0|1|2 gerekli (geldi: $v)" }
             return v!!
@@ -224,17 +256,15 @@ object ComfortPlan {
                     listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS), Step.Wait(after.toLong()), send(cs, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS)),
                 )
             }
-            "defrost_front" -> writeCmd(c, listOf(send(hv, ID_FRONT_GLASS_HEAT, onOff())), listOf(FRONT_GLASS_HEAT))
-            "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, onOffOrTwo())), listOf(MAX_FRONT_DEFOREST))
+            "defrost_front" -> writeCmd(c, listOf(send(hv, ID_FRONT_GLASS_HEAT, frontDefrost())), listOf(FRONT_GLASS_HEAT))
+            "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, frontDefrost())), listOf(MAX_FRONT_DEFOREST))
             "defrost_rear" -> writeCmd(c, listOf(send(hv, ID_REAR_DEFROST, onOffOrTwo())), listOf(REAR_DEFROST))
-            "defrost_rear_both" -> {
-                val on = onOff()
-                writeCmd(
-                    c, listOf(send(hv, ID_REAR_DEFROST, on), send(cs, ID_REAR_WINDOW_HEAT, on)),
-                    listOf(REAR_DEFROST, REAR_WINDOW_HEAT),
-                )
-            }
-            "wheel_heat" -> writeCmd(c, listOf(send(cs, ID_STEER_WHEEL_HEAT, onOff())), listOf(STEER_WHEEL_HEAT))
+            // v = hedef durum (1 açık, 0 kapalı); araca her iki durumda da yalnızca 160 ← 1 gider (OEM gibi).
+            "wheel_heat" -> writeCmd(
+                c,
+                listOf(Step.Toggle(validate(Write(cs, ID_STEER_WHEEL_HEAT, STEER_WHEEL_TOGGLE)), STEER_WHEEL_HEAT, onOff())),
+                listOf(STEER_WHEEL_HEAT),
+            )
             else -> throw IllegalArgumentException("geçersiz komut: $c")
         }
     }
