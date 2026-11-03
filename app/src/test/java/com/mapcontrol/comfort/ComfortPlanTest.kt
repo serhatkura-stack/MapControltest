@@ -253,6 +253,39 @@ class ComfortPlanTest {
         assertEquals(listOf(327684, 327684, 327681), info.watch.map { it.module })
     }
 
+    @Test fun hiddenCommandsAreReadOnly() {
+        val info = ComfortPlan.parse("hidden_info")
+        assertEquals(ComfortPlan.Kind.INFO, info.kind)
+        assertTrue(info.steps.isEmpty())
+        assertEquals(ComfortPlan.HIDDEN_SIGNALS, info.watch)
+        assertEquals(46, info.watch.size)
+        val w = ComfortPlan.parse("hidden_watch")
+        assertEquals(ComfortPlan.Kind.TIMING, w.kind)
+        assertTrue(w.steps.isEmpty())
+        assertEquals(60_000L, w.watchMs)
+        assertEquals(300L, w.intervalMs)
+        assertEquals(ComfortPlan.HIDDEN_SIGNALS, w.watch)
+        for (c in listOf(info, w)) {
+            assertTrue(c.steps.none { it is ComfortPlan.Step.Send || it is ComfortPlan.Step.Toggle })
+        }
+        // ChangeTracker anahtarı ad: adlar benzersiz olmalı.
+        assertEquals(46, ComfortPlan.HIDDEN_SIGNALS.map { it.name }.toSet().size)
+    }
+
+    @Test fun hiddenWatchSeconds() {
+        assertEquals(60_000L, ComfortPlan.parse("hidden_watch").watchMs)
+        assertEquals(120_000L, ComfortPlan.parse("hidden_watch", watchS = 120).watchMs)
+        assertEquals(10_000L, ComfortPlan.parse("hidden_watch", watchS = 1).watchMs)
+        assertEquals(10_000L, ComfortPlan.parse("hidden_watch", watchS = -5).watchMs)
+        assertEquals(600_000L, ComfortPlan.parse("hidden_watch", watchS = 9999).watchMs)
+        val w = ComfortPlan.parse("hidden_watch", watchS = 300)
+        assertTrue(w.steps.none { it is ComfortPlan.Step.Send || it is ComfortPlan.Step.Toggle })
+        // Ek sinyaller listede, kimlikler hâlâ salt-okur komutta.
+        val ids = ComfortPlan.HIDDEN_SIGNALS.map { it.module to it.id }
+        assertTrue((ComfortPlan.MODULE_HVAC to 12) in ids)
+        assertTrue((ComfortPlan.MODULE_READONLY_INFO to 19) in ids)
+    }
+
     @Test fun changeTracker() {
         val t = ComfortPlan.ChangeTracker()
         assertTrue(t.observe("a", "[1]"))

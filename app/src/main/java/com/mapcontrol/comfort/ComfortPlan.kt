@@ -136,6 +136,60 @@ object ComfortPlan {
     val ALL_SIGNALS: List<Signal> =
         listOf(SUNSHADE, FRONT_GLASS_HEAT, MAX_FRONT_DEFOREST, REAR_DEFROST, REAR_WINDOW_HEAT, STEER_WHEEL_HEAT)
 
+    /**
+     * `hidden_info` / `hidden_watch` için SALT-OKUR sinyaller (gizli/belgelenmemiş kimlikler). Sürücü fiziksel tuşlara basarken
+     * hangi kimliğin değiştiği görülsün diye izlenir; HİÇBİR yazma yok. Ad: modül öneki + kimlik + kısa Türkçe ad (ChangeTracker anahtarı benzersiz).
+     */
+    val HIDDEN_SIGNALS: List<Signal> = listOf(
+        Signal("cs0_kilit_geri_bildirimi", MODULE_CAR_SETTING, 0),
+        Signal("cs1_kilitte_ayna_katlama", MODULE_CAR_SETTING, 1),
+        Signal("cs22_kabin_havalandırma", MODULE_CAR_SETTING, 22),
+        Signal("cs23_kabin_temizleme", MODULE_CAR_SETTING, 23),
+        Signal("cs41_karşılama_ışığı", MODULE_CAR_SETTING, 41),
+        Signal("cs42_BT_pasif_giriş", MODULE_CAR_SETTING, 42),
+        Signal("cs45_kablosuz_şarj", MODULE_CAR_SETTING, 45),
+        Signal("cs47_telefon_unutma_uyarısı", MODULE_CAR_SETTING, 47),
+        Signal("cs76_karşılama_kokusu", MODULE_CAR_SETTING, 76),
+        Signal("cs77_hava_temizleme_oto", MODULE_CAR_SETTING, 77),
+        Signal("cs78_ferahlatma", MODULE_CAR_SETTING, 78),
+        Signal("cs117_ambiyans_müzik_ritmi", MODULE_CAR_SETTING, 117),
+        Signal("cs161_yağmur_sensörü_hassasiyeti", MODULE_CAR_SETTING, 161),
+        Signal("cs177_sürüş_modu_hafızası", MODULE_CAR_SETTING, 177),
+        Signal("cs204_ayna_katlı_mı", MODULE_CAR_SETTING, 204),
+        Signal("cs205_ADAS_ses_stili", MODULE_CAR_SETTING, 205),
+        Signal("cs240_iç_alarm", MODULE_CAR_SETTING, 240),
+        Signal("hvac69_PTC_ısıtıcı", MODULE_HVAC, 69),
+        Signal("hvac70_akıllı_klima", MODULE_HVAC, 70),
+        Signal("hvac97_oto_buğu_T1E24", MODULE_HVAC, 97),
+        Signal("ro14_ACC", MODULE_READONLY_INFO, 14),
+        Signal("ro26_vites", MODULE_READONLY_INFO, 26),
+        Signal("ro74_motor", MODULE_READONLY_INFO, 74),
+        // hidden_watch için ek salt-okur sinyaller (kapılar/bagaj, kablosuz şarj, ambiyans, kilit, klima durumları).
+        Signal("ro15_kapı_1", MODULE_READONLY_INFO, 15),
+        Signal("ro16_kapı_2", MODULE_READONLY_INFO, 16),
+        Signal("ro17_kapı_3", MODULE_READONLY_INFO, 17),
+        Signal("ro18_kapı_4", MODULE_READONLY_INFO, 18),
+        Signal("ro19_bagaj_durumu", MODULE_READONLY_INFO, 19),
+        Signal("ro47_bilinmeyen", MODULE_READONLY_INFO, 47),
+        Signal("cs7_ambiyans", MODULE_CAR_SETTING, 7),
+        Signal("cs44_kablosuz_şarj_durumu", MODULE_CAR_SETTING, 44),
+        Signal("cs92_bagaj_kapağı", MODULE_CAR_SETTING, 92),
+        Signal("cs160_direksiyon_ısıtma", MODULE_CAR_SETTING, 160),
+        Signal("cs169_merkezi_kilit_durumu", MODULE_CAR_SETTING, 169),
+        Signal("cs237_bilinmeyen", MODULE_CAR_SETTING, 237),
+        Signal("hvac1_klima_1", MODULE_HVAC, 1),
+        Signal("hvac4_klima_4", MODULE_HVAC, 4),
+        Signal("hvac8_klima_8", MODULE_HVAC, 8),
+        Signal("hvac9_klima_9", MODULE_HVAC, 9),
+        Signal("hvac10_klima_10", MODULE_HVAC, 10),
+        Signal("hvac12_fan_kademesi", MODULE_HVAC, 12),
+        Signal("hvac13_klima_13", MODULE_HVAC, 13),
+        Signal("hvac18_klima_gücü", MODULE_HVAC, 18),
+        Signal("hvac24_maks_ön_buğu", MODULE_HVAC, 24),
+        Signal("hvac65_ön_cam_ısıtma", MODULE_HVAC, 65),
+        Signal("hvac80_arka_buğu", MODULE_HVAC, 80),
+    )
+
     sealed class Step {
         data class Send(val write: Write) : Step()
         data class Wait(val ms: Long) : Step()
@@ -180,23 +234,33 @@ object ComfortPlan {
     const val TRUNK_WATCH_MS = 10_000L
     const val TIMING_MS = 30_000L
     const val TIMING_INTERVAL_MS = 100L
+    const val HIDDEN_WATCH_MS = 60_000L
+    const val HIDDEN_WATCH_INTERVAL_MS = 300L
+    const val HIDDEN_WATCH_MIN_S = 10
+    const val HIDDEN_WATCH_MAX_S = 600
+    const val HIDDEN_WATCH_DEFAULT_S = 60
     const val DEFAULT_AFTER_MS = 2000
     const val MAX_AFTER_MS = 10_000
 
     val COMMANDS: Set<String> = setOf(
-        "info", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
+        "info", "hidden_info", "hidden_watch", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
         "shade_open_stop", "shade_stop", "shade_stop_vr", "defrost_front", "defrost_front_max", "defrost_rear",
         "wheel_heat",
         "trunk_info", "trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs", "trunk_stop_cs", "trunk_open_stop_cs",
     )
 
+    /** hidden_watch süresi: --ei watch_s (yoksa 60 sn), 10..600 sn aralığına sıkıştırılır. */
+    @JvmStatic
+    fun hiddenWatchMs(watchS: Int?): Long =
+        (watchS ?: HIDDEN_WATCH_DEFAULT_S).coerceIn(HIDDEN_WATCH_MIN_S, HIDDEN_WATCH_MAX_S) * 1000L
+
     private fun send(module: Int, id: Int, value: Int) = Step.Send(validate(Write(module, id, value)))
 
     /**
-     * `--es c <ad> [--ei v 0|1 (defrost_front/defrost_front_max: 0 ya da 2 = kapat → 2; defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0]` ekstralarını komuta çevirir.
+     * `--es c <ad> [--ei v 0|1 (defrost_front/defrost_front_max: 0 ya da 2 = kapat → 2; defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0] [--ei watch_s 10..600 (hidden_watch; varsayılan 60, aralık dışı sıkıştırılır)]` ekstralarını komuta çevirir.
      * Bilinmeyen ad, eksik/geçersiz v, geçersiz stop veya after_ms için [IllegalArgumentException].
      */
-    fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null): Command {
+    fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null, watchS: Int? = null): Command {
         require(c != null && c in COMMANDS) { "geçersiz komut: $c" }
         fun onOff(): Int {
             require(v == 0 || v == 1) { "--ei v 0|1 gerekli (geldi: $v)" }
@@ -226,6 +290,9 @@ object ComfortPlan {
         val hv = MODULE_HVAC
         return when (c) {
             "info" -> Command(c, Kind.INFO)
+            // Salt-okur: gizli kimlikler bir kez okunur / 60 sn boyunca 300 ms aralıkla yalnızca değişimler yazılır.
+            "hidden_info" -> Command(c, Kind.INFO, watch = HIDDEN_SIGNALS)
+            "hidden_watch" -> Command(c, Kind.TIMING, watch = HIDDEN_SIGNALS, watchMs = hiddenWatchMs(watchS), intervalMs = HIDDEN_WATCH_INTERVAL_MS)
             "shade_time" -> Command(c, Kind.TIMING, watch = listOf(SUNSHADE), watchMs = TIMING_MS, intervalMs = TIMING_INTERVAL_MS)
             "shade_open" -> writeCmd(c, listOf(send(cs, ID_SUNSHADE, SHADE_OPEN)), listOf(SUNSHADE))
             "shade_close" -> writeCmd(c, listOf(send(cs, ID_SUNSHADE, SHADE_CLOSE)), listOf(SUNSHADE))

@@ -119,7 +119,8 @@ internal class ClimateControl(
         pendingFan = level
         if (level > 0) lastOnFan = level
         afterCommit()
-        if (ClimateWriter.enabled) io.runSafely { ClimateWriter.setFan(level) }
+        // Fan 0 araca yazılmaz (HVAC 12 ← 0 OEM'de doğrulanmadı); arayüz 0/kapalı gösterebilir.
+        if (level > 0 && ClimateWriter.enabled) io.runSafely { ClimateWriter.setFan(level) }
     }
 
     /**

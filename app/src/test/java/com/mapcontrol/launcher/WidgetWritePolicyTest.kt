@@ -27,14 +27,16 @@ class WidgetWritePolicyTest {
             assertTrue(allowed(cs, CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION, v))
             assertTrue(allowed(cs, CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION, v))
         }
-        // Klima: LO, 16,0..30,0 °C 0,5 adım, HI ve fan 0..10.
+        // Klima: LO, 16,0..30,0 °C 0,5 adım, HI ve fan 1..10 (0 yazılmaz).
         var c = ClimateMath.LO_TEMP
         while (c <= ClimateMath.HI_TEMP) {
             assertTrue("temp $c", allowed(hv, HvacID.ID_AC_TEMPERATURE_DRIVER, ClimateMath.encodeTemp(c)))
             assertTrue("temp $c", allowed(hv, HvacID.ID_AC_TEMPERATURE_COPILOT, ClimateMath.encodeTemp(c)))
             c += 0.5
         }
-        for (f in 0..ClimateMath.FAN_MAX) assertTrue(allowed(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(f)))
+        for (f in 1..ClimateMath.FAN_MAX) assertTrue(allowed(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(f)))
+        assertFalse(allowed(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, 0))   // fan 0 OEM'de doğrulanmadı
+        assertFalse(allowed(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.FAN_MAX + 1))
         // Bagaj, kilit.
         for (open in listOf(true, false)) {
             val cmd = TrunkMath.command(open)

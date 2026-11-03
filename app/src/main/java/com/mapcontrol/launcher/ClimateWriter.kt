@@ -78,8 +78,8 @@ internal object ClimateMath {
      */
     fun needsPowerOn(powerRaw: Int?): Boolean = powerRaw != null && powerRaw != POWER_ON
 
-    /** Fan ham değeri doğrudan kademedir (okuma da öyle); 0..10. */
-    fun encodeFan(level: Int): Int = level.coerceIn(0, FAN_MAX)
+    /** Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. 0 (HVAC 12 ← 0) OEM'de doğrulanmadı, hiç yazılmaz. */
+    fun encodeFan(level: Int): Int = level.coerceIn(1, FAN_MAX)
 }
 
 /**
@@ -106,10 +106,11 @@ internal object ClimateWriter {
         return send(id, ClimateMath.encodeTemp(celsius))
     }
 
-    /** Fan kademesini (0 = kapalı, 1..10) yazar. Kapalıyken false döner ve araca dokunmaz. */
+    /** Fan kademesini (1..10) yazar. Kapalıyken ya da level < 1 iken (0 yazılmaz) false döner ve araca dokunmaz. */
     fun setFan(level: Int): Boolean {
         if (!enabled) return false
-        if (level > 0) powerOnIfOff()
+        if (level < 1) return false
+        powerOnIfOff()
         return send(HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(level))
     }
 

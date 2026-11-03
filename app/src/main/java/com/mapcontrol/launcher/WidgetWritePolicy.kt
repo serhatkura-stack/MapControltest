@@ -58,7 +58,7 @@ internal object WidgetWritePolicy {
         // Klima gücü (HVAC 18): 1 aç / 2 kapat. Sıcaklık/fan yazmadan önce otomatik 1 de buradan geçer.
         Entry("ClimatePower", HV, HvacID.ID_AC_WORKING, setOf(ClimateMath.POWER_ON, ClimateMath.POWER_OFF),
             listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
-        Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (0..10).toSet(),
+        Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (1..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
         // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
         Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),

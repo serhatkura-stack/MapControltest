@@ -49,6 +49,8 @@ class ClimateMathTest {
         assertNull(OurBottomBar.decodeTemp(31))
         assertNull(OurBottomBar.decodeTemp(33))
         assertEquals(10, ClimateMath.encodeFan(12))
+        assertEquals(1, ClimateMath.encodeFan(0))       // 0 hiç yazılmaz
+        assertEquals(1, ClimateMath.encodeFan(-3))
     }
 
     @Test fun loAndHiEnds() {
@@ -82,5 +84,7 @@ class ClimateMathTest {
         assertFalse(ClimateWriter.enabled)
         assertFalse(ClimateWriter.setTemperature(ClimateSide.DRIVER, 24.0))
         assertFalse(ClimateWriter.setFan(3))
+        assertFalse(ClimateWriter.setFan(0))
+        assertFalse(ClimateWriter.setFan(-1))
     }
 }

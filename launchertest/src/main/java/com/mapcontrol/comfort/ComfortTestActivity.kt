@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Ekstralar (`--es c <komut> --es ack PARKED`; ack olmadan hiçbir şey olmaz; salt-okur komutlar dahil):
  *  - `info`, `shade_time`, `trunk_info`: SALT-OKUR (shade_time perdeyi elle oynatırken 30 sn, 100 ms aralıkla geçişleri zaman damgalarıyla yazar).
+ *  - `hidden_info` (gizli kimlikleri bir kez okur), `hidden_watch [--ei watch_s 10..600]` (aynı kimlikleri varsayılan 60 sn, 300 ms aralıkla izler, yalnızca değişimleri T+ms ile yazar;
+ *    sürücü fiziksel tuşlara basar): SALT-OKUR, hiçbir yazma yok.
  *  - `shade_open`, `shade_close`, `shade_open_vr`, `shade_close_vr`, `shade_stop [--ei stop 3|6|0]`,
  *    `shade_open_stop [--ei after_ms 2000] [--ei stop 3]`.
  *  - `defrost_front`, `defrost_front_max` (`--ei v 1|0`; 0 araca OEM kapatma değeri 2 olarak gider), `defrost_rear` (`--ei v 1|0|2`).
@@ -74,7 +76,7 @@ class ComfortTestActivity : Activity() {
         }
         fun intExtra(key: String): Int? = if (intent?.hasExtra(key) == true) intent.getIntExtra(key, -1) else null
         val cmd = try {
-            ComfortPlan.parse(name, intExtra(EXTRA_V), intExtra(EXTRA_AFTER_MS), intExtra(EXTRA_STOP))
+            ComfortPlan.parse(name, intExtra(EXTRA_V), intExtra(EXTRA_AFTER_MS), intExtra(EXTRA_STOP), intExtra(EXTRA_WATCH_S))
         } catch (e: IllegalArgumentException) {
             show("REDDEDİLDİ: ${e.message}\nhiçbir şey gönderilmedi")
             Log.w(ComfortSender.TAG, "REFUSED ${e.message}")
@@ -111,7 +113,7 @@ class ComfortTestActivity : Activity() {
             ComfortPlan.Kind.INFO -> info(sender, connected, cmd)
             ComfortPlan.Kind.TIMING -> {
                 if (!connected) return notConnected(cmd)
-                watch(sender, cmd, cmd.watchMs, "shade_time: perdeyi şimdi elle oynat")
+                watch(sender, cmd, cmd.watchMs, if (cmd.name == "hidden_watch") "hidden_watch: fiziksel tuşlara şimdi bas (${cmd.watchMs / 1000} sn)" else "shade_time: perdeyi şimdi elle oynat")
             }
             ComfortPlan.Kind.WRITE -> {
                 if (!connected) return notConnected(cmd)
@@ -227,6 +229,7 @@ class ComfortTestActivity : Activity() {
         const val EXTRA_V = "v"
         const val EXTRA_AFTER_MS = "after_ms"
         const val EXTRA_STOP = "stop"
+        const val EXTRA_WATCH_S = "watch_s"
         const val EXTRA_ACK = "ack"
         const val ACK_VALUE = "PARKED"
         private val RUNNING = AtomicBoolean(false)
