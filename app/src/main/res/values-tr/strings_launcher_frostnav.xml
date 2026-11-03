@@ -7,7 +7,10 @@
     <string name="launcher_widget_split_screen">Bölünmüş ekran</string>
     <string name="launcher_widget_cluster_mirror">Göstergeye yansıt</string>
     <string name="launcher_fn_only">Yalnızca FrostNav\'da</string>
-    <string name="launcher_fn_web_start">FrostNav\'da başlat</string>
+    <string name="launcher_fn_web_start">Başlat</string>
+    <string name="launcher_fn_web_starting">Başlatılıyor…</string>
+    <string name="launcher_fn_web_start_failed">Web paneli başlatılamadı</string>
+    <string name="launcher_fn_web_needs_frostnav">Önce FrostNav\'ı bir kez açıp uyarıyı onaylayın</string>
     <string name="launcher_fn_web_manage">FrostNav\'da yönet</string>
     <string name="launcher_fn_web_scan">Telefon kamerasıyla tarayın</string>
     <string name="launcher_fn_web_local">Araç bir ağa bağlı değil</string>
@@ -26,5 +29,4 @@
     <string name="launcher_fn_cluster_start">Yansıt</string>
     <string name="launcher_fn_cluster_stop">Durdur</string>
     <string name="launcher_fn_cluster_no_target">Hedef uygulama seçilmedi</string>
-    <string name="launcher_wifi_web_hint">Web paneli FrostNav\'ın Aktar sekmesinden açılıp kapatılır</string>
 </resources>

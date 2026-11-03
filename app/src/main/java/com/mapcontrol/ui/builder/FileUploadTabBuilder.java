@@ -22,7 +22,7 @@ import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.mapcontrol.R;
-import com.mapcontrol.manager.WebServerManager;
+import com.mapcontrol.manager.WebServerHub;
 import com.mapcontrol.trip.PairingUri;
 import com.mapcontrol.trip.PhoneAccess;
 import com.mapcontrol.trip.TripRecorder;
@@ -36,7 +36,7 @@ public class FileUploadTabBuilder {
     public static final String KEY_PHONE_PAIR_BETA_SHOWN = "phonePairBetaNoticeShown";
 
     private final Context context;
-    private final WebServerManager webServerManager;
+    private final WebServerHub webServerHub;
 
     private ScrollView scrollView;
     private LinearLayout fileUploadTabContent;
@@ -53,9 +53,9 @@ public class FileUploadTabBuilder {
     private String serverUrl;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    public FileUploadTabBuilder(Context context, WebServerManager webServerManager) {
+    public FileUploadTabBuilder(Context context, WebServerHub webServerHub) {
         this.context = context;
-        this.webServerManager = webServerManager;
+        this.webServerHub = webServerHub;
         build();
     }
 
@@ -267,13 +267,7 @@ public class FileUploadTabBuilder {
         pairQrParams.gravity = Gravity.CENTER;
         pairPanel.addView(pairQrImageView, pairQrParams);
 
-        btnWebServerToggle.setOnClickListener(v -> {
-            if (webServerManager.isRunning()) {
-                webServerManager.stopServer();
-            } else {
-                webServerManager.startServer();
-            }
-        });
+        btnWebServerToggle.setOnClickListener(v -> webServerHub.toggle());
 
         fileUploadTabContent.addView(webPanel, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -365,7 +359,7 @@ public class FileUploadTabBuilder {
             return;
         }
         // Adres sunucu açıldığından beri değişmiş olabilir (hotspot sonradan açıldı); QR her çizimde güncel adresi alır.
-        String host = webServerManager.currentHost();
+        String host = webServerHub.currentHost();
         if (host.startsWith("127.")) {
             pairQrImageView.setVisibility(View.GONE);
             return;

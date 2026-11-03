@@ -64,11 +64,13 @@ class HeaderBar(
     private val wifiStatus = WifiStatus(context) { bindWifi(it) }
 
     /**
-     * FrostNav web paneli sunucusu çalışıyorsa Wi-Fi simgesinde küçük nokta. Durum yerel porta kısa bir bağlantı denemesiyle
-     * okunur ([FrostNavFeatures.readWebPanel]); yalnızca başlık görünürken [WEB_POLL_MS]'de bir, arka planda.
+     * FrostNav web paneli sunucusu çalışıyorsa Wi-Fi simgesinde küçük nokta. Durum sunucunun sahibinden okunur
+     * ([FrostNavFeatures.readWebPanel]); başlık görünürken değişince hemen ([FrostNavFeatures.watchWebPanel]), yedek olarak
+     * [WEB_POLL_MS]'de bir, arka planda.
      */
     private val features = LauncherEdition.frostNav(context)
     private val webIo = LauncherIo.serial()
+    private var webUnwatch: (() -> Unit)? = null
     private val webHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val webPoll = object : Runnable {
         override fun run() {
@@ -402,7 +404,11 @@ class HeaderBar(
         btStatus.start()
         ExtraSource.add(context, extraListener)
         webHandler.removeCallbacks(webPoll)
-        if (features.available) webHandler.post(webPoll)
+        if (features.available) {
+            webHandler.post(webPoll)
+            webUnwatch?.invoke()
+            webUnwatch = features.watchWebPanel { webHandler.removeCallbacks(webPoll); webHandler.post(webPoll) }
+        }
     }
 
     override fun onHidden() {
@@ -417,10 +423,14 @@ class HeaderBar(
         btStatus.stop()
         ExtraSource.remove(extraListener)
         webHandler.removeCallbacks(webPoll)
+        webUnwatch?.invoke()
+        webUnwatch = null
     }
 
     override fun release() {
         webHandler.removeCallbacks(webPoll)
+        webUnwatch?.invoke()
+        webUnwatch = null
         wifiStatus.stop()
         btStatus.stop()
         ExtraSource.remove(extraListener)

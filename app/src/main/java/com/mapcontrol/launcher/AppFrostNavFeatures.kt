@@ -12,7 +12,7 @@ import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.mapcontrol.audio.AudioEqualizerController
-import com.mapcontrol.manager.WebServerManager
+import com.mapcontrol.manager.WebServerHub
 import com.mapcontrol.service.DmsFaceRecognitionManager
 import com.mapcontrol.service.MapControlService
 import com.mapcontrol.ui.activity.MainActivity
@@ -24,18 +24,14 @@ import com.mapcontrol.util.TargetPackageStore
 import com.mapcontrol.vehicle.ClimateAutomationEngine
 import com.mapcontrol.vehicle.ClimateAutomationStore
 import com.mapcontrol.vehicle.SunroofAutomationEngine
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
 
 /**
  * [FrostNavFeatures]'ın gerçek sürümü: her çağrı FrostNav'ın kendi ayar sekmesinin kullandığı yoldan geçer. Yalnızca :app'te
  * derlenir (`launchertest` bu dosyayı almaz, [FrostNavFeatures.NONE] kullanır).
  *
- * Web sunucusu: [WebServerManager] örneği MainActivity'nin kendisinindir (dinleyicisi APK kurma, uygulama açma gibi işleri
- * etkinlik üzerinden yapar); launcher'dan güvenle başlatılıp durdurulamaz. Bu yüzden durum, sunucunun sabit portuna yerel bir
- * TCP bağlantı denemesiyle okunur, adres FrostNav'ın kendi adres seçiminden ([WebServerManager.currentHost]) gelir;
- * başlat/durdur için FrostNav "Aktar" (web yönetimi) sekmesi açılır.
+ * Web sunucusu: süreç genelindeki tek sahibi [WebServerHub]'dır; FrostNav'ın Aktar sekmesi de aynı örneği kullanır. Durum
+ * ondan okunur ve dinlenir, adres FrostNav'ın kendi adres seçiminden ([WebServerHub.currentHost]) gelir; başlat/durdur
+ * doğrudan yapılır. Yasal uyarı onaylanmadan (FrostNav hiç kurulmamışken) sunucu açılmaz, FrostNav'a yönlendirilir.
  */
 internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
 
@@ -46,19 +42,36 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
 
     // --- Web paneli ---
 
+    private val web: WebServerHub get() = WebServerHub.get(app)
+
     override fun readWebPanel(): WebPanelState {
-        val running = portOpen(FrostNavWidgetMath.WEB_PORT)
-        if (!running) return WebPanelState(running = false, url = null, reachable = false)
-        // Yalnızca adres okunur: örnek başlatılmaz, soket açmaz (FrostNav'ın gösterdiği adresle aynı seçim).
-        val host = try { WebServerManager(app).currentHost() } catch (e: RuntimeException) { null }
+        if (!web.isRunning) return WebPanelState(running = false, url = null, reachable = false)
+        // Adres her okumada güncel (hotspot sunucudan sonra açılmış olabilir); FrostNav'ın gösterdiği adresle aynı seçim.
+        val host = try { web.currentHost() } catch (e: RuntimeException) { null }
         return WebPanelState(true, FrostNavWidgetMath.webUrl(host), !FrostNavWidgetMath.isLoopback(host))
     }
 
-    /** Sunucu dinliyor mu: bağlanıp hemen kapatır (FrostNav başlık okuyamayınca bağlantıyı sessizce kapatır). */
-    private fun portOpen(port: Int): Boolean = try {
-        Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), PROBE_TIMEOUT_MS); true }
-    } catch (e: IOException) {
-        false
+    override fun setWebPanel(on: Boolean, done: (String?) -> Unit) {
+        if (!on) {
+            web.stop()
+            main.post { done(null) }
+            return
+        }
+        if (!app.getSharedPreferences(PREFS_MAIN, Context.MODE_PRIVATE).getBoolean(KEY_DISCLAIMER_ACCEPTED, false)) {
+            main.post { done(app.getString(com.mapcontrol.R.string.launcher_fn_web_needs_frostnav)) }
+            return
+        }
+        web.start { error ->
+            if (error != null) Log.w(TAG, "web start: $error")
+            done(if (error == null) null else app.getString(com.mapcontrol.R.string.launcher_fn_web_start_failed))
+        }
+    }
+
+    override fun watchWebPanel(onChange: () -> Unit): () -> Unit {
+        val hub = web
+        val listener = WebServerHub.StateListener { onChange() }
+        hub.addStateListener(listener)
+        return { hub.removeStateListener(listener) }
     }
 
     override fun qr(text: String): QrMatrix? = try {
@@ -171,7 +184,8 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
     private companion object {
         const val TAG = "FrostNavWidgets"
         const val PREFS_MAIN = "MapControlPrefs"
-        const val PROBE_TIMEOUT_MS = 300
+        /** MainActivity'nin yasal uyarı onayı; onaysız web sunucusu açılmaz. */
+        const val KEY_DISCLAIMER_ACCEPTED = "disclaimerAccepted"
         const val TAB_WEB = 1
         const val TAB_PROJECTION = 3
         const val TAB_EQUALIZER = 11

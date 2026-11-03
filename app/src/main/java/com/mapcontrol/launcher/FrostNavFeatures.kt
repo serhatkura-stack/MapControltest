@@ -21,6 +21,15 @@ internal interface FrostNavFeatures {
     /** Web yönetim paneli durumu: sunucu açık mı ve FrostNav'ın gösterdiği adres. */
     fun readWebPanel(): WebPanelState
 
+    /**
+     * Web sunucusunu FrostNav'ın Aktar sekmesiyle aynı örnek üzerinden açar/kapatır (sunucu FrostNav ekranına bağlı değildir).
+     * [done] ana iş parçacığında: null = istek yerine getirildi, yoksa kullanıcıya gösterilecek kısa neden (başlatılamadı).
+     */
+    fun setWebPanel(on: Boolean, done: (String?) -> Unit)
+
+    /** Web paneli durumu değişince [onChange] ana iş parçacığında çağrılır; dönen işlev aboneliği bitirir. */
+    fun watchWebPanel(onChange: () -> Unit): () -> Unit
+
     /** [text] için QR modül matrisi (kenar boşluksuz); üretilemezse null. */
     fun qr(text: String): QrMatrix?
 
@@ -56,6 +65,8 @@ internal interface FrostNavFeatures {
         val NONE: FrostNavFeatures = object : FrostNavFeatures {
             override val available = false
             override fun readWebPanel() = WebPanelState(running = false, url = null, reachable = false)
+            override fun setWebPanel(on: Boolean, done: (String?) -> Unit) = Unit
+            override fun watchWebPanel(onChange: () -> Unit): () -> Unit = {}
             override fun qr(text: String): QrMatrix? = null
             override fun readEqualizer() = EqState(supported = false, enabled = false, preset = "", presets = emptyList())
             override fun setEqualizer(enabled: Boolean, preset: String) = Unit

@@ -30,7 +30,8 @@ import com.mapcontrol.R
  * Başlıktaki Wi-Fi simgesine dokununca açılan, simgenin altına bağlı Wi-Fi paneli (macOS menü çubuğu gibi):
  * aç/kapa, bağlı ağ ("Bağlantıyı kes"), yakındaki ağlar, yeni şifreli ağ için şifre penceresi, "Web paneli" satırı (FrostNav web
  * sunucusu; açıkken QR ve adres) ve "Wi-Fi ayarları…". Wi-Fi işleri [WifiBackend] üzerinden gider ve yalnızca açıkken tarama/ağ
- * yayınlarıyla yenilenir; web paneli durumu panel açıkken [WEB_POLL_MS]'de bir arka planda okunur ([FrostNavFeatures]).
+ * yayınlarıyla yenilenir; web paneli durumu panel açıkken değişince ([FrostNavFeatures.watchWebPanel]) ve yedek olarak
+ * [WEB_POLL_MS]'de bir arka planda okunur. "Web paneli" anahtarı sunucuyu yerinde açıp kapatır.
  *
  * Sürüşte ([driving] true) en çok [WifiListShaper.MAX_VISIBLE] ağ, kaydırma yok ve şifre girilemez; park halinde liste kayar.
  */
@@ -62,6 +63,7 @@ internal class WifiPanel(
     private var webQr: QrMatrix? = null
     private var webQrUrl: String? = null
     private val webIo = LauncherIo.serial()
+    private var webUnwatch: (() -> Unit)? = null
     private val webPoll = object : Runnable {
         override fun run() {
             readWeb()
@@ -126,7 +128,10 @@ internal class WifiPanel(
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
         })
         scan()
-        if (features.available) main.post(webPoll)
+        if (features.available) {
+            main.post(webPoll)
+            webUnwatch = features.watchWebPanel { readWeb() }
+        }
     }
 
     fun dismiss() {
@@ -148,6 +153,8 @@ internal class WifiPanel(
         dismissedAt = android.os.SystemClock.uptimeMillis()
         main.removeCallbacks(scanTimeout)
         main.removeCallbacks(webPoll)
+        webUnwatch?.invoke()
+        webUnwatch = null
         try { activity.unregisterReceiver(receiver) } catch (e: IllegalArgumentException) { }
         popup = null
         root = null
@@ -262,13 +269,18 @@ internal class WifiPanel(
     }
 
     /**
-     * Sunucu launcher'dan başlatılamaz/durdurulamaz (örneği FrostNav ekranınındır, bkz. [AppFrostNavFeatures]): web paneli
-     * widget'ıyla aynı yol, FrostNav'ın Aktar sekmesi açılır; kısa bir ipucu bunu söyler.
+     * Sunucuyu yerinde açar/kapatır; durum değişikliği izleyiciyle gelir. Başlatılamazsa (ör. port kullanımda) kısa bir
+     * mesajla FrostNav'ın Aktar sekmesi açılır, ayrıntılı hata orada görünür.
      */
     private fun toggleWeb() {
-        android.widget.Toast.makeText(activity, R.string.launcher_wifi_web_hint, android.widget.Toast.LENGTH_LONG).show()
-        dismiss()
-        features.openTab(activity, FrostNavTab.WEB)
+        features.setWebPanel(web?.running != true) { msg ->
+            readWeb()
+            if (msg != null) {
+                android.widget.Toast.makeText(activity, msg, android.widget.Toast.LENGTH_LONG).show()
+                dismiss()
+                features.openTab(activity, FrostNavTab.WEB)
+            }
+        }
     }
 
     private fun renderNetworks(box: LinearLayout, connectedSsid: String?) {

@@ -13,7 +13,6 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInstaller;
-import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -72,8 +71,7 @@ import com.mapcontrol.manager.ClusterDisplayManager;
 import com.mapcontrol.manager.MapControlVDBusKeyBridge;
 import com.mapcontrol.util.AlertSoundHelper;
 import com.mapcontrol.util.ApkSessionInstaller;
-import com.mapcontrol.manager.WebServerManager;
-import com.mapcontrol.service.GlobalBackService;
+import com.mapcontrol.manager.WebServerHub;
 import com.mapcontrol.service.ServiceInitializer;
 import com.mapcontrol.ui.builder.AppsTabBuilder;
 import com.mapcontrol.ui.builder.AssistTabBuilder;
@@ -113,8 +111,6 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot;
 import com.mapcontrol.vehicle.VehicleQuickControls;
 import com.mapcontrol.vehicle.SunroofGestureOverlayManager;
 import com.mapcontrol.vehicle.SunroofGestureStore;
-import com.mapcontrol.util.MapsLink;
-import com.mapcontrol.util.AppLaunchHelper;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.ui.HeaderStatusMonitor;
 
@@ -124,6 +120,8 @@ public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_OPEN_PROJECTION_TARGET_PICKER = "com.mapcontrol.extra.OPEN_PROJECTION_TARGET_PICKER";
     /** Açılışta seçilecek sekme indeksi (int extra); yoksa Wi-Fi sekmesi. Yeni launcher "Ayarlar" için kullanır. */
     public static final String EXTRA_OPEN_TAB = "com.mapcontrol.extra.OPEN_TAB";
+    /** İşaret (boolean extra): web panelinden yüklenen APK bekliyor; dosya adı {@link WebServerHub#takePendingInstall()}'dan alınır. */
+    public static final String EXTRA_INSTALL_APK = "com.mapcontrol.extra.INSTALL_APK";
     public static final int TAB_WIFI = 0;
     public static final int TAB_SETTINGS = 7;
     public static final int TAB_HOME_SCREEN = 17;
@@ -195,14 +193,16 @@ public class MainActivity extends AppCompatActivity {
     private SplitScreenTabBuilder splitScreenTabBuilder;
     /** Bu görev, Android'in Ana Ekran (HOME) isteğiyle mi başlatıldı? */
     private int currentTab = 0; // 0=Wi-Fi, 1=Web, 2=Profil, 3=Yansıtma, 4=LOG, 5=Uygulamalar, 6=Hafıza, 7=Ayarlar, 8=Açılış Sesi, 9=Araç Bilgi, 11=Ekolayzer
-    private WebServerManager webServerManager; // HTTP Server Manager
+    /** Süreç genelindeki web sunucusu; bu ekran durumunu dinler ve etkinlik gerektiren işleri üstlenir. */
+    private WebServerHub webServerHub;
+    private WebServerHub.StateListener webServerStateListener;
+    private WebServerHub.ActionHost webServerActionHost;
     /** Kullanıcı seçtiyse kontak açılınca (güç modu 1/2) sunucuyu açar. */
     private VehicleMetricsRepository.Listener webServerPowerListener;
     private boolean webServerPowerOn;
     private Button btnWebServerToggle; // Web Server aç/kapat butonu
     private TextView webServerStatusText; // Web Server durum metni
     private android.widget.ImageView qrCodeImageView;
-    private String currentServerUrl; // QR kod görseli
     private ServiceInitializer serviceInitializer;
     private SideRailBuilder sideRailBuilder;
     /** {@link ClusterVDBusTestActivity} bench — yalnızca görünürken; {@link #onResume()} atanır. */
@@ -531,137 +531,39 @@ public class MainActivity extends AppCompatActivity {
         mainContent.addView(tabContentArea, tabContentParams);
         mountShell(isPortraitConfiguration());
         
-        // WebServerManager'ı başlat
-        webServerManager = new WebServerManager(this);
-        webServerManager.setListener(new WebServerManager.WebServerListener() {
+        // Web sunucusu süreç genelinde tek örnektir (WebServerHub); bu ekran yalnızca durumunu gösterir ve
+        // etkinlik gerektiren işleri (APK kurma, uygulama silme/açma) üstlenir. Ekran kapanınca sunucu durmaz.
+        webServerHub = WebServerHub.get(this);
+        webServerStateListener = new WebServerHub.StateListener() {
             @Override
-            public void onServerStarted(int port, String localIp) {
-                handler.post(() -> {
-                    String serverUrl = "http://" + localIp + ":" + port;
-                    currentServerUrl = serverUrl;
-                    if (webServerStatusText != null) {
-                        webServerStatusText.setText(serverUrl);
-                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.accentHighlight));
-                    }
-                    if (btnWebServerToggle != null) {
-                        btnWebServerToggle.setText(R.string.web_server_stop);
-                    }
-                    // QR kod oluştur
-                    if (fileUploadTabBuilder != null) fileUploadTabBuilder.generateQRCode(serverUrl);
-                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
-                    log("Web Server başlatıldı: " + serverUrl);
-                });
-            }
-
-            @Override
-            public void onServerStopped() {
-                handler.post(() -> {
-                    if (webServerStatusText != null) {
-                        webServerStatusText.setText(R.string.web_server_stopped);
-                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.textDialogButtonSecondary));
-                    }
-                    if (qrCodeImageView != null) {
-                        qrCodeImageView.setVisibility(android.view.View.GONE);
-                    }
-                    if (fileUploadTabBuilder != null) fileUploadTabBuilder.hidePairQr();
-                    if (btnWebServerToggle != null) {
-                        btnWebServerToggle.setText(R.string.web_server_start);
-                    }
-                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
-                    currentServerUrl = null;
-                    log("Web Server durduruldu");
-                });
-            }
-
-            @Override
-            public void onError(String error) {
-                handler.post(() -> {
-                    if (webServerStatusText != null) {
-                        webServerStatusText.setText(getString(R.string.common_error_prefix, error));
-                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.statusErrorBright));
-                    }
-                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
-                    log("Web Server hatası: " + error);
-                });
-            }
-
-            @Override
-            public void onInstallApk(String fileName) {
-                handler.post(() -> {
-                    if (appsTabBuilder != null) appsTabBuilder.installApkFile(fileName);
-                });
-            }
-
-            @Override
-            public void onDeleteApp(String packageName) {
-                handler.post(() -> {
-                    if (appsTabBuilder != null) appsTabBuilder.deleteApp(packageName);
-                });
-            }
-
-            @Override
-            public void onLaunchApp(String packageName) {
-                handler.post(() -> {
-                    if (appsTabBuilder != null) appsTabBuilder.launchApp(packageName);
-                });
+            public void onStateChanged(WebServerHub.State state) {
+                renderWebServerState(state);
             }
 
             @Override
             public void onLog(String message) {
-                handler.post(() -> {
-                    log(message);
-                });
+                log(message);
+            }
+        };
+        webServerActionHost = new WebServerHub.ActionHost() {
+            @Override
+            public void installApk(String fileName) {
+                if (appsTabBuilder != null) appsTabBuilder.installApkFile(fileName);
             }
 
             @Override
-            public void onOpenMapUrl(String url) {
-                handler.post(() -> {
-                    try {
-                        String u = url != null ? url.trim() : "";
-                        if (u.isEmpty()) {
-                            return;
-                        }
-                        // Google Haritalar bağlantısı: tarayıcı seçicisine düşmeden doğrudan Google Haritalar'a ver.
-                        if (MapsLink.isGoogleMaps(u) && openGoogleMapsLink(u)) {
-                            return;
-                        }
-                        openLinkViaSystem(u);
-                    } catch (Exception e) {
-                        Toast.makeText(MainActivity.this,
-                                "Link açılamadı: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                        log("Link açma hatası: " + e.getMessage());
-                    }
-                });
+            public void deleteApp(String packageName) {
+                if (appsTabBuilder != null) appsTabBuilder.deleteApp(packageName);
             }
 
             @Override
-            public void onTypeKeyboardText(String text, boolean showDeviceFeedback) {
-                handler.post(() -> {
-                    if (!GlobalBackService.isRegisteredInSystemAccessibilitySettings(MainActivity.this)) {
-                        if (showDeviceFeedback) {
-                            Toast.makeText(MainActivity.this,
-                                    "Ayarlar > Erişilebilirlik: Global Back servisini açın; diğer uygulamada girdi alanının odaklı olması gerekir.",
-                                    Toast.LENGTH_LONG).show();
-                        }
-                        return;
-                    }
-                    if (GlobalBackService.typeIntoFocusedField(MainActivity.this, text)) {
-                        if (showDeviceFeedback) {
-                            Toast.makeText(MainActivity.this, R.string.web_text_sent, Toast.LENGTH_SHORT).show();
-                        }
-                    } else {
-                        if (showDeviceFeedback) {
-                            Toast.makeText(MainActivity.this,
-                                    "Metin eklenemedi. Hedef uygulamada arama/Metin alanına bir kez dokunup odağın açık olduğundan emin olun (bazı uygulamalar ağaçta desteklemez).",
-                                    Toast.LENGTH_LONG).show();
-                        }
-                    }
-                });
+            public void launchApp(String packageName) {
+                if (appsTabBuilder != null) appsTabBuilder.launchApp(packageName);
             }
-        });
+        };
 
         // Web Yönetimi tab içeriği
-        fileUploadTabBuilder = new FileUploadTabBuilder(this, webServerManager);
+        fileUploadTabBuilder = new FileUploadTabBuilder(this, webServerHub);
         fileUploadScrollView = fileUploadTabBuilder.getScrollView();
         btnWebServerToggle = fileUploadTabBuilder.getToggleButton();
         webServerStatusText = fileUploadTabBuilder.getStatusText();
@@ -899,7 +801,7 @@ public class MainActivity extends AppCompatActivity {
 
         vehicleMetricsRepository = new VehicleMetricsRepository(getApplicationContext());
         headerStatusMonitor = new HeaderStatusMonitor(this, topBarBuilder,
-                () -> webServerManager != null && webServerManager.isRunning());
+                () -> webServerHub != null && webServerHub.isRunning());
         if (activityStarted) headerStatusMonitor.start();
         // Onbellek yalnizca dinleyici varken doluyordu; hiz overlay'i (ve launcher)
         // icin izlemeyi bastan acik tut (VDBus olay gudumlu, hafif).
@@ -941,6 +843,9 @@ public class MainActivity extends AppCompatActivity {
         appsTabContent = MainActivity.this.appsTabBuilder.getTabContent();
         apkSessionListener = (status, message) -> handler.post(() -> onApkSessionStatus(status, message));
         ApkSessionInstaller.setListener(apkSessionListener);
+        webServerHub.addStateListener(webServerStateListener);
+        webServerHub.setActionHost(webServerActionHost);
+        consumeInstallApkExtra(getIntent());
 
         // Ayarlar tab içeriği (Builder) — initializeApp içinde bir kez oluşturulur
         settingsTabBuilder = new SettingsTabBuilder(this, prefs,
@@ -1668,11 +1573,62 @@ public class MainActivity extends AppCompatActivity {
 
     /** Kullanıcı Web Yönetimi'nde otomatik başlatmayı seçtiyse sunucuyu açar; varsayılan kapalı. */
     private void startWebServerIfPreferred() {
-        if (webServerManager != null && !webServerManager.isRunning()
-                && getSharedPreferences("MapControlPrefs", MODE_PRIVATE)
-                        .getBoolean(FileUploadTabBuilder.KEY_WEB_SERVER_AUTO_START, false)) {
-            webServerManager.startServer();
+        if (webServerHub != null) {
+            webServerHub.startIfPreferred();
         }
+    }
+
+    /** Web sunucusu durumunu Aktar sekmesine ve başlığa yansıtır (ana iş parçacığında). */
+    private void renderWebServerState(WebServerHub.State state) {
+        if (state.error != null) {
+            if (webServerStatusText != null) {
+                webServerStatusText.setText(getString(R.string.common_error_prefix, state.error));
+                webServerStatusText.setTextColor(UiStyles.color(this, R.color.statusErrorBright));
+            }
+        } else if (state.running) {
+            if (webServerStatusText != null) {
+                webServerStatusText.setText(state.url);
+                webServerStatusText.setTextColor(UiStyles.color(this, R.color.accentHighlight));
+            }
+            if (btnWebServerToggle != null) {
+                btnWebServerToggle.setText(R.string.web_server_stop);
+            }
+            // QR kod oluştur
+            if (fileUploadTabBuilder != null && state.url != null) fileUploadTabBuilder.generateQRCode(state.url);
+        } else {
+            if (webServerStatusText != null) {
+                webServerStatusText.setText(R.string.web_server_stopped);
+                webServerStatusText.setTextColor(UiStyles.color(this, R.color.textDialogButtonSecondary));
+            }
+            if (qrCodeImageView != null) {
+                qrCodeImageView.setVisibility(android.view.View.GONE);
+            }
+            if (fileUploadTabBuilder != null) fileUploadTabBuilder.hidePairQr();
+            if (btnWebServerToggle != null) {
+                btnWebServerToggle.setText(R.string.web_server_start);
+            }
+        }
+        if (headerStatusMonitor != null) headerStatusMonitor.refresh();
+    }
+
+    /**
+     * Web panelinden yüklenen APK, FrostNav ekranı yokken buraya yönlendirilir ({@link #EXTRA_INSTALL_APK}); kurulum
+     * ekran hazır olunca yapılır (yasal uyarı onaylanmadıysa extra bekler).
+     */
+    private void consumeInstallApkExtra(Intent intent) {
+        if (intent == null || appsTabBuilder == null) {
+            return;
+        }
+        if (!intent.hasExtra(EXTRA_INSTALL_APK)) {
+            return;
+        }
+        intent.removeExtra(EXTRA_INSTALL_APK);
+        // Extra'nın değeri yok sayılır: dışarıdan gelen sahte intent hiçbir şey kuramaz.
+        String fileName = webServerHub != null ? webServerHub.takePendingInstall() : null;
+        if (fileName == null || fileName.isEmpty() || fileName.contains("/") || fileName.contains("..")) {
+            return;
+        }
+        appsTabBuilder.installApkFile(fileName);
     }
 
     // QR üretimi `FileUploadTabBuilder.generateQRCode()` içine taşındı.
@@ -1693,6 +1649,7 @@ public class MainActivity extends AppCompatActivity {
             openHomeLauncher();
             return;
         }
+        consumeInstallApkExtra(intent);
         applyOpenTabExtra(intent);
     }
 
@@ -1941,16 +1898,7 @@ public class MainActivity extends AppCompatActivity {
                     btnWebServerToggle = fileUploadTabBuilder.getToggleButton();
                     webServerStatusText = fileUploadTabBuilder.getStatusText();
                     qrCodeImageView = fileUploadTabBuilder.getQrImageView();
-                    if (webServerManager != null && webServerManager.isRunning()) {
-                        if (btnWebServerToggle != null) {
-                            btnWebServerToggle.setText(R.string.web_server_stop);
-                        }
-                        if (webServerStatusText != null) {
-                            webServerStatusText.setTextColor(UiStyles.color(this, R.color.accentHighlight));
-                            if (currentServerUrl != null) webServerStatusText.setText(currentServerUrl);
-                        }
-                        if (currentServerUrl != null) fileUploadTabBuilder.generateQRCode(currentServerUrl);
-                    }
+                    if (webServerHub != null) renderWebServerState(webServerHub.state());
                 }
                 break;
             case 2:
@@ -2478,12 +2426,17 @@ public class MainActivity extends AppCompatActivity {
         // Kilit dinleyicileri launcher'a ait; burada yalnızca dinleyen kalmadıysa takip durdurulur.
         VehicleQuickControls.getInstance(getApplicationContext()).release();
         super.onDestroy();
-        // WebServerManager'ı durdur
+        // Launcher kullanılıyorsa web sunucusu durdurulmaz (süreç genelinde, launcher'dan da yönetilir); yalnızca bu ekranın bağları kopar.
         if (vehicleMetricsRepository != null && webServerPowerListener != null) {
             vehicleMetricsRepository.removeListener(webServerPowerListener);
         }
-        if (webServerManager != null) {
-            webServerManager.stopServer();
+        if (webServerHub != null) {
+            webServerHub.removeStateListener(webServerStateListener);
+            webServerHub.clearActionHost(webServerActionHost);
+            // Launcher kullanılmıyorsa eski davranış: FrostNav kapanınca sunucu da durur.
+            if (!isChangingConfigurations() && !LauncherModeManager.isActive(this)) {
+                webServerHub.stop();
+            }
         }
         // KeyEvent logcat thread'ini temizle
         keyEventLogcatRunning = false;
@@ -2596,137 +2549,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             log("loadTargetPackage hatası: " + e.getMessage());
         }
-    }
-
-    /**
-     * Aynı host’ta /q açılırken /maps gibi yollarda Yandex Haritalar (veya App Link) intent’i alıp
-     * ekran göstermeyebiliyor; doğrudan tarayıcı hiç seçilmiyor. Bu URL’lerde önce seçici gösterilir.
-     */
-    /** Bağlantıyı sistemin seçtiği uygulamayla açar; bazı harita bağlantılarında önce seçici gösterir. */
-    private void openLinkViaSystem(String u) {
-        try {
-            Uri uri = Uri.parse(u);
-            Intent i = new Intent(Intent.ACTION_VIEW, uri);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            String scheme = uri.getScheme();
-            if (scheme != null
-                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
-                i.addCategory(Intent.CATEGORY_BROWSABLE);
-            }
-            if (shouldShowChooserToPickBrowserOrMaps(uri)) {
-                // Yandex /maps, goo.gl harita kısası: önce tek hedef uyg. sessizce çalışıp
-                // ekran göstermeyebiliyor; listeden tarayıcı seçilebilir.
-                Intent chooser = Intent.createChooser(i, "Linki aç (tarayıcı önerilir)");
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(chooser);
-            } else {
-                try {
-                    startActivity(i);
-                } catch (android.content.ActivityNotFoundException noHandler) {
-                    Intent chooser = Intent.createChooser(i, "Bağlantıyı aç");
-                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(chooser);
-                }
-            }
-        } catch (Exception e) {
-            Toast.makeText(MainActivity.this, "Link açılamadı: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            log("Link açma hatası: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Google Haritalar bağlantısını doğrudan Google Haritalar'a verir (açık paket adıyla, seçici yok).
-     * Sırayla dener: bağlantının kendisi, koordinat varsa rota/konum, yer adı varsa arama. Kısa bağlantıda
-     * (maps.app.goo.gl) koordinat bağlantıda yoktur; yönlendirme arka planda çözülür.
-     *
-     * @return Google Haritalar kurulu değilse false (çağıran sistemin yoluna döner); aksi halde true
-     */
-    private boolean openGoogleMapsLink(String u) {
-        if (!isPackageInstalled(AppLaunchHelper.GOOGLE_MAPS_PACKAGE)) {
-            log("Google Haritalar kurulu değil; sistem yoluyla açılıyor");
-            return false;
-        }
-        if (startGoogleMaps(Uri.parse(u), "bağlantı")) {
-            return true;
-        }
-        if (openGoogleMapsTarget(u)) {
-            return true;
-        }
-        if (MapsLink.isShortLink(u)) {
-            log("Kısa bağlantı çözülüyor: " + u);
-            new Thread(() -> {
-                String resolved = MapsLink.resolve(u);
-                handler.post(() -> {
-                    log("Kısa bağlantı çözüldü: " + resolved);
-                    if (!resolved.equals(u) && (startGoogleMaps(Uri.parse(resolved), "çözülen bağlantı")
-                            || openGoogleMapsTarget(resolved))) {
-                        return;
-                    }
-                    openLinkViaSystem(u);
-                });
-            }, "MapsLinkResolve").start();
-            return true;
-        }
-        return false;
-    }
-
-    /** Bağlantıdan koordinat ya da yer adı çıkarıp Google Haritalar'ın anladığı bir adresle açar. */
-    private boolean openGoogleMapsTarget(String url) {
-        double[] c = MapsLink.coordinates(url);
-        if (c != null) {
-            return startGoogleMaps(Uri.parse(MapsLink.navigationUri(c[0], c[1])), "rota")
-                    || startGoogleMaps(Uri.parse(MapsLink.geoUri(c[0], c[1])), "konum");
-        }
-        String name = MapsLink.placeName(url);
-        return name != null && startGoogleMaps(Uri.parse(MapsLink.searchUri(name)), "yer araması");
-    }
-
-    private boolean startGoogleMaps(Uri uri, String what) {
-        Intent i = new Intent(Intent.ACTION_VIEW, uri);
-        i.setPackage(AppLaunchHelper.GOOGLE_MAPS_PACKAGE);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        String scheme = uri.getScheme();
-        if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
-            i.addCategory(Intent.CATEGORY_BROWSABLE);
-        }
-        List<ResolveInfo> handlers = getPackageManager().queryIntentActivities(i, 0);
-        if (handlers.isEmpty()) {
-            // Hangi biçimleri anladığı araçta bilinmediği için tanı kaydı: Günlük sekmesinde görünür.
-            log("Google Haritalar bu biçimi açmıyor (" + what + "): " + uri.getScheme() + ":");
-            return false;
-        }
-        try {
-            startActivity(i);
-            log("Google Haritalar'a verildi (" + what + "): " + uri);
-            return true;
-        } catch (Exception e) {
-            log("Google Haritalar açılamadı (" + what + "): " + e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean isPackageInstalled(String packageName) {
-        try {
-            getPackageManager().getApplicationInfo(packageName, 0);
-            return true;
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
-        }
-    }
-
-    private static boolean shouldShowChooserToPickBrowserOrMaps(Uri uri) {
-        if (uri == null) {
-            return false;
-        }
-        String h = uri.getHost() != null ? uri.getHost().toLowerCase() : "";
-        String p = uri.getPath() != null ? uri.getPath().toLowerCase() : "";
-        if (h.contains("yandex") && p.contains("maps")) {
-            return true;
-        }
-        if (h.equals("maps.app.goo.gl")) {
-            return true;
-        }
-        return false;
     }
 
     // App operations moved to `AppsTabBuilder`.

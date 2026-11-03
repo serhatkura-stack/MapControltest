@@ -456,8 +456,9 @@ internal class QrView(context: Context) : View(context) {
 internal data class WebLoad(val state: WebPanelState, val qr: QrMatrix?)
 
 /**
- * "Web paneli": FrostNav web yönetim sunucusunun durumu; açıkken adresin QR'ı ve adres. Sunucu FrostNav ekranına bağlı
- * olduğundan ([AppFrostNavFeatures]) başlatma/durdurma FrostNav'ın "Aktar" sekmesinde yapılır: kapalıyken dokunuş oraya götürür.
+ * "Web paneli": FrostNav web yönetim sunucusunun durumu; açıkken adresin QR'ı ve adres. Kapalıyken dokunuş (ve paneldeki
+ * "Başlat") sunucuyu yerinde başlatır; başlatılamazsa kısa mesajla FrostNav'ın "Aktar" sekmesi açılır. Yönetim (durdurma,
+ * eşleme) "FrostNav'da yönet" ile. Durum değişince izleyiciyle ([FrostNavFeatures.watchWebPanel]) hemen yenilenir.
  * Şerit: durum + küçük QR simgesi; açıkken dokunuş büyük QR sayfasını açar. Panel: büyük QR.
  */
 internal class WebPanelTile(activity: Activity) :
@@ -465,6 +466,39 @@ internal class WebPanelTile(activity: Activity) :
 
     private var qrUrl: String? = null
     private var qrCache: QrMatrix? = null
+    private var starting = false
+    private var unwatch: (() -> Unit)? = null
+
+    override fun onVisible() {
+        super.onVisible()
+        unwatch?.invoke()
+        unwatch = if (features.available) features.watchWebPanel { refresh() } else null
+    }
+
+    override fun onHidden() {
+        unwatch?.invoke()
+        unwatch = null
+        super.onHidden()
+    }
+
+    /** Sunucuyu yerinde başlatır; olmazsa nedeni söyleyip FrostNav'ın Aktar sekmesini açar. */
+    private fun start() {
+        if (starting) return
+        starting = true
+        redraw()
+        features.setWebPanel(true) { msg ->
+            starting = false
+            redraw()
+            refresh()
+            if (msg != null) {
+                toast(msg)
+                openSettings()
+            }
+        }
+    }
+
+    private fun startLabel(): String =
+        activity.getString(if (starting) R.string.launcher_fn_web_starting else R.string.launcher_fn_web_start)
 
     override fun load(): WebLoad {
         val s = features.readWebPanel()
@@ -489,7 +523,7 @@ internal class WebPanelTile(activity: Activity) :
     override fun buildCompact(): View {
         val s = state?.state
         if (s == null || !s.running) return compact(activity.getString(R.string.launcher_toggle_off), LauncherTheme.TEXT_SECONDARY,
-            activity.getString(R.string.launcher_fn_web_start))
+            startLabel())
         return compact(activity.getString(R.string.launcher_toggle_on), LauncherTheme.ACCENT, s.url?.removePrefix("http://"),
             leading = if (state?.qr != null) qrView() else null)
     }
@@ -515,7 +549,7 @@ internal class WebPanelTile(activity: Activity) :
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = activity.dp(16) })
             addView(View(activity), LinearLayout.LayoutParams(1, 0, 1f))
-            addView(pill(activity.getString(R.string.launcher_fn_web_start), primary = true) { openSettings() },
+            addView(pill(startLabel(), primary = true) { start() },
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { gravity = Gravity.CENTER_HORIZONTAL })
             return@largeFrame
         }
@@ -532,7 +566,11 @@ internal class WebPanelTile(activity: Activity) :
     }
 
     override fun onTap() {
-        if (running && state?.qr != null) openSheet() else openSettings()
+        when {
+            running && state?.qr != null -> openSheet()
+            running -> openSettings()
+            else -> start()
+        }
     }
 
     override fun buildSheet(box: LinearLayout, dialog: Dialog) {
@@ -560,7 +598,7 @@ internal class WebPanelTile(activity: Activity) :
         return StripState(activity.getString(labelRes),
             activity.getString(if (on) R.string.launcher_toggle_on else R.string.launcher_toggle_off),
             iconRes, if (on) StripTone.ON else StripTone.NORMAL,
-            detail = if (on) s?.url else activity.getString(R.string.launcher_fn_web_start), active = on)
+            detail = if (on) s?.url else startLabel(), active = on)
     }
 
     private companion object {
