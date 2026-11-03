@@ -207,4 +207,8 @@
     <string name="launcher_air_row_in">Cabin PM2.5</string>
     <string name="launcher_air_row_out">Outside PM2.5</string>
     <string name="launcher_air_ugm" formatted="true">%1$d µg/m³</string>
+    <string name="launcher_favorite_key">Favorite key (steering wheel)</string>
+    <string name="launcher_favorite_key_off">Off</string>
+    <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
+    <string name="launcher_favorite_key_missing">%1$s is not installed</string>
 </resources>

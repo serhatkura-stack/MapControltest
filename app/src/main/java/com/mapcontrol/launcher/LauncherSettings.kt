@@ -121,6 +121,12 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             LauncherTheme.LABEL_SP, SWATCH_DP) { d.dismiss() }, fullWidth())
 
         if (appearanceOnly) return
+
+        addView(gap(activity, 12, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_favorite_key) }, fullWidth())
+        addView(gap(activity, 12, vertical = true))
+        addView(favoriteKeySegments(d), fullWidth())
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
@@ -278,6 +284,42 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                         if (mode != current) {
                             LauncherBottomBar.setMode(activity, mode)
                             ThemeTransition.recreate(activity)
+                        }
+                    }
+                    pressFeedback()
+                }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
+            }
+        }
+    }
+
+    /**
+     * "Favori tuşu": direksiyondaki favori tuşa kısa basınca ne açılacağı (Kapalı | Yandex Navi | ...). Ekran yeniden
+     * kurulmaz; dinleyici hemen yeni seçime geçer (Kapalı'da VDBus aboneliği bırakılır).
+     */
+    private fun favoriteKeySegments(d: Dialog): View {
+        val current = FavoriteKeyPrefs.get(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
+            val p = activity.dp(6)
+            setPadding(p, p, p, p)
+            FavoriteAction.values().forEachIndexed { i, action ->
+                if (i > 0) addView(gap(activity, 6))
+                val selected = action == current
+                addView(text(activity, LauncherTheme.BODY_SP,
+                    if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+                    setText(action.label)
+                    gravity = Gravity.CENTER
+                    if (selected) background = rounded(activity, LauncherTheme.ACCENT, SEGMENT_RADIUS_DP - 4)
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = activity.getString(R.string.launcher_favorite_key) + ": " + activity.getString(action.label)
+                    setOnClickListener {
+                        d.dismiss()
+                        if (action != current) {
+                            FavoriteKeyPrefs.set(activity, action)
+                            FavoriteKey.sync(activity)
                         }
                     }
                     pressFeedback()

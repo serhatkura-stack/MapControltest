@@ -207,4 +207,8 @@
     <string name="launcher_air_row_in">Kabin içi PM2.5</string>
     <string name="launcher_air_row_out">Dışarı PM2.5</string>
     <string name="launcher_air_ugm" formatted="true">%1$d µg/m³</string>
+    <string name="launcher_favorite_key">Favori tuşu (direksiyon)</string>
+    <string name="launcher_favorite_key_off">Kapalı</string>
+    <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
+    <string name="launcher_favorite_key_missing">%1$s kurulu değil</string>
 </resources>

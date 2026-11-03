@@ -204,6 +204,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherBottomBar.logResult(this)
         appliedSignature = HomeScreenPrefs.signature(this)
         if (pendingEdit) openPendingEdit()
+        // Favori tuşu: etkinlik ömrü boyunca dinlenir (HOME etkinliği başka uygulama öndeyken de yaşar, yalnızca durur).
+        FavoriteKey.sync(this)
     }
 
     /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */
@@ -526,6 +528,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         fixedWidgets.forEach { it.onVisible() }
         gridWidgets.values.forEach { it.onVisible() }
         sahne?.onVisible()
+        // Ana ekrana dönüş: araç uykusunda düşmüş olabilecek favori tuşu aboneliği tazelenir.
+        FavoriteKey.refresh()
     }
 
     override fun onResume() {
@@ -583,6 +587,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         settings.release()
         dataCheckExtra?.release()
         dataCheckExtra = null
+        FavoriteKey.stop(this)
         super.onDestroy()
     }
 
