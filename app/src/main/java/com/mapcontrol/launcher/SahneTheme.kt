@@ -48,19 +48,29 @@ object HomeStylePrefs {
 object Sahne {
     private val n get() = LauncherTheme.night
 
-    /** Zemin: düz renk ve dikey gradyanın üç durağı. */
-    val GROUND: Int get() = if (n) 0xFF05070A.toInt() else 0xFFE4E2DD.toInt()
-    val GROUND_TOP: Int get() = if (n) 0xFF080B10.toInt() else 0xFFEFEEEA.toInt()
-    val GROUND_MID: Int get() = if (n) 0xFF05070A.toInt() else 0xFFE6E4DF.toInt()
-    val GROUND_BOTTOM: Int get() = if (n) 0xFF040508.toInt() else 0xFFDAD8D2.toInt()
-    /** Ortadaki ve üstteki yumuşak ortam ışığı (radyal, merkezde bu renk, kenarda saydam). */
-    val AMBIENT_CENTER: Int get() = if (n) 0x335C769E else 0x73FFFDF8
-    val AMBIENT_TOP: Int get() = if (n) 0x383C4E68 else 0xE6FFFFFF.toInt()
+    /**
+     * Zemin: düz renk ve dikey gradyanın üç durağı. Gece saf siyah: aracın kendi alt çubuğunun çevresi (yanlar, üstündeki
+     * 610–628 bandı, altı) #000000; zemin de aynı olunca çubukla launcher arasında bant farkı kalmaz. Paneller tonla ayrılır.
+     */
+    val GROUND: Int get() = if (n) 0xFF000000.toInt() else 0xFFE4E2DD.toInt()
+    val GROUND_TOP: Int get() = if (n) 0xFF000000.toInt() else 0xFFEFEEEA.toInt()
+    val GROUND_MID: Int get() = if (n) 0xFF000000.toInt() else 0xFFE6E4DF.toInt()
+    val GROUND_BOTTOM: Int get() = if (n) 0xFF000000.toInt() else 0xFFDAD8D2.toInt()
+    /**
+     * Ortadaki ve üstteki yumuşak ortam ışığı (radyal, merkezde bu renk, kenarda saydam). Gece yok (saydam): zemin her
+     * yerde saf siyah kalsın; araç altındaki ışık havuzu sahnenin kendi zemin çiziminde (SahneStage.FloorView) durur.
+     */
+    val AMBIENT_CENTER: Int get() = if (n) 0x00000000 else 0x73FFFDF8
+    val AMBIENT_TOP: Int get() = if (n) 0x00000000 else 0xE6FFFFFF.toInt()
 
     val INK: Int get() = if (n) 0xFFEEF2F7.toInt() else 0xFF111419.toInt()
-    val INK_2: Int get() = if (n) 0xB8E4ECF6.toInt() else 0xBD111419.toInt()
-    /** İkincil yazı (etiket, alt satır): gece ~7,5:1, gündüz ~7:1 kontrast (opak). */
-    val INK_3: Int get() = if (n) 0xFFA1A8B3.toInt() else 0xFF55575C.toInt()
+    /** İkinci kademe mürekkep (birim, başlık): gece aracın alt çubuğundaki çelik mavisi ailesinden, [INK_3]'ten bir ton açık. */
+    val INK_2: Int get() = if (n) 0xFFB9C3D4.toInt() else 0xBD111419.toInt()
+    /**
+     * İkincil yazı (etiket, alt satır): gece aracın alt çubuğundaki ikon/sıcaklık yazısının çelik mavisi (#ABB7CA; siyah
+     * zeminde ~10:1, panel camında ~8:1), gündüz ~7:1 kontrast (opak). Mavi vurgu yalnızca etkin/birincil öğede kalır.
+     */
+    val INK_3: Int get() = if (n) 0xFFABB7CA.toInt() else 0xFF55575C.toInt()
     /** Büyük rakamlar (menzil, saat, sıcaklık): gece kâğıt beyazı yerine gri-beyaz (karanlık uyumu bozulmasın). */
     val NUMERAL: Int get() = if (n) 0xFFDCE1E8.toInt() else INK
     /** Açık kapı / bagaj / kaput uyarısı (sahne satırı, Bagaj "Açık"). */
@@ -92,13 +102,24 @@ object Sahne {
 
     /**
      * Başlık ve alt çubuk denetimleri (sahibinin isteği): gecede panellerden bir ton açık cam, net 1dp üst parıltı,
-     * belirgin kenar ve ~%85 beyaz ikonlar; gündüz panel camıyla aynı.
+     * belirgin kenar ve ~%85 beyaz ikonlar; gündüz panel camıyla aynı. Bu jetonlar alt çubuğumuzda da kullanılır.
      */
     val CONTROL_TOP: Int get() = if (n) 0xFF252C37.toInt() else GLASS_TOP
     val CONTROL_BOTTOM: Int get() = if (n) 0xFF161B23.toInt() else GLASS_BOTTOM
     val CONTROL_BORDER: Int get() = if (n) 0x29FFFFFF else GLASS_BORDER
     val CONTROL_HIGHLIGHT: Int get() = if (n) 0x40FFFFFF else GLASS_HIGHLIGHT
     val CONTROL_ICON: Int get() = if (n) 0xD9FFFFFF.toInt() else INK_2
+    /**
+     * Başlık ve şerit ikonları (yalnızca bunlar; alt çubuğumuz [CONTROL_ICON]'da kalır): gece aracın alt çubuk ikonlarıyla
+     * aynı çelik mavisi (#AEB9CC); gündüz [CONTROL_ICON] ile aynı.
+     */
+    val HEADER_ICON: Int get() = if (n) 0xFFAEB9CC.toInt() else INK_2
+    /** Başlıkta kapalı durumdaki ikon (Bluetooth kapalı): gece [HEADER_ICON]'un %65'i, açık/bağlı halinden belirgin sönük (~3,4:1). */
+    val HEADER_ICON_OFF: Int get() = if (n) 0xA6AEB9CC.toInt() else INK_3
+    /** Başlıktaki tarih ve hava etiketi: gece [INK_2] çelik mavisi (siyah zeminde ~11:1); gündüz [HEADER_DATE] ile aynı. */
+    val HEADER_SUB: Int get() = if (n) INK_2 else HEADER_DATE
+    /** Şerit kutuları arasındaki ince çizgi: gece çelik mavisi %25 (siyah zeminde kutular bir grup okunsun); gündüz [HAIR_2]. */
+    val STRIP_HAIR: Int get() = if (n) 0x40ABB7CA else HAIR_2
     /** Gece başlıktaki saat/tarih: tam ve %85 mürekkep (ince saat koyu zeminde silik kalmasın). */
     val HEADER_DATE: Int get() = if (n) 0xD9EEF2F7.toInt() else INK_2
 
@@ -137,7 +158,6 @@ object Sahne {
 
     /** Biçim dili: kaplar (panel, şerit, alt çubuk, sayfa) 24dp, içlerindeki denetimler 16dp, haplar tam yuvarlak. */
     const val PANEL_RADIUS_DP = 24f
-    const val STRIP_RADIUS_DP = 24f
     const val SQUARE_RADIUS_DP = 16f
     const val CONTROL_RADIUS_DP = 16f
     const val PILL_RADIUS_DP = 999f
@@ -208,6 +228,8 @@ class GlassDrawable(
     private val rect = RectF()
     private val inner = RectF()
     private var radius = 0f
+    /** Gece gölge yok (zemin saf siyah, paneller tonla ayrılır); gündüz [shadow] gücünde. [refresh]'te güncellenir. */
+    private var shadowOn = false
 
     init { refresh() }
 
@@ -219,7 +241,8 @@ class GlassDrawable(
         highlight.strokeWidth = d
         shadowPaint.color = Sahne.GLASS_BOTTOM
         tightPaint.color = Sahne.GLASS_BOTTOM
-        if (shadow > 0f) {
+        shadowOn = shadow > 0f && !LauncherTheme.night
+        if (shadowOn) {
             shadowPaint.setShadowLayer(22f * d * shadow, 0f, 14f * d * shadow, Sahne.SHADOW)
             tightPaint.setShadowLayer(4f * d * shadow, 0f, 2f * d * shadow, Sahne.SHADOW_TIGHT)
         } else {
@@ -246,7 +269,7 @@ class GlassDrawable(
     }
 
     override fun draw(canvas: Canvas) {
-        if (shadow > 0f) {
+        if (shadowOn) {
             canvas.drawRoundRect(rect, radius, radius, shadowPaint)
             canvas.drawRoundRect(rect, radius, radius, tightPaint)
         }
@@ -269,6 +292,9 @@ class SahneGround : Drawable() {
     private val base = Paint()
     private val center = Paint(Paint.ANTI_ALIAS_FLAG)
     private val top = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** Ortam ışıkları saydamsa (gece) tam ekran radyal çizim atlanır. */
+    private var drawCenter = false
+    private var drawTop = false
 
     override fun onBoundsChange(b: Rect) {
         val w = b.width().toFloat()
@@ -281,13 +307,15 @@ class SahneGround : Drawable() {
         // CSS radial-gradient(900px 420px at ...): ölçüler yarıçaptır.
         center.shader = ellipse(w / 2f, (if (LauncherTheme.night) 360f else 380f) * s, 900f * s, (if (LauncherTheme.night) 420f else 400f) * s, Sahne.AMBIENT_CENTER, if (LauncherTheme.night) 0.70f else 0.72f)
         top.shader = ellipse(w / 2f, (if (LauncherTheme.night) -120f else -170f) * s, (if (LauncherTheme.night) 1400f else 1500f) * s, (if (LauncherTheme.night) 500f else 480f) * s, Sahne.AMBIENT_TOP, 0.70f)
+        drawCenter = Sahne.AMBIENT_CENTER ushr 24 != 0
+        drawTop = Sahne.AMBIENT_TOP ushr 24 != 0
     }
 
     override fun draw(canvas: Canvas) {
         val b = bounds
         canvas.drawRect(b, base)
-        canvas.drawRect(b, top)
-        canvas.drawRect(b, center)
+        if (drawTop) canvas.drawRect(b, top)
+        if (drawCenter) canvas.drawRect(b, center)
     }
 
     override fun setAlpha(alpha: Int) {}

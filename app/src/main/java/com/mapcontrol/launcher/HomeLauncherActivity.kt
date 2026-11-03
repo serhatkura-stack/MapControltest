@@ -192,8 +192,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             setContentView(FrameLayout(this).apply {
                 addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
                 addView(OemBarMock.build(this@HomeLauncherActivity).also { mockBar = it }, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, band - dp(12), Gravity.BOTTOM
-                ).apply { setMargins(dp(24), 0, dp(24), dp(6)) })
+                    FrameLayout.LayoutParams.MATCH_PARENT, minOf(band, dp(OemBarMock.BODY_DP)), Gravity.BOTTOM
+                ).apply { setMargins(dp(OemBarMock.SIDE_DP), 0, dp(OemBarMock.SIDE_DP), dp(OemBarMock.BOTTOM_GAP_DP)) })
             })
         } else {
             setContentView(root)

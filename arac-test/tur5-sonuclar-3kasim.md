@@ -31,6 +31,7 @@ APK: `~/chery/launcher-test-3kasim-c.apk` (feat/frostnav-embed 7e70412 + commit 
 - Favori tuş: fabrika değeri 9 = AVM. Basış bizim launcher'a ulaşıyor (`FavoriteKey`). Test sonunda fabrika değeri **13** (sessiz) yapıldı; geri alma `settings put global com.desaysv.vehiclesetting.key_custom_button 9`.
 - Sesli komut "haritayı göstergede göster": asistan uyandı ama `controlCluster` hiç gelmedi; Türkçe bu komut yok.
 - Ekran görüntüsü: aracın kendi aracı `/storage/emulated/0/ScreenShotCut_*.png` kaydediyor; orijinal alt bar giriyor, klima paneli girmiyor.
+- **Kadranın gizli tanı ekranı "ETM Data":** Mühendislik menüsü (Ayarlar → Sistem → mavi noktaya 10 kez) → **IVI ENGMODE** → ekran kadranda açılıyor. List 1–5: yakıt (depo 57 L), ODO, trip, rpm, soğutma suyu, akü, bakım tarihi, SW/HW, `FunCfg[0..15]`, `NetCfg[0..7]`. "IVI" bölümü Android'den gelenleri gösteriyor: `DisplayCluster`, `NaviStatus`, `NaviDisplayArea`, `LaneID`, `RoadIcon`, `Angle`, `MusicPlayStatus`. `nav_area` testi bu ekranla doğrulanır (NaviDisplayArea 0 → 9). Fotoğraf: `katalog/loglar/tur5-2026-11-03/kadran-ETM-data-2208.jpeg`.
 - Performans (boşta): launcher CPU %1–4, PSS 89 MB.
 
 ## Düzeltilecekler (Mac)

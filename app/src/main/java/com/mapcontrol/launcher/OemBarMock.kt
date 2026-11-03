@@ -1,7 +1,6 @@
 package com.mapcontrol.launcher
 
 import android.content.Context
-import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -12,19 +11,29 @@ import com.mapcontrol.R
  * Yalnızca hata ayıklama: Desay'ın uygulamaların üstüne çizdiği alt çubuğun görsel taklidi
  * (ana ekran · uygulamalar · araç · sıcaklık · fan · sıcaklık · ayarlar · telefon). Emülatörde ayrılan alt
  * bandın nasıl görüneceğini gösterir. Dokunulmaz; yalnızca `launcher_oem_inset` ekstrasıyla eklenir.
+ * Ölçüler araçtaki ekran görüntüsünden (katalog/oem-alt-cubuk-olculeri.md): 110 px pencerede görünen gövde y 628–708
+ * (üstte 18, altta 12 px boşluk), yanlarda 34 px; gövde #1D2026→#191D24, ikon ve sıcaklık yazısı çelik mavisi #ABB7CA.
  */
 object OemBarMock {
 
-    private const val BAR_ALPHA = 0xE6
+    /** Görünen gövdenin yüksekliği ve pencere altına uzaklığı (px = dp, 160 dpi). */
+    const val BODY_DP = 80
+    const val BOTTOM_GAP_DP = 12
+    const val SIDE_DP = 34
     private const val ICON_DP = 36
     private const val TEMP_SP = 22f
 
     fun build(context: Context): View {
-        val tint = 0xFFE5E7EB.toInt()
+        val tint = 0xFFABB7CA.toInt()
         val bar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(context, Color.argb(BAR_ALPHA, 0x0B, 0x0D, 0x11), 20f)
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF1D2026.toInt(), 0xFF191D24.toInt()),
+            ).apply {
+                cornerRadius = context.dp(20).toFloat()
+                setStroke(1, 0xFF36393C.toInt())
+            }
             setPadding(context.dp(32), 0, context.dp(32), 0)
             isClickable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS

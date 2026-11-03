@@ -406,14 +406,16 @@ class SahneScreen(
 
     // --- Şerit kabı ---
 
-    /** Tek cam şerit: yuvalar yan yana (genişlikleri türlerine göre), aralarında ince çizgi. */
+    /**
+     * Şerit: yuvalar yan yana (genişlikleri türlerine göre), aralarında ince çizgi. Ortak cam zemini yok: altta aracın kendi
+     * alt çubuğu da bir çubuk olduğundan, alt üçte birde üst üste iki ağır şerit durmasın diye kutular doğrudan zeminde durur.
+     */
     private inner class StripBar : LinearLayout(activity) {
         private val slots = arrayOfNulls<View>(STRIP_SLOTS)
         private val types = arrayOfNulls<WidgetType>(STRIP_SLOTS)
 
         init {
             orientation = HORIZONTAL
-            background = GlassDrawable(context, Sahne.STRIP_RADIUS_DP)
             setPadding(context.dp(10), 0, context.dp(10), 0)
             clipChildren = false
         }
@@ -435,7 +437,7 @@ class SahneScreen(
             slots.forEachIndexed { i, v ->
                 val view = v ?: View(context).also { slots[i] = it }
                 (view.parent as? ViewGroup)?.removeView(view)
-                if (i > 0) addView(View(context).apply { setBackgroundColor(Sahne.HAIR_2) },
+                if (i > 0) addView(View(context).apply { setBackgroundColor(Sahne.STRIP_HAIR) },
                     LayoutParams(context.dp(1), LayoutParams.MATCH_PARENT).apply { topMargin = context.dp(22); bottomMargin = context.dp(22) })
                 addView(view, LayoutParams(0, LayoutParams.MATCH_PARENT, stripWeight(types[i])))
             }

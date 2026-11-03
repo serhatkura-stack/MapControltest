@@ -283,7 +283,8 @@ internal class StripItemView(
             if (artKey != null || prev?.icon != s.icon || prev.iconDrawable != null) iconView.setImageResource(sahneIconFor(s.icon))
             artKey = null
             applyArtLook(false, false)
-            iconView.imageTintList = ColorStateList.valueOf(if (active) tint else Sahne.INK_2)
+            // Pasif çizgi ikon başlıktaki denetim ikonlarıyla aynı çelik mavisi; etkin tonlar kendi renginde.
+            iconView.imageTintList = ColorStateList.valueOf(if (active) tint else Sahne.HEADER_ICON)
             resizeIcon(SIZE_ICON)
         }
         title.text = s.title
@@ -294,7 +295,7 @@ internal class StripItemView(
         valueRow.visibility = if (s.value.isEmpty()) View.GONE else View.VISIBLE
         if (s.badge != 0) {
             badge.setImageResource(s.badge)
-            badge.imageTintList = ColorStateList.valueOf(Sahne.INK_2)
+            badge.imageTintList = ColorStateList.valueOf(Sahne.HEADER_ICON)
             badge.visibility = View.VISIBLE
         } else badge.visibility = View.GONE
         bindPips(s)

@@ -106,7 +106,8 @@ object LauncherTheme {
     /** Soğutma/havalandırma anlamı (bkz. [HEAT]). */
     val COOL: Int get() = if (sahne) Sahne.COOL else if (night) NIGHT_COOL else DAY_COOL
     val TEXT: Int get() = if (sahne) (if (night) 0xFFEEF2F7.toInt() else 0xFF111419.toInt()) else if (night) NIGHT_TEXT else DAY_TEXT
-    val TEXT_SECONDARY: Int get() = if (sahne) (if (night) 0xFFA7AFB7.toInt() else 0xFF4D4F53.toInt()) else if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
+    /** Sahne gecesinde ikincil yazı [Sahne.INK_3] ile aynı çelik mavisi (aracın alt çubuğuyla uyumlu). */
+    val TEXT_SECONDARY: Int get() = if (sahne) (if (night) Sahne.INK_3 else 0xFF4D4F53.toInt()) else if (night) NIGHT_TEXT_SECONDARY else DAY_TEXT_SECONDARY
 
     /** Alt çubuk yüzeyi, üst ve alt gradyan uçları (gece koyu, gündüz açık buzlu). */
     val DOCK_TOP: Int get() = if (sahne) Sahne.GLASS_TOP else if (night) NIGHT_DOCK_TOP else DAY_DOCK_TOP
@@ -120,7 +121,8 @@ object LauncherTheme {
      * Gündüz: [TEXT] rengi, ikincil %60, ayraç %10, basış %8, pasif iz %20 koyu.
      */
     val DOCK_TEXT: Int get() = if (sahne) Sahne.INK else if (night) 0xFFF5F7FA.toInt() else DAY_TEXT
-    val DOCK_TEXT_SECONDARY: Int get() = if (sahne) Sahne.INK_2 else if (night) 0xA6FFFFFF.toInt() else (DAY_TEXT and 0x00FFFFFF) or 0x99000000.toInt()
+    // Sahne gecesinde alt çubuğumuz eski ikincil tonunda (%72 açık mürekkep) kalır; çelik mavisi yalnızca başlık ve şeritte.
+    val DOCK_TEXT_SECONDARY: Int get() = if (sahne) (if (night) 0xB8E4ECF6.toInt() else Sahne.INK_2) else if (night) 0xA6FFFFFF.toInt() else (DAY_TEXT and 0x00FFFFFF) or 0x99000000.toInt()
     val DOCK_DIVIDER: Int get() = if (sahne) Sahne.HAIR_2 else if (night) 0x1AFFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x1A000000
     val DOCK_PRESS: Int get() = if (night) 0x1FFFFFFF else (DAY_TEXT and 0x00FFFFFF) or 0x14000000
     /** Pasif nokta/iz. */
