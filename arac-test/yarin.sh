@@ -3,7 +3,7 @@
 # Widget komut testi, launcher'daki "Widget'lardan araca yaz (test)" anahtarıyla elle yapılır.
 # Kullanım:
 #   ./yarin.sh baglan      cihaz + FrostNav paneli kontrolü
-#   ./yarin.sh yukle       launcher-perf2.apk'yı panele yükle (kurulum araçta: Uygulamalar → İndirilen dosyalar)
+#   ./yarin.sh yukle       $APK dosyasını panele yükle (kurulum araçta: Uygulamalar → İndirilen dosyalar)
 #   ./yarin.sh olc ETIKET  tema geçişi + soğuk açılış + kare/işlemci ölçümü (ETIKET: once / sonra / surus)
 #   ./yarin.sh gunluk      WidgetWrite + LauncherInfo + ThemeTiming günlüğünü canlı dosyaya yaz (Ctrl-C ile biter)
 #   ./yarin.sh kontak      kontak kapat-aç sonrası: launcher önde mi, süreç yeni mi, veri geliyor mu
@@ -14,7 +14,7 @@ SERIAL="${SERIAL:-449671d3}"
 ADB_BIN="$HOME/.local/toolchains/android-sdk/platform-tools/adb"
 PKG="com.mapcontrol.launchertest"
 ACT="$PKG/com.mapcontrol.launcher.HomeLauncherActivity"
-APK="/Users/serhat/chery/launcher-perf2.apk"
+APK="/Users/serhat/chery/launcher-test-3kasim-c.apk"
 OUT="/Users/serhat/chery/katalog/loglar/tur4-$(date +%Y%m%d)"
 mkdir -p "$OUT"
 adb() { "$ADB_BIN" -s "$SERIAL" "$@"; }
@@ -30,7 +30,7 @@ case "${1:-}" in
     adb forward tcp:7462 tcp:7462 >/dev/null
     shasum -a 256 "$APK" | cut -c1-16
     curl -s -m 120 -F "file=@$APK;type=application/vnd.android.package-archive" http://localhost:7462/upload; echo
-    echo "Araçta: FrostNav → Uygulamalar → İndirilen dosyalar → launcher-perf2.apk → Kur"
+    echo "Araçta: FrostNav → Uygulamalar → İndirilen dosyalar → $(basename "$APK") → Kur"
     ;;
   olc)
     E="${2:-olcum}"; F="$OUT/olc-$E-$(date +%H%M%S).txt"
