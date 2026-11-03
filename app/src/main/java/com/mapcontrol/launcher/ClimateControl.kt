@@ -165,13 +165,15 @@ internal class ClimateControl(
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                addView(text(context, if (sahne) 20f else LauncherTheme.LABEL_SP).apply {
-                    text = context.getString(shortRes)
-                    gravity = Gravity.CENTER
-                    if (sahne) SahneFonts.apply(this, 400)
-                    theme.bind { setTextColor(if (sahne) Sahne.HEADER_DATE else LauncherTheme.DOCK_TEXT_SECONDARY) }
-                })
-                addView(gap(context, 2, vertical = true))
+                // Sahne'de "Sürücü/Yolcu" etiketi yok: yeri sol/sağ belli, rakam tek başına durur.
+                if (!sahne) {
+                    addView(text(context, LauncherTheme.LABEL_SP).apply {
+                        text = context.getString(shortRes)
+                        gravity = Gravity.CENTER
+                        theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
+                    })
+                    addView(gap(context, 2, vertical = true))
+                }
                 addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
