@@ -49,12 +49,11 @@ object SahneForm {
         WidgetType.CLUSTER_MIRROR,
     )
 
-    /** Panel (büyük) için izinli türler, seçicideki sırayla. Koltuk her iki taraftan da panele konabilir. */
-    val PANEL_TYPES: List<WidgetType> = listOf(
-        WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.HEALTH, WidgetType.AIR, WidgetType.AWD,
-        WidgetType.PHOTO, WidgetType.CLOCK, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION,
-        WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR, WidgetType.BREAK_REMINDER, WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER,
-    )
+    /**
+     * Panel (büyük) için izinli türler, seçicideki sırayla: yalnız bu boyuta göre çizilmiş üç widget (4 Kasım kararı §2).
+     * Diğer türler Serbest ızgarada kalır; eski Sahne kayıtlarındaki yuvalar [SahneSlots.decode]'da yedeğe döner.
+     */
+    val PANEL_TYPES: List<WidgetType> = listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION)
 
     fun fitsPanel(type: WidgetType): Boolean = type in PANEL_TYPES
     fun fitsStrip(type: WidgetType): Boolean = type in STRIP_TYPES
@@ -194,7 +193,27 @@ object SahneSlots {
             return SahneSlot(id, type, f.getOrNull(2)?.ifEmpty { null })
         }
         val strip = parts[3].split(",").map { slot(it) }
-        return sanitize(migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip)))
+        val raw = migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip))
+        return fallbackPanels(raw, sanitize(raw))
+    }
+
+    /**
+     * Artık panelde izinli olmayan türdeki (ör. sağlık, hava, koltuk) bir yan paneli yedeğe çevirir: o tarafın varsayılanı
+     * (sol medya, sağ yolculuk) düzende başka yerde yoksa o, yoksa kullanılmayan diğer izinli panel türü, yoksa boş.
+     * Yalnız o yuvanın kaydı dolu ve türü izinsizse çalışır; bilinmeyen/boş yuvalar boş kalır.
+     */
+    private fun fallbackPanels(raw: SahneLayout, clean: SahneLayout): SahneLayout {
+        var out = clean
+        listOf(0, 1).forEach { i ->
+            val ref = SahneSlotRef(SahneSlotKind.PANEL, i)
+            val was = get(raw, ref)
+            if (was == null || SahneForm.fitsPanel(was.type) || get(out, ref) != null) return@forEach
+            val preferred = if (i == 0) WidgetType.MEDIA else WidgetType.TRIP
+            val used = out.types()
+            val pick = (listOf(preferred) + SahneForm.PANEL_TYPES).firstOrNull { it !in used } ?: return@forEach
+            out = set(out, ref, SahneSlot(newId(out, pick), pick))
+        }
+        return out
     }
 
     /**

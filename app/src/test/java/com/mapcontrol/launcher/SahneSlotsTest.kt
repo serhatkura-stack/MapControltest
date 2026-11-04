@@ -20,11 +20,7 @@ class SahneSlotsTest {
             WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
             WidgetType.CLUSTER_MIRROR,
         )
-        val panel = setOf(
-            WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.HEALTH, WidgetType.AIR, WidgetType.AWD,
-            WidgetType.PHOTO, WidgetType.CLOCK, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION,
-            WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR, WidgetType.BREAK_REMINDER, WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER,
-        )
+        val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION)
         assertEquals(strip, SahneForm.STRIP_TYPES.toSet())
         assertEquals(panel, SahneForm.PANEL_TYPES.toSet())
         assertEquals(SahneForm.STRIP_TYPES.size, strip.size) // yinelenen yok
@@ -40,11 +36,34 @@ class SahneSlotsTest {
     }
 
     @Test
-    fun appIsStripOnlyAndPhotoIsPanelOnly() {
+    fun appIsStripOnlyAndRemovedPanelTypesAreOut() {
         assertTrue(SahneForm.fitsStrip(WidgetType.APP))
         assertFalse(SahneForm.fitsPanel(WidgetType.APP))
-        assertTrue(SahneForm.fitsPanel(WidgetType.PHOTO))
+        listOf(WidgetType.PHOTO, WidgetType.HEALTH, WidgetType.AIR, WidgetType.SEAT_DRIVER, WidgetType.CLOCK).forEach {
+            assertFalse("$it", SahneForm.fitsPanel(it))
+        }
         assertFalse(SahneForm.fitsStrip(WidgetType.PHOTO))
+    }
+
+    @Test
+    fun disallowedPanelFallsBackToSideDefaultOrOtherFreeType() {
+        // Sol: hava (artık yok) -> medya; sağ: sağlık -> yolculuk.
+        var d = SahneSlots.decode("v1|air~a~|health~h~|")!!
+        assertEquals(WidgetType.MEDIA, d.left?.type)
+        assertEquals(WidgetType.TRIP, d.right?.type)
+        // Medya sağda kullanımda: sol yedek medya olamaz, kullanılmayan diğer panel türü (yolculuk) gelir.
+        d = SahneSlots.decode("v1|air~a~|media~m~|")!!
+        assertEquals(WidgetType.TRIP, d.left?.type)
+        assertEquals(WidgetType.MEDIA, d.right?.type)
+        // Tüketim şeritte kullanımda olsa da yedek olabilir türler arasından kullanılmayan alınır; sağ yedeği yolculuk, sol medya.
+        d = SahneSlots.decode("v1|clock~c~|health~h~|consumption~k~")!!
+        assertEquals(WidgetType.MEDIA, d.left?.type)
+        assertEquals(WidgetType.TRIP, d.right?.type)
+        assertEquals(WidgetType.CONSUMPTION, d.strip[0]?.type)
+        // Boş ya da bilinmeyen yuva yedek almaz.
+        d = SahneSlots.decode("v1||nope~x~|")!!
+        assertNull(d.left)
+        assertNull(d.right)
     }
 
     @Test
@@ -172,11 +191,11 @@ class SahneSlotsTest {
             "defrost~defrost~,app~app_pair~a.b+c.d,seat_heat_passenger~seat_heat_passenger~"
         val d = SahneSlots.decode(old)!!
         assertEquals(WidgetType.MEDIA, d.left?.type)
-        assertEquals(WidgetType.SEAT_PASSENGER, d.right?.type) // soğutma yolcu → birleşik yolcu koltuğu (panelde)
+        assertEquals(WidgetType.TRIP, d.right?.type) // yolcu koltuğu artık panelde yok: sağ yedeği yolculuk
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, null, WidgetType.TRUNK, null, WidgetType.APP, null),
+            listOf(WidgetType.SEAT_DRIVER, null, WidgetType.TRUNK, null, WidgetType.APP, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
-        ) // perde ve buğu boşaldı; yolcu ısıtma ikinci yolcu koltuğu olduğundan atıldı (ilki kalır)
+        ) // perde ve buğu boşaldı; panelden düşen yolcu koltuğu yolculuğa döndü, şeritteki yolcu koltuğu kaldı
         assertEquals(d, SahneSlots.decode(SahneSlots.encode(d))) // yeniden yazınca aynı
     }
 
@@ -194,19 +213,20 @@ class SahneSlotsTest {
         // Ekranda başka yuvada olan tekil tür konamaz; kendi yerine yeniden konabilir.
         assertFalse(SahneForm.canPlace(d, right, WidgetType.MEDIA))
         assertTrue(SahneForm.canPlace(d, right, WidgetType.TRIP))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.HEALTH))
+        assertTrue(SahneForm.canPlace(d, right, WidgetType.CONSUMPTION))
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.HEALTH))
         // Biçim kuralları (seçki); Park/Sürüş ayrımı yok, fotoğraf da sürüşte konabilir.
         assertFalse(SahneForm.canPlace(d, right, WidgetType.APP))
         assertTrue(SahneForm.canPlace(d, strip0, WidgetType.APP))
         assertFalse(SahneForm.canPlace(d, strip0, WidgetType.PHOTO))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.PHOTO))
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.PHOTO))
         assertFalse(SahneForm.canPlace(d, right, WidgetType.LOCK))     // kilit hiçbir yuvada yok (sahnedeki hap)
         assertFalse(SahneForm.canPlace(d, strip0, WidgetType.LOCK))
         assertFalse(SahneForm.canPlace(d, strip0, WidgetType.HEALTH))  // sağlık yalnızca panelde
         assertFalse(SahneForm.canPlace(d, right, WidgetType.VEHICLE))
-        // Koltuk her iki taraftan panele de konabilir (şeritte zaten olan taraf hariç).
+        // Koltuk artık yalnız şeritte.
         val noSeats = SahneSlots.set(d, strip0, null)
-        assertTrue(SahneForm.canPlace(noSeats, right, WidgetType.SEAT_DRIVER))
+        assertFalse(SahneForm.canPlace(noSeats, right, WidgetType.SEAT_DRIVER))
         assertFalse(SahneForm.canPlace(d, right, WidgetType.SEAT_PASSENGER))
     }
 

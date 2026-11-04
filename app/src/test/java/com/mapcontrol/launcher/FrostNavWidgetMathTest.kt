@@ -60,7 +60,7 @@ class FrostNavWidgetMathTest {
 
     @Test fun frostNavWidgetsFitSahneAndHaveLargeForm() {
         listOf(WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR).forEach {
-            assertTrue("$it panel", SahneForm.fitsPanel(it))
+            assertFalse("$it panel", SahneForm.fitsPanel(it)) // büyük panel yalnız medya/yolculuk/tüketim (4 Kasım kararı)
             assertTrue("$it şerit", SahneForm.fitsStrip(it))
             assertTrue("$it büyük biçim", SahneForm.hasLargeForm(it))
             assertEquals(it, WidgetType.fromKey(it.key))
