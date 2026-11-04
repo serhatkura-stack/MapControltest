@@ -77,10 +77,7 @@
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/sa</string>
     <string name="launcher_fuel_low" formatted="true">Yakıt az: %%%1$d</string>
-    <string name="launcher_health_good">İyi</string>
-    <string name="launcher_health_check">Kontrol et</string>
     <string name="launcher_health_low_fuel">Yakıt az</string>
-    <string name="launcher_health_battery">Akü voltajı</string>
     <string name="launcher_health_hot">Motor sıcak</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
@@ -94,8 +91,6 @@
     <string name="launcher_air_out" formatted="true">Dışarı %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Dışarı %1$d µg/m³, kötü</string>
     <string name="launcher_air_recirc_hint">İç sirkülasyon önerilir</string>
-    <string name="launcher_seat_driver">Sürücü koltuğu</string>
-    <string name="launcher_seat_passenger">Yolcu koltuğu</string>
     <string name="launcher_oem_mock_label">OEM (taklit)</string>
     <string name="launcher_open_frostnav">FrostNav\'ı aç</string>
     <string name="launcher_open_frostnav_hint">Uygulamanın kendi ekranları ve ayarları</string>

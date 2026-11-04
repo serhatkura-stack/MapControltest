@@ -77,10 +77,7 @@
     <string name="launcher_km_value" formatted="true">%1$s km</string>
     <string name="launcher_kmh_value" formatted="true">%1$d km/h</string>
     <string name="launcher_fuel_low" formatted="true">Low fuel · %1$d%%</string>
-    <string name="launcher_health_good">Good</string>
-    <string name="launcher_health_check">Check</string>
     <string name="launcher_health_low_fuel">Low fuel</string>
-    <string name="launcher_health_battery">Battery voltage</string>
     <string name="launcher_health_hot">Engine hot</string>
     <string name="launcher_health_volt_only" formatted="true">%1$s V</string>
     <string name="launcher_temp_c" formatted="true">%1$d°C</string>
@@ -94,8 +91,6 @@
     <string name="launcher_air_out" formatted="true">Outside %1$d µg/m³</string>
     <string name="launcher_air_out_poor" formatted="true">Outside %1$d µg/m³ · Poor</string>
     <string name="launcher_air_recirc_hint">Recirculation advised</string>
-    <string name="launcher_seat_driver">Driver seat</string>
-    <string name="launcher_seat_passenger">Passenger seat</string>
     <string name="launcher_oem_mock_label">OEM (mock)</string>
     <string name="launcher_open_frostnav">Open FrostNav</string>
     <string name="launcher_open_frostnav_hint">FrostNav\'s own screens and settings</string>

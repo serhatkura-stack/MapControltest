@@ -26,8 +26,6 @@
     <string name="car_color_kirmizi">Red</string>
     <string name="car_color_mavi">Blue</string>
     <string name="launcher_sahne_psi" formatted="true">%1$d psi</string>
-    <string name="launcher_notice_tire_wheel" formatted="true">%1$s tire low</string>
-    <string name="launcher_notice_fuel">Low fuel · nearest station</string>
     <string name="launcher_notice_more" formatted="true">+%1$d</string>
     <string name="launcher_notice_more_desc" formatted="true">%1$d more alerts</string>
     <string name="launcher_notice_no_maps">No maps app found</string>

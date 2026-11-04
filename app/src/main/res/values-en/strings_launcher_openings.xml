@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Open body parts line on the stage -->
-    <string name="launcher_open_door" formatted="true">%1$s door</string>
     <string name="launcher_lock_waiting">Waiting</string>
     <string name="launcher_stage_waiting">Waiting for car data</string>
     <string name="launcher_trip_no_data">No trip data yet</string>

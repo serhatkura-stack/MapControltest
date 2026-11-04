@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Sahne: açık gövde parçaları satırı -->
-    <string name="launcher_open_door" formatted="true">%1$s kapı</string>
     <string name="launcher_lock_waiting">Bekleniyor</string>
     <string name="launcher_stage_waiting">Araç verisi bekleniyor</string>
     <string name="launcher_trip_no_data">Henüz yolculuk verisi yok</string>
