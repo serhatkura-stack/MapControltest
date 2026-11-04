@@ -191,13 +191,35 @@ object CarAnimSpec {
     const val GLINT_STEP_MS = 80L
 
     /**
-     * Teker merkezleri (base pikseli; üst kenar aracın solu, burun sağda), [TireDecode] sırasıyla: ön sol, ön sağ, arka sol,
-     * arka sağ. Üstten görünüşte teker gövdenin altında: halka gövde kenarına oturur.
+     * Lastikler (base pikseli; üst kenar aracın solu, burun sağda), [TireDecode] sırasıyla: ön sol, ön sağ, arka sol, arka sağ.
+     * Üstten görünüşte lastik gövdenin altındadır; çamurluk kemerinin en geniş yerinde (car_*_base silüetinden ölçüldü: arka
+     * kemer x≈144..192, gövde kenarı y≈23 / 338; ön kemer x≈592..656, y≈26 / 337) gövde kenarından [TIRE_OUT] kadar taşar.
+     * [TIRE_X] lastik merkezi, [TIRE_EDGE] o taraftaki gövde kenarı; lastik [TIRE_L] × [TIRE_W].
      */
-    val WHEEL_X = floatArrayOf(622f, 622f, 186f, 186f)
-    val WHEEL_Y = floatArrayOf(24f, 332f, 24f, 332f)
-    const val WHEEL_RX = 54f
-    const val WHEEL_RY = 18f
+    val TIRE_X = floatArrayOf(622f, 622f, 168f, 168f)
+    val TIRE_EDGE = floatArrayOf(26f, 337f, 23f, 338f)
+    const val TIRE_L = 104f
+    const val TIRE_W = 30f
+    const val TIRE_OUT = 11f
+
+    /** Lastiğin base pikseli kutusu (sol, üst, sağ, alt); [i] [TireDecode] sırası. */
+    fun tireBox(i: Int): FloatArray {
+        val top = i % 2 == 0
+        val y0 = if (top) TIRE_EDGE[i] - TIRE_OUT else TIRE_EDGE[i] + TIRE_OUT - TIRE_W
+        return floatArrayOf(TIRE_X[i] - TIRE_L / 2f, y0, TIRE_X[i] + TIRE_L / 2f, y0 + TIRE_W)
+    }
+
+    /**
+     * Yakıt kapağı: sağ arka çamurlukta (görünüşte alt kenar, arka tekerin gerisi), gövde kenarına oturan küçük kapak.
+     * Yer araç fotoğraflarından tahmin; araçta doğrulanmadı (Tur 6).
+     */
+    val FUEL_CAP = Box(104f, 320f, 26f, 11f)
+
+    /** Kaput ışığı (motor suyu / akü uyarısı): kaputun ortası ve yarıçapları; gövde alfasıyla kırpılır. */
+    const val HOOD_CX = 655f
+    const val HOOD_CY = 178f
+    const val HOOD_RX = 118f
+    const val HOOD_RY = 132f
 
     // --- Eğri yardımcıları (anim.json formülleri) ---
 

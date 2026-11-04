@@ -131,6 +131,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         if (it == trip) return@Listener
         trip = it
         car.setLights(it.lights)
+        bindPartAlerts()
         bindStrip()
         refreshDetail()
     }
@@ -260,10 +261,21 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         rangeBlock.visibility = if (waiting) View.INVISIBLE else View.VISIBLE
         skeleton.visibility = if (waiting) View.VISIBLE else View.GONE
         waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
+        bindPartAlerts()
         bindStrip()
         refreshDetail()
         bindLock(lock.stripState())
         requestLayout()
+    }
+
+    /** Arabada yanan parçalar (§10 genel kural): yakıt kapağı açıkken kapak, motor suyu / akü uyarısında kaput. */
+    private fun bindPartAlerts() {
+        val s = vehicle.summary
+        val health = if (waiting || s == null) emptyList() else HealthMath.issues(trip.batteryV, trip.coolantC, null, null, null)
+        car.setPartAlerts(
+            fuelCapOpen = !waiting && s?.fuelCapOpen == true,
+            engine = health.any { it == HealthMath.Issue.ENGINE_HOT || it == HealthMath.Issue.BATTERY_LOW || it == HealthMath.Issue.BATTERY_HIGH },
+        )
     }
 
     /** Şerit: motor suyu / akü, düşük lastik, yakıt kapağı, yakıt az, bakım, kötü hava ([MiniAlerts]); veri beklenirken gizli. Sürüşte kenar ışığı güçlü. */

@@ -34,7 +34,9 @@ import com.mapcontrol.R
  * Görünüm base'in taşan parçalarını ([CarAnimSpec.padLeft] …) da kapsar; araç gövdesi [carLeft]/[carTop]'tan başlar.
  *
  * Dijital ikiz (§11, [setLights]): far huzmesi, fren ışığı ve kırmızı zemin havuzu, geri lambası, sinyaller ve kilitlenince
- * dörtlülerin tek yanışı; düşük lastikte o tekerde ince kehribar halka ([setTireAlert]); arabanın altında çok hafif yansıma
+ * dörtlülerin tek yanışı. Uyarıda ilgili parçanın kendisi yanar (halka / rozet yok): düşük lastikte o lastik gövde kenarının
+ * altından kehribar parlar ([setTireAlert]), yakıt kapağı açıkken kapak yerinde, motor suyu / akü uyarısında kaput üstünde
+ * hafif kehribar ([setPartAlerts]); arabanın altında çok hafif yansıma
  * ve ~60 sn'de bir 1,5 sn'lik boya parlaması. Hepsi önceden çizilmiş küçük maskelerdir (paylaşılan ALPHA_8 bitmap'ler) ve
  * yalnızca görünüm alfası / konumu canlanır: kare başına çizim kaydı ve bellek ayırma yoktur. Işık katmanları çocuk
  * görünümlerdir; zemindekiler gövdenin altında, lambalar üstünde çizilir. [setActive] false iken (ekran görünmezken)
@@ -97,10 +99,13 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private val reverseBottom = sprite(LightMasks.glow, REVERSE_LAMP)
     private val turnLeft = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
     private val turnRight = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
-    private val tires = TireRings(context)
+    /** Lastikler gövdenin altında (yalnızca kenardan taşan kısım ve ışıması görünür); [TireDecode] sırası. */
+    private val tires = Array(4) { sprite(PartArt.tire, 0xFFFFFFFF.toInt()) }
+    private val fuelCap = sprite(PartArt.fuelCap, 0xFFFFFFFF.toInt())
+    private val hood = sprite(null, HOOD_GLOW)
     private val glint = GlintLayer(context)
-    private val under: Array<View> = arrayOf(reflection, brakePool, reverseFloor, beamTop, beamBottom)
-    private val over: Array<View> = arrayOf(tail, headTop, headBottom, reverseTop, reverseBottom, *turnLeft, *turnRight, glint, tires)
+    private val under: Array<View> = arrayOf(reflection, brakePool, reverseFloor, beamTop, beamBottom, *tires)
+    private val over: Array<View> = arrayOf(tail, headTop, headBottom, reverseTop, reverseBottom, *turnLeft, *turnRight, hood, fuelCap, glint)
     /** Çocukların base pikseli kutuları (gövdenin sol üstüne göre): sol, üst, sağ, alt. */
     private val boxes: Map<View, FloatArray> = mapOf(
         beamTop to floatArrayOf(735f, -23f, 985f, 167f),
@@ -119,7 +124,12 @@ class CarStageView(context: Context) : ViewGroup(context) {
         turnRight[0] to floatArrayOf(686f, 246f, 796f, 356f),
         turnRight[1] to floatArrayOf(-30f, 246f, 80f, 356f),
         turnRight[2] to floatArrayOf(471f, 306f, 539f, 374f),
-        tires to floatArrayOf(-TireRings.PAD, -TireRings.PAD, CarAnimSpec.BASE_W + TireRings.PAD, CarAnimSpec.BASE_H + TireRings.PAD),
+        tires[0] to PartArt.tireViewBox(0),
+        tires[1] to PartArt.tireViewBox(1),
+        tires[2] to PartArt.tireViewBox(2),
+        tires[3] to PartArt.tireViewBox(3),
+        fuelCap to PartArt.capViewBox(),
+        hood to PartArt.hoodBox(),
         glint to floatArrayOf(0f, 0f, CarAnimSpec.BASE_W, CarAnimSpec.BASE_H),
     )
     private var lights = CarLights.OFF
@@ -154,7 +164,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         for (v in over) addView(v)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         bitmaps = CarBitmaps.get(context, CarColorPrefs.get(context))
-        bitmaps?.let { reflection.setMask(it.reflection) }
+        bitmaps?.let { reflection.setMask(it.reflection); hood.setMask(it.hoodMask) }
         glint.mask = bitmaps?.base
         for (i in parts.indices) {
             val s = specs[i]
@@ -260,6 +270,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         if (bitmaps?.color == color) return
         bitmaps = CarBitmaps.get(context, color)
         reflection.setMask(bitmaps?.reflection)
+        hood.setMask(bitmaps?.hoodMask)
         glint.mask = bitmaps?.base
         invalidate()
     }
@@ -295,8 +306,62 @@ class CarStageView(context: Context) : ViewGroup(context) {
         reflection.visibility = if (on) VISIBLE else GONE
     }
 
-    /** Düşük lastik: o tekerde ince kehribar halka ([wheel] [TireDecode] sırası; null ya da bilinmeyen = halka yok). */
-    fun setTireAlert(wheel: Int?) = tires.set(wheel)
+    private var tireWheel: Int? = null
+    private val pulses = HashMap<View, Animator>(4)
+    private var capOn = false
+    private var hoodOn = false
+
+    /**
+     * Düşük lastik: o lastik gövde kenarının altından kehribar yanar ([wheel] [TireDecode] sırası; null ya da bilinmeyen =
+     * hiçbiri). İlk çıkışta bir kez yavaş nabız, sonra sabit.
+     */
+    fun setTireAlert(wheel: Int?) {
+        val next = wheel?.takeIf { it in 0..3 }
+        if (next == tireWheel) return
+        tireWheel = next
+        for (i in tires.indices) showPart(tires[i], i == next, pulse = true)
+    }
+
+    /** Yakıt kapağı açık: kapak yerinde kehribar; [engine] motor suyu / akü uyarısı: kaput üstünde hafif kehribar (sabit). */
+    fun setPartAlerts(fuelCapOpen: Boolean, engine: Boolean) {
+        if (fuelCapOpen != capOn) {
+            capOn = fuelCapOpen
+            showPart(fuelCap, fuelCapOpen, pulse = true)
+        }
+        if (engine != hoodOn) {
+            hoodOn = engine
+            showPart(hood, engine, pulse = false)
+        }
+    }
+
+    /** Parça ışığı yumuşakça belirir / söner (yalnızca görünüm alfası; donanım katmanı yalnız geçişte). */
+    private fun showPart(v: View, on: Boolean, pulse: Boolean) {
+        v.animate().cancel()
+        pulses.remove(v)?.cancel()
+        if (!(isAttachedToWindow && isLaidOut) || !ValueAnimator.areAnimatorsEnabled()) {
+            v.alpha = if (on) 1f else 0f
+            v.visibility = if (on) VISIBLE else GONE
+            return
+        }
+        if (on) {
+            v.visibility = VISIBLE
+            if (pulse) {
+                val a = android.animation.ObjectAnimator.ofFloat(v, View.ALPHA, v.alpha, 1f, PART_PULSE_LOW, 1f).apply {
+                    duration = PART_PULSE_MS
+                    addListener(object : AnimatorListenerAdapter() {
+                        override fun onAnimationStart(animation: Animator) { v.setLayerType(LAYER_TYPE_HARDWARE, null) }
+                        override fun onAnimationEnd(animation: Animator) { v.setLayerType(LAYER_TYPE_NONE, null) }
+                    })
+                }
+                pulses[v] = a
+                a.start()
+            } else {
+                v.animate().alpha(1f).setDuration(PART_FADE_MS).withLayer().start()
+            }
+        } else {
+            v.animate().alpha(0f).setDuration(PART_FADE_MS).withLayer().withEndAction { v.visibility = GONE }.start()
+        }
+    }
 
     /** Ekran görünür mü: false iken yanıp sönme, dörtlü ve parlama durur (durum korunur, görünür olunca sürer). */
     fun setActive(on: Boolean) {
@@ -573,6 +638,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private class CarBitmaps(val color: CarColor, val base: Bitmap?, val sprite: Array<Bitmap?>, val gap: Array<Bitmap?>, val overlay: Array<Bitmap?>) {
         /** Zemindeki yansıma: gövdenin alt kenarının küçük, ters ve aşağı doğru sönen kopyası (renk başına bir kez). */
         val reflection: Bitmap? = base?.let { reflectionOf(it) }
+        /** Kaput ışığı maskesi: gövde alfası × yumuşak elips (renk başına bir kez, küçük ALPHA_8). */
+        val hoodMask: Bitmap? by lazy { base?.let { PartArt.hoodMaskOf(it) } }
 
         companion object {
             /** Süreç boyunca yalnızca son kullanılan renk tutulur; tema değişimiyle yeniden kurulan ekran yeniden çözmez. */
@@ -696,51 +763,6 @@ private class LightSprite(context: Context, private var mask: Bitmap?, color: In
 }
 
 /**
- * Düşük lastik halkası: ilgili tekerin üstünde ince kehribar elips ve hafif ışıması (statik; yalnızca değişince çizilir).
- * Görünüm gövde kutusunu her yandan [PAD] base pikseli aşar.
- */
-private class TireRings(context: Context) : View(context) {
-    private var wheel: Int? = null
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val oval = RectF()
-
-    init {
-        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        visibility = GONE
-    }
-
-    fun set(w: Int?) {
-        val next = w?.takeIf { it in 0..3 }
-        if (next == wheel) return
-        wheel = next
-        visibility = if (next == null) GONE else VISIBLE
-        invalidate()
-    }
-
-    override fun hasOverlappingRendering(): Boolean = false
-
-    override fun onDraw(canvas: Canvas) {
-        val i = wheel ?: return
-        val k = width / (CarAnimSpec.BASE_W + 2 * PAD)
-        val d = resources.displayMetrics.density
-        val cx = (CarAnimSpec.WHEEL_X[i] + PAD) * k
-        val cy = (CarAnimSpec.WHEEL_Y[i] + PAD) * k
-        oval.set(cx - CarAnimSpec.WHEEL_RX * k, cy - CarAnimSpec.WHEEL_RY * k, cx + CarAnimSpec.WHEEL_RX * k, cy + CarAnimSpec.WHEEL_RY * k)
-        glow.color = Sahne.AMBER and 0x00FFFFFF or 0x38000000
-        glow.strokeWidth = 7f * d
-        canvas.drawOval(oval, glow)
-        line.color = Sahne.AMBER
-        line.strokeWidth = 2f * d
-        canvas.drawOval(oval, line)
-    }
-
-    companion object {
-        const val PAD = 30f
-    }
-}
-
-/**
  * Boya parlaması: gövde kutusunda çapraz, çok yumuşak beyaz bir bant [CarAnimSpec.GLINT_MS] boyunca soldan sağa adım adım
  * ([CarAnimSpec.GLINT_STEP_MS]) geçer;
  * gövde dışına taşmaz (base görselinin alfasıyla DST_IN maske). Yalnızca geçiş sırasında görünür ve donanım katmanındadır
@@ -840,6 +862,11 @@ private const val BRAKE_POOL = 0x80FF2A20.toInt()
 private const val REVERSE_LAMP = 0xE6F2F6FF.toInt()
 private const val REVERSE_FLOOR = 0x6BF2F6FF
 private const val TURN = 0xFFFFA24A.toInt()
+/** Kaput ışığı (motor suyu / akü): maskenin en dolu yerinde ~%45 kehribar. */
+private const val HOOD_GLOW = 0x73FFA040
+private const val PART_FADE_MS = 360L
+private const val PART_PULSE_MS = 1_800L
+private const val PART_PULSE_LOW = 0.5f
 /** Farla birlikte stopların park lambası parlaklığı (frende 1). */
 private const val TAIL_POSITION_ALPHA = 0.35f
 /** Yansımanın görünüm alfası (bitmap'te en çok %40; toplam ~%9). */
@@ -848,3 +875,76 @@ private const val REFLECTION_ALPHA = 0.22f
 /** Gölge bitmap'inin bulanıklık payı (base px) ve BlurMaskFilter yarıçapı (CSS blur σ ≈ 7.1 px → yarıçap ≈ σ / 0.57735). */
 private const val SHADOW_PAD = 24f
 private const val SHADOW_BLUR_RADIUS = 12f
+
+/**
+ * Parça ışıkları (süreç başına bir kez, küçük bitmap'ler): [tire] üstten görülen lastik (yuvarlak köşeli dikdörtgen, sıcak
+ * kehribar dolgu, çevresinde yumuşak ışıma; dört teker aynı bitmap'i paylaşır), [fuelCap] küçük yakıt kapağı ve ışıması.
+ * Kutular base pikselinde; ışıma payı [GLOW_PAD].
+ */
+private object PartArt {
+    const val GLOW_PAD = 22f
+    private const val CAP_PAD = 12f
+    private const val AMBER = 0xFFFFA040.toInt()
+
+    fun tireViewBox(i: Int): FloatArray = CarAnimSpec.tireBox(i).let { floatArrayOf(it[0] - GLOW_PAD, it[1] - GLOW_PAD, it[2] + GLOW_PAD, it[3] + GLOW_PAD) }
+
+    fun capViewBox(): FloatArray = CarAnimSpec.FUEL_CAP.let { floatArrayOf(it.x - CAP_PAD, it.y - CAP_PAD, it.right + CAP_PAD, it.bottom + CAP_PAD) }
+
+    fun hoodBox(): FloatArray = floatArrayOf(
+        CarAnimSpec.HOOD_CX - CarAnimSpec.HOOD_RX, CarAnimSpec.HOOD_CY - CarAnimSpec.HOOD_RY,
+        CarAnimSpec.HOOD_CX + CarAnimSpec.HOOD_RX, CarAnimSpec.HOOD_CY + CarAnimSpec.HOOD_RY,
+    )
+
+    val tire: Bitmap? by lazy { lit(CarAnimSpec.TIRE_L, CarAnimSpec.TIRE_W, GLOW_PAD, 10f, 16f) }
+
+    val fuelCap: Bitmap? by lazy { lit(CarAnimSpec.FUEL_CAP.w, CarAnimSpec.FUEL_CAP.h, CAP_PAD, 4f, 8f) }
+
+    /**
+     * Işıyan parça: iki kat bulanık kehribar ışıma, üstünde parça. Dolgu uzunlamasına tonlu (uçlar koyu, orta açık: lastik
+     * sırtının yuvarlaklığı), üstte ince parlak çizgi. Base pikseli ölçeğinde.
+     */
+    private fun lit(w: Float, h: Float, pad: Float, corner: Float, blur: Float): Bitmap? = try {
+        Bitmap.createBitmap((w + 2 * pad).toInt(), (h + 2 * pad).toInt(), Bitmap.Config.ARGB_8888).also { bmp ->
+            val c = Canvas(bmp)
+            val r = RectF(pad, pad, pad + w, pad + h)
+            val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = (AMBER and 0x00FFFFFF) or 0xCC000000.toInt()
+                maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+            }
+            c.drawRoundRect(r, corner, corner, glow)
+            glow.maskFilter = BlurMaskFilter(blur * 0.5f, BlurMaskFilter.Blur.OUTER)
+            c.drawRoundRect(r, corner, corner, glow)
+            c.drawRoundRect(r, corner, corner, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(r.left, 0f, r.right, 0f,
+                    intArrayOf(0xFFD8701E.toInt(), 0xFFFFB45C.toInt(), AMBER, 0xFFFFB45C.toInt(), 0xFFD8701E.toInt()),
+                    floatArrayOf(0f, 0.22f, 0.5f, 0.78f, 1f), Shader.TileMode.CLAMP)
+            })
+        }
+    } catch (e: OutOfMemoryError) {
+        null
+    }
+
+    /** Kaput maskesi: base alfası (kaput bölgesi) × elips içinde yumuşak sönüm; ALPHA_8, ~60 KB, renk başına bir kez. */
+    fun hoodMaskOf(base: Bitmap): Bitmap? = try {
+        val b = hoodBox()
+        val x0 = b[0].toInt().coerceIn(0, base.width - 1)
+        val y0 = b[1].toInt().coerceIn(0, base.height - 1)
+        val w = (b[2].toInt() - x0).coerceAtMost(base.width - x0)
+        val h = (b[3].toInt() - y0).coerceAtMost(base.height - y0)
+        val px = IntArray(w * h)
+        base.getPixels(px, 0, w, x0, y0, w, h)
+        val out = ByteArray(w * h)
+        for (y in 0 until h) for (x in 0 until w) {
+            val u = (x0 + x - CarAnimSpec.HOOD_CX) / CarAnimSpec.HOOD_RX
+            val v = (y0 + y - CarAnimSpec.HOOD_CY) / CarAnimSpec.HOOD_RY
+            val d = 1f - (u * u + v * v)
+            if (d <= 0f) continue
+            val a = (px[y * w + x] ushr 24) / 255f
+            out[y * w + x] = (255f * a * d * d).toInt().coerceIn(0, 255).toByte()
+        }
+        // Görünüm kutusu tam elips kutusudur; kırpılan kenar varsa maske kutuya gerilir (kaput base içinde, kırpma yok).
+        Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8).also { it.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(out)) }
+    } catch (e: OutOfMemoryError) {
+        null
+    }
+}
