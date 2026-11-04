@@ -932,7 +932,7 @@ internal class SplitScreenTile(activity: Activity) :
     override fun strip(): StripState = StripState(
         activity.getString(labelRes),
         if (starting) activity.getString(R.string.launcher_fn_split_starting)
-        else pairText() ?: activity.getString(R.string.launcher_fn_split_none),
+        else pairText() ?: activity.getString(R.string.launcher_fn_split_mini),
         iconRes,
         if (ready) StripTone.NORMAL else StripTone.MUTED,
         detail = if (ready) null else activity.getString(R.string.launcher_fn_split_no_pair),

@@ -26,6 +26,7 @@
     <string name="launcher_fn_split_start">Start</string>
     <string name="launcher_fn_split_starting">Starting…</string>
     <string name="launcher_fn_split_none">Not set</string>
+    <string name="launcher_fn_split_mini">With mini dashboard</string>
     <string name="launcher_fn_split_no_pair">Choose two apps in FrostNav</string>
     <string name="launcher_fn_cluster_start">Mirror</string>
     <string name="launcher_fn_cluster_stop">Stop</string>
