@@ -6,6 +6,9 @@ import android.graphics.Outline
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -471,6 +474,7 @@ class MediaCard(
             lastArtist = artist
             sourceLabel.text = if (source.isNullOrEmpty()) "" else appLabel(source)
             titleView.text = title ?: ""
+            fitSahneTitle()
             artistView.text = artist ?: ""
             compactTitle.text = title ?: ""
             compactArtist.text = artist ?: ""
@@ -626,6 +630,35 @@ class MediaCard(
     // --- Sahne yerleşimi ---
 
     /**
+     * Sahne başlığı: uzun şarkı adı iki satıra kelime bölmeden sığana kadar [SAHNE_TITLE_SP]'den
+     * [SAHNE_TITLE_MIN_SP]'ye küçülür (araçta "İstanbul Benden Büy…" kesiliyordu); yine sığmazsa "…" kalır.
+     */
+    private fun fitSahneTitle() {
+        if (!sahne) return
+        val width = titleView.width - titleView.paddingLeft - titleView.paddingRight
+        val text = titleView.text
+        if (width <= 0 || text.isNullOrEmpty()) return
+        val paint = TextPaint(titleView.paint)
+        val metrics = context.resources.displayMetrics
+        var sp = SAHNE_TITLE_SP
+        while (sp > SAHNE_TITLE_MIN_SP) {
+            paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, metrics)
+            val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
+                .setBreakStrategy(titleView.breakStrategy)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+                .setIncludePad(titleView.includeFontPadding)
+                .build()
+            if (layout.lineCount <= 2 && (0 until layout.lineCount - 1).none { splitsWord(text, layout.getLineEnd(it)) }) break
+            sp -= 2f
+        }
+        val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, metrics)
+        if (titleView.textSize != px) titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+    }
+
+    private fun splitsWord(text: CharSequence, end: Int): Boolean =
+        end in 1 until text.length && !text[end - 1].isWhitespace() && !text[end].isWhitespace() && text[end - 1] != '-'
+
+    /**
      * Taslaktaki medya paneli: üstte 112dp kapak ve yanında kaynak (uygulama ikonu + adı), başlık, sanatçı; altında ince
      * ilerleme çizgisi, topuzu ve süreler; en altta ortalı önceki / oynat / sonraki. Görünümler tam yerleşimdekilerle
      * aynı örneklerdir; yalnızca yeniden dizilir.
@@ -635,9 +668,10 @@ class MediaCard(
         mainBox.removeAllViews()
         sourceLabel.textSize = 20f
         SahneFonts.apply(sourceLabel, 500)
-        titleView.textSize = 32f
+        titleView.textSize = SAHNE_TITLE_SP
         titleView.maxLines = 2
         SahneFonts.apply(titleView, 600, -0.01f)
+        titleView.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) titleView.post { fitSahneTitle() } }
         artistView.textSize = 20f
         SahneFonts.apply(artistView, 400)
         elapsedView.textSize = 20f
@@ -784,6 +818,8 @@ class MediaCard(
         /** Bu yüksekliğin üstünde kapak ve başlık büyür. */
         const val TALL_HEIGHT_DP = 380
         const val TALL_TITLE_SP = 56f
+        private const val SAHNE_TITLE_SP = 32f
+        private const val SAHNE_TITLE_MIN_SP = 24f
         const val TALL_ARTIST_SP = 36f
         /** Bu yüksekliğin altında süre satırı da gizlenir; düğmeler en az MIN_PLAY_DP olur. */
         const val TINY_HEIGHT_DP = 190

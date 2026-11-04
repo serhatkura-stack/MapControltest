@@ -52,7 +52,15 @@ internal object LauncherDemo {
         if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
         if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
+        if (enabled && intent.hasExtra(EXTRA_TITLE)) title = intent.getStringExtra(EXTRA_TITLE)
     }
+
+    /** Demo şarkı adı (`--es launcher_demo_title "..."`): uzun başlığın kartta sığmasını denemek için. */
+    const val EXTRA_TITLE = "launcher_demo_title"
+
+    @Volatile
+    var title: String? = null
+        private set
 
     /** Demo kablosuz şarj: varsayılan telefon pedde şarj oluyor; `--ez launcher_demo_charging false` pedi boş gösterir. */
     const val EXTRA_CHARGING = "launcher_demo_charging"
@@ -301,7 +309,7 @@ internal object LauncherDemo {
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */
     fun media(): MediaState = MediaState(
         true, true, true,
-        "Yolun Sonu", "Demo Sanatçı", "com.google.android.apps.youtube.music",
+        title ?: "Yolun Sonu", "Demo Sanatçı", "com.google.android.apps.youtube.music",
         72_000L, 215_000L, artwork,
     )
 }
