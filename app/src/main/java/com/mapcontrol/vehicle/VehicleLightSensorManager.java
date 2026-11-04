@@ -54,7 +54,6 @@ public final class VehicleLightSensorManager implements SensorEventListener {
     private volatile String currentSource = "Başlatılıyor";
     private volatile long lastUpdateTimestampMs = 0L;
     private volatile boolean parkingLampActive = false;
-    private volatile boolean headLampActive = false;
     private volatile int lastRawLightValue = 1;
     private volatile boolean vehicleDataSeen = false;
 
@@ -158,15 +157,6 @@ public final class VehicleLightSensorManager implements SensorEventListener {
     }
 
     /**
-     * Araç kısa far durumu (VDBus CarSettingID.ID_CAR_HEAD_LAMP).
-     * 1 = Kısa Farlar Açık, 0 = Kapalı
-     */
-    public void onHeadLampSignal(int value) {
-        this.headLampActive = (value == 1);
-        evaluateVehicleLighting();
-    }
-
-    /**
      * Araç ön cam ışık / RLS sensör sinyali (VDBus ReadOnlyID.ID_LIGHT_DETECTED_IHU).
      */
     public void onVdbusLightSignal(int rawLightValue) {
@@ -242,10 +232,6 @@ public final class VehicleLightSensorManager implements SensorEventListener {
                 if (lampVals != null && lampVals.length > 0) {
                     this.vehicleDataSeen = true;
                     this.parkingLampActive = (lampVals[0] == 1);
-                }
-                int[] headVals = proxy.getItemValues(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_HEAD_LAMP);
-                if (headVals != null && headVals.length > 0) {
-                    this.headLampActive = (headVals[0] == 1);
                 }
 
                 // 2. IHU Işık Durumunu Sorgula
@@ -336,11 +322,6 @@ public final class VehicleLightSensorManager implements SensorEventListener {
     /** Salt okunur: park lambası açık mı (VDBus). */
     public boolean isParkingLampActive() {
         return parkingLampActive;
-    }
-
-    /** Salt okunur: kısa far açık mı (VDBus). */
-    public boolean isHeadLampActive() {
-        return headLampActive;
     }
 
     /** Araçtan en az bir kez gerçek far/park lambası değeri okunduysa true (emülatörde false). */

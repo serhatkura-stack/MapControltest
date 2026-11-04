@@ -189,7 +189,7 @@ object LauncherTheme {
         val runner = object : Runnable {
             override fun run() {
                 if (ThemeMode.read(app) == ThemeMode.AUTO && manager != null && manager.hasVehicleLampData()) {
-                    val dark = manager.isParkingLampActive || manager.isHeadLampActive ||
+                    val dark = manager.isParkingLampActive ||
                         manager.effectiveLux < DARK_LUX
                     val switchTo = autoPolicy.update(System.currentTimeMillis(), dark, canSwitch())
                     if (switchTo != null) {

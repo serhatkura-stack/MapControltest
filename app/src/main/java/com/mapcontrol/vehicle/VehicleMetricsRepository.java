@@ -89,7 +89,7 @@ public final class VehicleMetricsRepository {
             CarSettingID.ID_CAR_SPF_OPERATE,
             CarSettingID.ID_CAR_SPF_POSI,
             CarSettingID.ID_CAR_SUNSHADE,
-            CarSettingID.ID_CAR_HEAD_LAMP,
+            // ID_CAR_HEAD_LAMP (91) bilerek yok: far YÜKSEKLİĞİ/ayar kademesi (0..3), far açık/kapalı değil.
             CarSettingID.ID_CAR_AIPM_BRIGHTNESS,
             CarSettingID.ID_CAR_METER_BACKLIGHT_LEVEL,
     };
@@ -133,9 +133,6 @@ public final class VehicleMetricsRepository {
             }
             if (module == MODULE_READONLY && itemId == ReadOnlyID.ID_PARKING_LAMP_STATE && values.length > 0) {
                 VehicleLightSensorManager.getInstance(appContext).onParkingLampSignal(values[0]);
-            }
-            if (module == MODULE_SETTING && itemId == CarSettingID.ID_CAR_HEAD_LAMP && values.length > 0) {
-                VehicleLightSensorManager.getInstance(appContext).onHeadLampSignal(values[0]);
             }
             if (cache.update(module, itemId, values)) {
                 if (module == MODULE_NEW_ENERGY && itemId == NewEnergyID.ID_DRIVE_MODE) {
@@ -354,9 +351,6 @@ public final class VehicleMetricsRepository {
             int[] values = proxy.getItemValues(MODULE_SETTING, id);
             if (values != null && values.length > 0) {
                 cache.put(MODULE_SETTING, id, values);
-                if (id == CarSettingID.ID_CAR_HEAD_LAMP) {
-                    VehicleLightSensorManager.getInstance(appContext).onHeadLampSignal(values[0]);
-                }
             }
         }
         for (int id : SUBSCRIBED_NEW_ENERGY_IDS) {
