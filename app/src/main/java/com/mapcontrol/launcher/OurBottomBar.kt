@@ -128,7 +128,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         fun sep() = View(context).apply { setBackgroundColor(Sahne.CONTROL_BORDER) }
         fun sepLp() = LinearLayout.LayoutParams(context.dp(1), context.dp(52)).apply { marginStart = context.dp(10); marginEnd = context.dp(10) }
         fun btnLp(first: Boolean) = LinearLayout.LayoutParams(context.dp(88), context.dp(80)).apply { if (!first) marginStart = context.dp(6) }
-        addView(sahneButton(R.drawable.ic_sahne_home, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, btnLp(true))
+        addView(sahneButton(R.drawable.ic_sahne_home_fill, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, btnLp(true))
         addView(sahneButton(R.drawable.ic_sahne_grid, R.string.launcher_bar_apps) { showApps() }, btnLp(false))
         addView(sahneButton(R.drawable.ic_sahne_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, btnLp(false))
         addView(sep(), sepLp())
