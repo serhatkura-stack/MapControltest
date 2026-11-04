@@ -146,6 +146,7 @@ internal abstract class FrostNavTile<S : Any>(
         }
         root.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setTappable(features.available && !large)
+        if (!features.available) root.setOnClickListener { notAvailableToast() }
         sheetBox?.let { box -> sheet?.let { d -> box.removeAllViews(); buildSheet(box, d) } }
         onStripChanged?.invoke()
     }
@@ -162,6 +163,11 @@ internal abstract class FrostNavTile<S : Any>(
             root.isClickable = false
             root.setOnTouchListener(null)
         }
+    }
+
+    /** FrostNav'sız derlemede (test sürümü) dokunuş sessiz kalmasın: kısa bir bilgi gösterilir. */
+    private fun notAvailableToast() {
+        android.widget.Toast.makeText(activity, R.string.launcher_fn_unavailable_toast, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     protected fun openSettings() = features.openTab(activity, settingsTab)
@@ -184,10 +190,10 @@ internal abstract class FrostNavTile<S : Any>(
         if (!features.available) StripState(activity.getString(labelRes), activity.getString(R.string.launcher_fn_only), iconRes, StripTone.MUTED)
         else strip()
 
-    override fun stripTap(part: Int) { if (features.available) onTap() }
+    override fun stripTap(part: Int) { if (features.available) onTap() else notAvailableToast() }
 
     override fun stripLongPress(): Boolean {
-        if (!features.available) return false
+        if (!features.available) { notAvailableToast(); return true }
         openSettings()
         return true
     }

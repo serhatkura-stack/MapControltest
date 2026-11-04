@@ -7,6 +7,7 @@
     <string name="launcher_widget_split_screen">Split screen</string>
     <string name="launcher_widget_cluster_mirror">Mirror to cluster</string>
     <string name="launcher_fn_only">FrostNav only</string>
+    <string name="launcher_fn_unavailable_toast">This feature works in the FrostNav build</string>
     <string name="launcher_fn_web_start">Start</string>
     <string name="launcher_fn_web_starting">Starting…</string>
     <string name="launcher_fn_web_start_failed">Couldn\'t start the web panel</string>

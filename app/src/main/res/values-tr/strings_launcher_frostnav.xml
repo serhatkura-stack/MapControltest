@@ -7,6 +7,7 @@
     <string name="launcher_widget_split_screen">Bölünmüş ekran</string>
     <string name="launcher_widget_cluster_mirror">Göstergeye yansıt</string>
     <string name="launcher_fn_only">Yalnızca FrostNav\'da</string>
+    <string name="launcher_fn_unavailable_toast">Bu özellik FrostNav\'lı sürümde çalışır</string>
     <string name="launcher_fn_web_start">Başlat</string>
     <string name="launcher_fn_web_starting">Başlatılıyor…</string>
     <string name="launcher_fn_web_start_failed">Web paneli başlatılamadı</string>
