@@ -47,6 +47,28 @@ object LauncherStartup {
         })
     }
 
+    /**
+     * Ana ekran dışındaki bir etkinlik (ör. [MiniDashActivity]) için: süreçte henüz hiç kare çizilmediyse bekleyenleri bu
+     * pencerenin ilk karesinden sonra çalıştırır. [begin]'den farkı: bekleyenleri silmez ve durumu sıfırlamaz (ana ekranın
+     * kendi açılışını bozmaz).
+     */
+    fun attach(decor: View) {
+        if (firstFrameDone) return
+        decor.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (decor.viewTreeObserver.isAlive) decor.viewTreeObserver.removeOnPreDrawListener(this)
+                Choreographer.getInstance().postFrameCallback {
+                    if (firstFrameDone) return@postFrameCallback
+                    firstFrameDone = true
+                    val run = ArrayList(pending)
+                    pending.clear()
+                    run.forEach { it.run() }
+                }
+                return true
+            }
+        })
+    }
+
     /** İlk kareden sonra çalıştırır; dönen nesne ile (örn. onHidden'da) iptal edilebilir. */
     fun later(block: () -> Unit): Deferred {
         val d = Deferred(block)

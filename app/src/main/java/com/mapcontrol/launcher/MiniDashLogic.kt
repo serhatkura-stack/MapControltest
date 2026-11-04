@@ -1,0 +1,112 @@
+package com.mapcontrol.launcher
+
+/**
+ * Mini göstergenin (bölünmüş ekranın bir yarısı, bkz. [MiniDashActivity]) saf kuralları; JVM'de sınanır.
+ *
+ * Uyarı satırı yalnızca bölünmüş ekranda BAŞKA YERDE görünmeyen şeyleri söyler (ana ekran o sırada gizli, fabrika çubuğu
+ * yalnızca klimayı gösterir): düşük lastik (psi ile), yaklaşan / geçmiş bakım, düşük yakıt ve kötü kabin havası. Eşikler
+ * Sahne ile aynıdır ([StageCorners], [TireDecode]); yeni eşik yoktur.
+ */
+internal object MiniAlerts {
+
+    /** Uyarı türü; sıra önem sırasıdır (küçük = önce). */
+    enum class Kind { TIRE, FUEL_LOW, SERVICE_OVERDUE, SERVICE_NEAR, AIR_BAD }
+
+    /** Tek uyarı ve metni kuracak değerler ([tireLow] lastikte, [serviceKm] bakımda, [pm25] havada). */
+    data class Item(val kind: Kind, val tireLow: TireLow? = null, val serviceKm: Int? = null, val pm25: Int? = null)
+
+    /** Satırda aynı anda adlandırılan en çok uyarı; fazlası "+N" olur. */
+    const val MAX_NAMED = 2
+
+    fun build(
+        tires: TireReading?,
+        lowFuel: Boolean?,
+        serviceKm: Int?,
+        serviceDays: Int?,
+        pm25In: Int?,
+    ): List<Item> = buildList {
+        val low = TireDecode.low(tires)
+        if (TireDecode.alertShown(tires?.warning, low)) add(Item(Kind.TIRE, tireLow = low))
+        if (lowFuel == true) add(Item(Kind.FUEL_LOW))
+        when {
+            HealthMath.serviceOverdue(serviceKm, serviceDays) -> add(Item(Kind.SERVICE_OVERDUE))
+            StageCorners.serviceNear(serviceKm, serviceDays) -> add(Item(Kind.SERVICE_NEAR, serviceKm = serviceKm))
+        }
+        if (StageCorners.airShown(pm25In)) add(Item(Kind.AIR_BAD, pm25 = pm25In))
+    }
+
+    /** Adlandırılan uyarılar ve "+N" sayısı (en önemli uyarı hiç kaybolmaz). */
+    fun visible(all: List<Item>): Pair<List<Item>, Int> = StageNotices.visible(all, MAX_NAMED)
+}
+
+/**
+ * Navigasyon ipucu: sonraki dönüş ve varış. [maneuver] kısa yön metni ("Sağa dönün"), [distanceM] dönüşe kalan metre,
+ * [arrivalMinutesOfDay] varış saati (gün içi dakika, 0..1439); bilinmeyen alan null.
+ */
+internal data class NavHint(
+    val maneuver: String?,
+    val distanceM: Int?,
+    val arrivalMinutesOfDay: Int?,
+)
+
+/** Navigasyon satırının saf biçimlendirmesi. */
+internal object MiniNav {
+
+    /** Satır yalnızca gösterecek bir şey varken görünür. */
+    fun shown(h: NavHint?): Boolean = h != null && (!h.maneuver.isNullOrBlank() || h.distanceM != null || h.arrivalMinutesOfDay != null)
+
+    /** Mesafe: 1 km altı 10 m'ye yuvarlanır ("350 m"); üstü 0,1 km ("1,2 km", 10 km üstü tam sayı). Geçersizse null. */
+    fun distance(m: Int?, decimalSep: Char = ','): Pair<String, Boolean>? {
+        if (m == null || m < 0) return null
+        val meters = (m + 5) / 10 * 10
+        if (meters < 1_000) return meters.toString() to false
+        val tenths = (m + 50) / 100
+        if (tenths >= 100) return ((m + 500) / 1_000).toString() to true
+        return "${tenths / 10}$decimalSep${tenths % 10}" to true
+    }
+
+    /** Varış saati "HH:mm" (24 saat) ya da "h:mm" (12 saat, AM/PM çağıranda); geçersizse null. */
+    fun arrival(minutesOfDay: Int?, is24: Boolean = true): String? {
+        if (minutesOfDay == null || minutesOfDay !in 0 until 24 * 60) return null
+        val h = minutesOfDay / 60
+        val m = minutesOfDay % 60
+        val hh = if (is24) h else (if (h % 12 == 0) 12 else h % 12)
+        return (if (is24) "%02d:%02d" else "%d:%02d").format(hh, m)
+    }
+}
+
+/**
+ * Pencere boyutuna göre ölçüler (dp). Hedef bir yarı: ~960 × 610 (fabrika çubuğu altta ~110 px alabilir). Daha dar ya da
+ * kısa pencerede (ör. üçte bir bölme) düğmeler küçülür ama sürüşte dokunma alanı [MIN_TOUCH_DP] altına inmez.
+ */
+internal data class MiniLayout(
+    val paddingDp: Int,
+    val clockSp: Float,
+    val valueSp: Float,
+    val playDp: Int,
+    val skipDp: Int,
+    val toggleHeightDp: Int,
+    /** Medya panelinde kapak resmi (yükseklik yetiyorsa). */
+    val showArtwork: Boolean,
+    /** Üst satırda "Menzil" / "Yakıt" etiketleri (yer yetiyorsa). */
+    val showLabels: Boolean,
+) {
+    companion object {
+        const val MIN_TOUCH_DP = 64
+
+        fun forSize(widthDp: Int, heightDp: Int): MiniLayout {
+            val compact = widthDp < 760 || heightDp < 520
+            val tight = heightDp < 440
+            return MiniLayout(
+                paddingDp = if (compact) 16 else 24,
+                clockSp = if (compact) 48f else 60f,
+                valueSp = if (compact) 28f else 34f,
+                playDp = if (tight) 72 else if (compact) 76 else 88,
+                skipDp = if (tight || compact) MIN_TOUCH_DP else 72,
+                toggleHeightDp = if (tight) 88 else if (compact) 104 else 120,
+                showArtwork = heightDp >= 520 && widthDp >= 700,
+                showLabels = widthDp >= 640,
+            )
+        }
+    }
+}

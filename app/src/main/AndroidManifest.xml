@@ -188,6 +188,25 @@
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         </activity>
 
+        <!-- Mini gösterge: bölünmüş ekranın bir yarısında (960 x ~610) açılan, boyutu değişebilen ayrı ekran (ana ekran
+             bölünemez). Uygulama listesinde ayrı simgesi var; serbest pencere (freeform) bölmesinde seçilebilir. Kendi görev
+             ilişkisi (taskAffinity) ana ekranla ve FrostNav'la aynı göreve karışmasın diye. -->
+        <activity
+            android:name="com.mapcontrol.launcher.MiniDashActivity"
+            android:exported="true"
+            android:label="Mini gösterge"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.mapcontrol.minidash"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- FileProvider for APK installation -->
         <provider
             android:name="androidx.core.content.FileProvider"

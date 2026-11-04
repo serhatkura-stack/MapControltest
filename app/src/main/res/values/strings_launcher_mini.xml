@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mini gösterge (bölünmüş ekranın bir yarısı, MiniDashActivity). -->
+<resources>
+    <string name="launcher_mini_fullscreen">Full screen</string>
+    <string name="launcher_mini_range">Range</string>
+    <string name="launcher_mini_fuel">Fuel</string>
+    <string name="launcher_mini_seat_heat_driver">Driver seat heat</string>
+    <string name="launcher_mini_seat_cool_passenger">Passenger seat cooling</string>
+    <string name="launcher_mini_alert_tire">Low tire pressure</string>
+    <string name="launcher_mini_alert_tire_psi" formatted="true">Low tire %1$d psi</string>
+    <string name="launcher_mini_alert_tire_wheel" formatted="true">%1$s tire %2$d psi</string>
+    <string name="launcher_mini_alert_fuel">Low fuel</string>
+    <string name="launcher_mini_alert_service">Service due soon</string>
+    <string name="launcher_mini_alert_service_km" formatted="true">Service in %1$d km</string>
+    <string name="launcher_mini_alert_service_overdue">Service overdue</string>
+    <string name="launcher_mini_alert_air" formatted="true">Poor cabin air · PM2.5 %1$d</string>
+    <string name="launcher_mini_more" formatted="true">+%1$d</string>
+    <string name="launcher_mini_nav_m" formatted="true">%1$s m</string>
+    <string name="launcher_mini_nav_km" formatted="true">%1$s km</string>
+    <string name="launcher_mini_nav_eta" formatted="true">Arrive %1$s</string>
+</resources>
