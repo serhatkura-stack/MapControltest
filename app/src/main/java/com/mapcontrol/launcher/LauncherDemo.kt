@@ -55,6 +55,23 @@ internal object LauncherDemo {
         if (enabled && intent.hasExtra(EXTRA_TITLE)) title = intent.getStringExtra(EXTRA_TITLE)
     }
 
+    /**
+     * Spor modu önizlemesi: `--ez launcher_demo_sport true` aracın sürüş modunu beklemeden spor ekranını açar (1 sn bekleme
+     * yine uygulanır), `false` kapatır; verilmezse demo sürüş modu (`launcher_demo_drive_mode 2`) belirler. Açıkken kadranlar
+     * sabit demo değerleri gösterir (3400 dev/dk, D4, 9,8 L/100, 0–100 9,6 sn, en yüksek 142 km/sa).
+     * `--ez launcher_demo_no_g true` ivme sensörü yokmuş gibi G kadranını gizler (sensörsüz yerleşimi görmek için).
+     */
+    const val EXTRA_SPORT = "launcher_demo_sport"
+    const val EXTRA_NO_G = "launcher_demo_no_g"
+
+    @Volatile
+    var sportForced: Boolean? = null
+        private set
+
+    @Volatile
+    var sportNoG = false
+        private set
+
     /** Demo şarkı adı (`--es launcher_demo_title "..."`): uzun başlığın kartta sığmasını denemek için. */
     const val EXTRA_TITLE = "launcher_demo_title"
 
@@ -182,6 +199,8 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
         if (intent.hasExtra(EXTRA_HEALTH)) healthProblem = intent.getStringExtra(EXTRA_HEALTH)
+        if (intent.hasExtra(EXTRA_SPORT)) sportForced = intent.getBooleanExtra(EXTRA_SPORT, false)
+        if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
     }
 

@@ -153,6 +153,19 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** Düzenleme modunda sahne dokunulmaz (yalnızca yuvalar düzenlenir). */
     var locked = false
 
+    /** Spor ekranının araç modülü için açık parçalar ve camlar (her araç özetinde; [animate] ilk özetten sonra). */
+    internal var onCar: ((parts: Set<CarPart>, windows: Collection<BodyPart>, sunroof: Boolean, animate: Boolean) -> Unit)? = null
+        set(value) {
+            field = value
+            value?.invoke(lastParts, lastWindows, lastSunroof, false)
+        }
+    private var lastParts: Set<CarPart> = emptySet()
+    private var lastWindows: Collection<BodyPart> = emptyList()
+    private var lastSunroof = false
+
+    /** Spor ekranından araç detayı. */
+    fun openCarDetail() = openDetail()
+
     init {
         clipChildren = false
         clipToPadding = false
@@ -240,6 +253,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val o = s?.openings
         car.setOpen(o?.carParts() ?: s?.openParts.orEmpty(), animate = carSeeded)
         car.setGlass(o?.windows.orEmpty(), o?.sunroof == true, animate = carSeeded)
+        lastParts = o?.carParts() ?: s?.openParts.orEmpty()
+        lastWindows = o?.windows.orEmpty()
+        lastSunroof = o?.sunroof == true
+        onCar?.invoke(lastParts, lastWindows, lastSunroof, carSeeded)
         if (s != null) carSeeded = true
         floor.alert = o?.any == true
         openings = o

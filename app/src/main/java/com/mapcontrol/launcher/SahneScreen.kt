@@ -78,19 +78,74 @@ class SahneScreen(
     fun onVisible() {
         started = true
         stage.onVisible()
-        hosted.values.flatten().forEach { it.onVisible() }
+        if (sportShown) sport?.onVisible() else hosted.values.flatten().forEach { it.onVisible() }
     }
 
     fun onHidden() {
         started = false
         stage.onHidden()
-        hosted.values.flatten().forEach { it.onHidden() }
+        if (sportShown) sport?.onHidden() else hosted.values.flatten().forEach { it.onHidden() }
     }
 
     fun release() {
+        stage.onCar = null
+        sport?.release()
         stage.release()
         hosted.values.flatten().forEach { it.release() }
         hosted.clear()
+    }
+
+    // --- Spor modu ---
+
+    /** Spor ekranı (kronograf); ilk kez spor açılınca kurulur, Normal'de hiç yoktur (Sahne aynen kalır). */
+    private var sport: SportStageView? = null
+
+    /** Spor ekranı gösteriliyor mu (orta alanın yerine). */
+    var sportShown = false
+        private set
+
+    /** Spor görünümü (gerekirse kurulur); geçişten önce bitmap'i hazırlamak için. */
+    internal fun sportStage(): SportStageView = sport ?: SportStageView(activity, onCarTap = { stage.openCarDetail() }).also { v ->
+        sport = v
+        v.visibility = View.GONE
+        addView(v)
+        stage.onCar = { parts, windows, sunroof, animate -> v.setCar(parts, windows, sunroof, animate) }
+    }
+
+    /**
+     * Orta alanı spor ekranıyla değiştirir ([on]) ya da geri getirir. Sahne yuvalarındaki widget'lar spor açıkken durur
+     * (araç sahnesi açık kapı bilgisini spor araç modülüne verdiği için çalışmaya devam eder); geri gelince aynen sürer.
+     */
+    fun showSport(on: Boolean) {
+        if (on == sportShown) return
+        if (on && editMode) return
+        sportShown = on
+        val v = if (on) sportStage() else sport ?: return
+        val normal = if (on) View.INVISIBLE else View.VISIBLE
+        stage.visibility = normal
+        leftPanel.visibility = normal
+        rightPanel.visibility = normal
+        strip.visibility = normal
+        v.visibility = if (on) View.VISIBLE else View.GONE
+        if (started) {
+            if (on) {
+                hosted.values.flatten().forEach { it.onHidden() }
+                v.onVisible()
+            } else {
+                v.onHidden()
+                hosted.values.flatten().forEach { it.onVisible() }
+            }
+        }
+    }
+
+    /** Spor tamamen kapandıktan sonra: büyük bitmap ve görünüm bırakılır. */
+    fun dropSport() {
+        if (sportShown) return
+        val v = sport ?: return
+        stage.onCar = null
+        v.release()
+        removeView(v)
+        sport = null
     }
 
     /** Park/Sürüş değişti: o modun kayıtlı düzeni kurulur. */
@@ -121,7 +176,7 @@ class SahneScreen(
 
     private fun dropHosted(ref: SahneSlotRef) {
         hosted.remove(ref)?.forEach { w ->
-            if (started) w.onHidden()
+            if (started && !sportShown) w.onHidden()
             w.release()
         }
     }
@@ -152,7 +207,7 @@ class SahneScreen(
         }
         if (widgets.isNotEmpty()) {
             hosted[ref] = widgets
-            if (started) widgets.forEach { it.onVisible() }
+            if (started && !sportShown) widgets.forEach { it.onVisible() }
         }
     }
 
@@ -466,6 +521,7 @@ class SahneScreen(
         rightPanel.measure(exactly(panelW), exactly(bandH))
         stage.measure(exactly(stageW), exactly(bandH + gapV))
         strip.measure(exactly(w), exactly(stripH))
+        sport?.measure(exactly(w), exactly(h))
         overlays.forEach { (ref, o) ->
             if (ref.kind == SahneSlotKind.PANEL) o.measure(exactly(panelW), exactly(bandH))
         }
@@ -482,6 +538,7 @@ class SahneScreen(
         rightPanel.layout(w - panelW, 0, w, bandH)
         stage.layout(panelW + (w - 2 * panelW - stage.measuredWidth) / 2, 0, w - panelW - (w - 2 * panelW - stage.measuredWidth) / 2, bandH + gapV)
         strip.layout(0, h - stripH, w, h)
+        sport?.layout(0, 0, w, h)
         overlays.forEach { (ref, o) ->
             if (ref.kind == SahneSlotKind.PANEL) {
                 val p = if (ref.index == 0) leftPanel else rightPanel
