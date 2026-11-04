@@ -149,10 +149,13 @@ object FrostNavWidgetMath {
     /** Mini gösterge ile bölünecek varsayılan eş: Yandex Haritalar. */
     const val SPLIT_DEFAULT_PKG = "ru.yandex.yandexmaps"
 
-    /** Mini gösterge bölünmüş ekranının diğer uygulaması: son seçilen, yoksa kuruluysa varsayılan, o da yoksa null. */
+    /**
+     * Mini gösterge bölünmüş ekranının diğer uygulaması: son seçilen (paketi hâlâ kuruluysa; "pkg/cls" ise paket kısmı
+     * denetlenir), yoksa kuruluysa varsayılan, o da yoksa null.
+     */
     fun miniDashSplitOther(last: String?, isInstalled: (String) -> Boolean): String? {
         val l = last?.trim().orEmpty()
-        if (l.isNotEmpty()) return l
+        if (l.isNotEmpty() && isInstalled(l.substringBefore('/'))) return l
         return SPLIT_DEFAULT_PKG.takeIf(isInstalled)
     }
 

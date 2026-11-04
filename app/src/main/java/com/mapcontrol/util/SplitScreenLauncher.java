@@ -1,5 +1,6 @@
 package com.mapcontrol.util;
 
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
@@ -218,6 +219,10 @@ public final class SplitScreenLauncher {
         // Açık görev yeni sınırları almaz; MyCar süreci düşürür. Yalnızca device owner iken mümkün.
         boolean recycled = recycleProcess(app, pkg1);
         recycled |= recycleProcess(app, pkg2);
+        // Kendi Mini göstergemiz (singleTask, ayrı görev) süreç düşürmeyle yenilenemez; açık görevi kapatılır ki yeni
+        // sınırlarla açılsın (yoksa eski tam ekran/boyutuyla öne gelir).
+        recycled |= closeOwnMiniDashTask(app, pkg1, self);
+        recycled |= closeOwnMiniDashTask(app, pkg2, self);
         if (recycled || !wasOn) {
             Thread.sleep(RECYCLE_WAIT_MS);
         }
@@ -285,6 +290,40 @@ public final class SplitScreenLauncher {
             return a;
         }
         return null;
+    }
+
+    /** Kutu Mini göstergeyse ve onun görevi açıksa görev kapatılır (kendi görevlerimiz; yetki gerekmez). */
+    private static boolean closeOwnMiniDashTask(Context context, String slot, String self) {
+        if (!SplitSlot.isMiniDash(slot, self)) {
+            return false;
+        }
+        boolean closed = false;
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) {
+                return false;
+            }
+            String cls = SplitSlot.classOf(slot);
+            for (ActivityManager.AppTask task : am.getAppTasks()) {
+                ComponentName base;
+                try {
+                    ActivityManager.RecentTaskInfo info = task.getTaskInfo();
+                    base = info.baseIntent != null ? info.baseIntent.getComponent() : null;
+                    if (base == null) {
+                        base = info.baseActivity;
+                    }
+                } catch (IllegalArgumentException e) {
+                    continue; // görev bu arada kapandı
+                }
+                if (base != null && self.equals(base.getPackageName()) && base.getClassName().equals(cls)) {
+                    task.finishAndRemoveTask();
+                    closed = true;
+                }
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "mini dash task close failed", e);
+        }
+        return closed;
     }
 
     /** Paketi askıya alıp geri açarak çalışan süreci düşürür (MyCar {@code A()}). */

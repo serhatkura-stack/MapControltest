@@ -32,7 +32,11 @@ class FrostNavWidgetMathTest {
     }
 
     @Test fun miniDashSplitOtherPrefersLastThenYandex() {
-        assertEquals("com.spotify.music", FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { false })
+        assertEquals("com.spotify.music", FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { true })
+        assertEquals("a.b/a.b.Main", FrostNavWidgetMath.miniDashSplitOther("a.b/a.b.Main") { it == "a.b" })
+        // Son seçilen kaldırıldı: varsayılana düşülür, o da yoksa null.
+        assertEquals("ru.yandex.yandexmaps", FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { it == "ru.yandex.yandexmaps" })
+        assertNull(FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { false })
         assertEquals("ru.yandex.yandexmaps", FrostNavWidgetMath.miniDashSplitOther(null) { it == "ru.yandex.yandexmaps" })
         assertEquals("ru.yandex.yandexmaps", FrostNavWidgetMath.miniDashSplitOther(" ") { true })
         assertNull(FrostNavWidgetMath.miniDashSplitOther(null) { false })

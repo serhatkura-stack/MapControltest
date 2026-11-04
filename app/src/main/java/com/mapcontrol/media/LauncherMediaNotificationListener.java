@@ -15,7 +15,8 @@ import java.util.concurrent.CopyOnWriteArraySet;
  */
 public final class LauncherMediaNotificationListener extends NotificationListenerService {
 
-    private static volatile Listener listener;
+    /** Her medya denetleyicisi (ana ekran kartı, spor, Mini gösterge) kendi dinleyicisini ekler; biri durunca ötekiler silinmez. */
+    private static final CopyOnWriteArraySet<Listener> listeners = new CopyOnWriteArraySet<>();
     private static final CopyOnWriteArraySet<Runnable> accessReadyWatchers = new CopyOnWriteArraySet<>();
     private static final CopyOnWriteArraySet<Runnable> accessLostWatchers = new CopyOnWriteArraySet<>();
 
@@ -23,8 +24,14 @@ public final class LauncherMediaNotificationListener extends NotificationListene
         void onListenerConnected();
     }
 
-    static void setListener(Listener value) {
-        listener = value;
+    static void addListener(Listener value) {
+        if (value != null) {
+            listeners.add(value);
+        }
+    }
+
+    static void removeListener(Listener value) {
+        listeners.remove(value);
     }
 
     static void watchAccess(Runnable onReady, Runnable onLost) {
@@ -41,8 +48,7 @@ public final class LauncherMediaNotificationListener extends NotificationListene
         GoogleMapsNavNotificationCoordinator.onListenerConnected(this);
         GoogleMapsNavNotificationCoordinator.resyncActiveNotifications(this);
         NavigationSource.onListenerConnected(this);
-        Listener current = listener;
-        if (current != null) {
+        for (Listener current : listeners) {
             current.onListenerConnected();
         }
         for (Runnable watcher : accessReadyWatchers) {

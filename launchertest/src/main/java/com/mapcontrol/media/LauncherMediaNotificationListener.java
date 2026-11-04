@@ -5,6 +5,8 @@ import android.service.notification.StatusBarNotification;
 
 import com.mapcontrol.launcher.NavigationSource;
 
+import java.util.concurrent.CopyOnWriteArraySet;
+
 /**
  * Test sürümünün bildirim dinleyicisi: medya oturumlarını okumak için bildirim erişimini sağlar ve yalnızca Yandex
  * Haritalar / Navigator rehberlik bildirimini Sahne Navigasyon paneline ({@link NavigationSource}) iletir (salt okuma;
@@ -12,20 +14,26 @@ import com.mapcontrol.launcher.NavigationSource;
  */
 public final class LauncherMediaNotificationListener extends NotificationListenerService {
 
-    private static volatile Listener listener;
+    /** Her medya denetleyicisi kendi dinleyicisini ekler; biri durunca ötekiler silinmez. */
+    private static final CopyOnWriteArraySet<Listener> listeners = new CopyOnWriteArraySet<>();
 
     interface Listener {
         void onListenerConnected();
     }
 
-    static void setListener(Listener value) {
-        listener = value;
+    static void addListener(Listener value) {
+        if (value != null) {
+            listeners.add(value);
+        }
+    }
+
+    static void removeListener(Listener value) {
+        listeners.remove(value);
     }
 
     @Override
     public void onListenerConnected() {
-        Listener current = listener;
-        if (current != null) {
+        for (Listener current : listeners) {
             current.onListenerConnected();
         }
         NavigationSource.onListenerConnected(this);

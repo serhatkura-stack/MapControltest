@@ -146,7 +146,7 @@ public final class LauncherMediaController {
             return;
         }
         started = true;
-        LauncherMediaNotificationListener.setListener(notificationListener);
+        LauncherMediaNotificationListener.addListener(notificationListener);
         sessionManager = (MediaSessionManager) appContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         registerSessionsListener();
         refreshActiveController();
@@ -157,7 +157,7 @@ public final class LauncherMediaController {
             return;
         }
         started = false;
-        LauncherMediaNotificationListener.setListener(null);
+        LauncherMediaNotificationListener.removeListener(notificationListener);
         mainHandler.removeCallbacks(progressTick);
         unregisterSessionsListener();
         detachController();
