@@ -179,12 +179,11 @@ internal class SeatHeatModel(
         fun decode(wire: Int): Int = wire.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
 
         /**
-         * Soğutma değeri: 0 = kapalı, 1..3 = seviye. DOĞRULANMADI: araçta sinyal (93/94) şimdilik hep [0] okunuyor;
-         * kodlama ısıtmayla aynı varsayılıyor ama gerçek araç testiyle teyit edilmeli.
+         * Soğutma değeri: 0 = kapalı, 1..3 = seviye. Sürücü (CS 93) araç testinde doğrulandı; yolcu (94) aynı varsayılıyor.
          */
         fun decodeVent(wire: Int): Int = wire.coerceIn(0, ClimateAutomationStore.LEVEL_MAX)
 
-        /** DOĞRULANMADI: yazma kodlaması ölçülmedi; okumadaki gibi düz seviye de olabilir (test sürümü yazmaz). */
+        /** Yazma kodlaması: kapalı = 1, seviye 1..3 → 2..4 (ısıtma ve sürücü soğutma CS 93 araçta doğrulandı). */
         fun encode(level: Int): Int = if (level <= 0) 1 else level.coerceIn(
             ClimateAutomationStore.LEVEL_MIN, ClimateAutomationStore.LEVEL_MAX) + 1
     }

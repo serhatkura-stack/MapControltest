@@ -46,12 +46,12 @@ internal object LauncherEdition {
     const val HAS_SETTINGS = true
 
     /**
-     * Koltuk soğutma yazması araçta doğrulanana kadar kapalı (kodlama bilinmiyor; sinyal 93/94 hep [0] okunuyor).
-     * Araç testinden sonra true yapılır.
+     * Koltuk soğutma yazması araçta doğrulandı (sürücü, CS 93: yazma seviye+1 = 2/3/4, kapalı = 1; okuma 1/2/3, kapalı 0).
+     * Yolcu tarafı (CS 94) aynı kodlamayla gidiyor, ayrıca ölçülmedi.
      */
-    const val SEAT_VENT_WRITE_VERIFIED = false
+    const val SEAT_VENT_WRITE_VERIFIED = true
 
-    /** Koltuk soğutma seviyesi (0..3). Doğrulanmadığı sürece hiçbir şey göndermez. Kodlama ısıtmayla aynı varsayılır (doğrulanmadı). */
+    /** Koltuk soğutma seviyesi (0..3). Kodlama ısıtmayla aynı (sürücüde araçta doğrulandı). */
     fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
         if (!SEAT_VENT_WRITE_VERIFIED) return
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION

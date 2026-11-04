@@ -30,8 +30,8 @@ internal object LauncherEdition {
 
     const val HAS_SETTINGS = false
 
-    /** Koltuk soğutma yazması yalnızca test anahtarı açıkken denenir (kodlama doğrulanmadı). */
-    val SEAT_VENT_WRITE_VERIFIED: Boolean get() = on
+    /** Koltuk soğutma yazması araçta doğrulandı (sürücü, CS 93); yine de yazma yalnızca test anahtarı açıkken ([READ_ONLY]) gider. */
+    const val SEAT_VENT_WRITE_VERIFIED = true
 
     /**
      * Etkinlik açılırken çağrılır. Anahtar bilerek KAYDEDİLMEZ: yalnızca bu süreç boyunca açık kalır; uygulama ya da
