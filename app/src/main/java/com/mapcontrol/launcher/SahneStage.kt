@@ -18,7 +18,7 @@ import android.widget.TextView
 import com.mapcontrol.R
 
 /**
- * Sahne'nin ortası (yuva değil, sabit): ışıklı zeminde araç görseli ve yumuşak halkalar; sol üstte menzil ve yakıt
+ * Sahne'nin ortası (yuva değil, sabit): ışıklı zeminde araç görseli; sol üstte menzil ve yakıt
  * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol), sol altta araç sağlığı, sağ altta hava kalitesi.
  * Açık kapı / bagaj / cam / kaput ve lastik / yakıt kapağı uyarıları aracın üstünde turuncu haplarla görünür; araç
  * kartının gösterdiği hiçbir bilgi kaybolmaz.
@@ -457,7 +457,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
 
     /**
      * Sahne zemini (bitmap değil, kodla): yukarıdan düşen ışık konisi, aracın altındaki iki katmanlı ışık havuzu,
-     * iki ince eliptik halka, geniş yumuşak gölge ve sıkı temas gölgesi; gece ön farların ve stop lambalarının
+     * geniş yumuşak gölge ve sıkı temas gölgesi; gece ön farların ve stop lambalarının
      * zemindeki yansıması. Gradyanlar yalnızca boyut değişince kurulur; görünüm statiktir.
      */
     private class FloorView(context: Context) : View(context) {
@@ -469,8 +469,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         private val contact = Paint(Paint.ANTI_ALIAS_FLAG)
         private val head = Paint(Paint.ANTI_ALIAS_FLAG)
         private val tail = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-        private val oval = RectF()
         private var builtW = -1
         private var builtH = -1
 
@@ -478,7 +476,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             builtW = w
             builtH = h
             val k = w / DESIGN_W
-            // Zemin ışığı, halkalar ve gölgeler araçla birlikte yukarı taşınır.
+            // Zemin ışığı ve gölgeler araçla birlikte yukarı taşınır.
             fun yy(v: Float) = (v - TOP_OFFSET - CAR_LIFT) * k
             val cx = 480f * k
             cone.shader = SahneGround.ellipse(cx, yy(40f + 216f), 350f * k, 180f * k, Sahne.CONE, 1f)
@@ -489,7 +487,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             // Burun sağda: farlar sağda (soğuk beyaz), stoplar solda (kırmızı); yalnızca gece.
             head.shader = if (Sahne.HEAD_GLOW == 0) null else SahneGround.ellipse(760f * k, yy(268f), 150f * k, 70f * k, Sahne.HEAD_GLOW, 1f)
             tail.shader = if (Sahne.TAIL_GLOW == 0) null else SahneGround.ellipse(212f * k, yy(268f), 70f * k, 56f * k, Sahne.TAIL_GLOW, 1f)
-            ring.strokeWidth = maxOf(1f, k)
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -497,17 +494,9 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             val h = height
             if (w <= 0 || h <= 0) return
             if (w != builtW || h != builtH) build(w, h)
-            val k = w / DESIGN_W
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), cone)
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), poolOuter)
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), pool)
-            // Halkalar: taslakta 800 × 240 ve 660 × 196 (merkez aracın altında).
-            ring.color = Sahne.RING_1
-            oval.set(80f * k, (150f - TOP_OFFSET - CAR_LIFT) * k, 880f * k, (390f - TOP_OFFSET - CAR_LIFT) * k)
-            canvas.drawOval(oval, ring)
-            ring.color = Sahne.RING_2
-            oval.set(150f * k, (172f - TOP_OFFSET - CAR_LIFT) * k, 810f * k, (368f - TOP_OFFSET - CAR_LIFT) * k)
-            canvas.drawOval(oval, ring)
             if (head.shader != null) canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), head)
             if (tail.shader != null) canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), tail)
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shadow)

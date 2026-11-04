@@ -141,12 +141,10 @@ object Sahne {
     val HOME_INK: Int get() = if (n) 0xFF3B82F6.toInt() else CTA_INK
     val KNOB: Int get() = if (n) 0xFFF4F7FB.toInt() else 0xFFFFFFFF.toInt()
 
-    /** Sahne zemini: ışık havuzu, halkalar ve temas gölgesi. */
+    /** Sahne zemini: ışık havuzu ve temas gölgesi. */
     val FLOOR_INNER: Int get() = if (n) 0x29BED0EC else 0xF2FFFFFF.toInt()
     val FLOOR_OUTER: Int get() = if (n) 0x1F6E84A8 else 0x8CFFFFFF.toInt()
     val CONE: Int get() = if (n) 0x14AAC3EB else 0x8CFFFFFF.toInt()
-    val RING_1: Int get() = if (n) 0x12BED2F0 else 0x1A1E2838
-    val RING_2: Int get() = if (n) 0x0DBED2F0 else 0x121E2838
     val CAR_SHADOW: Int get() = if (n) 0x99000000.toInt() else 0x52282620
     val CAR_CONTACT: Int get() = if (n) 0xB3000000.toInt() else 0x611E1C18
     /** Gece far ve stop ışığının zemindeki yansıması; gündüz yok. */
