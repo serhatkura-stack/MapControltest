@@ -171,7 +171,9 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     // --- Karşılama (§7.4, [SahneWelcome]) ---
     /** Karşılama sürerken ışıklar karşılamanındır (yolculuk verisi beklenir, sonunda gerçek ışıklar uygulanır). */
     private var welcome = false
-    private val ambientSaved = FloatArray(2)
+    /** Ortam ışığının durgun alfası (karşılama sonunda dönülen): öndeki görünüm renk varsa 1, öteki 0. Karşılama sırasında
+     *  [setAmbient] ön/arka görünümü değiştirebildiği için açılışta saklanan alfa değil, o anki durum kullanılır. */
+    private fun ambientRest(i: Int): Float = if (ambientColor != null && i == ambientFront) 1f else 0f
     private val welcomeShoulders: Array<View> get() = arrayOf(rangeBlock, lockChip, strip, skeleton, waitNote)
     private val lightsIgnite = Runnable { car.setLights(trip.lights.copy(head = true, brake = true)) }
     private val brakeSettle = Runnable { car.setLights(trip.lights.copy(head = true)) }
@@ -187,7 +189,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         car.scaleX = WELCOME_SCALE
         car.scaleY = WELCOME_SCALE
         floor.alpha = 0f
-        ambient.forEachIndexed { i, v -> v.animate().cancel(); ambientSaved[i] = v.alpha; v.alpha = 0f }
+        ambient.forEach { v -> v.animate().cancel(); v.alpha = 0f }
         welcomeShoulders.forEach { it.animate().cancel(); it.alpha = 0f }
     }
 
@@ -204,7 +206,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         main.postDelayed(lightsIgnite, WELCOME_LIGHTS_MS)
         main.postDelayed(brakeSettle, WELCOME_BRAKE_OFF_MS)
         floor.animate().alpha(1f).setStartDelay(WELCOME_FLOOR_MS).setDuration(800).setInterpolator(WELCOME_EASE).withLayer().start()
-        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientSaved[i]).setStartDelay(WELCOME_FLOOR_MS).setDuration(800).start() }
+        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientRest(i)).setStartDelay(WELCOME_FLOOR_MS).setDuration(800).start() }
         welcomeShoulders.forEach { it.animate().alpha(1f).setStartDelay(1_150).setDuration(650).setInterpolator(WELCOME_EASE).withLayer().start() }
     }
 
@@ -213,7 +215,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         car.flatAlpha = true
         car.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(ms).withEndAction { car.flatAlpha = false }.start()
         floor.animate().alpha(1f).setStartDelay(0).setDuration(ms).start()
-        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientSaved[i]).setStartDelay(0).setDuration(ms).start() }
+        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientRest(i)).setStartDelay(0).setDuration(ms).start() }
         welcomeShoulders.forEach { it.animate().alpha(1f).setStartDelay(0).setDuration(ms).start() }
     }
 
@@ -230,7 +232,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         car.scaleX = 1f
         car.scaleY = 1f
         floor.alpha = 1f
-        ambient.forEachIndexed { i, v -> v.animate().cancel(); v.alpha = ambientSaved[i] }
+        ambient.forEachIndexed { i, v -> v.animate().cancel(); v.alpha = ambientRest(i) }
         welcomeShoulders.forEach { it.animate().cancel(); it.alpha = 1f }
         car.setLights(trip.lights)
     }
@@ -291,6 +293,13 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         visibleNow = false
         car.setActive(false)
         ambientAnim?.cancel()
+        main.removeCallbacks(lightsIgnite)
+        main.removeCallbacks(brakeSettle)
+        welcome = false
+        shiftAnim?.cancel()
+        shiftAnim = null
+        lock.onStripChanged = null
+        artKey = null
         sources.forEach { it.release() }
     }
 
@@ -393,8 +402,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             else -> activity.getString(R.string.launcher_lock_waiting)
         }
         val live = known || doorOpen
-        if (live) {
-            val nowLocked = !unlocked
+        // Dörtlü kenarı yalnız gerçek kilit sinyalinden: açık kapı hapı "Açık" gösterir ama kilit durumu sayılmaz (kilitliyken
+        // içeriden açılıp kapanan kapı sahte "kilitlendi" parlaması yapmasın).
+        if (known) {
+            val nowLocked = s!!.icon != R.drawable.ic_mdi_lock_open_variant
             if (lastLocked == false && nowLocked) car.flashHazard()
             lastLocked = nowLocked
         }
@@ -436,10 +447,13 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         }
         val fromStart = from.alpha
         val target = if (color != null) to else null
-        if (!visibleNow || !isAttachedToWindow) {
+        if (welcome || !visibleNow || !isAttachedToWindow) {
+            // Karşılama sürerken ekran karanlık: ışık yakılmaz, karşılama sonunda [ambientRest] ile durgun hale gelinir.
+            from.animate().cancel()
+            target?.animate()?.cancel()
             from.alpha = 0f
             from.visibility = View.GONE
-            target?.alpha = 1f
+            target?.alpha = if (welcome) 0f else 1f
             return
         }
         ambientAnim = ValueAnimator.ofFloat(0f, 1f).apply {

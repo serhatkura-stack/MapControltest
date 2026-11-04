@@ -379,9 +379,10 @@ class CarStageView(context: Context) : ViewGroup(context) {
     }
 
     private var shownNow = true
+    private var attached = false
 
     private fun updateActive() {
-        val now = wantActive && isAttachedToWindow && shownNow
+        val now = wantActive && attached && shownNow
         if (now == active) return
         active = now
         if (now) {
@@ -521,6 +522,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         super.onAttachedToWindow()
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
         setColor(CarColorPrefs.get(context))
+        attached = true
         updateActive()
     }
 
@@ -536,8 +538,11 @@ class CarStageView(context: Context) : ViewGroup(context) {
         glassAnim = null
         glassTarget.copyInto(glassNow)
         running = 0
-        super.onDetachedFromWindow()
+        // isAttachedToWindow burada hâlâ true (mAttachInfo süper çağrıdan sonra boşalır): ayrı bayrakla kapatılır ki
+        // göz kırpma/parlama geri çağrıları işleyiciden hâlâ kaldırılabilirken kaldırılsın.
+        attached = false
         updateActive()
+        super.onDetachedFromWindow()
     }
 
     private fun drawCar(canvas: Canvas) {
