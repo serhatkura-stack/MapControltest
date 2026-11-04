@@ -54,6 +54,9 @@ internal object SportAmbientLogic {
     fun decide(state: State, wantSport: Boolean, r: Reading): Decision {
         if (wantSport == state.applied) return Decision(state)
         if (wantSport) {
+            // Okunamadı (açılış/servis yeniden bağlanma ilk saniyeleri): vazgeçilmez, yeniden denenir. Bilinçli ret
+            // (ambiyans kapalı, sürüş moduna bağlı, ritim) bu spor açıklığı için kesindir.
+            if (r.ambientOn == null || r.color == null) return Decision(state, settled = false)
             if (r.ambientOn != 1 || r.relateDrive == 1 || r.rhythm == 1) return Decision(state)
             val color = r.color
             if (!validColor(color) || color == SPORT_COLOR) return Decision(state)

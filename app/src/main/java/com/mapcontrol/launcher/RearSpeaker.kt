@@ -295,7 +295,12 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
             pendingMuted = !wasMuted
             render()
             io.runSafely {
-                val sent = ComfortWriter.setFader(balance, target)
+                // Yazım atarsa (VDBus.set, DSP bağlı değil) runSafely yutar: başarısız sayılır, bekleyen hal temizlenir.
+                val sent = try {
+                    ComfortWriter.setFader(balance, target)
+                } catch (e: RuntimeException) {
+                    false
+                }
                 main.post {
                     if (sent) {
                         // Yalnızca gönderim başarılıysa hatırla (eski fader, son yazım).

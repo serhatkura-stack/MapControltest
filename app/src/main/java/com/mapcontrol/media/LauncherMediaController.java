@@ -445,6 +445,19 @@ public final class LauncherMediaController {
         return source + "\u0001" + title + "\u0001" + artist + "\u0001" + album;
     }
 
+    /**
+     * Kapak tutma anahtarı: [trackKey] artı süre ve medya kimliği (aynı yazılı farklı parçalar ayrılsın). Başlık, sanatçı
+     * ve albüm hiç yoksa parça tanınamaz: null (önceki kapak tutulmaz; boş üstverili BT kaynağında eski kapak kalmasın).
+     */
+    @Nullable
+    static String artworkKey(@Nullable String source, @Nullable String title, @Nullable String artist,
+                             @Nullable String album, long durationMs, @Nullable String mediaId) {
+        if (title == null && artist == null && album == null) {
+            return null;
+        }
+        return trackKey(source, title, artist, album) + "\u0001" + durationMs + "\u0001" + mediaId;
+    }
+
     interface SameContent<T> {
         boolean same(T a, T b);
     }
@@ -455,7 +468,7 @@ public final class LauncherMediaController {
      */
     @Nullable
     static <T> T stableArtwork(@Nullable String prevKey, @Nullable T prev,
-                               String key, @Nullable T next, SameContent<T> cmp) {
+                               @Nullable String key, @Nullable T next, SameContent<T> cmp) {
         if (prev == null || prevKey == null || !prevKey.equals(key)) {
             return next;
         }
@@ -490,7 +503,9 @@ public final class LauncherMediaController {
         // yeni Bitmap nesnesi gelir; kapak titremesin diye aynı parçada eski örneği koru.
         String album = metadata != null
                 ? metadata.getString(MediaMetadata.METADATA_KEY_ALBUM) : null;
-        String trackKey = trackKey(source, title, artist, album);
+        String trackKey = artworkKey(source, title, artist, album,
+                metadata != null ? metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) : 0L,
+                metadata != null ? metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) : null);
         artwork = stableArtwork(lastArtworkKey, lastArtwork, trackKey, artwork,
                 (a, b) -> a.getWidth() == b.getWidth() && a.getHeight() == b.getHeight() && a.sameAs(b));
         lastArtworkKey = trackKey;

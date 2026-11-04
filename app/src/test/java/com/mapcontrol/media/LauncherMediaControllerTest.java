@@ -45,4 +45,21 @@ public class LauncherMediaControllerTest {
         String k2 = LauncherMediaController.trackKey("pkg", "X", "B", "C");
         assertNull(LauncherMediaController.stableArtwork(k1, "kapak", k2, null, EQ));
     }
+
+    @Test
+    public void anonymousTracksDoNotKeepOldArt() {
+        // Boş üstverili kaynak: parça tanınamaz, önceki kapak yeni (kapaksız) parçaya taşınmaz.
+        String k = LauncherMediaController.artworkKey("bt", null, null, null, 0L, null);
+        assertNull(k);
+        assertNull(LauncherMediaController.stableArtwork(k, "kapak", k, null, EQ));
+    }
+
+    @Test
+    public void sameTextDifferentDurationIsAnotherTrack() {
+        String k1 = LauncherMediaController.artworkKey("bt", "Radyo", null, null, 180_000L, null);
+        String k2 = LauncherMediaController.artworkKey("bt", "Radyo", null, null, 200_000L, null);
+        assertNull(LauncherMediaController.stableArtwork(k1, "kapak", k2, null, EQ));
+        // Aynı parça yeniden gönderildi (BT ~5 sn): kapak korunur.
+        assertSame("kapak", LauncherMediaController.stableArtwork(k1, "kapak", k1, null, EQ));
+    }
 }

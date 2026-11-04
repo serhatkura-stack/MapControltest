@@ -293,6 +293,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet = null
         wifiPanel?.dismiss()
         if (!keepEdit) exitEditMode()
+        // Karşılama eski görünümlere bağlı: önce son haline çekilir (kök zemin geri verilir), sahne yenilenince yeni
+        // parçalarla yeniden kurulur (siyah tutma yeniden kurulmaz).
+        welcome?.finish()
+        welcomeArmUntil = 0L
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
@@ -342,6 +346,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             swapView(old, fresh)
             sahne = fresh
             fresh.setMode(activeMode)
+            rootLayout?.let { welcome = buildWelcome(it) }
             sport?.onRebuilt()
             if (keepEdit) {
                 fresh.editMode = true
@@ -465,9 +470,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      * sinyali [WELCOME_ARM_MS] içinde gelirse karşılama karanlıktan başlar, gelmezse kısa solmayla açılır.
      */
     private fun setupWelcome(root: View) {
-        val (stage, parts) = sahne?.welcomeParts() ?: return
-        val others = listOfNotNull(header.view, ourBar?.view, climateBar?.view) + parts
-        val w = SahneWelcome(root, stage, others)
+        val w = buildWelcome(root) ?: return
         welcome = w
         val demo = LauncherDemo.enabled && LauncherDemo.welcomeRequested
         if (!WelcomeCycle.gate.played && !WelcomeCycle.armedOnce && (demo || LauncherSafeArea.isDesayUnit(this))) {
@@ -475,6 +478,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             w.prepare()
             welcomeArmUntil = android.os.SystemClock.uptimeMillis() + WELCOME_ARM_MS
         }
+    }
+
+    private fun buildWelcome(root: View): SahneWelcome? {
+        val (stage, parts) = sahne?.welcomeParts() ?: return null
+        val others = listOfNotNull(header.view, ourBar?.view, climateBar?.view) + parts
+        return SahneWelcome(root, stage, others)
     }
 
     /**

@@ -54,6 +54,18 @@ class SportAmbientLogicTest {
         assertNoop(SportAmbientLogic.decide(idle, true, on(3, rhythm = 1)))                       // müzik ritmi
     }
 
+    @Test fun sportStartWithUnreadableSettingsRetries() {
+        val noColor = SportAmbientLogic.decide(idle, true, on(null))
+        assertNoop(noColor)
+        assertFalse(noColor.settled)
+        val noSwitch = SportAmbientLogic.decide(idle, true, SportAmbientLogic.Reading(color = 3))
+        assertNoop(noSwitch)
+        assertFalse(noSwitch.settled)
+        // Bilinçli ret kesin: yeniden denenmez.
+        assertTrue(SportAmbientLogic.decide(idle, true, SportAmbientLogic.Reading(ambientOn = 2, color = 3)).settled)
+        assertTrue(SportAmbientLogic.decide(idle, true, on(3, relate = 1)).settled)
+    }
+
     @Test fun onlyOemColorIndicesAreRemembered() {
         for (bad in listOf(null, 0, 65, 255, -1)) assertNoop(SportAmbientLogic.decide(idle, true, on(bad)))
         // Zaten kırmızı-turuncu: geri yazılacak bir şey yok.
