@@ -203,11 +203,10 @@ public final class SplitScreenLauncher {
             return Result.SAME_APP;
         }
         String self = app.getPackageName();
-        if (pkg1.equals(self) || pkg2.equals(self)) {
+        if (!SplitSlot.isAllowed(pkg1, self) || !SplitSlot.isAllowed(pkg2, self)) {
             return Result.NOT_INSTALLED;
         }
-        PackageManager pm = app.getPackageManager();
-        if (pm.getLaunchIntentForPackage(pkg1) == null || pm.getLaunchIntentForPackage(pkg2) == null) {
+        if (launchIntent(app, pkg1) == null || launchIntent(app, pkg2) == null) {
             return Result.NOT_INSTALLED;
         }
 
@@ -235,8 +234,62 @@ public final class SplitScreenLauncher {
         return first && second ? Result.STARTED : Result.LAUNCH_FAILED;
     }
 
+    /**
+     * Kutu için açılış intent'i: "pkg/cls" ise açık bileşen, değilse paketin launcher intent'i.
+     */
+    @Nullable
+    private static Intent launchIntent(Context context, String slot) {
+        PackageManager pm = context.getPackageManager();
+        if (!SplitSlot.isComponent(slot)) {
+            return pm.getLaunchIntentForPackage(slot);
+        }
+        ComponentName cn = new ComponentName(SplitSlot.packageOf(slot), SplitSlot.classOf(slot));
+        try {
+            pm.getActivityInfo(cn, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
+        return new Intent(Intent.ACTION_MAIN).setComponent(cn);
+    }
+
+    /**
+     * Mini gösterge solda, verilen diğer uygulama sağda, yarı yarıya bölünmüş ekran açar.
+     * Launcher bunu ileride çağırır; arayüz bağlanmadı. Diğer kutu boşsa ya da Mini göstergenin
+     * kendisiyse {@link Result#NOT_INSTALLED} döner.
+     *
+     * @param otherApp paket adı ya da "pkg/cls" bileşen dizesi; genelde {@link #lastOtherApp}
+     */
+    public static void startWithMiniDash(
+            @NonNull Context context, @Nullable String otherApp, @Nullable Callback callback) {
+        Context app = context.getApplicationContext();
+        String self = app.getPackageName();
+        if (otherApp == null || !SplitSlot.isAllowed(otherApp, self) || SplitSlot.isMiniDash(otherApp, self)) {
+            if (callback != null) {
+                new Handler(Looper.getMainLooper()).post(() -> callback.onResult(Result.NOT_INSTALLED));
+            }
+            return;
+        }
+        start(app, SplitSlot.miniDash(self), otherApp, Ratio.HALF, callback);
+    }
+
+    /** Kayıtlı bölünmüş ekran çiftinden Mini gösterge olmayan, en son seçilen uygulama (sağ kutu önce). */
+    @Nullable
+    public static String lastOtherApp(@NonNull Context context) {
+        String self = context.getApplicationContext().getPackageName();
+        String a = SplitScreenStore.getPkg1(context);
+        String b = SplitScreenStore.getPkg2(context);
+        if (b != null && !SplitSlot.isMiniDash(b, self)) {
+            return b;
+        }
+        if (a != null && !SplitSlot.isMiniDash(a, self)) {
+            return a;
+        }
+        return null;
+    }
+
     /** Paketi askıya alıp geri açarak çalışan süreci düşürür (MyCar {@code A()}). */
-    private static boolean recycleProcess(Context context, String packageName) {
+    private static boolean recycleProcess(Context context, String slot) {
+        String packageName = SplitSlot.packageOf(slot);
         if (packageName.equals(context.getPackageName()) || !isDeviceOwner(context)) {
             return false;
         }
@@ -319,7 +372,7 @@ public final class SplitScreenLauncher {
     /** MyCar {@code r()}: pencere modu, sınırlar ve ekran 0. Anahtarlar birebir korunur. */
     private static boolean launchFreeform(Context context, String packageName, Rect bounds) {
         try {
-            Intent intent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+            Intent intent = launchIntent(context, packageName);
             if (intent == null) {
                 return false;
             }

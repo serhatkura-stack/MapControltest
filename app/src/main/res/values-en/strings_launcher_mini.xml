@@ -18,4 +18,5 @@
     <string name="launcher_mini_nav_m" formatted="true">%1$s m</string>
     <string name="launcher_mini_nav_km" formatted="true">%1$s km</string>
     <string name="launcher_mini_nav_eta" formatted="true">Arrive %1$s</string>
+    <string name="launcher_mini_title">Mini dashboard</string>
 </resources>
