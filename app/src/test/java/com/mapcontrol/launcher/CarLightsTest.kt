@@ -16,9 +16,12 @@ class CarLightsTest {
         assertTrue(l.left)
         assertFalse(l.right)
         assertTrue(l.reverse)
-        // Fren ve dörtlü anahtarı araçta doğrulanmadı: okunsa bile yanmaz.
-        assertFalse(l.brake)
+        // Fren pedalı OEM'deki gibi 1 = basılı; dörtlü anahtarı (79) doğrulanmadı: okunsa bile yanmaz.
+        assertTrue(l.brake)
         assertFalse(l.hazard)
+        assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = 0, hazard = 0).brake)
+        assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = 2, hazard = 0).brake)
+        assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = null, hazard = 0).brake)
         assertEquals(CarLights.OFF, CarLightSignals.decode(0, 0, 0, 1, 0, 0))
         assertEquals(CarLights.OFF, CarLightSignals.decode(null, null, null, null, null, null))
     }
@@ -27,9 +30,24 @@ class CarLightsTest {
     fun unverifiedSignalsAreNotEvenRead() {
         val asked = mutableListOf<Int>()
         CarLightSignals.read { asked += it; 0 }
-        assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_BRAKE_PEDAL !in asked)
+        assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_BRAKE_PEDAL in asked)
         assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_HAZARD_LIGHT !in asked)
-        assertEquals(4, asked.size)
+        assertEquals(5, asked.size)
+    }
+
+    @Test
+    fun hazardWithoutSwitchSignalBlinksBothFromIndicators() {
+        // Dörtlü anahtarı okunmuyor; dörtlülerde iki sinyal birden 1 gelirse iki taraf da yanar.
+        val l = CarLightSignals.read { id ->
+            when (id) {
+                com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_DIRECTION_IND_LEFT,
+                com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_DIRECTION_IND_RIGHT -> 1
+                else -> 0
+            }
+        }
+        assertFalse(l.hazard)
+        assertTrue(l.blinkLeft && l.blinkRight)
+        assertFalse(l.brake)
     }
 
     @Test

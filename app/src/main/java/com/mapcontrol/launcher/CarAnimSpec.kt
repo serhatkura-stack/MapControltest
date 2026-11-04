@@ -389,12 +389,16 @@ internal object CarLightSignals {
     /** ID_GEARBOX_STATE (26): R = 2 (ölçüldü; P = 1, N = 3, D = 5). */
     val REVERSE_GEAR_VALUE: Int? = 2
 
-    /** TODO(Tur 6): ID_BRAKE_PEDAL (80) taramada hep 0 okundu, frene basınca değişimi ölçülmedi. Doğrulanana kadar okunmaz. */
-    val BRAKE_ON_VALUE: Int? = null
+    /**
+     * ID_BRAKE_PEDAL (80): 1 = pedala basılı, başka her değer (0) bırakılmış. OEM ayar ve şarj sunucuları yalnızca `== 1`
+     * sınar (Tiggo 8 dökümü); taramamızda basılmadan 0 okundu. Salt okuma: değer araçta güncellenmezse stop yalnızca hiç
+     * yanmaz. TODO(Tur 6): Tiggo 7'de frene basınca 0 → 1 → 0 değişimini ölç.
+     */
+    val BRAKE_ON_VALUE: Int? = 1
 
     /**
-     * TODO(Tur 6): ID_HAZARD_LIGHT (79) ölçülmedi; okunmaz. Dörtlüler açıkken 35 ve 34 ikisi birden 1 geliyorsa iki taraf
-     * zaten yanar.
+     * TODO(Tur 6): ID_HAZARD_LIGHT (79) ölçülmedi ve hiçbir OEM uygulaması okumuyor (döküm), değer anlamı bilinmiyor; okunmaz.
+     * Dörtlüler açıkken 35 ve 34 ikisi birden 1 geliyorsa iki taraf zaten aynı ritimde yanar.
      */
     val HAZARD_ON_VALUE: Int? = null
 
