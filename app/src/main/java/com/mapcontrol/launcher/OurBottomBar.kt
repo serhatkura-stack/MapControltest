@@ -130,7 +130,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         fun btnLp(first: Boolean) = LinearLayout.LayoutParams(context.dp(88), context.dp(80)).apply { if (!first) marginStart = context.dp(6) }
         addView(sahneButton(R.drawable.ic_sahne_home_fill, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, btnLp(true))
         addView(sahneButton(R.drawable.ic_sahne_grid, R.string.launcher_bar_apps) { showApps() }, btnLp(false))
-        addView(sahneButton(R.drawable.ic_sahne_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, btnLp(false))
+        addView(sahneButton(R.drawable.ic_sahne_car, R.string.launcher_vehicle_settings, iconDp = CAR_ICON_DP) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, btnLp(false))
         addView(sep(), sepLp())
         addView(climateControl.driverView, LinearLayout.LayoutParams(0, context.dp(80), 1f))
         addView(sep(), sepLp())
@@ -143,7 +143,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
     }
 
     /** Sahne düğmesi: 22dp köşeli; etkin olan birincil (CTA) gradyan zeminli ve gölgeli, diğerleri zeminsiz. */
-    private fun sahneButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
+    private fun sahneButton(iconRes: Int, labelRes: Int, active: Boolean = false, iconDp: Int = 30, onClick: () -> Unit): View =
         FrameLayout(context).apply {
             val radius = context.dpF(Sahne.SQUARE_RADIUS_DP)
             if (active) {
@@ -163,8 +163,8 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             contentDescription = context.getString(labelRes)
             isClickable = true
             isFocusable = true
-            addView(icon(context, iconRes, 30, if (active) Sahne.HOME_INK else Sahne.CONTROL_ICON),
-                FrameLayout.LayoutParams(context.dp(30), context.dp(30), Gravity.CENTER))
+            addView(icon(context, iconRes, iconDp, if (active) Sahne.HOME_INK else Sahne.CONTROL_ICON),
+                FrameLayout.LayoutParams(context.dp(iconDp), context.dp(iconDp), Gravity.CENTER))
             setOnClickListener { onClick() }
         }
 
@@ -365,6 +365,9 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
     }
 
     companion object {
+        /** Araç simgesi geniş ve alçak bir yan görünüş: diğer simgelerle aynı görsel ağırlıkta kalması için kutusu büyük (genişliğe sıkı görünüm kutusu). */
+        private const val CAR_ICON_DP = 40
+
         /** Tiggo 7 çubuk yüksekliği; profile göre gerçek yükseklik için [heightDp]. */
         const val HEIGHT_DP = VehicleProfile.TIGGO7_BAR_DP
 
