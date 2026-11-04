@@ -107,14 +107,20 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private val alertRow = NoticeRow(activity, tappable = { true }, onTap = { onNotice(it) })
     /** Araç parkta mı (vites P ya da el freni): açık bagaj / cam kapsülleri o zaman belirgin. */
     private var parked = false
+    /** onVisible ile onHidden arası: park yoklaması yalnız görünürken (ve pencereye bağlıyken) döner. */
+    private var visibleNow = false
+    /** Bekleyen tek park yoklaması var mı (tek zincir; sık gelen yolculuk güncellemeleri zamanlayıcıyı ertelemez). */
+    private var parkPollPending = false
     private val parkPoll = object : Runnable {
         override fun run() {
+            parkPollPending = false
             val now = readParked()
             if (now != parked) {
                 parked = now
-                bindNotices()
+                bindNotices() // zinciri kendisi sürdürür
+                return
             }
-            if (needsPark()) postDelayed(this, PARK_POLL_MS)
+            schedulePark()
         }
     }
 
@@ -176,14 +182,30 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     override fun onVisible() {
         sources.forEach { it.onVisible() }
         TripSource.add(activity, tripListener)
+        visibleNow = true
         parked = readParked()
         bindNotices()
+    }
+
+    /** onVisible pencereye bağlanmadan gelmiş olabilir: bağlanınca park yoklaması (gerekiyorsa) başlar. */
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (visibleNow) {
+            parked = readParked()
+            bindNotices()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        stopPark()
+        super.onDetachedFromWindow()
     }
 
     override fun onHidden() {
         sources.forEach { it.onHidden() }
         TripSource.remove(tripListener)
-        removeCallbacks(parkPoll)
+        visibleNow = false
+        stopPark()
     }
 
     override fun release() {
@@ -191,7 +213,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         detail = null
         vehicle.onSummary = null
         TripSource.remove(tripListener)
-        removeCallbacks(parkPoll)
+        visibleNow = false
+        stopPark()
         sources.forEach { it.release() }
     }
 
@@ -216,6 +239,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         ).joinToString(", ")
         val o = s?.openings
         car.setOpen(o?.carParts() ?: s?.openParts.orEmpty(), animate = carSeeded)
+        car.setGlass(o?.windows.orEmpty(), o?.sunroof == true, animate = carSeeded)
         if (s != null) carSeeded = true
         floor.alert = o?.any == true
         openings = o
@@ -291,11 +315,26 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         )
         alertRow.bind(list.map { noticeItem(it, s?.tireLow) })
         // Park durumu yalnızca belirgin tonu etkileyen bir kapsül varken izlenir (vites / el freni okuması arka planda).
-        removeCallbacks(parkPoll)
-        if (needsPark()) post(parkPoll)
+        schedulePark()
     }
 
-    private fun needsPark(): Boolean = isAttachedToWindow && vehicle.summary?.openings.let { o ->
+    /** Gerekiyorsa tek bir gecikmeli yoklama kurar (zaten bekleyen varsa dokunmaz); gerekmiyorsa bekleyeni kaldırır. */
+    private fun schedulePark() {
+        if (!needsPark()) {
+            stopPark()
+            return
+        }
+        if (parkPollPending) return
+        parkPollPending = true
+        postDelayed(parkPoll, PARK_POLL_MS)
+    }
+
+    private fun stopPark() {
+        removeCallbacks(parkPoll)
+        parkPollPending = false
+    }
+
+    private fun needsPark(): Boolean = visibleNow && isAttachedToWindow && vehicle.summary?.openings.let { o ->
         o != null && (o.trunk || o.sunroof || o.windows.isNotEmpty())
     }
 
@@ -409,13 +448,21 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         carW = carBox.width.toInt()
         car.measure(exactly(CarStageView.widthFor(carW)), exactly(CarStageView.heightFor(carW)))
         floor.setCar(carBox)
-        // Şerit aracın genişliği kadar (biraz taşabilir), sahneden taşmaz.
-        alertRow.measure(MeasureSpec.makeMeasureSpec(minOf(w - 2 * (SIDE * w / DESIGN_W).toInt(),
-            carBox.width.toInt() + context.dp(40)), MeasureSpec.AT_MOST), looseH)
         // Notlar aracın solundaki sütunda (menzilin altında): genişlik aracın sol kenarına kadar.
+        val side = (SIDE * w / DESIGN_W).toInt()
         val noteW = MeasureSpec.makeMeasureSpec(columnWidth(w), MeasureSpec.AT_MOST)
         healthNote.measure(noteW, looseH)
         airNote.measure(noteW, looseH)
+        // Şerit aracın genişliği kadar (biraz taşabilir), sahneden taşmaz; görünen notun sağ kenarına da binmez (şerit
+        // aracın ortasına hizalı olduğundan iki yana eşit daralır).
+        val noteRight = side + maxOf(
+            if (healthNote.visibility == View.VISIBLE) healthNote.measuredWidth else 0,
+            if (airNote.visibility == View.VISIBLE) airNote.measuredWidth else 0,
+        )
+        val carMid = (carBox.left + carBox.right) / 2f
+        var rowW = minOf(w - 2 * side, carBox.width.toInt() + context.dp(40))
+        if (noteRight > side) rowW = minOf(rowW, (2 * (carMid - noteRight - context.dpF(FIT_GAP_DP))).toInt().coerceAtLeast(0))
+        alertRow.measure(MeasureSpec.makeMeasureSpec(rowW, MeasureSpec.AT_MOST), looseH)
         skeleton.measure(exactly(context.dp(Skeleton.W_DP)), exactly(context.dp(Skeleton.H_DP)))
         waitNote.measure(MeasureSpec.makeMeasureSpec((w * 0.8f).toInt(), MeasureSpec.AT_MOST), looseH)
     }

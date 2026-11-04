@@ -142,6 +142,29 @@ object CarAnimSpec {
 
     fun part(p: CarPart): Part = parts.getValue(p)
 
+    /**
+     * Cam vurgusu (4 Kasım §1, "camlara hafif renk"): açık camın üstüne hafif buz mavisi. Kutular base pikselinde, kapı
+     * kapalıyken görünen yan camın yeri (üst kenar aracın solu); [door] açıldıkça vurgu söner (cam kapıyla birlikte döner).
+     */
+    class Glass(val box: Box, val door: CarPart?, val strength: Float = 1f)
+
+    const val GLASS_MAX_ALPHA = 0.32f
+    const val GLASS_CORNER = 8f
+    const val GLASS_FADE_MS = 280L
+
+    internal val windows: Map<BodyPart, Glass> = mapOf(
+        BodyPart.WINDOW_LF to Glass(Box(352f, 47f, 128f, 22f), CarPart.DOOR_FL),
+        BodyPart.WINDOW_LR to Glass(Box(205f, 47f, 126f, 22f), CarPart.DOOR_RL),
+        BodyPart.WINDOW_RF to Glass(Box(352f, 286f, 128f, 22f), CarPart.DOOR_FR),
+        BodyPart.WINDOW_RR to Glass(Box(205f, 286f, 126f, 22f), CarPart.DOOR_RR),
+    )
+
+    /** Cam tavanın camı (tavan açıkken aynı renk; geniş yüzey olduğundan daha hafif). */
+    val sunroof = Glass(Box(163f, 96f, 268f, 156f), null, strength = 0.6f)
+
+    /** Vurgunun saydamlığı: [fade] cam açılış geçişi (0 kapalı, 1 açık), [doorOpen] o camın kapısının açıklığı (0..1). */
+    fun glassAlpha(fade: Float, doorOpen: Float): Float = GLASS_MAX_ALPHA * clamp01(fade) * (1f - clamp01(doorOpen))
+
     /** Açık parçalar base dışına taşar (kapılar yanlara, bagaj geriye); görünüm bu payları kapsar. Gölge bulanıklığı dahil. */
     val padLeft: Float = maxOf(0f, -parts.values.minOf { minOf(it.overlay.x, it.sprite.x + it.translateXEnd) })
     val padTop: Float = maxOf(0f, -parts.values.minOf { it.overlay.y }) + SHADOW_BLUR * 2

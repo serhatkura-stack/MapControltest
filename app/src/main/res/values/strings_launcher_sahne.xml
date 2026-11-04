@@ -31,7 +31,6 @@
     <string name="launcher_notice_more" formatted="true">+%1$d</string>
     <string name="launcher_notice_more_desc" formatted="true">%1$d more alerts</string>
     <string name="launcher_notice_no_maps">No maps app found</string>
-    <string name="launcher_notice_fuel_desc">Low fuel. Search for the nearest gas station</string>
     <string name="launcher_detail_title">Vehicle status</string>
     <string name="launcher_detail_open">Open</string>
     <string name="launcher_detail_closed">Closed</string>

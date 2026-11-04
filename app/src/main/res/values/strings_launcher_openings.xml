@@ -2,10 +2,6 @@
 <resources>
     <!-- Open body parts line on the stage -->
     <string name="launcher_open_door" formatted="true">%1$s door</string>
-    <string name="launcher_open_doors_n" formatted="true">%1$d doors</string>
-    <string name="launcher_open_windows_n" formatted="true">%1$d windows</string>
-    <string name="launcher_open_two" formatted="true">%1$s and %2$s open</string>
-    <string name="launcher_open_many" formatted="true">%1$d open: %2$s</string>
     <string name="launcher_lock_waiting">Waiting</string>
     <string name="launcher_stage_waiting">Waiting for car data</string>
     <string name="launcher_trip_no_data">No trip data yet</string>

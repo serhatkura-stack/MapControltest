@@ -37,6 +37,8 @@ internal class NoticeRow(
 
     init {
         clipChildren = false
+        // "+N" ikonsuz kapsül biçiminde başlar: ölçümdeki [NoticeChip.widthFor] doğru dolgu ve yazıyla hesaplar.
+        more.style(NoticeItem(null, "", 0, NoticeTone.INFO))
         addView(more)
         if (tappable(null)) {
             more.setOnClickListener { onTap(null) }

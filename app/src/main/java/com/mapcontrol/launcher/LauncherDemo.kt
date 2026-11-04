@@ -153,6 +153,9 @@ internal object LauncherDemo {
 
     private val ALERT_PARTS = setOf("lf", "trunk")
 
+    /** Uyarı önizlemesinin kendisinin açtığı parçalar: kapatınca yalnız bunlar kapanır (`launcher_demo_open` ile açılanlar kalır). */
+    private var alertAdded: Set<String> = emptySet()
+
     /** Araç kartı bunu atar; demo isteği değişince ana iş parçacığında çağrılır. */
     @Volatile
     var onBodyChanged: Runnable? = null
@@ -161,11 +164,18 @@ internal object LauncherDemo {
         if (!enabled || intent == null) return
         if (intent.hasExtra(EXTRA_OPEN)) {
             openParts = parseOpen(intent.getStringExtra(EXTRA_OPEN))
+            alertAdded = emptySet()
             onBodyChanged?.let { main.post(it) }
         }
         if (intent.hasExtra(EXTRA_ALERTS)) {
             alerts = intent.getBooleanExtra(EXTRA_ALERTS, false)
-            openParts = if (alerts) openParts + ALERT_PARTS else openParts - ALERT_PARTS
+            if (alerts) {
+                alertAdded = alertAdded + (ALERT_PARTS - openParts)
+                openParts = openParts + ALERT_PARTS
+            } else {
+                openParts = openParts - alertAdded
+                alertAdded = emptySet()
+            }
             onBodyChanged?.let { main.post(it) }
         }
         if (intent.hasExtra(EXTRA_DOORS_CYCLE)) setDoorsCycle(intent.getBooleanExtra(EXTRA_DOORS_CYCLE, false))

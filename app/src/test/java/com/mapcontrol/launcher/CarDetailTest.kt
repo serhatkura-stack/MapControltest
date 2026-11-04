@@ -49,6 +49,8 @@ class CarDetailTest {
         assertEquals(listOf(0), CarDetail.openIndices(m.doors))
         assertEquals(listOf(3), CarDetail.openIndices(m.windows))
         assertEquals(emptyList<Int>(), CarDetail.openIndices(listOf(false, null, false, false)))
+        // Detaydaki araç görselinde renklenen camlar: yalnız açık olduğu bilinenler.
+        assertEquals(listOf(BodyPart.WINDOW_RR), CarDetail.openWindows(m))
     }
 
     @Test
@@ -67,6 +69,8 @@ class CarDetailTest {
         assertEquals(AirGrade.MODERATE, AirGrade.of(36))
         assertEquals(AirGrade.MODERATE, AirGrade.of(75))
         assertEquals(AirGrade.POOR, AirGrade.of(76))
-        assertTrue(StageCorners.AIR_BAD_PM25 in (AirGrade.GOOD_MAX + 1)..AirGrade.MODERATE_MAX)
+        // Sahnedeki hava notu yalnız "Kötü" derecede çıkar (uyarı rengi ile yazı aynı şeyi söyler).
+        assertEquals(AirGrade.POOR, AirGrade.of(StageCorners.AIR_BAD_PM25))
+        assertEquals(AirGrade.MODERATE, AirGrade.of(StageCorners.AIR_BAD_PM25 - 1))
     }
 }

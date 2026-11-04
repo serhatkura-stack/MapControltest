@@ -50,11 +50,11 @@ class StageCornersTest {
 
     @Test
     fun airCornerOnlyWhenBad() {
-        assertEquals(55, StageCorners.AIR_BAD_PM25)
+        assertEquals(76, StageCorners.AIR_BAD_PM25)
         assertFalse(StageCorners.airShown(null))
         assertFalse(StageCorners.airShown(4))
-        assertFalse(StageCorners.airShown(54))
-        assertTrue(StageCorners.airShown(55))
+        assertFalse(StageCorners.airShown(75)) // "Orta": not çıkmaz
+        assertTrue(StageCorners.airShown(76))
         assertTrue(StageCorners.airShown(120))
     }
 }

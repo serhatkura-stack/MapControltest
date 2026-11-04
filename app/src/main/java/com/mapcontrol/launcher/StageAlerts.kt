@@ -9,8 +9,11 @@ internal object StageCorners {
     /** Bakım "yaklaştı" sayılan kalan mesafe (km); geçmiş bakım (0 ve altı) her zaman sayılır. */
     const val SERVICE_NEAR_KM = HealthMath.SOON_KM
 
-    /** Kötü hava eşiği: kabin içi PM2.5 (µg/m³) bu değer ve üstündeyse hava köşesi çıkar. */
-    const val AIR_BAD_PM25 = 55
+    /**
+     * Kötü hava eşiği: kabin içi PM2.5 (µg/m³) bu değer ve üstündeyse hava köşesi çıkar. Hava kutucuğunun "Kötü" derecesiyle
+     * aynı ([AirGrade.POOR]): uyarı renginde çıkan not "Orta" yazmasın.
+     */
+    const val AIR_BAD_PM25 = AirGrade.MODERATE_MAX + 1
 
     /** Köşeyi açan sağlık uyarıları. Düşük yakıt yok (menzil bloğunda ve bildirim kapsülünde); bakım ayrıca [serviceNear]. */
     private val WARNINGS = setOf(HealthMath.Issue.ENGINE_HOT, HealthMath.Issue.BATTERY_LOW, HealthMath.Issue.BATTERY_HIGH)

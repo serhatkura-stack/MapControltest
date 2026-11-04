@@ -51,6 +51,9 @@ internal object CarDetail {
 
     private val WINDOWS = listOf(BodyPart.WINDOW_LF, BodyPart.WINDOW_RF, BodyPart.WINDOW_LR, BodyPart.WINDOW_RR)
 
+    /** Açık olduğu bilinen camlar ([CarDetailModel.windows] sırası [WINDOWS]); bilinmeyen (null) açık sayılmaz. */
+    fun openWindows(m: CarDetailModel): List<BodyPart> = WINDOWS.filterIndexed { i, _ -> m.windows.getOrNull(i) == true }
+
     /** Tekerlek başına psi; yalnızca dört tekerlekli okumada (tek değerli okumada hangi tekerlek olduğu bilinmez). */
     fun psi(t: TireReading?): List<Int?> =
         if (t == null || !t.perWheel) List(TireReading.WHEELS) { null } else t.values.map { v -> v?.let { TireDecode.psi(it) } }
@@ -216,6 +219,7 @@ internal class CarDetailSheet(private val activity: Activity) {
 
         fun bind(m: CarDetailModel, parts: Set<CarPart>) {
             car.setOpen(parts, animate = false)
+            car.setGlass(CarDetail.openWindows(m), m.sunroof == true, animate = false)
             labels.forEachIndexed { i, l -> l.bind(context.getString(TIRE_NAMES[i]), m.tiresPsi[i], m.tiresLow[i]) }
         }
 

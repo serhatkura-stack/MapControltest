@@ -156,4 +156,32 @@ class CarAnimSpecTest {
             }
         }
     }
+
+    @Test fun glassCoversEachWindowOnItsOwnDoorSide() {
+        // Dört yan cam da tanımlı; sol camlar üst kenarda (aracın solu), sağ camlar alt kenarda; hepsi gövdenin içinde.
+        assertEquals(setOf(BodyPart.WINDOW_LF, BodyPart.WINDOW_RF, BodyPart.WINDOW_LR, BodyPart.WINDOW_RR), CarAnimSpec.windows.keys)
+        val all = CarAnimSpec.windows.values + CarAnimSpec.sunroof
+        all.forEach { g ->
+            assertTrue(g.box.x >= 0f && g.box.y >= 0f && g.box.right <= CarAnimSpec.BASE_W && g.box.bottom <= CarAnimSpec.BASE_H)
+        }
+        CarAnimSpec.windows.forEach { (w, g) ->
+            val door = g.door!!
+            assertTrue(door.isDoor)
+            val gap = CarAnimSpec.part(door).gap
+            // Cam, kapısının boşluğuyla aynı yanda ve aynı boyda (kapı açılınca boşluk camın üstüne biner).
+            assertTrue("$w", g.box.x < gap.right && g.box.right > gap.x)
+            val left = w == BodyPart.WINDOW_LF || w == BodyPart.WINDOW_LR
+            assertEquals("$w", left, g.box.y < CarAnimSpec.BASE_H / 2)
+        }
+        assertNull(CarAnimSpec.sunroof.door)
+    }
+
+    @Test fun glassFadesInAndHidesWhileItsDoorOpens() {
+        assertEquals(0f, CarAnimSpec.glassAlpha(0f, 0f), 0f)
+        assertEquals(CarAnimSpec.GLASS_MAX_ALPHA, CarAnimSpec.glassAlpha(1f, 0f), 1e-6f)
+        assertEquals(CarAnimSpec.GLASS_MAX_ALPHA / 2, CarAnimSpec.glassAlpha(1f, 0.5f), 1e-6f)
+        assertEquals(0f, CarAnimSpec.glassAlpha(1f, 1f), 0f)
+        assertEquals(0f, CarAnimSpec.glassAlpha(1f, 1.05f), 0f) // kapı ucu hafif taşar: eksiye düşmez
+        assertTrue(CarAnimSpec.GLASS_MAX_ALPHA <= 0.4f) // "hafif" renk
+    }
 }

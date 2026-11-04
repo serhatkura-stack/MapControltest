@@ -56,6 +56,17 @@ class CarStageView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
+    // --- Cam vurgusu: dört yan cam ve tavan camı ([CarAnimSpec.windows], [CarAnimSpec.sunroof]) ---
+    private val glassKeys: List<BodyPart?> = CarAnimSpec.windows.keys.toList() + null
+    private val glasses = glassKeys.map { if (it == null) CarAnimSpec.sunroof else CarAnimSpec.windows.getValue(it) }
+    private val glassDoor = IntArray(glasses.size) { i -> glasses[i].door?.let { parts.indexOf(it) } ?: -1 }
+    private val glassFrom = FloatArray(glasses.size)
+    private val glassNow = FloatArray(glasses.size)
+    private val glassTarget = FloatArray(glasses.size)
+    private var glassAnim: ValueAnimator? = null
+    private val glassPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glassRect = RectF()
+
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(CarColorPrefs.PREFS_NAME, Context.MODE_PRIVATE)
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == CarColorPrefs.KEY) setColor(CarColorPrefs.get(context))
@@ -126,6 +137,43 @@ class CarStageView(context: Context) : View(context) {
         invalidate()
     }
 
+    /**
+     * Açık camlar ve tavan: üstlerine hafif buz mavisi (4 Kasım §1). [animate] false ise doğrudan son hal; aksi halde kısa
+     * bir geçişle belirir / söner.
+     */
+    internal fun setGlass(windows: Collection<BodyPart>, sunroof: Boolean, animate: Boolean) {
+        var changed = false
+        for (i in glasses.indices) {
+            val want = if (glassKeys[i] == null) sunroof else glassKeys[i] in windows
+            val t = if (want) 1f else 0f
+            if (glassTarget[i] != t) changed = true
+            glassTarget[i] = t
+        }
+        if (!changed && glassAnim == null) return
+        glassAnim?.let { it.removeAllListeners(); it.cancel() }
+        glassAnim = null
+        if (!(animate && isAttachedToWindow && isLaidOut)) {
+            glassTarget.copyInto(glassNow)
+            invalidate()
+            return
+        }
+        glassNow.copyInto(glassFrom)
+        glassAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = CarAnimSpec.GLASS_FADE_MS
+            addUpdateListener { a ->
+                val f = a.animatedValue as Float
+                for (i in glasses.indices) glassNow[i] = glassFrom[i] + (glassTarget[i] - glassFrom[i]) * f
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (glassAnim === animation) glassAnim = null
+                }
+            })
+            start()
+        }
+    }
+
     /** Renk takımını değiştirir (tercih dinleyicisi ve ayar panelinden); görseller hemen değişir. */
     fun setColor(color: CarColor) {
         if (bitmaps?.color == color) return
@@ -149,6 +197,9 @@ class CarStageView(context: Context) : View(context) {
         }
         // Son hal korunur: kalan hareket bitmiş sayılır.
         motions.forEach { it.snap(it.target == 1) }
+        glassAnim?.let { it.removeAllListeners(); it.cancel() }
+        glassAnim = null
+        glassTarget.copyInto(glassNow)
         running = 0
         super.onDetachedFromWindow()
     }
@@ -162,6 +213,7 @@ class CarStageView(context: Context) : View(context) {
         canvas.translate(CarAnimSpec.padLeft, CarAnimSpec.padTop)
         paint.alpha = 255
         b.base?.let { canvas.drawBitmap(it, 0f, 0f, paint) }
+        drawGlass(canvas)
         // 1) Boşluklar (tüm parçalar), 2) parça + gölge + kenar ışığı, 3) açık hal fotoğrafları (anim.json zOrder).
         for (i in parts.indices) {
             val a = motions[i].gapAlpha()
@@ -177,6 +229,20 @@ class CarStageView(context: Context) : View(context) {
             drawAt(canvas, b.overlay[i], o.x, o.y, a)
         }
         canvas.restoreToCount(save)
+    }
+
+    /** Açık camların hafif rengi: gövdenin hemen üstünde (açılan kapının boşluğu ve parçası üstüne biner). */
+    private fun drawGlass(canvas: Canvas) {
+        glassPaint.color = Sahne.ICE
+        for (i in glasses.indices) {
+            val d = glassDoor[i]
+            val a = CarAnimSpec.glassAlpha(glassNow[i], if (d >= 0) motions[d].x else 0f) * glasses[i].strength
+            if (a <= 0.001f) continue
+            val g = glasses[i].box
+            glassPaint.alpha = (255 * a).toInt().coerceIn(0, 255)
+            glassRect.set(g.x, g.y, g.right, g.bottom)
+            canvas.drawRoundRect(glassRect, CarAnimSpec.GLASS_CORNER, CarAnimSpec.GLASS_CORNER, glassPaint)
+        }
     }
 
     private fun drawSprite(canvas: Canvas, i: Int, b: CarBitmaps) {
