@@ -3,6 +3,7 @@ package com.mapcontrol.launcher
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
@@ -37,8 +38,18 @@ internal class SportController(
     /** Geçiş kuşağı: iptal edilen ya da yerine yenisi başlayan geçişin geç gelen geri çağrıları hiçbir şey yapmaz. */
     private var gen = 0
 
-    /** Spor açık ya da açılıp kapanıyor (düzenlemeye girerken kapatılmalı). */
+    /** Spor açık ya da açılıp kapanıyor. */
     val engaged: Boolean get() = shown || busy
+    /** Geçiş sürüyor (karartma altında): düzenlemeye girerken kesilir. */
+    val transitioning: Boolean get() = busy
+    /** Spor ekranının açıldığı an (monoton ms); özet kartı yalnız [MIN_STINT_MS]'den uzun spor açıklığında. */
+    private var shownAt = 0L
+    /** Analog saat seçimi değişince başlıktaki dijital saat. */
+    private val dialsListener: () -> Unit = { if (shown) header().setSportClockHidden(SportDialPrefs.clockChosen(activity)) }
+
+    init {
+        SportDialPrefs.addListener(dialsListener)
+    }
 
     fun request(on: Boolean) {
         target = on
@@ -100,6 +111,7 @@ internal class SportController(
             savedGround = null
             return
         }
+        header().setSportClockHidden(SportDialPrefs.clockChosen(activity))
         r?.let {
             savedGround = it.background
             it.background = SportGround(activity)
@@ -114,6 +126,7 @@ internal class SportController(
 
     fun release() {
         cancelRunning()
+        SportDialPrefs.removeListener(dialsListener)
     }
 
     private fun animationsOn(): Boolean = try {
@@ -163,7 +176,13 @@ internal class SportController(
     private fun exit() {
         val s = sahne()
         if (s == null || !s.sportShown) { swap(false); return }
-        if (!animationsOn()) { applyInstant(false); return }
+        // Sürüş özeti: spor ekranı bir süre açık kaldıysa çıkış bitince kısa süre gösterilir.
+        val summarize = SystemClock.elapsedRealtime() - shownAt >= MIN_STINT_MS
+        if (!animationsOn()) {
+            applyInstant(false)
+            if (summarize) SportSummaryCard.show(activity, SportSummaryCard.current(activity))
+            return
+        }
         busy = true
         val my = ++gen
         val stage = s.sportStage()
@@ -175,6 +194,7 @@ internal class SportController(
                 if (my != gen) return@fade
                 sahne()?.dropSport()
                 finish()
+                if (summarize && !shown) SportSummaryCard.show(activity, SportSummaryCard.current(activity))
             }
         }
     }
@@ -195,7 +215,9 @@ internal class SportController(
         }
         shown = on
         rememberedSport = on
+        if (on) shownAt = SystemClock.elapsedRealtime()
         header().setSport(on)
+        header().setSportClockHidden(on && SportDialPrefs.clockChosen(activity))
         bar()?.setSport(on)
         val r = root() ?: return true
         if (on) {
@@ -250,6 +272,8 @@ internal class SportController(
         const val OUT_DIM_MS = 420L
         const val OUT_REVEAL_MS = 650L
         const val READY_TIMEOUT_MS = 1_500L
+        /** Bundan kısa spor açıklığında çıkışta özet kartı gösterilmez (titreşim, deneme). */
+        const val MIN_STINT_MS = 20_000L
 
         /** Etkinlik yeniden kurulursa (tema, tercih) spor ekranı geçişsiz geri gelsin diye. */
         @Volatile var rememberedSport = false

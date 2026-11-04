@@ -188,11 +188,16 @@ internal object SportArt {
         // Zemin gölgesi (aracın altı) ve stop lambası parıltısı (burun yukarı, kuyruk aşağıda).
         p.shader = RadialGradient(d.cx, d.cy, carLen * 0.62f, intArrayOf(0x99000000.toInt(), 0x00000000), null, Shader.TileMode.CLAMP)
         c.drawCircle(d.cx, d.cy, carLen * 0.62f, p)
-        val ty = d.cy + carLen * 0.5f
-        p.shader = RadialGradient(d.cx, ty, carLen * 0.34f, intArrayOf(0x8CEA580C.toInt(), 0x33EA580C, 0x00EA580C), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        // Işık havuzu kuyruğun hemen altında; yüz çemberinin içinde sıfıra iner (en alt nokta ~0,94 rf), ayrıca yüz
+        // çemberine kırpılır: alt kenarda kesik görünmez.
+        val ty = d.cy + rf * 0.70f
+        val gr = rf * 0.5f
+        p.shader = RadialGradient(d.cx, ty, gr, intArrayOf(0x80EA580C.toInt(), 0x3DEA580C, 0x12EA580C, 0x00EA580C), floatArrayOf(0f, 0.35f, 0.7f, 1f), Shader.TileMode.CLAMP)
         c.save()
-        c.scale(1.5f, 0.75f, d.cx, ty)
-        c.drawCircle(d.cx, ty, carLen * 0.34f, p)
+        val clip = android.graphics.Path().apply { addCircle(d.cx, d.cy, rf - 1f, android.graphics.Path.Direction.CW) }
+        c.clipPath(clip)
+        c.scale(1.15f, 0.48f, d.cx, ty)
+        c.drawCircle(d.cx, ty, gr, p)
         c.restore()
         p.shader = null
     }
@@ -204,9 +209,9 @@ internal object SportArt {
         face(c, d.cx, d.cy, rf)
         tickRing(c, d.cx, d.cy, rf - 3f, 60, rf * 0.05f, 0x30)
         val label = textPaint(context, d.r * 0.17f, SportInk.INK_3, 500)
-        val unit = textPaint(context, d.r * 0.15f, SportInk.INK_3, 400)
         when (d.kind) {
-            SportGeometry.Kind.G -> {
+            SportDial.CLOCK -> clockFace(c, d.cx, d.cy, rf)
+            SportDial.G -> {
                 // Artı işareti yalnız 1 g çemberinin içinde: etiket, eksen yazıları ve büyük değer çizgilerin üstüne binmez.
                 val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0x40FFFFFF }
                 val gr = d.r * SportGeometry.G_RANGE
@@ -220,11 +225,57 @@ internal object SportArt {
                 centered(c, "1", d.cx - gr - d.r * 0.12f, d.cy, small)
             }
             else -> {
+                // Birim ve durum ("Hazır", "En iyi") canlı yazı; durağan çizimde yalnız etiket.
                 val k = d.kind ?: return
-                centered(c, g.label(k), d.cx, d.cy - d.r * 0.44f, label)
-                centered(c, g.unit(k), d.cx, d.cy + d.r * 0.42f, unit)
+                centered(c, SportGeometry.label(k), d.cx, d.cy - d.r * 0.44f, label)
             }
         }
+    }
+
+    /**
+     * Analog saat yüzü: 12/3/6/9'da talaşlı metal çentikler, diğer saatlerde sönük noktalar, altta minik saniye alt
+     * kadranı (ince halka ve 12 çentik). İbreler canlı ([SportClockHand]).
+     */
+    private fun clockFace(c: Canvas, cx: Float, cy: Float, rf: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val r1 = rf * 0.86f
+        val len = rf * 0.17f
+        val hw = rf * 0.036f
+        for (i in 0 until 12) {
+            val deg = i * 30f - 90f
+            if (i % 3 == 0) {
+                c.save()
+                c.rotate(deg + 90f, cx, cy)
+                // Çentik: dikey metal çubuk (üstten ışık), koyu kenar çizgisi.
+                val rect = RectF(cx - hw, cy - r1, cx + hw, cy - r1 + len)
+                p.style = Paint.Style.FILL
+                p.shader = LinearGradient(rect.left, 0f, rect.right, 0f, intArrayOf(SportInk.METAL_LO, SportInk.METAL_HI, SportInk.METAL_MID), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+                c.drawRoundRect(rect, hw * 0.4f, hw * 0.4f, p)
+                p.shader = null
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 1f
+                p.color = 0xFF050506.toInt()
+                c.drawRoundRect(rect, hw * 0.4f, hw * 0.4f, p)
+                c.restore()
+            } else {
+                p.style = Paint.Style.FILL
+                p.shader = null
+                p.color = 0x8CFFFFFF.toInt()
+                val a = Math.toRadians(deg.toDouble())
+                c.drawCircle(cx + cos(a).toFloat() * (r1 - len * 0.3f), cy + sin(a).toFloat() * (r1 - len * 0.3f), rf * 0.018f, p)
+            }
+        }
+        // Saniye alt kadranı.
+        val sy = cy + rf * SportGeometry.CLOCK_SEC_Y
+        val sr = rf * SportGeometry.CLOCK_SEC_R
+        p.style = Paint.Style.FILL
+        p.color = 0xFF060607.toInt()
+        c.drawCircle(cx, sy, sr, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1f
+        p.color = 0x4DFFFFFF
+        c.drawCircle(cx, sy, sr, p)
+        for (i in 0 until 12) line(c, cx, sy, i * 30f, sr * (if (i % 3 == 0) 0.62f else 0.78f), sr * 0.92f, p.apply { color = if (i % 3 == 0) 0x99FFFFFF.toInt() else 0x40FFFFFF })
     }
 
     private fun rpmDial(context: Context, c: Canvas, g: SportGeometry) {
@@ -287,12 +338,6 @@ internal object SportArt {
         p.shader = LinearGradient(0f, win.top, 0f, win.bottom, intArrayOf(SportInk.METAL_HI, SportInk.METAL_LO, SportInk.METAL_MID), null, Shader.TileMode.CLAMP)
         c.drawRoundRect(win, wr, wr, p)
         p.shader = null
-        if (!g.hasG) {
-            // G-metre yoksa anlık tüketim devir kadranının altında: büyük değer ortada (canlı), etiket ve birim iki yanda.
-            val y = g.innerInstantY()
-            centered(c, g.label(SportGeometry.Kind.INSTANT), d.cx - rf * 0.33f, y, textPaint(context, rf * 0.078f, SportInk.INK_2, 500))
-            centered(c, g.unit(SportGeometry.Kind.INSTANT), d.cx + rf * 0.33f, y, textPaint(context, rf * 0.078f, SportInk.INK_2, 400))
-        }
     }
 
     /** Geçişte kadran çerçevesi parıltısı (yalnızca halka; gradyanla yumuşak kenar). */
@@ -320,9 +365,9 @@ internal object SportArt {
 }
 
 /** Spor orta alanının kadran yerleşimi (taslak 1872 × 488; ölçek ve ortalama gerçek boyuta göre). */
-internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
-    enum class Kind { ZERO100, G, INSTANT, MAX }
-    class Dial(val cx: Float, val cy: Float, val r: Float, val kind: Kind? = null)
+internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>) {
+    /** [slot] küçük kadran yuvası (0 sol üst, 1 sol alt, 2 sağ üst, 3 sağ alt); büyük kadranlarda -1. */
+    class Dial(val cx: Float, val cy: Float, val r: Float, val kind: SportDial? = null, val slot: Int = -1)
 
     val s: Float = min(w / DW, h / DH).coerceAtLeast(0.1f)
     private val ox = (w - DW * s) / 2f
@@ -335,20 +380,20 @@ internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
     val media = Dial(x(212f), y(244f), r(210f))
     val car = Dial(x(1660f), y(244f), r(210f))
     val rpm = Dial(x(936f), y(244f), r(236f))
-    val subs: List<Dial> = if (hasG) listOf(
-        Dial(x(590f), y(128f), r(104f), Kind.ZERO100),
-        Dial(x(590f), y(360f), r(104f), Kind.G),
-        Dial(x(1282f), y(128f), r(104f), Kind.INSTANT),
-        Dial(x(1282f), y(360f), r(104f), Kind.MAX),
-    ) else listOf(
-        Dial(x(590f), y(244f), r(112f), Kind.ZERO100),
-        Dial(x(1282f), y(244f), r(112f), Kind.MAX),
+    val subs: List<Dial> = listOf(
+        Dial(x(590f), y(128f), r(104f), dials[0], 0),
+        Dial(x(590f), y(360f), r(104f), dials[1], 1),
+        Dial(x(1282f), y(128f), r(104f), dials[2], 2),
+        Dial(x(1282f), y(360f), r(104f), dials[3], 3),
     )
 
     /** Kadranlar soldan sağa (geçişteki parıltı sırası). */
     val inOrder: List<Dial> get() = (listOf(media, rpm, car) + subs).sortedBy { it.cx }
 
-    fun sub(kind: Kind): Dial? = subs.firstOrNull { it.kind == kind }
+    fun sub(kind: SportDial): Dial? = subs.firstOrNull { it.kind == kind }
+
+    /** Aynı boyut ve aynı seçim (durağan çizim yeniden kullanılabilir). */
+    fun sameAs(o: SportGeometry?): Boolean = o != null && o.w == w && o.h == h && o.dials == dials
 
     /** Devir kadranı yüz yarıçapı. */
     val rpmFace: Float get() = rpm.r - rpm.r * 0.075f - 2f
@@ -362,26 +407,56 @@ internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
         return RectF(cx - hw, cy - hh, cx + hw, cy + hh)
     }
 
-    fun innerInstantY(): Float = rpm.cy + rpmFace * 0.76f
-
     /** Araç kadranında aracın gövde boyu (burun yukarı). */
     fun carLength(): Float = (car.r - car.r * 0.075f - 2f) * 1.52f
 
-    fun label(kind: Kind): String = when (kind) {
-        Kind.ZERO100 -> "0–100"
-        Kind.G -> "G"
-        Kind.INSTANT -> "Anlık"
-        Kind.MAX -> "Maks"
-    }
-
-    fun unit(kind: Kind): String = when (kind) {
-        Kind.ZERO100 -> "sn"
-        Kind.G -> ""
-        Kind.INSTANT -> "L/100"
-        Kind.MAX -> "km/sa"
-    }
+    /** Küçük kadran yüzü yarıçapı (bezel içi). */
+    fun subFace(d: Dial): Float = d.r - d.r * 0.09f - 2f
 
     companion object {
+        /** Kadran üstündeki tek kelimelik etiket (saatte yok). */
+        fun label(kind: SportDial): String = when (kind) {
+            SportDial.ZERO100 -> "0–100"
+            SportDial.G -> "G"
+            SportDial.INSTANT -> "Anlık"
+            SportDial.MAX -> "Maks"
+            SportDial.COOLANT -> "Motor"
+            SportDial.AVG_SPEED -> "Ortalama"
+            SportDial.TRIP_TIME -> "Süre"
+            SportDial.RANGE -> "Menzil"
+            SportDial.PASS80 -> "80–120"
+            SportDial.CLOCK -> ""
+        }
+
+        /** Birim (canlı yazı; süre "dk"/"sa" arasında değişir). */
+        fun unit(kind: SportDial): String = when (kind) {
+            SportDial.ZERO100, SportDial.PASS80 -> "sn"
+            SportDial.INSTANT -> "L/100"
+            SportDial.MAX, SportDial.AVG_SPEED -> "km/sa"
+            SportDial.COOLANT -> "°C"
+            SportDial.TRIP_TIME -> "dk"
+            SportDial.RANGE -> "km"
+            SportDial.G, SportDial.CLOCK -> ""
+        }
+
+        /** Seçicideki ad. */
+        fun pickerName(kind: SportDial): String = when (kind) {
+            SportDial.ZERO100 -> "0–100"
+            SportDial.G -> "G-metre"
+            SportDial.INSTANT -> "Anlık tüketim"
+            SportDial.MAX -> "Maks hız"
+            SportDial.COOLANT -> "Motor suyu"
+            SportDial.AVG_SPEED -> "Ortalama hız"
+            SportDial.TRIP_TIME -> "Yolculuk süresi"
+            SportDial.RANGE -> "Menzil"
+            SportDial.PASS80 -> "80–120"
+            SportDial.CLOCK -> "Analog saat"
+        }
+
+        /** Analog saat: saniye alt kadranının merkez yüksekliği ve yarıçapı (yüz yarıçapına oran). */
+        const val CLOCK_SEC_Y = 0.42f
+        const val CLOCK_SEC_R = 0.19f
+
         const val DW = 1872f
         const val DH = 488f
         /** Medya kadranında ilerleme halkası yarıçapı ve kalınlığı (dış yarıçapa oran). */
@@ -391,8 +466,6 @@ internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
         const val G_RANGE = 0.42f
         const val G_VALUE = 0.30f
         const val G_VALUE_Y = 0.64f
-        /** G-metre yoksa devir kadranındaki anlık tüketim değerinin boyu (yüz yarıçapına oran). */
-        const val INNER_VALUE = 0.20f
     }
 }
 
@@ -529,10 +602,96 @@ internal class SportPillDrawable(private val context: Context, private val radiu
 }
 
 /**
+ * Talaşlı metal çerçeveli hap (başlıktaki hava ve bağlantı kapsülü): sol düğmelerdeki ([SportKnobDrawable]) fırçalanmış
+ * halkanın hap biçimi; açısal metal bantlar, eşmerkezli fırça izleri, iç pah ve üstten düşen ışık. Boyut başına bir kez
+ * önbellek bitmap'ine çizilir.
+ */
+internal class SportBezelPillDrawable(private val context: Context, private val bandDp: Float = 5f) : Drawable() {
+    private var cache: Bitmap? = null
+
+    override fun onBoundsChange(b: Rect) {
+        cache = null
+    }
+
+    private fun build(w: Int, h: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val inset = context.dpF(1f)
+        val o = RectF(inset, inset, w - inset, h - inset)
+        val r = o.height() / 2f
+        val bw = context.dpF(bandDp)
+        p.color = 0xFF040405.toInt()
+        c.drawRoundRect(o, r, r, p)
+        // Metal bant (açısal geçiş, kadran çerçevesiyle aynı tonlar).
+        val cx = w / 2f
+        val cy = h / 2f
+        val hi = SportArt.scale(SportInk.METAL_HI, 0.92f)
+        val mid = SportArt.scale(SportInk.METAL_MID, 0.92f)
+        val lo = SportArt.scale(SportInk.METAL_LO, 0.92f)
+        val deep = SportArt.scale(SportInk.METAL_DEEP, 0.92f)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = bw
+        p.shader = SweepGradient(cx, cy, intArrayOf(mid, hi, mid, lo, deep, lo, mid, hi, mid, lo, deep, lo, mid),
+            floatArrayOf(0f, 0.07f, 0.15f, 0.24f, 0.32f, 0.41f, 0.5f, 0.57f, 0.65f, 0.74f, 0.82f, 0.91f, 1f))
+        val m = RectF(o.left + bw / 2f, o.top + bw / 2f, o.right - bw / 2f, o.bottom - bw / 2f)
+        c.drawRoundRect(m, r - bw / 2f, r - bw / 2f, p)
+        p.shader = null
+        // Fırça izleri.
+        p.strokeWidth = 0.7f
+        for (i in 1..4) {
+            val k = bw * i / 5f
+            p.color = if (i % 2 == 0) 0x1AFFFFFF else 0x1F000000
+            c.drawRoundRect(RectF(o.left + k, o.top + k, o.right - k, o.bottom - k), r - k, r - k, p)
+        }
+        // Dış koyu kenar, iç pah (ince ışık + koyu çizgi).
+        p.strokeWidth = 1.2f
+        p.color = 0xFF020203.toInt()
+        c.drawRoundRect(RectF(o.left + 0.6f, o.top + 0.6f, o.right - 0.6f, o.bottom - 0.6f), r - 0.6f, r - 0.6f, p)
+        val ir = r - bw
+        val inner = RectF(o.left + bw, o.top + bw, o.right - bw, o.bottom - bw)
+        // İç yüz: üstten hafif ışık, koyu.
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(0f, inner.top, 0f, inner.bottom, intArrayOf(0xFF202227.toInt(), 0xFF0D0E10.toInt(), 0xFF070708.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+        c.drawRoundRect(inner, ir, ir, p)
+        p.shader = null
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1f
+        p.color = 0x59FFFFFF
+        c.drawRoundRect(RectF(inner.left - 0.5f, inner.top - 0.5f, inner.right + 0.5f, inner.bottom + 0.5f), ir + 0.5f, ir + 0.5f, p)
+        p.color = 0xFF050506.toInt()
+        p.strokeWidth = 1.6f
+        c.drawRoundRect(RectF(inner.left + 1.3f, inner.top + 1.3f, inner.right - 1.3f, inner.bottom - 1.3f), ir - 1.3f, ir - 1.3f, p)
+        // Üstten düşen ışık: dış kenarın üst yarısında ince parıltı.
+        p.strokeWidth = 1.2f
+        p.shader = LinearGradient(0f, o.top, 0f, cy, 0x99FFFFFF.toInt(), 0x00FFFFFF, Shader.TileMode.CLAMP)
+        c.drawRoundRect(RectF(o.left + 1.4f, o.top + 1.4f, o.right - 1.4f, o.bottom - 1.4f), r - 1.4f, r - 1.4f, p)
+        return bmp
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        if (b.isEmpty) return
+        val bmp = cache ?: build(b.width(), b.height()).also { cache = it }
+        canvas.drawBitmap(bmp, b.left.toFloat(), b.top.toFloat(), null)
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+/**
  * Spor alt çubuğu: zemin görselinin koyu bir kesiti (yarı saydam koyu dolgu, altındaki görsel karartılmış görünür) ve
  * fırçalanmış metal çerçeve. Dikiş ve vida yok (dikiş zemin görselinde). Bir kez önbellek bitmap'ine çizilir.
  */
-internal class SportPanelDrawable(private val context: Context, private val radiusDp: Float) : Drawable() {
+internal class SportPanelDrawable(
+    private val context: Context,
+    private val radiusDp: Float,
+    /** Kadranların üstünde açılan panel (seçici, özet kartı): dolgu opak, alttaki çizim görünmez. */
+    private val solid: Boolean = false,
+) : Drawable() {
     private var cache: Bitmap? = null
 
     override fun onBoundsChange(b: Rect) {
@@ -547,21 +706,42 @@ internal class SportPanelDrawable(private val context: Context, private val radi
         val rect = RectF(fw / 2f, fw / 2f, w - fw / 2f, h - fw / 2f)
         // Koyu kesit: üstte biraz daha saydam (görselin dokusu sezilir), altta koyu.
         c.drawRoundRect(rect, r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xB3050607.toInt(), 0xC7050607.toInt(), 0xE6030304.toInt()), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+            shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
+                if (solid) intArrayOf(0xFF17191C.toInt(), 0xFF0B0C0E.toInt(), 0xFF060607.toInt()) else intArrayOf(0xB3050607.toInt(), 0xC7050607.toInt(), 0xE6030304.toInt()),
+                floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
         })
-        // Fırçalanmış metal çerçeve: yatay bantlarla.
+        // Fırçalanmış metal çerçeve: üstten ışık alan dikey geçiş (köşeler ve uçlar aynı tonda; parlak bant uçta taşmaz).
         val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = fw
-            shader = LinearGradient(0f, 0f, w.toFloat(), 0f,
-                intArrayOf(SportInk.METAL_LO, SportInk.METAL_HI, SportInk.METAL_MID, SportInk.METAL_LO, SportInk.METAL_MID, SportInk.METAL_HI, SportInk.METAL_LO),
-                null, Shader.TileMode.CLAMP)
+            shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
+                intArrayOf(SportInk.METAL_LO, SportInk.METAL_LO, SportInk.METAL_DEEP, SportInk.METAL_LO), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
         }
         c.drawRoundRect(rect, r, r, frame)
         val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0xFF030304.toInt() }
         val ir = (r - fw).coerceAtLeast(0f)
         c.drawRoundRect(RectF(rect.left + fw / 2f + 0.5f, rect.top + fw / 2f + 0.5f, rect.right - fw / 2f - 0.5f, rect.bottom - fw / 2f - 0.5f), ir, ir, edge)
+        // Üst kenardaki ince parlak çizgi yalnız düz kısmın içinde: iki uçta [HIGHLIGHT_END_DP] önce saydamlaşır (sağ uçtaki
+        // FrostNav okunun altına uzanmaz; köşeye taşmaz), çubuğun içinde biter.
+        val x0 = rect.left + r + context.dpF(HIGHLIGHT_END_DP)
+        val x1 = rect.right - r - context.dpF(HIGHLIGHT_END_DP)
+        if (x1 > x0) {
+            val hl = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = maxOf(1f, fw * 0.4f)
+                strokeCap = Paint.Cap.BUTT
+                shader = LinearGradient(x0, 0f, x1, 0f, intArrayOf(0x00FFFFFF, 0xB3FFFFFF.toInt(), 0x8CFFFFFF.toInt(), 0xB3FFFFFF.toInt(), 0x00FFFFFF),
+                    floatArrayOf(0f, 0.12f, 0.5f, 0.88f, 1f), Shader.TileMode.CLAMP)
+            }
+            val y = rect.top - fw / 2f + hl.strokeWidth / 2f + 0.5f
+            c.drawLine(x0, y, x1, y, hl)
+        }
         return bmp
+    }
+
+    companion object {
+        /** Üst parlak çizginin uçlarda düz kısmın bitişinden ne kadar önce sönmüş olduğu. */
+        const val HIGHLIGHT_END_DP = 96f
     }
 
     override fun draw(canvas: Canvas) {

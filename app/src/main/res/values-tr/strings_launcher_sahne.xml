@@ -39,4 +39,12 @@
     <string name="launcher_detail_sunroof">Cam tavan</string>
     <string name="launcher_strip_tire_wheel" formatted="true">%1$s %2$d psi</string>
     <string name="launcher_strip_air">Hava kalitesi kötü</string>
+    <string name="launcher_sport_dial_change">Kadranı değiştir: %1$s</string>
+    <string name="launcher_sport_pick_title">Kadran</string>
+    <string name="launcher_sport_pick_swap">Yer değişir</string>
+    <string name="launcher_sport_helper_edit">Değiştirmek için küçük kadrana uzun bas</string>
+    <string name="launcher_sport_summary_title">Sürüş özeti</string>
+    <string name="launcher_sport_summary_time">Süre</string>
+    <string name="launcher_sport_summary_max">Maks</string>
+    <string name="launcher_sport_summary_avg">Tüketim</string>
 </resources>

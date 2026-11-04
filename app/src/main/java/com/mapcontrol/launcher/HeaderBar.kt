@@ -146,7 +146,8 @@ class HeaderBar(
 
     /** Sahne: cam yüzey (kare 22dp köşe, kapsül hap); Serbest: düz kart yüzeyi. */
     private fun surface(radiusDp: Float): android.graphics.drawable.Drawable =
-        if (sport) SportPillDrawable(context, radiusDp)
+        // Spor: sol düğmelerdeki talaşlı metal çerçevenin hap biçimi (hava ve bağlantı kapsülü aynı dilde).
+        if (sport) SportBezelPillDrawable(context)
         else if (LauncherTheme.sahne) GlassDrawable(context, radiusDp, shadow = 0.55f, control = true)
         else rounded(context, LauncherTheme.CARD, radiusDp, LauncherTheme.CARD_BORDER)
 
@@ -229,7 +230,24 @@ class HeaderBar(
         wifiGlyph.sportInk = if (on) SportInk.ICON else null
         fill()
         lastWeather?.let { bindWeather(it) }
+        applyClockVisibility()
         view.invalidate()
+    }
+
+    /** Spor ekranında analog saat kadranı seçili: dijital saat spor modunda gizlenir, tarih kalır. */
+    private var sportClockHidden = false
+
+    fun setSportClockHidden(hidden: Boolean) {
+        if (sportClockHidden == hidden) return
+        sportClockHidden = hidden
+        applyClockVisibility()
+    }
+
+    private fun applyClockVisibility() {
+        val hide = sport && sportClockHidden
+        time.visibility = if (hide) View.GONE else View.VISIBLE
+        // Yalnız tarih kalınca biraz büyür (plaka boş görünmesin).
+        if (sport) date.textSize = if (hide) 20f else 14f
     }
 
     private fun fillSport() {
@@ -249,6 +267,7 @@ class HeaderBar(
         leftGroup.addView(gap(context, 16))
         leftGroup.addView(squareButton(R.drawable.ic_sahne_pen_fill, context.getString(R.string.launcher_edit_title), onEditHome))
         rightGroup.addView(weatherCapsule())
+        applyClockVisibility()
     }
 
     /** Hava kapsülü: yalnızca hava; veri gelene kadar gizli kalır. Dokunma işi yok, sağ grupta bakılır. */

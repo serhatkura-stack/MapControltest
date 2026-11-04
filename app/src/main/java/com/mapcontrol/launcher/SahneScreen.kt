@@ -57,7 +57,9 @@ class SahneScreen(
             if (field == value) return
             field = value
             stage.locked = value
-            overlays.values.forEach { it.visibility = if (value) View.VISIBLE else View.GONE }
+            // Spor ekranı açıkken düzenleme spor küçük kadranlarında yapılır (yuva örtüleri gizli kalır).
+            overlays.values.forEach { it.visibility = if (value && !sportShown) View.VISIBLE else View.GONE }
+            sport?.setEditing(value && sportShown)
             refreshEmpty()
         }
 
@@ -128,6 +130,11 @@ class SahneScreen(
         rightPanel.visibility = normal
         strip.visibility = normal
         v.visibility = if (on) View.VISIBLE else View.GONE
+        if (!on) {
+            // Düzenleme sürerken spor kapandıysa düzenleme Sahne yuvalarına döner.
+            v.setEditing(false)
+            if (editMode) overlays.values.forEach { it.visibility = View.VISIBLE }
+        }
         if (started) {
             if (on) {
                 hosted.values.flatten().forEach { it.onHidden() }

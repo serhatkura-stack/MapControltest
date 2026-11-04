@@ -510,6 +510,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private fun refreshEditLayoutUi() {
         editHelper.setText(when {
+            sahne?.sportShown == true -> R.string.launcher_sport_helper_edit
             sahne != null -> if (activeMode == LayoutMode.DRIVE) R.string.launcher_sahne_helper_drive else R.string.launcher_sahne_helper_park
             activeMode == LayoutMode.DRIVE -> R.string.launcher_edit_helper_drive
             else -> R.string.launcher_edit_helper_park
@@ -703,9 +704,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun enterEditMode() {
         if (editing) return
         if (editLocked()) return
-        // Düzenleme Sahne yuvalarında yapılır: spor ekranı geçişsiz kapanır, düzenleme bitince yeniden gelir.
-        // Geçiş sürerken (karartmada) de kapatılır: orta alan düzenlemeye geçer, çubuklar spor kalmaz.
-        if (sport?.engaged == true) { sport?.applyInstant(false); sportGate.reset(false) }
+        // Spor ekranı açıksa düzenleme spor küçük kadranlarında yapılır (uzun basınca seçici); spor kalır. Geçiş sürerken
+        // (karartmada) ise spor geçişsiz kapanır: orta alan Sahne yuvalarının düzenlemesine geçer, çubuklar spor kalmaz.
+        if (sport?.transitioning == true) { sport?.applyInstant(false); sportGate.reset(false) }
         sahne?.let { it.editMode = true } ?: run { grid.editMode = true }
         refreshEditLayoutUi()
         dock?.setEditMode(true)

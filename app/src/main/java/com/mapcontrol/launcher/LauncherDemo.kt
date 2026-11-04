@@ -73,6 +73,20 @@ internal object LauncherDemo {
     var sportNoG = false
         private set
 
+    /**
+     * Spor küçük kadran seçimi (`--es launcher_demo_sport_dials "clock,p80,cool,range"`; anahtarlar [SportDial.key]):
+     * kayıtlı seçimin yerine geçer (seçicide yapılan değişiklik de demo süresince buraya yazılır).
+     * `--ez launcher_demo_sport_summary true` spor ekranı açılınca sürüş özeti kartını bir kez gösterir.
+     */
+    const val EXTRA_SPORT_DIALS = "launcher_demo_sport_dials"
+    const val EXTRA_SPORT_SUMMARY = "launcher_demo_sport_summary"
+
+    @Volatile
+    var sportDials: String? = null
+
+    @Volatile
+    var sportSummary = false
+
     /** Demo şarkı adı (`--es launcher_demo_title "..."`): uzun başlığın kartta sığmasını denemek için. */
     const val EXTRA_TITLE = "launcher_demo_title"
 
@@ -202,6 +216,8 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_HEALTH)) healthProblem = intent.getStringExtra(EXTRA_HEALTH)
         if (intent.hasExtra(EXTRA_SPORT)) sportForced = intent.getBooleanExtra(EXTRA_SPORT, false)
         if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
+        if (intent.hasExtra(EXTRA_SPORT_DIALS)) sportDials = intent.getStringExtra(EXTRA_SPORT_DIALS)
+        if (intent.hasExtra(EXTRA_SPORT_SUMMARY)) sportSummary = intent.getBooleanExtra(EXTRA_SPORT_SUMMARY, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
         if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
         if (intent.hasExtra(EXTRA_LIGHTS)) lights = CarLights.parse(intent.getStringExtra(EXTRA_LIGHTS))

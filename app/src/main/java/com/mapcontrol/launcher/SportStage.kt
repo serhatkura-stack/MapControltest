@@ -85,21 +85,26 @@ internal object SportSessionStore {
 /** Demo spor değerleri (`--ez launcher_demo_sport true`): ekran görüntüleri için sabit ve gerçekçi. */
 internal object SportDemo {
     const val RPM = 3_400
+    const val PEAK_RPM = 5_200
     const val GEAR_STATE = 5
     const val GEAR_NUMBER = 4
     const val INSTANT_L100 = 9.8
     const val ZERO100_MS = 9_600L
+    const val PASS80_MS = 6_400L
     const val MAX_KMH = 142
 }
 
 /**
- * Spor modunun orta alanı (kronograf): solda yuvarlak medya modülü, ortada 0–8 devir kadranı ve vites penceresi,
- * iki yanda küçük ve sakin alt kadranlar (0–100, G, Anlık, Maks; G-metre yalnız ivme sensörü varsa), sağda burnu yukarı
- * araç modülü (açık kapı/bagaj, stop parıltısı).
+ * Spor modunun orta alanı (kronograf): solda yuvarlak medya modülü, ortada 0–8 devir kadranı (tepe işaretiyle) ve vites
+ * penceresi, iki yanda dört küçük ve sakin alt kadran (seçilebilir, [SportDials]; varsayılan 0–100, G, Anlık, Maks),
+ * sağda burnu yukarı araç modülü (açık kapı/bagaj, stop parıltısı).
  *
- * Performans: bütün durağan çizim ([SportArt.render]) boyut başına bir kez arka planda bitmap'e çizilir; çizimde yalnızca
- * o bitmap basılır. Canlı olanlar: ibre (ayrı görünüm, donanım katmanında döndürülür), metinler (değişince), G noktası
- * (öteleme), medya halkası (1 Hz). Değerler en çok 10 Hz güncellenir; sensör ~15 Hz ve yalnız spor görünürken dinlenir.
+ * Düzenleme modunda küçük kadrana uzun basınca seçici açılır ([SportDialPicker]); seçim kalıcıdır ([SportDialPrefs]).
+ *
+ * Performans: bütün durağan çizim ([SportArt.render]) boyut ve seçim başına bir kez arka planda bitmap'e çizilir; çizimde
+ * yalnızca o bitmap basılır. Canlı olanlar: ibreler (ayrı görünümler, donanım katmanında döndürülür), metinler
+ * (değişince), G noktası (öteleme), medya halkası (1 Hz). Değerler en çok 10 Hz güncellenir, saat ibreleri saniyede bir;
+ * sensör ~15 Hz ve yalnız G kadranı seçili ve spor görünürken dinlenir.
  */
 @SuppressLint("ViewConstructor")
 internal class SportStageView(
@@ -111,26 +116,24 @@ internal class SportStageView(
     private val sensors = activity.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val linearSensor: Sensor? = sensors?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     private val accelSensor: Sensor? = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    /** G-metre gösterilir mi: sensör var ve demo "sensör yok" demiyor. */
-    private val hasG: Boolean = !LauncherDemo.sportNoG && (linearSensor != null || accelSensor != null)
+    /** G-metre sunulur mu: sensör var ve demo "sensör yok" demiyor. */
+    private val hasG: Boolean = SportDialPrefs.hasG(activity)
+    /** Küçük kadran seçimi (yuva sırasıyla). */
+    private var dials: List<SportDial> = SportDialPrefs.load(activity)
 
     private var geometry: SportGeometry? = null
     private var art: Bitmap? = null
-    private var artKey = 0L
+    /** [art]'ın çizildiği yerleşim (boyut + seçim). */
+    private var artGeometry: SportGeometry? = null
     private var rendering = false
     private val artPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val main = Handler(Looper.getMainLooper())
 
     // --- Canlı parçalar ---
     private val needle = NeedleView(activity)
+    private val peak = PeakView(activity)
     private val gear = sahneText(activity, 40f, SportInk.INK, 600, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-    private val values = HashMap<SportGeometry.Kind, TextView>()
-    private val gDot = View(activity).apply {
-        background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(SportInk.RED_HOT) }
-        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    private val gValue = sahneText(activity, 28f, SportInk.INK_2, 300, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-    private val innerInstant = sahneText(activity, 40f, SportInk.INK_2, 300, -0.02f, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+    private val slots = ArrayList<Slot>()
     private val media = SportMediaDial(activity)
     private val car = CarStageView(activity).apply {
         contentDescription = activity.getString(R.string.launcher_sahne_car)
@@ -143,10 +146,13 @@ internal class SportStageView(
     }
     private val carLight = CarLightView(activity)
     private val glows = ArrayList<GlowView>()
-    private val live: List<View> get() = listOfNotNull(gear, gValue.takeIf { hasG }, gDot.takeIf { hasG }, innerInstant.takeIf { !hasG }, media, car, carLight) + values.values
+    /** Geçişte solup beliren canlı görünümler (yalnız geçişte okunur). */
+    private val live: List<View> get() = listOf(gear, peak, media, car, carLight) + slots.flatMap { it.liveViews }
 
     private var visibleNow = false
     private var sweeping = false
+    private var editing = false
+    private var picker: SportDialPicker? = null
     private var shownRpm = 0f
     // Tek ibre animatörü (10 Hz takipte her seferinde yenisi kurulmaz): başlangıç/hedef alanlardan okunur.
     private var needleFrom = 0f
@@ -168,27 +174,82 @@ internal class SportStageView(
         })
     }
     private val gFilter = GFilter(linear = linearSensor != null)
-    private var lastText = HashMap<View, String>()
+    private val lastText = HashMap<View, String>()
+    private var shownPeak = -1
+    private var shownResults = -1
+    private var lastClockSec = -1L
+    private var lastGearState: Int? = null
+    private val cal: java.util.Calendar = java.util.Calendar.getInstance()
+
+    /** Tek bir küçük kadranın canlı görünümleri ([kind]'a göre değer + birim, G noktası ya da saat ibreleri). */
+    private inner class Slot(val index: Int, val kind: SportDial) {
+        var dial: SportGeometry.Dial? = null
+        val value: TextView? = if (kind == SportDial.G || kind == SportDial.CLOCK) null
+            else sahneText(activity, 46f, SportInk.INK_2, 300, -0.02f, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+        val unit: TextView? = if (kind == SportDial.G || kind == SportDial.CLOCK) null
+            else sahneText(activity, 15f, SportInk.INK_3, 500, 0.02f, dayBump = false).apply {
+                gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
+                text = SportGeometry.unit(kind)
+            }
+        val gDot: View? = if (kind != SportDial.G) null else View(activity).apply {
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(SportInk.RED_HOT) }
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val gValue: TextView? = if (kind != SportDial.G) null
+            else sahneText(activity, 28f, SportInk.INK_2, 300, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+        val hour: SportClockHand? = if (kind == SportDial.CLOCK) SportClockHand(activity, SportClockHand.Kind.HOUR) else null
+        val minute: SportClockHand? = if (kind == SportDial.CLOCK) SportClockHand(activity, SportClockHand.Kind.MINUTE) else null
+        val second: SportClockHand? = if (kind == SportDial.CLOCK) SportClockHand(activity, SportClockHand.Kind.SECOND) else null
+        /** Düzenlemede: kadranın çevresinde ince halka ve uzun basma alanı. */
+        val mark = SportEditRing(activity).apply { visibility = GONE }
+        val touch = View(activity).apply {
+            visibility = GONE
+            contentDescription = activity.getString(R.string.launcher_sport_dial_change, SportGeometry.pickerName(kind))
+            isLongClickable = true
+            setOnLongClickListener { if (editing) openPicker(index); true }
+            // Kısa dokunuş da bir şey yapmasın ama alttaki araç/medya dokunuşu almasın.
+            setOnClickListener { }
+        }
+        val liveViews: List<View> = listOfNotNull(value, unit, gDot, gValue, hour, minute, second)
+    }
 
     init {
         clipChildren = false
         setWillNotDraw(false)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        val kinds = if (hasG) listOf(SportGeometry.Kind.ZERO100, SportGeometry.Kind.INSTANT, SportGeometry.Kind.MAX)
-        else listOf(SportGeometry.Kind.ZERO100, SportGeometry.Kind.MAX)
-        kinds.forEach { k ->
-            values[k] = sahneText(activity, 46f, SportInk.INK_2, 300, -0.02f, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-        }
         addView(media)
         addView(car)
         addView(carLight)
-        values.values.forEach { addView(it) }
-        if (hasG) { addView(gValue); addView(gDot) }
-        else addView(innerInstant)
         addView(gear)
+        addView(peak)
         addView(needle)
+        buildSlots()
         // Yazı tipleri ana iş parçacığında bir kez yüklenir (arka plan çizimi önbellekten alır).
         listOf(300, 400, 500, 600).forEach { SahneFonts.get(activity, it) }
+    }
+
+    /** Küçük kadran görünümlerini seçime göre kurar (yalnız seçim değişince). Değerler ibrelerin altında, düzenleme üstte. */
+    private fun buildSlots() {
+        slots.forEach { s ->
+            (s.liveViews + s.mark + s.touch).forEach { v ->
+                v.animate().cancel()
+                removeView(v)
+                lastText.remove(v)
+            }
+        }
+        slots.clear()
+        dials.forEachIndexed { i, k -> slots += Slot(i, k) }
+        val at = indexOfChild(gear)
+        slots.flatMap { it.liveViews }.forEachIndexed { j, v -> addView(v, at + j) }
+        slots.forEach { s -> addView(s.mark); addView(s.touch) }
+        slots.forEach { s ->
+            val on = if (editing) VISIBLE else GONE
+            s.mark.visibility = on
+            s.touch.visibility = on
+        }
+        shownResults = -1
+        lastClockSec = -1L
+        geometry?.let { g -> slots.forEach { it.dial = g.subs[it.index] } }
     }
 
     // --- Yaşam döngüsü ---
@@ -197,11 +258,16 @@ internal class SportStageView(
     fun onVisible() {
         if (visibleNow) return
         visibleNow = true
+        lastGearState = null
         media.onVisible()
         TripSource.add(activity, tripListener)
         registerSensor()
         main.removeCallbacks(tick)
         main.post(tick)
+        if (LauncherDemo.enabled && LauncherDemo.sportSummary) {
+            LauncherDemo.sportSummary = false
+            main.postDelayed({ if (visibleNow) SportSummaryCard.show(activity, SportSummaryCard.current(activity)) }, DEMO_SUMMARY_MS)
+        }
     }
 
     fun onHidden() {
@@ -212,8 +278,10 @@ internal class SportStageView(
         sensors?.unregisterListener(sensorListener)
         main.removeCallbacks(tick)
         main.removeCallbacks(gPost)
+        main.removeCallbacks(unflash)
         // Bekleyen G güncellemesi iptal edildi: bayrak da sıfırlanır, yoksa geri gelince nokta donar.
         gPending = false
+        picker?.dismiss()
     }
 
     /** Spor kapandı: büyük bitmap bırakılır (4–6 MB), yeniden açılınca arka planda yeniden çizilir. */
@@ -223,7 +291,7 @@ internal class SportStageView(
         needleAnim.cancel()
         glows.forEach { it.animate().cancel() }
         art = null
-        artKey = 0
+        artGeometry = null
         released = true
         readyWaiters.clear()
         SportGroundImage.release()
@@ -234,6 +302,46 @@ internal class SportStageView(
         car.setOpen(parts, animate)
         car.setGlass(windows, sunroof, animate)
     }
+
+    // --- Düzenleme ve seçim ---
+
+    /** Düzenleme modu (spor açıkken): küçük kadranlar halkayla işaretlenir, uzun basınca seçici açılır. */
+    fun setEditing(on: Boolean) {
+        if (editing == on) return
+        editing = on
+        val v = if (on) VISIBLE else GONE
+        slots.forEach { it.mark.visibility = v; it.touch.visibility = v }
+        if (!on) picker?.dismiss()
+    }
+
+    private fun openPicker(slot: Int) {
+        if (!editing || picker != null) return
+        val d = geometry?.subs?.getOrNull(slot) ?: return
+        picker = SportDialPicker.show(activity, this, d, dials, SportDials.offered(hasG), onPick = { chosen ->
+            applyDials(SportDials.choose(dials, slot, chosen))
+        }, onDismiss = { picker = null })
+    }
+
+    /** Yeni seçim: kaydedilir, görünümler kurulur, durağan çizim arka planda yenilenir (eski çizim o ana dek kalır). */
+    private fun applyDials(next: List<SportDial>) {
+        if (next == dials) return
+        val gBefore = SportDial.G in dials
+        dials = next
+        SportDialPrefs.save(activity, next)
+        buildSlots()
+        // Yeni değerler yeni çizimle birlikte belirir (eski etiketlerin üstünde görünmesin).
+        slots.forEach { s -> s.liveViews.forEach { it.alpha = 0f } }
+        waitingArt = true
+        if (visibleNow && gBefore != (SportDial.G in dials)) {
+            sensors?.unregisterListener(sensorListener)
+            registerSensor()
+        }
+        requestLayout()
+        refresh()
+    }
+
+    /** Seçim değişti ve yeni durağan çizim bekleniyor: hazır olunca küçük kadran değerleri belirir. */
+    private var waitingArt = false
 
     // --- Veri ---
 
@@ -251,35 +359,145 @@ internal class SportStageView(
 
     private fun refresh() {
         val demo = LauncherDemo.enabled
+        val now = SystemClock.elapsedRealtime()
         val rpm: Int?
         val gearText: String
         val instant: Double?
         val best: Long?
         val maxKmh: Int?
+        val peakRpm: Int?
+        val pass: Long?
+        val last: Long?
+        val lastAt: Long
+        val lastBest: Boolean
+        val results: Int
+        val ready: Boolean
+        val range: Int?
+        val s = SportSessionStore.session
         if (demo) {
             rpm = SportDemo.RPM
             gearText = SportMath.gearText(SportDemo.GEAR_STATE, SportDemo.GEAR_NUMBER)
             instant = SportDemo.INSTANT_L100
             best = SportDemo.ZERO100_MS
             maxKmh = SportDemo.MAX_KMH
+            peakRpm = SportDemo.PEAK_RPM
+            pass = SportDemo.PASS80_MS
+            last = null
+            lastAt = 0L
+            lastBest = false
+            results = 0
+            ready = trip.speedKmh == 0
+            range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
             rpm = if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
-            gearText = SportMath.gearText(snap.gearSignal.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) })
+            val gs = snap.gearSignal.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) }
+            gearText = SportMath.gearText(gs)
+            watchPark(gs)
             // Anlık tüketim yalnızca hareket halinde geçerli gelir (dururken 0xFFFF).
             instant = trip.instantL100
-            val s = SportSessionStore.session
             best = s.best0to100Ms
             maxKmh = s.maxSpeedKmh
+            peakRpm = s.peakRpm
+            pass = s.best80to120Ms
+            last = s.last0to100Ms
+            lastAt = s.lastResultAt
+            lastBest = s.lastWasBest
+            results = s.results
+            ready = s.stopped && !s.timing
+            range = snap.rangeKm.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) && it >= 0 }
         }
         setText(gear, gearText)
-        values[SportGeometry.Kind.ZERO100]?.let { setText(it, SportFormat.seconds(best) ?: DASH) }
-        val inst = SportFormat.l100(instant) ?: DASH
-        values[SportGeometry.Kind.INSTANT]?.let { setText(it, inst) }
-        if (!hasG) setText(innerInstant, inst)
-        values[SportGeometry.Kind.MAX]?.let { setText(it, maxKmh?.toString() ?: DASH) }
+        for (i in slots.indices) {
+            val slot = slots[i]
+            val v = slot.value ?: if (slot.kind == SportDial.CLOCK) { updateClock(slot); continue } else continue
+            when (slot.kind) {
+                SportDial.ZERO100 -> {
+                    val recent = last != null && lastAt > 0L && now - lastAt < RESULT_SHOW_MS
+                    setText(v, SportFormat.seconds(if (recent) last else best) ?: DASH)
+                    val status = when {
+                        recent && lastBest -> STATUS_BEST
+                        ready -> STATUS_READY
+                        else -> SportGeometry.unit(SportDial.ZERO100)
+                    }
+                    slot.unit?.let { u ->
+                        if (lastText[u] != status) u.setTextColor(if (status === STATUS_BEST || status === STATUS_READY) SportInk.RED_HOT else SportInk.INK_3)
+                        setText(u, status)
+                    }
+                    if (results != shownResults) {
+                        if (shownResults >= 0 && results > shownResults) flash(v)
+                        shownResults = results
+                    }
+                }
+                SportDial.INSTANT -> setText(v, SportFormat.l100(instant) ?: DASH)
+                SportDial.MAX -> setText(v, maxKmh?.toString() ?: DASH)
+                SportDial.COOLANT -> setText(v, trip.coolantC?.toString() ?: DASH)
+                SportDial.AVG_SPEED -> setText(v, trip.avgSpeedKmh?.toString() ?: DASH)
+                SportDial.TRIP_TIME -> {
+                    val min = TripTotals.drivingMinutes(trip.drivingRunMin, trip.drivingResetMin, trip.drivingAltMin, trip.engineOnMin)
+                    setText(v, SportFormat.duration(min) ?: DASH)
+                    slot.unit?.let { setText(it, SportFormat.durationUnit(min)) }
+                }
+                SportDial.RANGE -> setText(v, range?.toString() ?: DASH)
+                SportDial.PASS80 -> setText(v, SportFormat.seconds(pass) ?: DASH)
+                SportDial.G, SportDial.CLOCK -> Unit
+            }
+        }
+        bindPeak(peakRpm)
         if (!sweeping) moveNeedle((rpm ?: 0).toFloat(), NEEDLE_MS)
+    }
+
+    private fun needsRange(): Boolean = slots.any { it.kind == SportDial.RANGE }
+
+    /** Spor açıkken vites P'ye alındı (sürüşten sonra): sürüş özeti kısa süre gösterilir. */
+    private fun watchPark(gs: Int?) {
+        val before = lastGearState
+        if (gs != null) lastGearState = gs
+        if (before != null && before != PARK && gs == PARK && SportSessionStore.session.maxSpeedKmh != null)
+            SportSummaryCard.show(activity, SportSummaryCard.current(activity))
+    }
+
+    /** Analog saat: ibreler saniyede bir döner (yalnız görünüm dönmesi). */
+    private fun updateClock(slot: Slot) {
+        val wall = System.currentTimeMillis()
+        val sec = wall / 1000L
+        if (sec == lastClockSec) return
+        if (lastClockSec < 0 || sec % 60L == 0L) cal.timeZone = java.util.TimeZone.getDefault()
+        lastClockSec = sec
+        cal.timeInMillis = wall
+        val h = cal.get(java.util.Calendar.HOUR)
+        val m = cal.get(java.util.Calendar.MINUTE)
+        val s = cal.get(java.util.Calendar.SECOND)
+        slot.hour?.rotation = (h + m / 60f) * 30f
+        slot.minute?.rotation = (m + s / 60f) * 6f
+        slot.second?.rotation = s * 6f
+    }
+
+    private fun bindPeak(rpm: Int?) {
+        val q = ((rpm ?: 0) / PEAK_STEP) * PEAK_STEP
+        if (q == shownPeak) return
+        shownPeak = q
+        peak.visibility = if (q > 0) VISIBLE else INVISIBLE
+        peak.rotation = SportMath.needleDeg(q.toFloat())
+    }
+
+    /** Yeni 0–100 sonucu: değer kısa süre kırmızı-turuncu parlar ve hafifçe büyüyüp yerine oturur. */
+    private fun flash(v: TextView) {
+        main.removeCallbacks(unflash)
+        flashing = v
+        v.setTextColor(SportInk.RED_HOT)
+        v.animate().cancel()
+        v.animate().scaleX(FLASH_SCALE).scaleY(FLASH_SCALE).setDuration(FLASH_UP_MS).withEndAction {
+            v.animate().scaleX(1f).scaleY(1f).setDuration(FLASH_DOWN_MS).start()
+        }.start()
+        main.postDelayed(unflash, FLASH_MS)
+    }
+
+    private var flashing: TextView? = null
+    private val unflash = Runnable {
+        flashing?.let { it.setTextColor(SportInk.INK_2); it.scaleX = 1f; it.scaleY = 1f }
+        flashing = null
     }
 
     private fun setText(v: TextView, s: String) {
@@ -330,22 +548,23 @@ internal class SportStageView(
     }
 
     private fun registerSensor() {
-        if (!hasG) return
+        if (!hasG || SportDial.G !in dials) return
         val s = linearSensor ?: accelSensor ?: return
         gFilter.reset()
         sensors?.registerListener(sensorListener, s, GFilter.SAMPLING_US, main)
     }
 
     private fun bindG() {
-        val g = geometry ?: return
-        val d = g.sub(SportGeometry.Kind.G) ?: return
+        val slot = slots.firstOrNull { it.kind == SportDial.G } ?: return
+        val d = slot.dial ?: return
+        val dot = slot.gDot ?: return
         val range = d.r * SportGeometry.G_RANGE
         // Tam piksele yuvarlanır: sabit duruşta süzgecin küçük kıpırtısı yeni kare çizdirmez.
         val tx = Math.round(GFilter.clampUnit(gFilter.lateral) * range).toFloat()
         val ty = Math.round(-GFilter.clampUnit(gFilter.longitudinal) * range).toFloat()
-        if (gDot.translationX != tx) gDot.translationX = tx
-        if (gDot.translationY != ty) gDot.translationY = ty
-        setText(gValue, SportFormat.g(gFilter.magnitude))
+        if (dot.translationX != tx) dot.translationX = tx
+        if (dot.translationY != ty) dot.translationY = ty
+        slot.gValue?.let { setText(it, SportFormat.g(gFilter.magnitude)) }
     }
 
     // --- Geçiş ---
@@ -388,6 +607,7 @@ internal class SportStageView(
     /** Çıkış başı: değerler söner, ibre sakince sıfıra iner ([OUTRO_MS]). */
     fun playOutro() {
         sweeping = true
+        picker?.dismiss()
         live.forEach { v ->
             v.animate().cancel()
             v.animate().alpha(0f).setStartDelay(0).setDuration(OUTRO_FADE_MS).apply { if (v === media) withLayer() }.start()
@@ -447,8 +667,7 @@ internal class SportStageView(
 
     private fun ensureArt() {
         val g = geometry ?: return
-        val key = (g.w.toLong() shl 32) or g.h.toLong()
-        if (artKey == key && art != null) return
+        if (art != null && g.sameAs(artGeometry)) return
         if (rendering || released || artFailures >= ART_TRIES) return
         rendering = true
         val ctx = activity.applicationContext
@@ -465,11 +684,16 @@ internal class SportStageView(
                     else readyWaiters.clear()
                     return@post
                 }
-                if (geometry?.let { it.w == g.w && it.h == g.h } != true) { ensureArt(); return@post }
+                // Bu arada boyut ya da seçim değiştiyse yeniden çizilir (eski çizim o ana dek ekranda kalır).
+                if (!g.sameAs(geometry)) { ensureArt(); return@post }
                 artFailures = 0
                 art = bmp
-                artKey = key
+                artGeometry = g
                 invalidate()
+                if (waitingArt) {
+                    waitingArt = false
+                    if (!sweeping) slots.forEach { s -> s.liveViews.forEach { it.animate().alpha(1f).setStartDelay(0).setDuration(SLOT_FADE_MS).start() } }
+                }
                 val run = ArrayList(readyWaiters)
                 readyWaiters.clear()
                 run.forEach { it() }
@@ -486,8 +710,9 @@ internal class SportStageView(
         val h = MeasureSpec.getSize(heightMeasureSpec)
         setMeasuredDimension(w, h)
         if (w <= 0 || h <= 0) return
-        val g = geometry?.takeIf { it.w == w && it.h == h } ?: SportGeometry(w, h, hasG).also {
+        val g = geometry?.takeIf { it.w == w && it.h == h && it.dials == dials } ?: SportGeometry(w, h, dials).also {
             geometry = it
+            slots.forEach { s -> s.dial = it.subs[s.index] }
             if (glows.isNotEmpty()) ensureGlows(it)
             ensureArt()
         }
@@ -497,23 +722,36 @@ internal class SportStageView(
         car.measure(exactly(CarStageView.widthFor(carLen)), exactly(CarStageView.heightFor(carLen)))
         val nr = (g.rpmFace * NeedleView.LENGTH * 2).toInt() + 8
         needle.measure(exactly(nr), exactly(nr))
+        val pr = (g.rpmFace * 2).toInt()
+        peak.measure(exactly(pr), exactly(pr))
         val win = g.gearWindow()
         gear.setTextSize(TypedValue.COMPLEX_UNIT_PX, win.height() * 0.72f)
         gear.measure(exactly(win.width().toInt()), exactly(win.height().toInt()))
-        values.forEach { (k, v) ->
-            val d = g.sub(k) ?: return@forEach
-            v.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * 0.46f)
-            v.measure(exactly((d.r * 1.6f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        }
-        g.sub(SportGeometry.Kind.G)?.let { d ->
-            val ds = (d.r * 0.15f).toInt()
-            gDot.measure(exactly(ds), exactly(ds))
-            gValue.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * SportGeometry.G_VALUE)
-            gValue.measure(exactly((d.r * 1.0f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        }
-        if (!hasG) {
-            innerInstant.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.rpmFace * SportGeometry.INNER_VALUE)
-            innerInstant.measure(exactly((g.rpmFace * 0.40f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        val wrap = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        slots.forEach { s ->
+            val d = s.dial ?: return@forEach
+            s.value?.let { v ->
+                v.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * 0.46f)
+                v.measure(exactly((d.r * 1.6f).toInt()), wrap)
+            }
+            s.unit?.let { u ->
+                u.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * 0.16f)
+                u.measure(exactly((d.r * 1.3f).toInt()), wrap)
+            }
+            s.gDot?.let { val ds = (d.r * 0.15f).toInt(); it.measure(exactly(ds), exactly(ds)) }
+            s.gValue?.let { v ->
+                v.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * SportGeometry.G_VALUE)
+                v.measure(exactly((d.r * 1.0f).toInt()), wrap)
+            }
+            val rf = g.subFace(d)
+            s.hour?.measure(exactly((rf * 2).toInt()), exactly((rf * 2).toInt()))
+            s.minute?.measure(exactly((rf * 2).toInt()), exactly((rf * 2).toInt()))
+            val sr = (rf * SportGeometry.CLOCK_SEC_R * 2).toInt()
+            s.second?.measure(exactly(sr), exactly(sr))
+            val ts = (d.r * 2).toInt()
+            s.touch.measure(exactly(ts), exactly(ts))
+            val ms = (d.r * 2 + SportEditRing.padPx(activity) * 2).toInt()
+            s.mark.measure(exactly(ms), exactly(ms))
         }
         val lr = (g.car.r * 2).toInt()
         carLight.measure(exactly(lr), exactly(lr))
@@ -545,18 +783,31 @@ internal class SportStageView(
         needle.pivotX = needle.measuredWidth / 2f
         needle.pivotY = needle.measuredHeight / 2f
         needle.rotation = SportMath.needleDeg(shownRpm)
+        centerAt(peak, g.rpm.cx, g.rpm.cy)
+        peak.pivotX = peak.measuredWidth / 2f
+        peak.pivotY = peak.measuredHeight / 2f
         val win = g.gearWindow()
         centerAt(gear, win.centerX(), win.centerY())
-        values.forEach { (k, v) ->
-            val d = g.sub(k) ?: return@forEach
-            centerAt(v, d.cx, d.cy + d.r * 0.02f)
-        }
-        g.sub(SportGeometry.Kind.G)?.let { d ->
-            centerAt(gDot, d.cx, d.cy)
-            centerAt(gValue, d.cx, d.cy + d.r * SportGeometry.G_VALUE_Y)
+        slots.forEach { s ->
+            val d = s.dial ?: return@forEach
+            s.value?.let { centerAt(it, d.cx, d.cy + d.r * 0.02f) }
+            s.unit?.let { centerAt(it, d.cx, d.cy + d.r * 0.42f) }
+            s.gDot?.let { centerAt(it, d.cx, d.cy) }
+            s.gValue?.let { centerAt(it, d.cx, d.cy + d.r * SportGeometry.G_VALUE_Y) }
+            listOfNotNull(s.hour, s.minute).forEach { h ->
+                centerAt(h, d.cx, d.cy)
+                h.pivotX = h.measuredWidth / 2f
+                h.pivotY = h.measuredHeight / 2f
+            }
+            s.second?.let { h ->
+                centerAt(h, d.cx, d.cy + g.subFace(d) * SportGeometry.CLOCK_SEC_Y)
+                h.pivotX = h.measuredWidth / 2f
+                h.pivotY = h.measuredHeight / 2f
+            }
+            centerAt(s.touch, d.cx, d.cy)
+            centerAt(s.mark, d.cx, d.cy)
         }
         centerAt(carLight, g.car.cx, g.car.cy)
-        if (!hasG) centerAt(innerInstant, g.rpm.cx, g.innerInstantY())
         glows.forEach { centerAt(it, it.dial.cx, it.dial.cy) }
     }
 
@@ -564,9 +815,22 @@ internal class SportStageView(
 
     companion object {
         private const val DASH = "—"
+        private const val STATUS_READY = "Hazır"
+        private const val STATUS_BEST = "En iyi"
+        private const val PARK = 1
         const val TICK_MS = 100L
         const val NEEDLE_MS = 110L
         const val G_UI_MS = 100L
+        /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */
+        const val RESULT_SHOW_MS = 10_000L
+        const val FLASH_MS = 1_400L
+        const val FLASH_UP_MS = 160L
+        const val FLASH_DOWN_MS = 420L
+        const val FLASH_SCALE = 1.12f
+        /** Tepe işareti 50 dev/dk adımla güncellenir (küçük kıpırtı yeniden çizdirmez). */
+        const val PEAK_STEP = 50
+        const val SLOT_FADE_MS = 180L
+        const val DEMO_SUMMARY_MS = 2_500L
 
         // Giriş zamanlaması (karartma kalktıktan sonra): çerçeve parıltısı, ibre süpürmesi, değerler.
         const val GLOW_DELAY_MS = 60L
@@ -901,12 +1165,12 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         fun ex(px: Float) = MeasureSpec.makeMeasureSpec(px.toInt().coerceAtLeast(0), MeasureSpec.EXACTLY)
         val wrap = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         ring.measure(ex(s.toFloat()), ex(s.toFloat()))
-        cover.measure(ex(r * 0.48f), ex(r * 0.48f))
+        cover.measure(ex(r * COVER), ex(r * COVER))
         note.measure(ex(r * 0.18f), ex(r * 0.18f))
         source.measure(ex(r * 1.1f), wrap)
         val tw = (r * 1.34f).toInt()
         if (tw != titleWidth) { titleWidth = tw; fitTitle() }
-        title.measure(ex(r * 1.34f), MeasureSpec.makeMeasureSpec((r * 0.4f).toInt(), MeasureSpec.AT_MOST))
+        title.measure(ex(r * 1.34f), MeasureSpec.makeMeasureSpec((r * 0.34f).toInt(), MeasureSpec.AT_MOST))
         artist.measure(ex(r * 1.2f), wrap)
         val small = activity.dp(64).toFloat()
         val big = activity.dp(76).toFloat()
@@ -924,21 +1188,33 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
             v.layout(left, top, left + v.measuredWidth, top + v.measuredHeight)
         }
         ring.layout(0, 0, ring.measuredWidth, ring.measuredHeight)
-        at(cover, r, r - r * 0.53f)
-        at(note, r, r - r * 0.53f)
-        at(source, r, r - r * 0.205f)
+        at(cover, r, r - r * 0.50f)
+        at(note, r, r - r * 0.50f)
+        at(source, r, r - r * 0.17f)
         at(title, r, r + r * 0.03f)
-        at(artist, r, r + r * 0.27f)
-        val by = r + r * 0.56f
-        val gap = activity.dp(16).toFloat()
+        at(artist, r, r + r * 0.235f)
+        // Düğmeler biraz yukarıda; yan düğmeler ilerleme halkasına değmez: dış kenarları halkanın iç kenarından en az
+        // [RING_CLEAR_DP] içeride kalana dek önce aradaki boşluk daralır, gerekirse sıra yukarı çıkar.
+        val ringInner = r * SportGeometry.PROGRESS_R - r * SportGeometry.PROGRESS_W * 1.15f / 2f - activity.dpF(RING_CLEAR_DP)
+        val sr = prev.measuredWidth / 2f
+        var dy = r * BUTTONS_Y
+        var gap = activity.dpF(10f)
+        fun reach() = Math.hypot((play.measuredWidth / 2f + gap + sr).toDouble(), dy.toDouble()).toFloat() + sr
+        while (reach() > ringInner && gap > activity.dpF(2f)) gap -= 1f
+        while (reach() > ringInner && dy > r * 0.36f) dy -= 1f
+        val by = r + dy
         at(play, r, by)
-        at(prev, r - play.measuredWidth / 2f - gap - prev.measuredWidth / 2f, by)
-        at(next, r + play.measuredWidth / 2f + gap + next.measuredWidth / 2f, by)
+        at(prev, r - play.measuredWidth / 2f - gap - sr, by)
+        at(next, r + play.measuredWidth / 2f + gap + sr, by)
     }
 
     companion object {
         const val TITLE_SP = 26f
         const val TITLE_MIN_SP = 18f
+        /** Kapak çapı ve düğme sırasının yüksekliği (dış yarıçapa oran); düğmelerle halka arası en az boşluk. */
+        const val COVER = 0.56f
+        const val BUTTONS_Y = 0.47f
+        const val RING_CLEAR_DP = 8f
     }
 }
 
