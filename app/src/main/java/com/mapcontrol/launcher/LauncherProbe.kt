@@ -55,6 +55,8 @@ internal object LauncherProbe {
      * Araçta test (örnek, paket com.mapcontrol):
      *   adb shell am start -n com.mapcontrol/com.mapcontrol.launcher.HomeLauncherActivity --ei launcher_nav_area 9
      *   (10 = tam alan, 0 = kapat)
+     * Launcher zaten açıkken de çalışır (singleTask: komut onNewIntent'ten işlenir). Sonuç alanı: 0 için "false"
+     * (ClusterDisplayManager.closeClusterDisplay gibi), 9/10 için "true".
      * Sonuç "LauncherProbe" etiketiyle loga düşer: NAV-AREA gönderildi/reddedildi/hata. Geçersiz değer reddedilir.
      */
     const val EXTRA_NAV_AREA = "launcher_nav_area"
@@ -145,7 +147,7 @@ internal object LauncherProbe {
                 VDBus.getDefault().bindService(VDServiceDef.ServiceType.CAR_LAN)
                 val payload = VDNaviDisplayArea().apply {
                     naviDisplayArea = value
-                    naviDisplayAreaResult = "true"
+                    naviDisplayAreaResult = if (value == 0) "false" else "true"
                 }
                 VDBus.getDefault().set(VDNaviDisplayArea.createEvent(VDEventCarLan.NAVIGATION_DISPLAY_AREA, payload))
                 Log.i(TAG, "NAV-AREA gönderildi: değer=$value")

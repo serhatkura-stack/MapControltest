@@ -217,6 +217,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         consumeAppearanceExtra(intent)
         consumeEditExtra(intent)
+        // Debug: launcher açıkken gelen --ei launcher_nav_area (ekstra işlenince silinir, tekrarlanmaz).
+        LauncherProbe.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
