@@ -635,6 +635,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         private var percent: Int? = null
         private var low = false
         private var fillW = -1f
+        private var fill: android.graphics.Shader? = null
 
         init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
 
@@ -657,9 +658,11 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             val w = maxOf(h, width * p.coerceIn(0, 100) / 100f)
             if (w != fillW) {
                 fillW = w
-                paint.shader = if (low) null else android.graphics.LinearGradient(0f, 0f, w, 0f, Sahne.ICE_LO, Sahne.ICE, android.graphics.Shader.TileMode.CLAMP)
+                fill = android.graphics.LinearGradient(0f, 0f, w, 0f, Sahne.ICE_LO, Sahne.ICE, android.graphics.Shader.TileMode.CLAMP)
             }
-            if (low) paint.shader = null
+            // Gradyan ayrı alanda saklanır: iz çizimi shader'ı sıfırladığı için her çizimde yeniden takılır
+            // (yoksa ikinci çizimde dolgu düz kehribar kalıyordu).
+            paint.shader = if (low) null else fill
             paint.color = Sahne.AMBER
             rect.set(0f, 0f, w, h)
             canvas.drawRoundRect(rect, r, r, paint)
