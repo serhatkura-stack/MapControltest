@@ -32,4 +32,10 @@
     <string name="launcher_notice_more_desc" formatted="true">%1$d bildirim daha</string>
     <string name="launcher_notice_no_maps">Harita uygulaması bulunamadı</string>
     <string name="launcher_notice_fuel_desc">Yakıt az. En yakın benzin istasyonunu ara</string>
+    <string name="launcher_detail_title">Araç durumu</string>
+    <string name="launcher_detail_open">Açık</string>
+    <string name="launcher_detail_closed">Kapalı</string>
+    <string name="launcher_detail_doors">Kapılar</string>
+    <string name="launcher_detail_windows">Camlar</string>
+    <string name="launcher_detail_sunroof">Cam tavan</string>
 </resources>

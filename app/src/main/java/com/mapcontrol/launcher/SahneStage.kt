@@ -43,7 +43,15 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         // Kapı hareketi sürerken her kare yeniden çizilir; arkadaki statik zemin (8 tam alan gradyan) bu sürede donanım
         // katmanından tek doku olarak basılır, hareket bitince katman bırakılır.
         onAnimatingChanged = { on -> floor.setLayerType(if (on) View.LAYER_TYPE_HARDWARE else View.LAYER_TYPE_NONE, null) }
+        // Dokununca araç detayı (lastik basınçları, kapı/cam durumu, bakım, sağlık, hava). Uzun basma yok; düzenleme
+        // modunda sahne dokunuşu zaten keser ([locked]).
+        isClickable = true
+        isLongClickable = false
+        setOnClickListener { openDetail() }
+        pressFeedback()
     }
+    /** Açık araç detayı sayfası (yoksa null); yeni veriyle yerinde tazelenir. */
+    private var detail: CarDetailSheet? = null
     /** İlk özet animasyonsuz uygulanır (ekran açıldığında kapı zaten açıksa açık çizilir). */
     private var carSeeded = false
     private var carW = 0
@@ -96,7 +104,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     }
 
     // --- Bildirim şeridi (aracın altında): açık kapı/kaput/bagaj/cam/tavan, lastik, yakıt kapağı, düşük yakıt, bakım ---
-    private val alertRow = NoticeRow(activity, tappable = { it?.kind == NoticeKind.FUEL_LOW }, onTap = { onNotice(it) })
+    private val alertRow = NoticeRow(activity, tappable = { true }, onTap = { onNotice(it) })
     /** Araç parkta mı (vites P ya da el freni): açık bagaj / cam kapsülleri o zaman belirgin. */
     private var parked = false
     private val parkPoll = object : Runnable {
@@ -123,6 +131,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         bindHealth(lastHealth)
         bindAir()
         bindNotices()
+        refreshDetail()
     }
 
     // --- Veri yok ---
@@ -178,6 +187,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     }
 
     override fun release() {
+        detail?.dialog?.dismiss()
+        detail = null
         vehicle.onSummary = null
         TripSource.remove(tripListener)
         removeCallbacks(parkPoll)
@@ -215,6 +226,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         bindAir()
         bindHealth(lastHealth)
         bindNotices()
+        refreshDetail()
         bindLock(lock.stripState())
         requestLayout()
     }
@@ -315,9 +327,12 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         }
     }
 
-    /** Kapsüle dokunuş: düşük yakıtta en yakın istasyon araması (Yandex, yoksa genel harita). */
+    /** Kapsüle dokunuş: düşük yakıtta en yakın istasyon araması (Yandex, yoksa genel harita); diğerlerinde araç detayı. */
     private fun onNotice(n: Notice?) {
-        if (n?.kind != NoticeKind.FUEL_LOW) return
+        if (n?.kind != NoticeKind.FUEL_LOW) {
+            openDetail()
+            return
+        }
         for (uri in listOf(NearestStation.yandexUri(), NearestStation.geoUri())) {
             try {
                 activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri)))
@@ -329,6 +344,22 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             }
         }
         android.widget.Toast.makeText(activity, R.string.launcher_notice_no_maps, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    /** Araç detayı: tek sayfa; düzenleme modunda ya da etkinlik kapanırken açılmaz. */
+    private fun openDetail() {
+        if (locked || detail != null || activity.isFinishing || activity.isDestroyed) return
+        val sheet = CarDetailSheet(activity)
+        detail = sheet
+        refreshDetail()
+        sheet.show { detail = null }
+    }
+
+    private fun refreshDetail() {
+        val sheet = detail ?: return
+        val s = vehicle.summary
+        val extra = if (LauncherDemo.enabled) ReadOnlyDemo.extra() else ExtraSource.last
+        sheet.bind(CarDetail.model(s?.openings, extra, trip, s?.lowFuel), s?.openParts.orEmpty())
     }
 
     /** Hava notu yalnızca kabin içi PM2.5 kötüyken ([StageCorners.airShown]); o zaman uyarı renginde. */

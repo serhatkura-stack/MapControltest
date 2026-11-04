@@ -45,11 +45,7 @@ internal class AirQualityTile(context: Context) :
         showSegments(grade(inside) + 1, GRADES, if (poor) LauncherTheme.ALERT else LauncherTheme.ACCENT)
     }
 
-    private fun grade(pm: Int) = when {
-        pm <= GOOD_MAX -> GOOD
-        pm <= MODERATE_MAX -> MODERATE
-        else -> POOR
-    }
+    private fun grade(pm: Int) = AirGrade.of(pm)
 
     private fun gradeLabel(pm: Int) = context.getString(when (grade(pm)) {
         GOOD -> R.string.launcher_air_good
@@ -58,11 +54,9 @@ internal class AirQualityTile(context: Context) :
     })
 
     private companion object {
-        const val GOOD_MAX = 35
-        const val MODERATE_MAX = 75
         const val GRADES = 3
-        const val GOOD = 0
-        const val MODERATE = 1
-        const val POOR = 2
+        const val GOOD = AirGrade.GOOD
+        const val MODERATE = AirGrade.MODERATE
+        const val POOR = AirGrade.POOR
     }
 }
