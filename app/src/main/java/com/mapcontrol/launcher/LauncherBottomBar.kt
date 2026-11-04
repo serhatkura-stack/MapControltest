@@ -33,6 +33,14 @@ enum class BottomBarMode(val key: String, @StringRes val label: Int) {
          */
         fun resolve(stored: String?, legacyFullscreen: Boolean?): BottomBarMode =
             parse(stored) ?: legacyFullscreen?.let(::fromLegacyFullscreen) ?: ORIGINAL
+
+        /**
+         * Launcher'ın kendi çubuğu çizilir mi: Bizimki'nde her zaman; Sahne'de "Orijinal" seçiliyken OEM çubuğu yoksa da
+         * (emülatör `launcher_oem_inset` olmadan, Desay olmayan ünite). Eski ızgara görünümünün klima + uygulama kartı
+         * ([AppDock] + [ClimateBar]) Sahne için tasarlanmadı; orada hiç görünmez.
+         */
+        fun drawsOurBar(mode: BottomBarMode, sahne: Boolean, oemBarPresent: Boolean): Boolean =
+            mode == OURS || (sahne && mode == ORIGINAL && !oemBarPresent)
     }
 }
 
