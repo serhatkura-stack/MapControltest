@@ -4,16 +4,30 @@ package com.mapcontrol.launcher
  * Mini göstergenin (bölünmüş ekranın bir yarısı, bkz. [MiniDashActivity]) saf kuralları; JVM'de sınanır.
  *
  * Uyarı satırı yalnızca bölünmüş ekranda BAŞKA YERDE görünmeyen şeyleri söyler (ana ekran o sırada gizli, fabrika çubuğu
- * yalnızca klimayı gösterir): düşük lastik (psi ile), yaklaşan / geçmiş bakım, düşük yakıt ve kötü kabin havası. Eşikler
- * Sahne ile aynıdır ([StageCorners], [TireDecode]); yeni eşik yoktur.
+ * yalnızca klimayı gösterir): motor suyu sıcak, akü zayıf / yüksek, düşük lastik (psi ile), yakıt kapağı açık, düşük yakıt,
+ * yaklaşan / geçmiş bakım ve kötü kabin havası. Eşikler Sahne ile aynıdır ([HealthMath], [StageCorners], [TireDecode]); yeni
+ * eşik yoktur.
  */
 internal object MiniAlerts {
 
-    /** Uyarı türü; sıra önem sırasıdır (küçük = önce). */
-    enum class Kind { TIRE, FUEL_LOW, SERVICE_OVERDUE, SERVICE_NEAR, AIR_BAD }
+    /**
+     * Uyarı türü; sıra önem sırasıdır (küçük = önce): motor suyu / akü > düşük lastik > yakıt kapağı > yakıt az > bakım > hava.
+     * Bunların hiçbiri araç çiziminde görünmez (§10: çizimde görünen kapı, bagaj, kaput, cam yazılmaz).
+     */
+    enum class Kind { ENGINE_HOT, BATTERY_LOW, BATTERY_HIGH, TIRE, FUEL_CAP, FUEL_LOW, SERVICE_OVERDUE, SERVICE_NEAR, AIR_BAD }
 
-    /** Tek uyarı ve metni kuracak değerler ([tireLow] lastikte, [serviceKm] bakımda, [pm25] havada). */
-    data class Item(val kind: Kind, val tireLow: TireLow? = null, val serviceKm: Int? = null, val pm25: Int? = null)
+    /**
+     * Tek uyarı ve metni kuracak değerler ([tireLow] lastikte, [serviceKm] bakımda, [pm25] havada, [coolantC] motor suyunda,
+     * [batteryV] aküde).
+     */
+    data class Item(
+        val kind: Kind,
+        val tireLow: TireLow? = null,
+        val serviceKm: Int? = null,
+        val pm25: Int? = null,
+        val coolantC: Int? = null,
+        val batteryV: Double? = null,
+    )
 
     /** Satırda aynı anda adlandırılan en çok uyarı; fazlası "+N" olur. */
     const val MAX_NAMED = 2
@@ -24,14 +38,18 @@ internal object MiniAlerts {
         serviceKm: Int?,
         serviceDays: Int?,
         pm25In: Int?,
+        batteryV: Double? = null,
+        coolantC: Int? = null,
+        fuelCapOpen: Boolean = false,
     ): List<Item> {
         val low = TireDecode.low(tires)
-        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In)
+        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In, batteryV, coolantC, fuelCapOpen)
     }
 
     /**
      * Sahne uyarı şeridi de aynı kuralları kullanır (§10): araç kartının özetinden gelen lastik uyarısı ([tireAlert],
-     * [tireLow]) ile. Kapı, bagaj, kaput, cam ve cam tavan burada yoktur; onları araç çizimi gösterir.
+     * [tireLow]) ile. Kapı, bagaj, kaput, cam ve cam tavan burada yoktur; onları araç çizimi gösterir. Motor suyu ve akü
+     * [HealthMath] eşikleriyle (okunamayan değer uyarı sayılmaz); yakıt kapağı çizimde yoktur, şeritte yazılır.
      */
     fun build(
         tireAlert: Boolean,
@@ -40,8 +58,16 @@ internal object MiniAlerts {
         serviceKm: Int?,
         serviceDays: Int?,
         pm25In: Int?,
+        batteryV: Double? = null,
+        coolantC: Int? = null,
+        fuelCapOpen: Boolean = false,
     ): List<Item> = buildList {
+        val health = HealthMath.issues(batteryV, coolantC, null, null, null)
+        if (HealthMath.Issue.ENGINE_HOT in health) add(Item(Kind.ENGINE_HOT, coolantC = coolantC))
+        if (HealthMath.Issue.BATTERY_LOW in health) add(Item(Kind.BATTERY_LOW, batteryV = batteryV))
+        if (HealthMath.Issue.BATTERY_HIGH in health) add(Item(Kind.BATTERY_HIGH, batteryV = batteryV))
         if (tireAlert) add(Item(Kind.TIRE, tireLow = tireLow))
+        if (fuelCapOpen) add(Item(Kind.FUEL_CAP))
         if (lowFuel == true) add(Item(Kind.FUEL_LOW))
         when {
             HealthMath.serviceOverdue(serviceKm, serviceDays) -> add(Item(Kind.SERVICE_OVERDUE))

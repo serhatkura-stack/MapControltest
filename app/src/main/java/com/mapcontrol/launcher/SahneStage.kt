@@ -26,8 +26,8 @@ import com.mapcontrol.R
  *
  * Uyarılar (§10, son karar): araç çiziminde görünen şey yazıyla tekrar edilmez (kapı / bagaj / kaput açılır, cam ve tavan
  * buz mavisi); düşük lastikte o tekerde ince kehribar halka. Arabanın altındaki tek şerit ([StageStrip]) yalnızca arabada
- * görünmeyenler içindir: düşük lastik (psi ile), bakım yaklaştı, yakıt az (dokununca benzinlik araması), kötü hava
- * ([MiniAlerts]); hiçbiri yoksa şerit hiç görünmez. Şeride ya da araca dokununca araç detayı ([CarDetailSheet]).
+ * görünmeyenler içindir: motor suyu sıcak / akü, düşük lastik (psi ile), yakıt kapağı açık, yakıt az (dokununca benzinlik
+ * araması), bakım yaklaştı, kötü hava ([MiniAlerts], bu önem sırasıyla); hiçbiri yoksa şerit hiç görünmez. Şeride ya da araca dokununca araç detayı ([CarDetailSheet]).
  *
  * Menzilin altında ince yakıt çubuğu ve yüzde (azalınca kehribar). Zemin (§11): ışık havuzu ve gölgeler, çalan şarkının kapak
  * rengini çok hafif alan ortam ışığı (şarkı başına bir kez küçük kopyadan hesaplanır, yumuşak geçiş) ve araç üstünde dijital
@@ -256,12 +256,13 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         requestLayout()
     }
 
-    /** Şerit: düşük lastik, bakım, yakıt az, kötü hava ([MiniAlerts]); veri beklenirken gizli. Sürüşte kenar ışığı güçlü. */
+    /** Şerit: motor suyu / akü, düşük lastik, yakıt kapağı, yakıt az, bakım, kötü hava ([MiniAlerts]); veri beklenirken gizli. Sürüşte kenar ışığı güçlü. */
     private fun bindStrip() {
         val s = vehicle.summary
         val list = if (waiting || s == null) emptyList() else MiniAlerts.build(
             tireAlert = s.tireAlert, tireLow = s.tireLow, lowFuel = s.lowFuel,
             serviceKm = trip.serviceKm, serviceDays = trip.serviceDays, pm25In = trip.pm25In,
+            batteryV = trip.batteryV, coolantC = trip.coolantC, fuelCapOpen = s.fuelCapOpen,
         )
         strip.bind(list) { stripText(activity, it) }
         strip.setDriving(if (LauncherDemo.enabled) LauncherDemo.moving == true else trip.moving == true)

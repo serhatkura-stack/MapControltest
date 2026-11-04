@@ -226,7 +226,10 @@ class MiniDashActivity : Activity() {
     /** Uyarı şeridi (Sahne ile aynı görünüş ve kurallar, [StageStrip]); hiç uyarı yoksa gizli. */
     private fun bindAlerts() {
         alertRow.setDriving(if (LauncherDemo.enabled) LauncherDemo.moving == true else trip.moving == true)
-        val all = MiniAlerts.build(extra.tires, trip.lowFuel, trip.serviceKm, trip.serviceDays, trip.pm25In)
+        val all = MiniAlerts.build(
+            extra.tires, trip.lowFuel, trip.serviceKm, trip.serviceDays, trip.pm25In,
+            batteryV = trip.batteryV, coolantC = trip.coolantC, fuelCapOpen = extra.parts[BodyPart.FUEL_CAP] == true,
+        )
         if (all == lastAlerts) return
         lastAlerts = all
         alertRow.bind(all) { stripText(this, it) }

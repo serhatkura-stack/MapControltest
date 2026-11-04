@@ -12,7 +12,8 @@ import com.mapcontrol.R
 
 /**
  * Uyarı şeridi (§10, karma çözüm): koyu cam, ince kehribar kenar, kehribar nokta; en çok iki madde ve "+N". Yalnızca arabada
- * görünmeyen şeyler içindir ([MiniAlerts]: düşük lastik psi ile, bakım, yakıt az, kötü hava); hiç madde yoksa şerit hiç
+ * görünmeyen şeyler içindir ([MiniAlerts]: motor suyu / akü, düşük lastik psi ile, yakıt kapağı, yakıt az, bakım, kötü hava; bu
+ * önem sırasıyla); hiç madde yoksa şerit hiç
  * görünmez. Yükseklik [HEIGHT_DP] (sürüşte basılabilir); her madde kendi dokunma alanıdır, dokunuş [onTap]'e gider ("+N" için
  * null). Sahne'de aracın altında, mini göstergede uyarı satırında aynı görünüşle kullanılır.
  *
@@ -124,8 +125,8 @@ internal class StageStrip(
 }
 
 /**
- * Şerit maddesinin kısa metni (Sahne ve mini gösterge ortak): "Arka sol 23 psi", "Bakıma 800 km", "Yakıt az" (şeritte
- * sonunda ok: dokununca benzinlik), "Hava kalitesi kötü". Lastikte teker bilinmiyorsa yalnızca psi, psi de yoksa genel metin.
+ * Şerit maddesinin kısa metni (Sahne ve mini gösterge ortak): "Motor suyu 118°C", "Akü zayıf 11,4 V", "Arka sol 23 psi",
+ * "Yakıt kapağı açık", "Bakıma 800 km", "Yakıt az" (şeritte sonunda ok: dokununca benzinlik), "Hava kalitesi kötü". Lastikte teker bilinmiyorsa yalnızca psi, psi de yoksa genel metin.
  */
 internal fun stripText(context: Context, a: MiniAlerts.Item): String = when (a.kind) {
     MiniAlerts.Kind.TIRE -> {
@@ -137,6 +138,13 @@ internal fun stripText(context: Context, a: MiniAlerts.Item): String = when (a.k
             else -> context.getString(R.string.launcher_mini_alert_tire)
         }
     }
+    MiniAlerts.Kind.ENGINE_HOT -> a.coolantC?.let { context.getString(R.string.launcher_strip_coolant_hot, it) }
+        ?: context.getString(R.string.launcher_health_hot)
+    MiniAlerts.Kind.BATTERY_LOW -> a.batteryV?.let { context.getString(R.string.launcher_strip_battery_low, it) }
+        ?: context.getString(R.string.launcher_health_battery_low)
+    MiniAlerts.Kind.BATTERY_HIGH -> a.batteryV?.let { context.getString(R.string.launcher_strip_battery_high, it) }
+        ?: context.getString(R.string.launcher_health_battery_high)
+    MiniAlerts.Kind.FUEL_CAP -> context.getString(R.string.launcher_strip_fuel_cap)
     MiniAlerts.Kind.FUEL_LOW -> context.getString(R.string.launcher_mini_alert_fuel)
     MiniAlerts.Kind.SERVICE_OVERDUE -> context.getString(R.string.launcher_mini_alert_service_overdue)
     MiniAlerts.Kind.SERVICE_NEAR -> a.serviceKm?.let { context.getString(R.string.launcher_mini_alert_service_km, it) }

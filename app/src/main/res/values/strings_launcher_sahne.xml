@@ -39,6 +39,10 @@
     <string name="launcher_detail_sunroof">Sunroof</string>
     <string name="launcher_strip_tire_wheel" formatted="true">%1$s %2$d psi</string>
     <string name="launcher_strip_air">Poor air quality</string>
+    <string name="launcher_strip_coolant_hot" formatted="true">Coolant %1$d°C</string>
+    <string name="launcher_strip_battery_low" formatted="true">Battery low %1$.1f V</string>
+    <string name="launcher_strip_battery_high" formatted="true">Battery high %1$.1f V</string>
+    <string name="launcher_strip_fuel_cap">Fuel cap open</string>
     <string name="launcher_sport_dial_change">Change dial: %1$s</string>
     <string name="launcher_sport_pick_title">Dial</string>
     <string name="launcher_sport_pick_swap">Swaps</string>

@@ -41,6 +41,32 @@ class MiniDashLogicTest {
         assertEquals(80, a[3].pm25)
     }
 
+    @Test fun healthAndFuelCapComeFirstInImportanceOrder() {
+        val a = MiniAlerts.build(
+            TireReading(listOf(1.5, 2.4, 2.4, 2.4)), lowFuel = true, serviceKm = 800, serviceDays = 40, pm25In = 80,
+            batteryV = 11.4, coolantC = 118, fuelCapOpen = true,
+        )
+        assertEquals(
+            listOf(
+                MiniAlerts.Kind.ENGINE_HOT, MiniAlerts.Kind.BATTERY_LOW, MiniAlerts.Kind.TIRE, MiniAlerts.Kind.FUEL_CAP,
+                MiniAlerts.Kind.FUEL_LOW, MiniAlerts.Kind.SERVICE_NEAR, MiniAlerts.Kind.AIR_BAD,
+            ),
+            a.map { it.kind },
+        )
+        assertEquals(118, a[0].coolantC)
+        assertEquals(11.4, a[1].batteryV!!, 1e-9)
+        val (named, more) = MiniAlerts.visible(a)
+        assertEquals(listOf(MiniAlerts.Kind.ENGINE_HOT, MiniAlerts.Kind.BATTERY_LOW), named.map { it.kind })
+        assertEquals(5, more)
+    }
+
+    @Test fun healthUsesHealthMathThresholds() {
+        assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 12.6, coolantC = HealthMath.COOLANT_MAX_C).isEmpty())
+        assertEquals(listOf(MiniAlerts.Kind.BATTERY_HIGH), MiniAlerts.build(null, null, null, null, null, batteryV = 15.4).map { it.kind })
+        assertEquals(listOf(MiniAlerts.Kind.ENGINE_HOT), MiniAlerts.build(null, null, null, null, null, coolantC = 111).map { it.kind })
+        assertEquals(listOf(MiniAlerts.Kind.FUEL_CAP), MiniAlerts.build(null, null, null, null, null, fuelCapOpen = true).map { it.kind })
+    }
+
     @Test fun serviceThresholdsMatchSahne() {
         assertTrue(MiniAlerts.build(null, null, StageCorners.SERVICE_NEAR_KM, 200, null).any { it.kind == MiniAlerts.Kind.SERVICE_NEAR })
         assertTrue(MiniAlerts.build(null, null, StageCorners.SERVICE_NEAR_KM + 1, 200, null).isEmpty())
