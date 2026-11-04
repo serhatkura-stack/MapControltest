@@ -65,17 +65,26 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** Aracın gövde kutusu (sahne pikseli; açılan parçalar hariç); ölçü değişmedikçe yeniden hesaplanmaz. */
     private var carBox = StageFit.Box(0f, 0f, 0f, 0f)
     private var fitKey: List<Int> = emptyList()
+    /**
+     * Bagaj açıkken aracın sağa kayması (piksel): açık bagaj kapağı menzil yazısının altına girmesin diye en çok
+     * [TRUNK_SHIFT_MAX_DP]; zemin ışığı, gölge, yansıma ve ortam ışığı araçla birlikte kayar. [trunkShiftNeed] o anki
+     * yerleşimde gereken pay (bagaj kapalıyken de hesaplanır), [trunkShift] şu anki değer (yumuşak geçiş).
+     */
+    private var trunkShiftNeed = 0f
+    private var trunkShift = 0f
+    private var trunkOpen = false
+    private var shiftAnim: ValueAnimator? = null
 
     // --- Menzil (sol omuz): tek satır, rakam + birim + "menzil" aynı taban çizgisinde, eşit genişlikli rakamlar ---
     private val rangeNumber = sahneText(activity, RANGE_SP, Sahne.NUMERAL, 300, -0.03f).apply { includeFontPadding = false }
     private val rangeUnit = sahneText(activity, SHOULDER_SP, Sahne.INK_2, SHOULDER_WEIGHT)
-    private val rangeLabel = sahneText(activity, 18f, Sahne.INK_3, 400).apply { setText(R.string.launcher_range_label) }
+    private val rangeLabel = sahneText(activity, 16f, Sahne.INK_3, 400).apply { setText(R.string.launcher_range_label) }
     private val rangeRow = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         isBaselineAligned = true
         addView(rangeNumber, LinearLayout.LayoutParams(WRAP, WRAP))
-        addView(rangeUnit, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
-        addView(rangeLabel, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+        addView(rangeUnit, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(6) })
+        addView(rangeLabel, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
     }
     // İnce yakıt çubuğu ve yüzde (menzilin altında; azalınca kehribar).
     private val fuelIcon = sahneIcon(R.drawable.ic_sahne_fuel, Sahne.INK_3)
@@ -101,7 +110,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = GlassDrawable(context, Sahne.PILL_RADIUS_DP, shadow = 0.6f)
-        setPadding(context.dp(18), 0, context.dp(22), 0)
+        setPadding(context.dp(16), 0, context.dp(18), 0)
         addView(lockIcon, LinearLayout.LayoutParams(context.dp(24), context.dp(24)))
         addView(lockText, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
         isClickable = true
@@ -241,6 +250,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         car.setGlass(o?.windows.orEmpty(), o?.sunroof == true, animate = carSeeded)
         car.setTireAlert(if (s?.tireAlert == true) s.tireLow?.wheel else null)
         lastParts = o?.carParts() ?: s?.openParts.orEmpty()
+        setTrunkOpen(CarPart.TRUNK in lastParts, animate = carSeeded && visibleNow)
         lastWindows = o?.windows.orEmpty()
         lastSunroof = o?.sunroof == true
         onCar?.invoke(lastParts, lastWindows, lastSunroof, carSeeded)
@@ -434,7 +444,51 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
                 StageFit.Box(chipLeft.toFloat(), cTop.toFloat(), (w - side).toFloat(), (cTop + lockChip.measuredHeight).toFloat()),
             ),
             cornerInset = CORNER_INSET,
-        )
+        ).let { box ->
+            // Araç kalan boşluğun ortası yerine şerit payına oturur (biraz aşağıda): omuzlarla dikey pay büyür.
+            val drop = (maxBottom - box.bottom).coerceAtLeast(0f)
+            box.copy(top = box.top + drop, bottom = box.bottom + drop)
+        }
+        // Açık bagaj kapağı gövdenin solundan taşar (base'de -79 px; bkz. CarAnimSpec TRUNK overlay); menzil bloğuyla en az
+        // [FIT_GAP_DP] kalacak kadar sağa kayılır.
+        val trunkLeft = carBox.left + carBox.width * CarAnimSpec.part(CarPart.TRUNK).overlay.x / CarAnimSpec.BASE_W
+        trunkShiftNeed = (rangeRight + context.dpF(FIT_GAP_DP) - trunkLeft).coerceIn(0f, context.dpF(TRUNK_SHIFT_MAX_DP))
+        if (shiftAnim == null) applyShift(if (trunkOpen) trunkShiftNeed else 0f)
+    }
+
+    /** Bagaj açılınca / kapanınca araç ve zemini yumuşakça kayar (yalnızca konum canlanır; ilk durumda anında). */
+    private fun setTrunkOpen(open: Boolean, animate: Boolean) {
+        if (open == trunkOpen) return
+        trunkOpen = open
+        shiftAnim?.cancel()
+        shiftAnim = null
+        val target = if (open) trunkShiftNeed else 0f
+        if (!animate || !ValueAnimator.areAnimatorsEnabled()) {
+            applyShift(target)
+            return
+        }
+        val from = trunkShift
+        shiftAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = TRUNK_SHIFT_MS
+            interpolator = android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)
+            addUpdateListener { a -> applyShift(from + (target - from) * a.animatedFraction) }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (shiftAnim === animation) {
+                        shiftAnim = null
+                        applyShift(if (trunkOpen) trunkShiftNeed else 0f)
+                    }
+                }
+            })
+            start()
+        }
+    }
+
+    private fun applyShift(dx: Float) {
+        trunkShift = dx
+        car.translationX = dx
+        ambient.forEach { it.translationX = dx }
+        floor.setShift(dx)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -589,6 +643,15 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             invalidate()
         }
 
+        /** Yatay kayma (bagaj açıkken): gradyanlar yeniden kurulmaz, yalnızca tuval kaydırılır. */
+        private var shift = 0f
+
+        fun setShift(dx: Float) {
+            if (dx == shift) return
+            shift = dx
+            invalidate()
+        }
+
         private val cone = Paint(Paint.ANTI_ALIAS_FLAG)
         private val pool = Paint(Paint.ANTI_ALIAS_FLAG)
         private val poolOuter = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -623,13 +686,19 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             val h = height
             if (w <= 0 || h <= 0) return
             if (w != builtW || h != builtH) build(w, h)
-            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), cone)
-            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), poolOuter)
-            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), pool)
-            if (head.shader != null) canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), head)
-            if (tail.shader != null) canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), tail)
-            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shadow)
-            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), contact)
+            val save = canvas.save()
+            canvas.translate(shift, 0f)
+            val l = -shift
+            val r = w - shift
+            val b = h.toFloat()
+            canvas.drawRect(l, 0f, r, b, cone)
+            canvas.drawRect(l, 0f, r, b, poolOuter)
+            canvas.drawRect(l, 0f, r, b, pool)
+            if (head.shader != null) canvas.drawRect(l, 0f, r, b, head)
+            if (tail.shader != null) canvas.drawRect(l, 0f, r, b, tail)
+            canvas.drawRect(l, 0f, r, b, shadow)
+            canvas.drawRect(l, 0f, r, b, contact)
+            canvas.restoreToCount(save)
         }
     }
 
@@ -643,22 +712,25 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         /** Araç genişliği sınırları (tasarım birimi): sığdığı kadar büyük, ortada (omuzlar köşeye biraz girebilir). */
         const val CAR_W_MAX = 640f
         const val CAR_W_MIN = 420f
-        /** Omuzlar aracın köşesine girmez (köşe payı yok); araç ile menzil / kilit arası en az [FIT_GAP_DP]. */
+        /** Omuzlar aracın köşesine girmez (köşe payı yok); araç ile menzil / kilit arası en az [FIT_GAP_DP] (16dp). */
         const val CORNER_INSET = 0f
-        const val FIT_GAP_DP = 24f
+        const val FIT_GAP_DP = 16f
+        /** Bagaj açıkken aracın en çok sağa kayması ve geçiş süresi. */
+        const val TRUNK_SHIFT_MAX_DP = 60f
+        const val TRUNK_SHIFT_MS = 420L
         const val FUEL_BAR_DP = 84
         /** Araç ile şerit payı arası. */
         const val CAR_STRIP_GAP_DP = 10
         /** Şeridin sahne altından uzaklığı. */
         const val STRIP_BOTTOM_DP = 8
         const val CAR_ASPECT = CarAnimSpec.BASE_H / CarAnimSpec.BASE_W
-        const val SIDE = 24f
-        /** Omuzların (menzil, kilit) üst kenarı (tasarım birimi). */
-        const val SHOULDER_TOP = 12f
+        /** Omuzlar sahnenin dış üst köşelerinde: kenar payı ve üst kenar (tasarım birimi). */
+        const val SIDE = 8f
+        const val SHOULDER_TOP = 4f
         /** Omuz yazıları: "km" ve "Kilitli" aynı boy ve ağırlık. */
         const val SHOULDER_SP = 22f
         const val SHOULDER_WEIGHT = 500
-        const val RANGE_SP = 48f
+        const val RANGE_SP = 46f
         /** Ortam ışığı: aracın merkezinde, gövdeye göre yarıçaplar; renk alfası; geçiş süresi. */
         const val AMBIENT_RX = 0.66f
         const val AMBIENT_RY = 0.78f
