@@ -252,7 +252,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     private fun totalsRows(): List<Pair<String, String>> {
         val d = data
-        val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin)
+        val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin)
         return TripTotals.rows(d.totalKm, d.totalFuelL, time).map { (kind, value) ->
             when (kind) {
                 TripTotals.Kind.ODOMETER -> context.getString(R.string.launcher_totals_short_km) to

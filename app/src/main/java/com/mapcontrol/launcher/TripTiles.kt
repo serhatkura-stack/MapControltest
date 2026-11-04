@@ -135,6 +135,10 @@ internal data class TripData(
     val totalFuelL: Double? = null,
     val drivingRunMin: Int? = null,
     val drivingResetMin: Int? = null,
+    /** ID_DRIVE_TIME (29) / GRAND_TIME_AFTER_RUNNING (50) dakikası; 151/152 sıfır dönerse yedek. */
+    val drivingAltMin: Int? = null,
+    /** Kendi biriktirdiğimiz motor-açık süresi (dk): hiçbir sinyal sıfırdan büyük değilse son yedek. */
+    val engineOnMin: Int? = null,
 )
 
 /**
@@ -168,6 +172,8 @@ internal object TripSource {
     private var appContext: Context? = null
     private val tiers = PollTiers(longArrayOf(POLL_MS, TRIP_MS, SLOW_MS))
     @Volatile private var rpmRaw: Int? = null
+    private var engineOnMs = 0L
+    private var lastLiveAt = 0L
 
     @Volatile
     var last: TripData = TripData()
@@ -229,7 +235,10 @@ internal object TripSource {
             val instant = TripDecode.instantL100(ro(ReadOnlyID.ID_INSTANTANEOUS_CONSUMPTION))
             // Hız: gösterge hızı (119); eski sinyal (0) bu araçta hareket ederken 0/geçersiz kalıyordu ("Araç duruyor" hatası).
             val speed = TripDecode.speed(ro(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY), ro(ReadOnlyID.ID_CAR_SPEED))
-            d = d.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant)
+            // Yedek sayaç: devir ya da hız varken geçen süre (yalnızca widget görünürken çalışır; alt sınır).
+            engineOnMs = TripTotals.accumulateMs(engineOnMs, if (lastLiveAt == 0L) 0L else now - lastLiveAt, (rpmRaw ?: 0) > 0 || (speed ?: 0) > 0)
+            lastLiveAt = now
+            d = d.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant, engineOnMin = (engineOnMs / 60_000L).toInt())
         }
         if (mask and T_TRIP != 0) {
             rpmRaw = ro(ReadOnlyID.ID_ENGINE_RPM)
@@ -253,6 +262,8 @@ internal object TripSource {
                 totalFuelL = TripDecode.totalFuelL(ro(ReadOnlyIds.TOTAL_FUEL)),
                 drivingRunMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RUNNING)),
                 drivingResetMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RESET)),
+                drivingAltMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyID.ID_DRIVE_TIME))?.takeIf { it > 0 }
+                    ?: TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyID.ID_GRAND_TIME_AFTER_RUNNING)),
             )
         }
         return d
@@ -680,7 +691,7 @@ internal class TripComputerTile(context: Context) :
     /** "Toplam" bölümünün satırları: ömür boyu km, toplam yakıt, sürüş süresi (okunabilenler). */
     private fun totalsRows(): List<Pair<String, String>> {
         val d = data
-        val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin)
+        val time = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin)
         return TripTotals.rows(d.totalKm, d.totalFuelL, time).map { (kind, value) ->
             when (kind) {
                 TripTotals.Kind.ODOMETER -> context.getString(R.string.launcher_totals_odometer) to

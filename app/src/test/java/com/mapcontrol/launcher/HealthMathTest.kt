@@ -3,6 +3,7 @@ package com.mapcontrol.launcher
 import com.mapcontrol.launcher.HealthMath.Issue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -63,5 +64,13 @@ class HealthMathTest {
         assertEquals(listOf(TripTotals.Kind.ODOMETER, TripTotals.Kind.TIME), TripTotals.rows(100, null, 5).map { it.first })
         assertEquals(47, TripTotals.drivingMinutes(47, 3552))
         assertEquals(3552, TripTotals.drivingMinutes(null, 3552))
+        // 151 sıfır dönerse sıradaki dolu sinyal seçilir; hepsi sıfırsa satır düşer ("0 dk" gösterilmez).
+        assertEquals(3552, TripTotals.drivingMinutes(0, 3552))
+        assertEquals(12, TripTotals.drivingMinutes(0, 0, 12, 5))
+        assertEquals(5, TripTotals.drivingMinutes(0, 0, null, 5))
+        assertNull(TripTotals.drivingMinutes(0, 0, 0, 0))
+        assertEquals(1_000L, TripTotals.accumulateMs(0, 1_000, true))
+        assertEquals(0L, TripTotals.accumulateMs(0, 1_000, false))
+        assertEquals(0L, TripTotals.accumulateMs(0, 60_000, true))
     }
 }
