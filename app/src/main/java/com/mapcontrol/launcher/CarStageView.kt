@@ -507,6 +507,14 @@ class CarStageView(context: Context) : ViewGroup(context) {
 
     val isAnimating: Boolean get() = running > 0
 
+    /**
+     * Karşılamada araç belirirken true: görünüm alfası ekran dışı katman açmadan her çizime ayrı uygulanır (katman görünüm
+     * kutusuyla sınırlı olur, kutudan taşan far huzmesini ve fren havuzunu keserdi).
+     */
+    var flatAlpha = false
+
+    override fun hasOverlappingRendering(): Boolean = !flatAlpha
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         prefs.registerOnSharedPreferenceChangeListener(prefListener)

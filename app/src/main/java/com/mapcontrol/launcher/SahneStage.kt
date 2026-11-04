@@ -130,7 +130,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private val tripListener = TripSource.Listener {
         if (it == trip) return@Listener
         trip = it
-        car.setLights(it.lights)
+        if (!welcome) car.setLights(it.lights)
         bindPartAlerts()
         bindStrip()
         refreshDetail()
@@ -167,6 +167,73 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private var lastParts: Set<CarPart> = emptySet()
     private var lastWindows: Collection<BodyPart> = emptyList()
     private var lastSunroof = false
+
+    // --- Karşılama (§7.4, [SahneWelcome]) ---
+    /** Karşılama sürerken ışıklar karşılamanındır (yolculuk verisi beklenir, sonunda gerçek ışıklar uygulanır). */
+    private var welcome = false
+    private val ambientSaved = FloatArray(2)
+    private val welcomeShoulders: Array<View> get() = arrayOf(rangeBlock, lockChip, strip, skeleton, waitNote)
+    private val lightsIgnite = Runnable { car.setLights(trip.lights.copy(head = true, brake = true)) }
+    private val brakeSettle = Runnable { car.setLights(trip.lights.copy(head = true)) }
+
+    /** Karanlık: araç, zemin, ortam ışığı, omuzlar ve şerit görünmez; araç biraz küçük. */
+    internal fun welcomePrepare() {
+        main.removeCallbacks(lightsIgnite)
+        main.removeCallbacks(brakeSettle)
+        welcome = true
+        car.animate().cancel()
+        floor.animate().cancel()
+        car.alpha = 0f
+        car.scaleX = WELCOME_SCALE
+        car.scaleY = WELCOME_SCALE
+        floor.alpha = 0f
+        ambient.forEachIndexed { i, v -> v.animate().cancel(); ambientSaved[i] = v.alpha; v.alpha = 0f }
+        welcomeShoulders.forEach { it.animate().cancel(); it.alpha = 0f }
+    }
+
+    /**
+     * Araç karanlıktan belirir (alfa + ölçek), ~0,3 sn'de farlar ve stoplar yanar (stoplar sonra park lambası parlaklığına
+     * iner), zemin ışığı ve ortam ışığı açılır, sonda menzil, kilit ve şerit belirir.
+     */
+    internal fun welcomePlay() {
+        // Katmansız: ışıklar (far huzmesi, fren havuzu) görünüm kutusunun dışına taşar, katman onları keserdi; geçişte
+        // alfa her çizime ayrı uygulanır ([CarStageView.flatAlpha]).
+        car.flatAlpha = true
+        car.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(80).setDuration(WELCOME_CAR_MS)
+            .setInterpolator(WELCOME_EASE).withEndAction { car.flatAlpha = false }.start()
+        main.postDelayed(lightsIgnite, WELCOME_LIGHTS_MS)
+        main.postDelayed(brakeSettle, WELCOME_BRAKE_OFF_MS)
+        floor.animate().alpha(1f).setStartDelay(WELCOME_FLOOR_MS).setDuration(800).setInterpolator(WELCOME_EASE).withLayer().start()
+        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientSaved[i]).setStartDelay(WELCOME_FLOOR_MS).setDuration(800).start() }
+        welcomeShoulders.forEach { it.animate().alpha(1f).setStartDelay(1_150).setDuration(650).setInterpolator(WELCOME_EASE).withLayer().start() }
+    }
+
+    /** Oynatmadan kısa solmayla açılış (güç sinyali gelmedi). */
+    internal fun welcomeReveal(ms: Long) {
+        car.flatAlpha = true
+        car.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(ms).withEndAction { car.flatAlpha = false }.start()
+        floor.animate().alpha(1f).setStartDelay(0).setDuration(ms).start()
+        ambient.forEachIndexed { i, v -> v.animate().alpha(ambientSaved[i]).setStartDelay(0).setDuration(ms).start() }
+        welcomeShoulders.forEach { it.animate().alpha(1f).setStartDelay(0).setDuration(ms).start() }
+    }
+
+    /** Son hal: her şey görünür, gerçek ışıklar. */
+    internal fun welcomeEnd() {
+        if (!welcome) return
+        welcome = false
+        main.removeCallbacks(lightsIgnite)
+        main.removeCallbacks(brakeSettle)
+        car.animate().cancel()
+        car.flatAlpha = false
+        floor.animate().cancel()
+        car.alpha = 1f
+        car.scaleX = 1f
+        car.scaleY = 1f
+        floor.alpha = 1f
+        ambient.forEachIndexed { i, v -> v.animate().cancel(); v.alpha = ambientSaved[i] }
+        welcomeShoulders.forEach { it.animate().cancel(); it.alpha = 1f }
+        car.setLights(trip.lights)
+    }
 
     /** Spor ekranından araç detayı. */
     fun openCarDetail() = openDetail()
@@ -750,6 +817,13 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         const val AMBIENT_ALPHA_NIGHT = 0x3D
         const val AMBIENT_ALPHA_DAY = 0x2E
         const val AMBIENT_FADE_MS = 1_200L
+        /** Karşılama: aracın başlangıç ölçeği, belirme süresi, ışıkların yanışı, stopların inişi, zemin ışığının başlangıcı. */
+        const val WELCOME_SCALE = 0.94f
+        const val WELCOME_CAR_MS = 950L
+        const val WELCOME_LIGHTS_MS = 330L
+        const val WELCOME_BRAKE_OFF_MS = 1_050L
+        const val WELCOME_FLOOR_MS = 450L
+        val WELCOME_EASE = android.view.animation.DecelerateInterpolator(1.6f)
     }
 }
 

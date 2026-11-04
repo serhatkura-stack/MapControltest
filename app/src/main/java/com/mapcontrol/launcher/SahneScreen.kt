@@ -75,6 +75,9 @@ class SahneScreen(
         rebuildAll()
     }
 
+    /** Karşılama ([SahneWelcome]) için: araç sahnesi ve geri kalan orta alan (yan paneller, şerit). */
+    internal fun welcomeParts(): Pair<SahneStage, List<View>> = stage to listOf(leftPanel, rightPanel, strip)
+
     // --- Yaşam döngüsü ---
 
     fun onVisible() {

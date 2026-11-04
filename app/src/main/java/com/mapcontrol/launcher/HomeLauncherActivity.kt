@@ -32,6 +32,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
         if (snap.connected && snap.hasDriveMode()) observedDriveMode = snap.driveMode
         // Hareket: gösterge hızı > 0 (okunamıyorsa bilinmiyor; sayaçlar sıfırlanır).
+        observedPowerOn = WelcomeGate.powerOn(snap)
         observedMoving = if (snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))) snap.preferredSpeed() > 0 else null
         window.decorView.post {
             if (editing && LauncherSafeArea.isMoving(snap, EDIT_EXIT_KMH)) exitEditMode()
@@ -41,6 +42,12 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Aracın bildirdiği son sürüş modu (veri yoksa null); tema vurgusu bundan [DRIVE_STABLE_MS] sonra uyarlanır. */
     @Volatile private var observedDriveMode: Int? = null
     @Volatile private var observedMoving: Boolean? = null
+    /** Güç modu açık mı (kontak; bilinmiyorsa null): karşılama (§7.4) bundan karar verir. */
+    @Volatile private var observedPowerOn: Boolean? = null
+    /** Sahne karşılaması; Sahne yoksa null. Etkinlik başına bir kez kurulur. */
+    private var welcome: SahneWelcome? = null
+    /** Soğuk açılışta karşılama için ekran siyah tutuldu; bu ana kadar güç sinyali gelmezse kısa solmayla açılır. */
+    private var welcomeArmUntil = 0L
 
     /** Park/Sürüş düzeni: etkin düzen, geçiş kararı ve başlıktaki düzenleme başlığı. */
     private var activeMode = LayoutMode.PARK
@@ -57,7 +64,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val driveTick = object : Runnable {
         override fun run() {
-            if (started) { driveModeTick(); sportTick(); layoutTick() }
+            if (started) { driveModeTick(); sportTick(); layoutTick(); welcomeTick() }
             driveHandler.postDelayed(this, DRIVE_TICK_MS)
         }
     }
@@ -204,6 +211,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         loadForMode()
         setupSport()
+        setupWelcome(root)
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
         LauncherBottomBar.logResult(this)
@@ -451,6 +459,53 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     /**
+     * Sahne karşılamasını kurar. Süreçte ilk kez (araç ünitesinde ya da demo isteğiyle) ekran baştan siyah tutulur: güç
+     * sinyali [WELCOME_ARM_MS] içinde gelirse karşılama karanlıktan başlar, gelmezse kısa solmayla açılır.
+     */
+    private fun setupWelcome(root: View) {
+        val (stage, parts) = sahne?.welcomeParts() ?: return
+        val others = listOfNotNull(header.view, ourBar?.view, climateBar?.view) + parts
+        val w = SahneWelcome(root, stage, others)
+        welcome = w
+        val demo = LauncherDemo.enabled && LauncherDemo.welcomeRequested
+        if (!WelcomeCycle.gate.played && !WelcomeCycle.armedOnce && (demo || LauncherSafeArea.isDesayUnit(this))) {
+            WelcomeCycle.armedOnce = true
+            w.prepare()
+            welcomeArmUntil = android.os.SystemClock.uptimeMillis() + WELCOME_ARM_MS
+        }
+    }
+
+    /**
+     * Karşılama (§7.4): kontak açılınca (güç modu 1/2) ya da kontak açıkken ilk öne gelişte bir kez; spor açıkken atlanır.
+     * Demo `launcher_demo_welcome true` beklemeden yeniden oynatır. Spor açılırsa ya da düzenlemeye girilirse hemen biter.
+     */
+    private fun welcomeTick() {
+        val w = welcome ?: return
+        val sportOn = sport?.shown == true
+        if ((w.running || w.prepared) && (sportOn || editing || sheet != null)) {
+            w.finish()
+            welcomeArmUntil = 0L
+            return
+        }
+        val ready = resumed && !editing && sheet == null && wifiPanel == null
+        if (LauncherDemo.enabled && LauncherDemo.welcomeRequested && ready) {
+            LauncherDemo.welcomeRequested = false
+            WelcomeCycle.gate.replay()
+            welcomeArmUntil = 0L
+            if (WelcomeCycle.gate.update(true, ready = true, sportActive = sportOn)) w.play() else w.finish()
+            return
+        }
+        if (w.running) return
+        if (WelcomeCycle.gate.update(observedPowerOn, ready, sportOn)) {
+            welcomeArmUntil = 0L
+            w.play()
+        } else if (w.prepared && (WelcomeCycle.gate.played || android.os.SystemClock.uptimeMillis() > welcomeArmUntil)) {
+            welcomeArmUntil = 0L
+            w.reveal()
+        }
+    }
+
+    /**
      * Park/Sürüş geçişi: hız ve vites sinyallerinden [DriveLayoutPolicy] karar verir; düzenleme ya da sayfa açıkken ertelenir.
      * Seçenek kapalıysa sürüş düzeni gösteriliyorsa Park'a dönülür. Demo `launcher_demo_moving false` beklemeden Park'a döner.
      */
@@ -607,6 +662,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     override fun onPause() {
         resumed = false
+        welcome?.finish()
+        welcomeArmUntil = 0L
         LauncherTheme.stopAutoNight()
         super.onPause()
     }
@@ -944,6 +1001,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         @Volatile var pendingEdit = false
         const val DRIVE_STABLE_MS = 2_000L
         const val DRIVE_TICK_MS = 500L
+        /** Soğuk açılışta karşılama için güç sinyalinin en çok beklendiği süre (ekran bu sırada siyah). */
+        const val WELCOME_ARM_MS = 1_500L
         const val ADD_COLUMNS = 5
         const val CATALOG_MIN_SP = 16
         const val ADD_SHEET_WIDTH_DP = 1280

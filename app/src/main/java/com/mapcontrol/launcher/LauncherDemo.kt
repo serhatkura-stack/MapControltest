@@ -221,7 +221,17 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
         if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
         if (intent.hasExtra(EXTRA_LIGHTS)) lights = CarLights.parse(intent.getStringExtra(EXTRA_LIGHTS))
+        if (intent.getBooleanExtra(EXTRA_WELCOME, false)) welcomeRequested = true
     }
+
+    /**
+     * Karşılama önizlemesi (§7.4): `--ez launcher_demo_welcome true` Sahne karşılamasını kontak beklemeden bir kez daha
+     * oynatır (etkinlik soğuk açılıyorsa ekran baştan siyah tutulur).
+     */
+    const val EXTRA_WELCOME = "launcher_demo_welcome"
+
+    @Volatile
+    var welcomeRequested = false
 
     /**
      * Dijital ikiz ışıkları önizlemesi: `--es launcher_demo_lights "head,brake,left,right,reverse,hazard"` (virgülle; boş =
