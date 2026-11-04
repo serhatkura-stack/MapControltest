@@ -980,20 +980,25 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     private fun hideSystemBars() {
-        window.insetsController?.let {
-            it.hide(WindowInsets.Type.statusBars())
-            if (LauncherBottomBar.hidesOemBar(this)) it.hide(WindowInsets.Type.navigationBars())
-            // Gündüz görünümünde gezinme çubuğu simgeleri açık zeminde görünür kalsın.
-            it.setSystemBarsAppearance(
-                if (LauncherTheme.night) 0 else WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-            )
-            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        } ?: run {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                if (LauncherTheme.night) 0 else View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
+        // minSdk 29: WindowInsetsController API 30'da geldi; Android 10'da (ya da denetleyici yoksa) eski bayrak yolu.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && hideSystemBarsR()) return
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            if (LauncherTheme.night) 0 else View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+    }
+
+    @android.annotation.TargetApi(android.os.Build.VERSION_CODES.R)
+    private fun hideSystemBarsR(): Boolean {
+        val it = window.insetsController ?: return false
+        it.hide(WindowInsets.Type.statusBars())
+        if (LauncherBottomBar.hidesOemBar(this)) it.hide(WindowInsets.Type.navigationBars())
+        // Gündüz görünümünde gezinme çubuğu simgeleri açık zeminde görünür kalsın.
+        it.setSystemBarsAppearance(
+            if (LauncherTheme.night) 0 else WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+            WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+        )
+        it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        return true
     }
 
     private companion object {
