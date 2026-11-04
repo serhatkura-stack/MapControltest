@@ -31,6 +31,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val metricsListener = VehicleMetricsRepository.Listener { snap ->
         // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
         if (snap.connected && snap.hasDriveMode()) observedDriveMode = snap.driveMode
+        // Spor kadranları için bu sürüşün en yüksek hızı ve 0–100 ölçümü (yalnız okuma).
+        SportSessionStore.feed(snap, metrics.getCombined(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_ENGINE_RPM))
         // Hareket: gösterge hızı > 0 (okunamıyorsa bilinmiyor; sayaçlar sıfırlanır).
         observedMoving = if (snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))) snap.preferredSpeed() > 0 else null
         window.decorView.post {
@@ -51,10 +53,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var autoLayoutOn = true
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
+    /** Spor modu (yalnız Sahne): sürüş modu Spor ~1 sn kararlı kalınca orta alan ve çubuklar kronograf diline geçer. */
+    private val sportGate = SportGate()
+    private var sport: SportController? = null
     private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val driveTick = object : Runnable {
         override fun run() {
-            if (started) { driveModeTick(); layoutTick() }
+            if (started) { driveModeTick(); sportTick(); layoutTick() }
             driveHandler.postDelayed(this, DRIVE_TICK_MS)
         }
     }
@@ -199,6 +204,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             setContentView(root)
         }
         loadForMode()
+        setupSport()
         LauncherStartup.begin(window.decorView)
         ThemeTransition.playIn(this)
         LauncherBottomBar.logResult(this)
@@ -327,6 +333,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             swapView(old, fresh)
             sahne = fresh
             fresh.setMode(activeMode)
+            sport?.onRebuilt()
             if (keepEdit) {
                 fresh.editMode = true
                 window.decorView.post { if (!isFinishing && !isDestroyed && editing) settings.show(appearanceOnly = true) }
@@ -391,13 +398,46 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         parent.addView(new, i, lp)
     }
 
+    /** Spor denetleyicisi (yalnız Sahne); etkinlik yeniden kurulduysa ve spor açıktıysa geçişsiz geri gelir. */
+    private fun setupSport() {
+        sport?.release()
+        if (sahne == null) {
+            sport = null
+            SportController.rememberedSport = false
+            sportGate.reset(false)
+            return
+        }
+        sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout })
+        val keep = SportController.rememberedSport && sportAllowed() && observedSportMode() == DriveAccent.SPORT
+        sportGate.reset(keep)
+        if (keep) sport?.applyInstant(true) else SportController.rememberedSport = false
+    }
+
+    /** Spor modu sürüş modu temasına bağlıdır (seçenek kapalıysa yok); demo zorlaması her zaman geçer. */
+    private fun sportAllowed(): Boolean = driveAccentOn || (LauncherDemo.enabled && LauncherDemo.sportForced != null)
+
+    private fun observedSportMode(): Int? = when {
+        LauncherDemo.enabled -> LauncherDemo.sportForced?.let { if (it) DriveAccent.SPORT else DriveAccent.NORMAL } ?: LauncherDemo.driveMode
+        else -> observedDriveMode
+    }
+
+    /** Spor kararı: [SportGate] (~1 sn titreşim süzgeci); düzenleme ya da sayfa açıkken ertelenir. */
+    private fun sportTick() {
+        val ctl = sport ?: return
+        val observed = if (sportAllowed()) observedSportMode() else DriveAccent.NORMAL
+        val to = sportGate.update(System.currentTimeMillis(), observed, !editing && sheet == null) ?: return
+        ctl.request(to)
+    }
+
     /**
      * Sürüş modu değişimini uygular: gözlenen mod ~2 sn kararlı kalınca vurgu güncellenir ve etkinlik
      * ThemeTransition ile yeniden kurulur (renkler kurulumda okunur). Düzenleme/sayfa açıkken ertelenir.
      */
     private fun driveModeTick() {
         if (!driveAccentOn) return
-        val observed = if (LauncherDemo.enabled) LauncherDemo.driveMode else observedDriveMode
+        val raw = if (LauncherDemo.enabled) LauncherDemo.driveMode else observedDriveMode
+        // Sahne'de Spor kendi ekranıyla gelir ([sportTick]); vurgu için yeniden kurulum (ve ikinci bir geçiş) yapılmaz.
+        val observed = if (sahne != null && raw == DriveAccent.SPORT) null else raw
         val to = driveModePolicy.update(System.currentTimeMillis(), observed, !editing && sheet == null)
         if (to != null && to != LauncherTheme.driveMode) {
             LauncherTheme.driveMode = to
@@ -435,7 +475,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherInfo.mode = to
         notice?.let { showLayoutNotice(it) }
         val apply = { loadForMode() }
-        if (!animate || !started) { apply(); return }
+        // Spor ekranında orta alan aynı kalır (düzen arkada değişir): solma yok.
+        if (!animate || !started || sport?.shown == true) { apply(); return }
         val m = middle
         m.animate().cancel()
         m.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
@@ -581,6 +622,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     }
 
     override fun onDestroy() {
+        sport?.release()
         if (::fixedWidgets.isInitialized) fixedWidgets.forEach { it.release() }
         gridWidgets.values.forEach { it.release() }
         sahne?.release()
@@ -657,6 +699,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun enterEditMode() {
         if (editing) return
         if (editLocked()) return
+        // Düzenleme Sahne yuvalarında yapılır: spor ekranı geçişsiz kapanır, düzenleme bitince yeniden gelir.
+        if (sport?.shown == true) { sport?.applyInstant(false); sportGate.reset(false) }
         sahne?.let { it.editMode = true } ?: run { grid.editMode = true }
         refreshEditLayoutUi()
         dock?.setEditMode(true)
