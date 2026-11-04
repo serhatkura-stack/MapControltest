@@ -57,12 +57,20 @@ internal object SoundFieldMath {
         if (!muted) return FRONT_EXTREME
         return valid(remembered)?.takeIf { it != FRONT_EXTREME } ?: CENTER
     }
+
+    /**
+     * DSP okunamadığında (araçta `getOnce(SOUND_FIELD)` boş geliyor; üçüncü taraf erişimi SELinux ile kapalı olabilir) kutucuğun
+     * göstereceği tahmin: bizim son yazdığımız değer; hiç yazılmadıysa HAL varsayılanı olan orta (10/10, "Açık").
+     */
+    fun assumed(lastBalance: Int?, lastFade: Int?): SoundFieldReading =
+        SoundFieldReading(valid(lastBalance) ?: CENTER, valid(lastFade) ?: CENTER)
 }
 
 /** DSP servisinden ses alanı okuma/yazma (VDBus, düz Bundle: "type" = balance, "value" = fade). Hatalarda null / sessiz; çökmez. */
 internal object SoundFieldIo {
 
     private var lastLogged: Pair<Int?, Int?>? = null
+    private var lastLoggedKeys: String? = null
 
     /** Güncel (balance, fade); DSP yoksa (emülatör) ya da payload boşsa null. */
     fun read(): SoundFieldReading? = try {
@@ -72,6 +80,11 @@ internal object SoundFieldIo {
         if (lastLogged != balance to fade) {
             lastLogged = balance to fade
             Log.i("RearSpeaker", "SOUND_FIELD read balance=$balance fade=$fade")
+        }
+        if (balance == null && fade == null && lastLoggedKeys != payload?.keySet()?.toString()) {
+            // Teşhis: boş okumada payload anahtarları (anahtar adı farklıysa araç günlüğünden görülür).
+            lastLoggedKeys = payload?.keySet()?.toString()
+            Log.i("RearSpeaker", "SOUND_FIELD read empty, payload keys=$lastLoggedKeys")
         }
         if (balance == null && fade == null) null else SoundFieldReading(balance, fade)
     } catch (e: RuntimeException) {
@@ -101,8 +114,19 @@ internal class RearSpeakerStore(context: Context) {
             prefs.edit().apply { if (value == null) remove(KEY) else putInt(KEY, value) }.apply()
         }
 
+    /** Bizim son yazdığımız ses alanı (okuma boşken kutucuk bundan durum gösterir). */
+    var lastBalance: Int?
+        get() = if (prefs.contains(KEY_LAST_BALANCE)) prefs.getInt(KEY_LAST_BALANCE, SoundFieldMath.CENTER) else null
+        set(value) { prefs.edit().apply { if (value == null) remove(KEY_LAST_BALANCE) else putInt(KEY_LAST_BALANCE, value) }.apply() }
+
+    var lastFade: Int?
+        get() = if (prefs.contains(KEY_LAST_FADE)) prefs.getInt(KEY_LAST_FADE, SoundFieldMath.CENTER) else null
+        set(value) { prefs.edit().apply { if (value == null) remove(KEY_LAST_FADE) else putInt(KEY_LAST_FADE, value) }.apply() }
+
     private companion object {
         const val KEY = "restore_fade"
+        const val KEY_LAST_BALANCE = "last_balance"
+        const val KEY_LAST_FADE = "last_fade"
     }
 }
 
@@ -168,7 +192,12 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
     override val view: View get() = root
 
-    override fun readNow(): ComfortReading = ComfortReader.readSound()
+    /** DSP okunamazsa (araçta fade=null) son yazımızdan, o da yoksa orta değerden tahmin eder; kart çalışmaya devam eder. */
+    override fun readNow(): ComfortReading {
+        val read = ComfortReader.readSound()
+        if (read.sound != null || LauncherDemo.enabled) return read
+        return ComfortReading(connected = true, sound = SoundFieldMath.assumed(store.lastBalance, store.lastFade))
+    }
 
     override fun applySpan(span: Span) {
         val c = span.h < 2
@@ -251,7 +280,10 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
             val nowMuted = muted() == true
             if (!nowMuted && fade != null) store.restoreFade = fade
             pendingMuted = !nowMuted
-            io.runSafely { ComfortWriter.setFader(SoundFieldMath.valid(reading.sound?.balance) ?: SoundFieldMath.CENTER, target) }
+            val balance = SoundFieldMath.valid(reading.sound?.balance) ?: SoundFieldMath.CENTER
+            store.lastBalance = balance
+            store.lastFade = target
+            io.runSafely { ComfortWriter.setFader(balance, target) }
         }
         afterCommit(enabled)
     }
