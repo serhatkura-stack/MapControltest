@@ -19,8 +19,8 @@ import com.mapcontrol.R
 
 /**
  * Sahne'nin ortası (yuva değil, sabit): ışıklı zeminde araç görseli; sol üstte menzil ve yakıt
- * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol); sol altta araç sağlığı ve sağ altta hava kalitesi
- * yalnızca bir şey olunca görünür ([StageCorners]).
+ * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol). Araç sol bilgi sütununun sağında, sığdığı kadar
+ * büyük ([StageFit]); sütunun altında araç sağlığı ve hava kalitesi yalnızca bir şey olunca görünür ([StageCorners]).
  * Açık kapı / bagaj / cam / kaput ve lastik / yakıt kapağı uyarıları aracın üstünde turuncu haplarla görünür; araç
  * kartının gösterdiği hiçbir bilgi kaybolmaz.
  *
@@ -47,6 +47,9 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** İlk özet animasyonsuz uygulanır (ekran açıldığında kapı zaten açıksa açık çizilir). */
     private var carSeeded = false
     private var carW = 0
+    /** Aracın gövde kutusu (sahne pikseli; açılan parçalar hariç), [StageFit] ile; ölçü değişmedikçe yeniden hesaplanmaz. */
+    private var carBox = StageFit.Box(0f, 0f, 0f, 0f)
+    private var fitKey: List<Int> = emptyList()
 
     // --- Menzil ---
     // Sahibinin isteği: taslaktaki 84'ten küçük menzil bloğu (76 / 24 / 18, yakıt çubuğu 110), araç ortada dengelensin.
@@ -102,7 +105,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
 
     // --- Notlar ---
     private val healthNote = Note(activity, R.drawable.ic_sahne_shield, end = false)
-    private val airNote = Note(activity, R.drawable.ic_sahne_wind, end = true)
+    private val airNote = Note(activity, R.drawable.ic_sahne_wind, end = false)
     /** Açık parça satırı: sağlık notunun yerine, turuncu, kapı ikonlu ("Sol ön kapı ve bagaj açık"). */
     private val openLine = OpenLine(activity)
     private val words = ResourceOpeningWords(activity)
@@ -279,22 +282,67 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val w = MeasureSpec.getSize(widthMeasureSpec)
         val h = MeasureSpec.getSize(heightMeasureSpec)
         setMeasuredDimension(w, h)
-        val k = w / DESIGN_W
         floor.measure(exactly(w), exactly(h))
-        carW = (CAR_W * k).toInt()
-        car.measure(exactly(CarStageView.widthFor(carW)), exactly(CarStageView.heightFor(carW)))
         val loose = MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST)
         val looseH = MeasureSpec.makeMeasureSpec(h, MeasureSpec.AT_MOST)
         rangeBlock.measure(loose, looseH)
         lockChip.measure(MeasureSpec.makeMeasureSpec(w / 2, MeasureSpec.AT_MOST), exactly(context.dp(LauncherTheme.TOUCH_MIN_DP)))
+        fitCar(w, h)
+        carW = carBox.width.toInt()
+        car.measure(exactly(CarStageView.widthFor(carW)), exactly(CarStageView.heightFor(carW)))
+        floor.setCar(carBox)
         alertRow.measure(MeasureSpec.makeMeasureSpec((w * 0.40f).toInt(), MeasureSpec.AT_MOST), looseH)
-        val noteW = MeasureSpec.makeMeasureSpec((w * 0.36f).toInt(), MeasureSpec.AT_MOST)
+        // Notlar aracın solundaki sütunda (menzilin altında): genişlik aracın sol kenarına kadar.
+        val noteW = MeasureSpec.makeMeasureSpec(columnWidth(w), MeasureSpec.AT_MOST)
         healthNote.measure(noteW, looseH)
         airNote.measure(noteW, looseH)
-        // Açıklık satırı daha geniş: hava notu sağda kısa kalır; iki satıra kadar.
-        openLine.measure(MeasureSpec.makeMeasureSpec((w * 0.58f).toInt(), MeasureSpec.AT_MOST), looseH)
+        openLine.measure(noteW, looseH)
         skeleton.measure(exactly(context.dp(Skeleton.W_DP)), exactly(context.dp(Skeleton.H_DP)))
         waitNote.measure(MeasureSpec.makeMeasureSpec((w * 0.8f).toInt(), MeasureSpec.AT_MOST), looseH)
+    }
+
+    /**
+     * Aracın kutusu: üst engeller menzil satırları (sabit pay: rakam satırı en az [RANGE_ROW_RESERVE_DP], yakıt satırı
+     * [FUEL_ROW_RESERVE_DP]; değer değişince araç zıplamasın) ve kilit hapı; alt sınır bildirim şeridi payı ([ROW_BOTTOM_DP] +
+     * [CAPSULE_H_DP], kapsül aracın alt kenarına [CAPSULE_OVERLAP_DP] biner). Genişlik [CAR_W] ile [CAR_W_MAX] arası (%20).
+     */
+    /** Sol bilgi sütununun genişliği: sahne kenarından aracın gövdesine kadar (arada boşluk). */
+    private fun columnWidth(w: Int): Int =
+        maxOf(context.dp(LEFT_COLUMN_DP), carBox.left.toInt() - (SIDE * w / DESIGN_W).toInt() - context.dp(FIT_GAP_DP.toInt()))
+
+    private fun fitCar(w: Int, h: Int) {
+        val k = w / DESIGN_W
+        val side = (SIDE * k).toInt()
+        // Ölçüm sırasında görünümün genişliği henüz atanmamış olabilir: y() yerine ölçülen genişlikle.
+        fun yk(designY: Float) = ((designY - TOP_OFFSET) * k).toInt()
+        val rangeTop = yk(RANGE_TOP)
+        val row0 = rangeBlock.getChildAt(0)
+        val row1 = rangeBlock.getChildAt(1)
+        val lp0 = row0.layoutParams as LinearLayout.LayoutParams
+        val lp1 = row1.layoutParams as LinearLayout.LayoutParams
+        val row0Top = rangeTop + lp0.topMargin
+        val row0Bottom = row0Top + row0.measuredHeight
+        val row1Top = row0Bottom + lp0.bottomMargin + lp1.topMargin
+        val row1Bottom = row1Top + row1.measuredHeight
+        val row0Right = side + maxOf(row0.measuredWidth, context.dp(RANGE_ROW_RESERVE_DP))
+        val row1Right = side + maxOf(row1.measuredWidth, context.dp(FUEL_ROW_RESERVE_DP))
+        val lockTop = yk(LOCK_TOP)
+        val chipLeft = w - side - lockChip.measuredWidth
+        val key = listOf(w, h, row0Bottom, row1Bottom, row0Right, row1Right, chipLeft, lockTop + lockChip.measuredHeight)
+        if (key == fitKey) return
+        fitKey = key
+        // Araç sol bilgi sütununun ([LEFT_COLUMN_DP]) sağında: sağlık / hava notları ve açıklık satırı aracın üstüne binmez.
+        carBox = StageFit.car(
+            areaLeft = (side + context.dp(LEFT_COLUMN_DP)).toFloat(), areaRight = (w - side).toFloat(),
+            minTop = context.dpF(8f),
+            maxBottom = (h - context.dp(ROW_BOTTOM_DP + CAPSULE_H_DP - CAPSULE_OVERLAP_DP)).toFloat(),
+            maxW = CAR_W_MAX * k, minW = CAR_W * k, aspect = CAR_ASPECT, gap = context.dpF(FIT_GAP_DP),
+            above = listOf(
+                StageFit.Box(side.toFloat(), row0Top.toFloat(), row0Right.toFloat(), row0Bottom.toFloat()),
+                StageFit.Box(side.toFloat(), row1Top.toFloat(), row1Right.toFloat(), row1Bottom.toFloat()),
+                StageFit.Box(chipLeft.toFloat(), lockTop.toFloat(), (w - side).toFloat(), (lockTop + lockChip.measuredHeight).toFloat()),
+            ),
+        )
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -302,24 +350,25 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val h = b - t
         val k = s()
         floor.layout(0, 0, w, h)
-        val cx = (CAR_X * k).toInt()
-        val cy = y(CAR_Y - CAR_LIFT)
-        val carL = cx - CarStageView.carLeft(carW)
-        val carT = cy - CarStageView.carTop(carW)
+        val carL = carBox.left.toInt() - CarStageView.carLeft(carW)
+        val carT = carBox.top.toInt() - CarStageView.carTop(carW)
         car.layout(carL, carT, carL + car.measuredWidth, carT + car.measuredHeight)
-        val carH = (carW * CAR_ASPECT).toInt()
         val side = (SIDE * k).toInt()
         rangeBlock.layout(side, y(RANGE_TOP), side + rangeBlock.measuredWidth, y(RANGE_TOP) + rangeBlock.measuredHeight)
         val lockTop = y(LOCK_TOP)
         lockChip.layout(w - side - lockChip.measuredWidth, lockTop, w - side, lockTop + lockChip.measuredHeight)
-        // Uyarılar aracın hemen altında, ortada (iki not arasında; araç yukarı alındığı için yer var).
+        // Bildirimler aracın hemen altında, aracın ortasına hizalı (sahne kenarlarına taşmadan); alt kenarı geçmez.
         val bottom = h - (NOTE_BOTTOM * k).toInt()
-        val aTop = maxOf(cy + carH - context.dp(14), bottom - alertRow.measuredHeight)
-        val aLeft = (w - alertRow.measuredWidth) / 2
+        val aTop = minOf(carBox.bottom.toInt() - context.dp(CAPSULE_OVERLAP_DP), h - context.dp(ROW_BOTTOM_DP) - alertRow.measuredHeight)
+        val aLeft = ((carBox.left + carBox.right) / 2f - alertRow.measuredWidth / 2f).toInt()
+            .coerceIn(side, maxOf(side, w - side - alertRow.measuredWidth))
         alertRow.layout(aLeft, aTop, aLeft + alertRow.measuredWidth, aTop + alertRow.measuredHeight)
-        healthNote.layout(side, bottom - healthNote.measuredHeight, side + healthNote.measuredWidth, bottom)
-        airNote.layout(w - side - airNote.measuredWidth, bottom - airNote.measuredHeight, w - side, bottom)
-        openLine.layout(side, bottom - openLine.measuredHeight, side + openLine.measuredWidth, bottom)
+        // Sol sütun alttan yukarı: hava notu en altta, üstünde sağlık notu ya da açıklık satırı.
+        val airShown = airNote.visibility == View.VISIBLE
+        airNote.layout(side, bottom - airNote.measuredHeight, side + airNote.measuredWidth, bottom)
+        val upper = if (airShown) bottom - airNote.measuredHeight - context.dp(NOTE_GAP_DP) else bottom
+        healthNote.layout(side, upper - healthNote.measuredHeight, side + healthNote.measuredWidth, upper)
+        openLine.layout(side, upper - openLine.measuredHeight, side + openLine.measuredWidth, upper)
         skeleton.layout(side, y(RANGE_TOP) + context.dp(8), side + skeleton.measuredWidth, y(RANGE_TOP) + context.dp(8) + skeleton.measuredHeight)
         val wl = (w - waitNote.measuredWidth) / 2
         waitNote.layout(wl, bottom - waitNote.measuredHeight, wl + waitNote.measuredWidth, bottom)
@@ -506,7 +555,17 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
      * zemindeki yansıması. Gradyanlar yalnızca boyut değişince kurulur; görünüm statiktir.
      */
     private class FloorView(context: Context) : View(context) {
-            var alert = false
+        var alert = false
+        /** Aracın gövde kutusu: zemin ışığı ve gölgeler araçla birlikte taşınır ve büyür. */
+        private var carBox: StageFit.Box? = null
+
+        fun setCar(box: StageFit.Box) {
+            if (box == carBox) return
+            carBox = box
+            builtW = -1
+            invalidate()
+        }
+
         private val cone = Paint(Paint.ANTI_ALIAS_FLAG)
         private val pool = Paint(Paint.ANTI_ALIAS_FLAG)
         private val poolOuter = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -520,18 +579,20 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         private fun build(w: Int, h: Int) {
             builtW = w
             builtH = h
-            val k = w / DESIGN_W
-            // Zemin ışığı ve gölgeler araçla birlikte yukarı taşınır.
-            fun yy(v: Float) = (v - TOP_OFFSET - CAR_LIFT) * k
-            val cx = 480f * k
+            // Taslak ölçüleri 510 birimlik aracın (sol 225, üst 146) çevresinde; hepsi aracın gerçek kutusuna oranlanır.
+            val box = carBox ?: StageFit.Box(CAR_X_DESIGN * w / DESIGN_W, 0f, (CAR_X_DESIGN + CAR_W) * w / DESIGN_W, CAR_W * CAR_ASPECT * w / DESIGN_W)
+            val k = box.width / CAR_W
+            fun xx(v: Float) = box.left + (v - CAR_X_DESIGN) * k
+            fun yy(v: Float) = box.top + (v - CAR_Y_DESIGN) * k
+            val cx = xx(480f)
             cone.shader = SahneGround.ellipse(cx, yy(40f + 216f), 350f * k, 180f * k, Sahne.CONE, 1f)
             pool.shader = SahneGround.ellipse(cx, yy(270f), 400f * k, 150f * k, Sahne.FLOOR_INNER, 0.72f)
             poolOuter.shader = SahneGround.ellipse(cx, yy(270f), 560f * k, 210f * k, Sahne.FLOOR_OUTER, if (LauncherTheme.night) 0.72f else 0.74f)
             shadow.shader = SahneGround.ellipse(cx, yy(292f), 290f * k, 78f * k, Sahne.CAR_SHADOW, 1f)
             contact.shader = SahneGround.ellipse(cx, yy(270f), 250f * k, 58f * k, Sahne.CAR_CONTACT, 1f)
             // Burun sağda: farlar sağda (soğuk beyaz), stoplar solda (kırmızı); yalnızca gece.
-            head.shader = if (Sahne.HEAD_GLOW == 0) null else SahneGround.ellipse(760f * k, yy(268f), 150f * k, 70f * k, Sahne.HEAD_GLOW, 1f)
-            tail.shader = if (Sahne.TAIL_GLOW == 0) null else SahneGround.ellipse(212f * k, yy(268f), 70f * k, 56f * k, Sahne.TAIL_GLOW, 1f)
+            head.shader = if (Sahne.HEAD_GLOW == 0) null else SahneGround.ellipse(xx(760f), yy(268f), 150f * k, 70f * k, Sahne.HEAD_GLOW, 1f)
+            tail.shader = if (Sahne.TAIL_GLOW == 0) null else SahneGround.ellipse(xx(212f), yy(268f), 70f * k, 56f * k, Sahne.TAIL_GLOW, 1f)
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -554,9 +615,24 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         const val DESIGN_W = 960f
         /** Taslak sahnesi başlığın 12 birim altından başlar; bizde sahne doğrudan başlık boşluğunun altında. */
         const val TOP_OFFSET = 12f
-        const val CAR_X = 225f
-        const val CAR_Y = 146f
+        /** Zemin çiziminin taslaktaki araç kutusu (sol, üst; 510 birim genişlik): ışık ve gölge bunlara göre tanımlı. */
+        const val CAR_X_DESIGN = 225f
+        const val CAR_Y_DESIGN = 146f
+        /** Araç genişliği (tasarım birimi): en az eski boy, sığarsa %20 büyük (4 Kasım kararı). */
         const val CAR_W = 510f
+        const val CAR_W_MAX = 612f
+        /** Araç kutusu üst engellerden bu kadar uzak durur. */
+        const val FIT_GAP_DP = 10f
+        /** Aracın solunda ayrılan bilgi sütunu (menzil altı: sağlık / hava notları); araç bunun sağında durur. */
+        const val LEFT_COLUMN_DP = 220
+        const val NOTE_GAP_DP = 16
+        /** Menzil satırları için sabit pay (dp): "540 km menzil" ve yakıt çubuğu + "%100". */
+        const val RANGE_ROW_RESERVE_DP = 260
+        const val FUEL_ROW_RESERVE_DP = 210
+        /** Aracın altındaki bildirim şeridi payı: kapsül yüksekliği, alt boşluk ve araca binme. */
+        const val CAPSULE_H_DP = 34
+        const val ROW_BOTTOM_DP = 10
+        const val CAPSULE_OVERLAP_DP = 12
         const val CAR_ASPECT = CarAnimSpec.BASE_H / CarAnimSpec.BASE_W
         const val SIDE = 30f
         const val RANGE_TOP = 22f
@@ -565,8 +641,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         /** 84sp rakamın doğal satırı ile taslaktaki .9 satır yüksekliği arasındaki yarı fark. */
         const val RANGE_TRIM_DP = 18
         const val RANGE_SP = 76f
-        /** Araç taslaktaki yerinden bu kadar (tasarım birimi) yukarıda: menzil satırı ile alt notlar arasında ortalı. */
-        const val CAR_LIFT = 30f
         val TIRE_WHEELS = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
     }
 }
