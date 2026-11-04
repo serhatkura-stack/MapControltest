@@ -66,6 +66,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         /** Lastik uyarısı gösteriliyor (uyarı sinyali ya da eşiğin altında bir tekerlek); [tireLow] o tekerlek. */
         val tireAlert: Boolean = false,
         val tireLow: TireLow? = null,
+        /** Yakıt kapağı açık (salt-okur tur). */
+        val fuelCapOpen: Boolean = false,
     )
 
     internal var onSummary: ((Summary) -> Unit)? = null
@@ -445,6 +447,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
             otherAlertsText = if (otherAlerts.isEmpty()) null else alertsText(otherAlerts, tireLow, windows, open.isNotEmpty()),
             tireAlert = tireAlert,
             tireLow = tireLow,
+            fuelCapOpen = fuelCapOpen,
         )
         if (sum != summary) {
             summary = sum

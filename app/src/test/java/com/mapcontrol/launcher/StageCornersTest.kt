@@ -39,6 +39,16 @@ class StageCornersTest {
     }
 
     @Test
+    fun healthNotesNameTheReasonNotLowFuel() {
+        assertEquals(listOf(StageCorners.HealthNote.SERVICE_NEAR), StageCorners.healthNotes(14.1, 89, 800, 40, tireAlert = false))
+        assertEquals(listOf(StageCorners.HealthNote.TIRE, StageCorners.HealthNote.SERVICE_NEAR),
+            StageCorners.healthNotes(14.1, 89, 800, 40, tireAlert = true))
+        assertEquals(listOf(StageCorners.HealthNote.ENGINE_HOT, StageCorners.HealthNote.BATTERY_LOW, StageCorners.HealthNote.SERVICE_OVERDUE),
+            StageCorners.healthNotes(11.4, 118, 0, 0, tireAlert = false))
+        assertTrue(StageCorners.healthNotes(14.1, 89, 3978, 20, tireAlert = false).isEmpty()) // yalnız gün yakın: not yok
+    }
+
+    @Test
     fun airCornerOnlyWhenBad() {
         assertEquals(55, StageCorners.AIR_BAD_PM25)
         assertFalse(StageCorners.airShown(null))

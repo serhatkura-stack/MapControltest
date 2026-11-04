@@ -23,9 +23,24 @@ internal object StageCorners {
     fun healthWarning(batteryV: Double?, coolantC: Int?): Boolean =
         HealthMath.issues(batteryV, coolantC, null, null, null).any { it in WARNINGS }
 
+    /** Sağlık notunda adlandırılan sorunlar, önem sırasıyla (ilki başlık olur). Düşük yakıt yok (kendi kapsülü var). */
+    enum class HealthNote { ENGINE_HOT, BATTERY_LOW, BATTERY_HIGH, TIRE, SERVICE_OVERDUE, SERVICE_NEAR }
+
+    fun healthNotes(batteryV: Double?, coolantC: Int?, serviceKm: Int?, serviceDays: Int?, tireAlert: Boolean): List<HealthNote> = buildList {
+        val issues = HealthMath.issues(batteryV, coolantC, null, null, null)
+        if (HealthMath.Issue.ENGINE_HOT in issues) add(HealthNote.ENGINE_HOT)
+        if (HealthMath.Issue.BATTERY_LOW in issues) add(HealthNote.BATTERY_LOW)
+        if (HealthMath.Issue.BATTERY_HIGH in issues) add(HealthNote.BATTERY_HIGH)
+        if (tireAlert) add(HealthNote.TIRE)
+        when {
+            HealthMath.serviceOverdue(serviceKm, serviceDays) -> add(HealthNote.SERVICE_OVERDUE)
+            serviceNear(serviceKm, serviceDays) -> add(HealthNote.SERVICE_NEAR)
+        }
+    }
+
     /** Sağlık köşesi: bakım yakın, sağlık uyarısı ya da lastik uyarısı varsa. */
     fun healthShown(batteryV: Double?, coolantC: Int?, serviceKm: Int?, serviceDays: Int?, tireAlert: Boolean): Boolean =
-        serviceNear(serviceKm, serviceDays) || healthWarning(batteryV, coolantC) || tireAlert
+        healthNotes(batteryV, coolantC, serviceKm, serviceDays, tireAlert).isNotEmpty()
 
     /** Hava köşesi: yalnızca kabin içi PM2.5 >= [AIR_BAD_PM25] iken. */
     fun airShown(pm25In: Int?): Boolean = pm25In != null && pm25In >= AIR_BAD_PM25
@@ -78,4 +93,67 @@ internal object StageFit {
         val x = (areaLeft + areaRight) / 2f - minW / 2f
         return Box(x, minTop, x + minW, minTop + minW * aspect)
     }
+}
+
+/** Sahne bildirim kapsülünün türü; sıra önem sırasıdır (küçük = daha önemli). */
+internal enum class NoticeKind { DOOR, HOOD, TRUNK, TIRE, WINDOW, SUNROOF, FUEL_CAP, FUEL_LOW, SERVICE }
+
+/**
+ * Bir bildirim kapsülü. [part]: kapı / cam için hangi parça; [strong]: belirgin (dolu) ton — araç parktayken açık bagaj, cam
+ * ya da cam tavan (inip gitmeden önce fark edilsin, 4 Kasım kararı §7.6).
+ */
+internal data class Notice(val kind: NoticeKind, val part: BodyPart? = null, val strong: Boolean = false)
+
+/**
+ * Aracın altındaki bildirim şeridinin saf kuralları (JVM'de sınanır): hangi kapsüller, hangi sırada, kaçı görünür.
+ * Kaynaklar: açık kapılar (her biri ayrı), kaput, bagaj, lastik uyarısı, açık camlar (her biri ayrı), cam tavan, yakıt kapağı,
+ * düşük yakıt ve yaklaşan bakım. Sıra: belirgin olanlar önce, sonra [NoticeKind] önem sırası, aynı türde [BodyPart] sırası.
+ */
+internal object StageNotices {
+
+    /** Aynı anda görünen en çok kapsül; fazlası tek bir "+N" kapsülünde toplanır. */
+    const val MAX_VISIBLE = 3
+
+    fun build(
+        openings: Openings?, fuelCapOpen: Boolean, tireAlert: Boolean, lowFuel: Boolean, serviceNear: Boolean, parked: Boolean,
+    ): List<Notice> {
+        val out = mutableListOf<Notice>()
+        val o = openings ?: Openings.NONE
+        if (o.doorFl) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_LF)
+        if (o.doorFr) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_RF)
+        if (o.doorRl) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_LR)
+        if (o.doorRr) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_RR)
+        if (o.hood) out += Notice(NoticeKind.HOOD)
+        if (o.trunk) out += Notice(NoticeKind.TRUNK, strong = parked)
+        if (tireAlert) out += Notice(NoticeKind.TIRE)
+        o.windows.forEach { out += Notice(NoticeKind.WINDOW, it, strong = parked) }
+        if (o.sunroof) out += Notice(NoticeKind.SUNROOF, strong = parked)
+        if (fuelCapOpen) out += Notice(NoticeKind.FUEL_CAP)
+        if (lowFuel) out += Notice(NoticeKind.FUEL_LOW)
+        if (serviceNear) out += Notice(NoticeKind.SERVICE)
+        return out.sortedWith(compareBy<Notice>({ !it.strong }, { it.kind.ordinal }, { it.part?.ordinal ?: -1 }))
+    }
+
+    /**
+     * Görünen kapsüller ve "+N" sayısı. [fit]: genişliğe sığan en çok kapsül (çağıran ölçer); fazlası varsa "+N" için yer
+     * açılır. Hiç sığmazsa ilk kapsül yine gösterilir (en önemli bildirim kaybolmaz).
+     */
+    fun <T> visible(all: List<T>, fit: Int = MAX_VISIBLE): Pair<List<T>, Int> {
+        val n = maxOf(1, minOf(fit, MAX_VISIBLE))
+        if (all.size <= n) return all to 0
+        return all.take(n) to all.size - n
+    }
+}
+
+/** En yakın benzin istasyonu araması: önce Yandex Haritalar, açılmazsa genel harita (geo:) araması. */
+internal object NearestStation {
+    /** Yandex arama terimi: "АЗС" (benzin istasyonu kategorisi; Türkçe arayüzde de tanınıyor). */
+    const val YANDEX_QUERY = "АЗС"
+    const val GEO_QUERY = "benzin istasyonu"
+
+    private fun encode(s: String): String = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+    fun yandexUri(): String = "yandexmaps://maps.yandex.ru/?text=" + encode(YANDEX_QUERY)
+
+    fun geoUri(): String = "geo:0,0?q=" + encode(GEO_QUERY)
 }

@@ -21,8 +21,8 @@ import com.mapcontrol.R
  * Sahne'nin ortası (yuva değil, sabit): ışıklı zeminde araç görseli; sol üstte menzil ve yakıt
  * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol). Araç sol bilgi sütununun sağında, sığdığı kadar
  * büyük ([StageFit]); sütunun altında araç sağlığı ve hava kalitesi yalnızca bir şey olunca görünür ([StageCorners]).
- * Açık kapı / bagaj / cam / kaput ve lastik / yakıt kapağı uyarıları aracın üstünde turuncu haplarla görünür; araç
- * kartının gösterdiği hiçbir bilgi kaybolmaz.
+ * Açık kapı / bagaj / cam / kaput, lastik, yakıt kapağı, düşük yakıt ve yaklaşan bakım aracın altındaki bildirim şeridinde
+ * küçük kapsüllerle görünür ([StageNotices], [NoticeRow]); araç kartının gösterdiği hiçbir bilgi kaybolmaz.
  *
  * Veri, bugünkü widget'ların kendisinden gelir: ekrana konmayan bir [VehicleHeroCard] ([VehicleHeroCard.Summary]),
  * [LockTile], [HealthTile] ve [AirQualityTile] ([StripSource]); kaynaklar, yoklama hızları ve yazma kuralları aynıdır.
@@ -95,20 +95,24 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         pressFeedback()
     }
 
-    // --- Uyarı hapı (lastik / yakıt kapağı); açık kapı/bagaj/kaput/cam sağlık satırının yerinde adlandırılır ---
-    private val alertsChip = AlertChip(activity, R.drawable.ic_mdi_alert)
-    private val alertRow = LinearLayout(activity).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        addView(alertsChip)
+    // --- Bildirim şeridi (aracın altında): açık kapı/kaput/bagaj/cam/tavan, lastik, yakıt kapağı, düşük yakıt, bakım ---
+    private val alertRow = NoticeRow(activity, tappable = { it?.kind == NoticeKind.FUEL_LOW }, onTap = { onNotice(it) })
+    /** Araç parkta mı (vites P ya da el freni): açık bagaj / cam kapsülleri o zaman belirgin. */
+    private var parked = false
+    private val parkPoll = object : Runnable {
+        override fun run() {
+            val now = readParked()
+            if (now != parked) {
+                parked = now
+                bindNotices()
+            }
+            if (needsPark()) postDelayed(this, PARK_POLL_MS)
+        }
     }
 
     // --- Notlar ---
     private val healthNote = Note(activity, R.drawable.ic_sahne_shield, end = false)
     private val airNote = Note(activity, R.drawable.ic_sahne_wind, end = false)
-    /** Açık parça satırı: sağlık notunun yerine, turuncu, kapı ikonlu ("Sol ön kapı ve bagaj açık"). */
-    private val openLine = OpenLine(activity)
-    private val words = ResourceOpeningWords(activity)
     private var openings: Openings? = null
     private var lastHealth: StripState? = null
     /** Köşe notlarının kararı için yolculuk verisi (bakım km, akü, motor suyu, PM2.5); ortak okuyucudan, ek yoklama yok. */
@@ -118,6 +122,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         trip = it
         bindHealth(lastHealth)
         bindAir()
+        bindNotices()
     }
 
     // --- Veri yok ---
@@ -143,7 +148,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         addView(alertRow)
         addView(healthNote)
         addView(airNote)
-        addView(openLine)
         addView(skeleton)
         addView(waitNote)
         vehicle.onSummary = { bindVehicle(it) }
@@ -163,16 +167,20 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     override fun onVisible() {
         sources.forEach { it.onVisible() }
         TripSource.add(activity, tripListener)
+        parked = readParked()
+        bindNotices()
     }
 
     override fun onHidden() {
         sources.forEach { it.onHidden() }
         TripSource.remove(tripListener)
+        removeCallbacks(parkPoll)
     }
 
     override fun release() {
         vehicle.onSummary = null
         TripSource.remove(tripListener)
+        removeCallbacks(parkPoll)
         sources.forEach { it.release() }
     }
 
@@ -198,8 +206,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val o = s?.openings
         car.setOpen(o?.carParts() ?: s?.openParts.orEmpty(), animate = carSeeded)
         if (s != null) carSeeded = true
-        alertsChip.bind(s?.otherAlertsText)
-        alertRow.visibility = if (s?.otherAlertsText != null) View.VISIBLE else View.GONE
         floor.alert = o?.any == true
         openings = o
         waiting = s == null || (s.rangeKm == null && s.fuel == null && s.locked == null && o == null)
@@ -208,41 +214,122 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
         bindAir()
         bindHealth(lastHealth)
+        bindNotices()
         bindLock(lock.stripState())
         requestLayout()
     }
 
     /**
-     * Sağlık notu ya da (bir şey açıksa) onun yerinde turuncu açıklık satırı; veri yokken ikisi de gizli. Not normalde gizli:
-     * yalnızca bakım yakın, akü / motor suyu uyarısı ya da lastik uyarısı varken çıkar ([StageCorners.healthShown]).
+     * Sağlık notu; veri yokken gizli. Not normalde gizli: yalnızca bakım yakın, akü / motor suyu uyarısı ya da lastik
+     * uyarısı varken çıkar ([StageCorners.healthShown]). Açık parçalar aracın altındaki bildirim şeridinde adlandırılır.
      */
     private fun bindHealth(st: StripState?) {
         lastHealth = st
-        val phrase = openings?.let { OpeningsText.phrase(it, words) }
-        openLine.bind(phrase)
-        openLine.visibility = if (phrase != null && !waiting) View.VISIBLE else View.GONE
         val s = vehicle.summary
-        val tireAlert = s?.tireAlert == true
-        val shown = StageCorners.healthShown(trip.batteryV, trip.coolantC, trip.serviceKm, trip.serviceDays, tireAlert)
-        healthNote.visibility = if (phrase == null && !waiting && shown) View.VISIBLE else View.GONE
-        // Yalnızca lastik uyarısı varsa sağlık kutucuğu "Her şey normal" der; not lastiği adlandırır.
-        val tireOnly = tireAlert && !StageCorners.serviceNear(trip.serviceKm, trip.serviceDays) &&
-            !StageCorners.healthWarning(trip.batteryV, trip.coolantC)
-        healthNote.bind(if (tireOnly) tireState(st, s?.tireLow) else st)
+        val notes = StageCorners.healthNotes(trip.batteryV, trip.coolantC, trip.serviceKm, trip.serviceDays, s?.tireAlert == true)
+        healthNote.visibility = if (!waiting && notes.isNotEmpty()) View.VISIBLE else View.GONE
+        if (notes.isNotEmpty()) healthNote.bind(healthState(st, notes, s?.tireLow))
     }
 
-    /** Lastik uyarısının not biçimi: başlık sağlık, değer "Lastik basıncı düşük", alt satır tekerlek ve psi (biliniyorsa). */
-    private fun tireState(st: StripState?, low: TireLow?): StripState = StripState(
-        title = st?.title ?: activity.getString(R.string.launcher_widget_health),
-        value = activity.getString(R.string.launcher_tires_warning),
-        icon = R.drawable.ic_mdi_alert,
-        tone = StripTone.ALERT,
-        detail = low?.let { l ->
-            val psi = l.bar?.let { TireDecode.psi(it) }
-            val wheel = l.wheel?.let { activity.getString(TIRE_WHEELS[it]) }
-            listOfNotNull(wheel, psi?.let { activity.getString(R.string.launcher_sahne_psi, it) }).joinToString(" ").ifEmpty { null }
-        },
-    )
+    /**
+     * Sağlık notunun içeriği: başlık sağlık kutucuğununki, değer notu açan en önemli sorun (düşük yakıt hariç; o kendi
+     * kapsülünde), alt satır ölçümü ve varsa "+N" diğer sorun sayısı.
+     */
+    private fun healthState(st: StripState?, notes: List<StageCorners.HealthNote>, tireLow: TireLow?): StripState {
+        val first = notes.first()
+        val value = activity.getString(when (first) {
+            StageCorners.HealthNote.ENGINE_HOT -> R.string.launcher_health_hot
+            StageCorners.HealthNote.BATTERY_LOW -> R.string.launcher_health_battery_low
+            StageCorners.HealthNote.BATTERY_HIGH -> R.string.launcher_health_battery_high
+            StageCorners.HealthNote.TIRE -> R.string.launcher_tires_warning_short
+            StageCorners.HealthNote.SERVICE_OVERDUE -> R.string.launcher_health_service_overdue
+            StageCorners.HealthNote.SERVICE_NEAR -> R.string.launcher_health_service_soon
+        })
+        val measure = when (first) {
+            StageCorners.HealthNote.ENGINE_HOT -> trip.coolantC?.let { activity.getString(R.string.launcher_temp_c, it) }
+            StageCorners.HealthNote.BATTERY_LOW, StageCorners.HealthNote.BATTERY_HIGH -> trip.batteryV?.let {
+                activity.getString(R.string.launcher_health_volt_only, String.format(java.util.Locale.getDefault(), "%,.1f", it))
+            }
+            StageCorners.HealthNote.TIRE -> tireLow?.let { l ->
+                listOfNotNull(l.wheel?.let { activity.getString(TIRE_WHEELS[it]) },
+                    l.bar?.let { activity.getString(R.string.launcher_sahne_psi, TireDecode.psi(it)) }).joinToString(" ").ifEmpty { null }
+            }
+            StageCorners.HealthNote.SERVICE_OVERDUE, StageCorners.HealthNote.SERVICE_NEAR -> serviceText()
+        }
+        return StripState(
+            title = st?.title ?: activity.getString(R.string.launcher_widget_health),
+            value = value,
+            icon = R.drawable.ic_mdi_alert,
+            tone = StripTone.ALERT,
+            detail = listOfNotNull(measure, (notes.size - 1).takeIf { it > 0 }?.let { "+$it" }).joinToString(" · ").ifEmpty { null },
+        )
+    }
+
+    /** Bakıma kalan: "800 km", yalnız gün biliniyorsa "22 gün". */
+    private fun serviceText(): String? = trip.serviceKm?.let {
+        activity.getString(R.string.launcher_km_value, java.text.NumberFormat.getIntegerInstance(java.util.Locale.getDefault()).format(it))
+    } ?: trip.serviceDays?.let { activity.getString(R.string.launcher_days_value, it) }
+
+    /** Bildirim şeridi: kaynaklar ve sıra [StageNotices]; veri beklenirken gizli. */
+    private fun bindNotices() {
+        val s = vehicle.summary
+        val list = if (waiting || s == null) emptyList() else StageNotices.build(
+            openings = s.openings, fuelCapOpen = s.fuelCapOpen, tireAlert = s.tireAlert, lowFuel = s.lowFuel,
+            serviceNear = StageCorners.serviceNear(trip.serviceKm, trip.serviceDays), parked = parked,
+        )
+        alertRow.bind(list.map { noticeItem(it, s?.tireLow) })
+        // Park durumu yalnızca belirgin tonu etkileyen bir kapsül varken izlenir (vites / el freni okuması arka planda).
+        removeCallbacks(parkPoll)
+        if (needsPark()) post(parkPoll)
+    }
+
+    private fun needsPark(): Boolean = isAttachedToWindow && vehicle.summary?.openings.let { o ->
+        o != null && (o.trunk || o.sunroof || o.windows.isNotEmpty())
+    }
+
+    /** Vites P ya da el freni (son okunan değer; okuma arka planda tazelenir). Demo: `launcher_demo_moving true` değilse park. */
+    private fun readParked(): Boolean = if (LauncherDemo.enabled) LauncherDemo.moving != true else DriveSignals.parked()
+
+    private fun noticeItem(n: Notice, tireLow: TireLow?): NoticeItem {
+        fun open(name: String) = activity.getString(R.string.launcher_part_open, name)
+        val warn = if (n.strong) NoticeTone.STRONG else NoticeTone.WARN
+        return when (n.kind) {
+            NoticeKind.DOOR -> NoticeItem(n, open(activity.getString(R.string.launcher_open_door, activity.getString(n.part!!.label))),
+                R.drawable.ic_mdi_car_door, warn)
+            NoticeKind.HOOD -> NoticeItem(n, open(activity.getString(R.string.launcher_body_hood)), R.drawable.ic_sahne_car, warn)
+            NoticeKind.TRUNK -> NoticeItem(n, open(activity.getString(R.string.launcher_trunk)), R.drawable.ic_sahne_trunk, warn)
+            NoticeKind.TIRE -> NoticeItem(n,
+                tireLow?.wheel?.let { activity.getString(R.string.launcher_notice_tire_wheel, activity.getString(TIRE_WHEELS[it])) }
+                    ?: activity.getString(R.string.launcher_tires_warning),
+                R.drawable.ic_mdi_alert, warn)
+            NoticeKind.WINDOW -> NoticeItem(n, open(activity.getString(n.part!!.label)), R.drawable.ic_sahne_wind, warn)
+            NoticeKind.SUNROOF -> NoticeItem(n, open(activity.getString(R.string.launcher_sunroof_part)), R.drawable.ic_mdi_car_sunroof, warn)
+            NoticeKind.FUEL_CAP -> NoticeItem(n, open(activity.getString(R.string.launcher_body_fuel_cap)), R.drawable.ic_sahne_fuel, warn)
+            NoticeKind.FUEL_LOW -> NoticeItem(n, activity.getString(R.string.launcher_notice_fuel), R.drawable.ic_sahne_fuel, warn, action = true)
+            NoticeKind.SERVICE -> {
+                val km = trip.serviceKm
+                val text = if (HealthMath.serviceOverdue(km, trip.serviceDays) || km == null) activity.getString(R.string.launcher_health_service_overdue)
+                else activity.getString(R.string.launcher_health_service_in, serviceText())
+                NoticeItem(n, text, R.drawable.ic_mdi_wrench, NoticeTone.INFO)
+            }
+        }
+    }
+
+    /** Kapsüle dokunuş: düşük yakıtta en yakın istasyon araması (Yandex, yoksa genel harita). */
+    private fun onNotice(n: Notice?) {
+        if (n?.kind != NoticeKind.FUEL_LOW) return
+        for (uri in listOf(NearestStation.yandexUri(), NearestStation.geoUri())) {
+            try {
+                activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri)))
+                return
+            } catch (e: android.content.ActivityNotFoundException) {
+                // Sıradaki adres denenir.
+            } catch (e: SecurityException) {
+                // Sıradaki adres denenir.
+            }
+        }
+        android.widget.Toast.makeText(activity, R.string.launcher_notice_no_maps, android.widget.Toast.LENGTH_SHORT).show()
+    }
 
     /** Hava notu yalnızca kabin içi PM2.5 kötüyken ([StageCorners.airShown]); o zaman uyarı renginde. */
     private fun bindAir() {
@@ -291,12 +378,13 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         carW = carBox.width.toInt()
         car.measure(exactly(CarStageView.widthFor(carW)), exactly(CarStageView.heightFor(carW)))
         floor.setCar(carBox)
-        alertRow.measure(MeasureSpec.makeMeasureSpec((w * 0.40f).toInt(), MeasureSpec.AT_MOST), looseH)
+        // Şerit aracın genişliği kadar (biraz taşabilir), sahneden taşmaz.
+        alertRow.measure(MeasureSpec.makeMeasureSpec(minOf(w - 2 * (SIDE * w / DESIGN_W).toInt(),
+            carBox.width.toInt() + context.dp(40)), MeasureSpec.AT_MOST), looseH)
         // Notlar aracın solundaki sütunda (menzilin altında): genişlik aracın sol kenarına kadar.
         val noteW = MeasureSpec.makeMeasureSpec(columnWidth(w), MeasureSpec.AT_MOST)
         healthNote.measure(noteW, looseH)
         airNote.measure(noteW, looseH)
-        openLine.measure(noteW, looseH)
         skeleton.measure(exactly(context.dp(Skeleton.W_DP)), exactly(context.dp(Skeleton.H_DP)))
         waitNote.measure(MeasureSpec.makeMeasureSpec((w * 0.8f).toInt(), MeasureSpec.AT_MOST), looseH)
     }
@@ -363,12 +451,11 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val aLeft = ((carBox.left + carBox.right) / 2f - alertRow.measuredWidth / 2f).toInt()
             .coerceIn(side, maxOf(side, w - side - alertRow.measuredWidth))
         alertRow.layout(aLeft, aTop, aLeft + alertRow.measuredWidth, aTop + alertRow.measuredHeight)
-        // Sol sütun alttan yukarı: hava notu en altta, üstünde sağlık notu ya da açıklık satırı.
+        // Sol sütun alttan yukarı: hava notu en altta, üstünde sağlık notu.
         val airShown = airNote.visibility == View.VISIBLE
         airNote.layout(side, bottom - airNote.measuredHeight, side + airNote.measuredWidth, bottom)
         val upper = if (airShown) bottom - airNote.measuredHeight - context.dp(NOTE_GAP_DP) else bottom
         healthNote.layout(side, upper - healthNote.measuredHeight, side + healthNote.measuredWidth, upper)
-        openLine.layout(side, upper - openLine.measuredHeight, side + openLine.measuredWidth, upper)
         skeleton.layout(side, y(RANGE_TOP) + context.dp(8), side + skeleton.measuredWidth, y(RANGE_TOP) + context.dp(8) + skeleton.measuredHeight)
         val wl = (w - waitNote.measuredWidth) / 2
         waitNote.layout(wl, bottom - waitNote.measuredHeight, wl + waitNote.measuredWidth, bottom)
@@ -437,29 +524,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         }
     }
 
-    /** Açık parça satırı: 24dp kapı ikonu ve 24sp orta ağırlıkta turuncu metin (iki satıra kadar); sağlık notunun yerinde. */
-    private class OpenLine(context: Context) : LinearLayout(context) {
-        private val icon = ImageView(context).apply {
-            setImageResource(R.drawable.ic_mdi_car_door)
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        private val label = sahneText(context, 24f, Sahne.WARN, 500).apply { maxLines = 2 }
-
-        init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(icon, LayoutParams(context.dp(24), context.dp(24)))
-            addView(label, LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
-            visibility = GONE
-        }
-
-        fun bind(text: String?) {
-            label.text = text ?: ""
-            label.setTextColor(Sahne.WARN)
-            icon.imageTintList = ColorStateList.valueOf(Sahne.WARN)
-            contentDescription = text
-        }
-    }
 
     /** Veri gelmeden menzil yerinde iki sabit iskelet çubuk (parıltı döngüsü yok): gece #1A1E25, gündüz #E6E4E0. */
     private class Skeleton(context: Context) : View(context) {
@@ -483,41 +547,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         }
     }
 
-    /** Turuncu uyarı hapı: ikon + kısa metin; metin yoksa gizli. */
-    private class AlertChip(context: Context, iconRes: Int) : LinearLayout(context) {
-        private val icon = ImageView(context).apply { setImageResource(iconRes); importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-        private val label = sahneText(context, 18f, Sahne.AMBER, 600).apply { maxLines = 1 }
-
-        init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(16), context.dp(8), context.dp(20), context.dp(8))
-            addView(icon, LayoutParams(context.dp(22), context.dp(22)))
-            addView(label, LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
-            visibility = GONE
-        }
-
-        fun bind(text: String?) {
-            if (text == null) { visibility = GONE; return }
-            label.text = text
-            label.setTextColor(Sahne.AMBER)
-            icon.imageTintList = ColorStateList.valueOf(Sahne.AMBER)
-            // Açık kapılar hapın altına uzanabilir: yarı saydam turuncu, zemin renginde dolu bir hapın üstünde (okunur kalsın).
-            background = android.graphics.drawable.LayerDrawable(arrayOf(
-                GradientDrawable().apply {
-                    cornerRadius = context.dpF(999f)
-                    setColor(Sahne.GROUND)
-                },
-                GradientDrawable().apply {
-                    cornerRadius = context.dpF(999f)
-                    setColor(Sahne.AMBER_SOFT)
-                    setStroke(context.dp(1), Sahne.AMBER_LINE)
-                },
-            ))
-            contentDescription = text
-            visibility = VISIBLE
-        }
-    }
 
     /** İnce yakıt çubuğu: iz ve buz mavisi gradyan dolgu; düşük yakıtta turuncu. Yalnızca değer değişince çizilir. */
     private class FuelGauge(context: Context) : View(context) {
@@ -626,6 +655,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         /** Aracın solunda ayrılan bilgi sütunu (menzil altı: sağlık / hava notları); araç bunun sağında durur. */
         const val LEFT_COLUMN_DP = 220
         const val NOTE_GAP_DP = 16
+        /** Açık bagaj / cam varken park durumunun yeniden okunma aralığı. */
+        const val PARK_POLL_MS = 2_000L
         /** Menzil satırları için sabit pay (dp): "540 km menzil" ve yakıt çubuğu + "%100". */
         const val RANGE_ROW_RESERVE_DP = 260
         const val FUEL_ROW_RESERVE_DP = 210

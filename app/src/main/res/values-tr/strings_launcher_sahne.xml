@@ -26,4 +26,10 @@
     <string name="car_color_kirmizi">Kırmızı</string>
     <string name="car_color_mavi">Mavi</string>
     <string name="launcher_sahne_psi" formatted="true">%1$d psi</string>
+    <string name="launcher_notice_tire_wheel" formatted="true">%1$s lastik düşük</string>
+    <string name="launcher_notice_fuel">Yakıt az · en yakın istasyon</string>
+    <string name="launcher_notice_more" formatted="true">+%1$d</string>
+    <string name="launcher_notice_more_desc" formatted="true">%1$d bildirim daha</string>
+    <string name="launcher_notice_no_maps">Harita uygulaması bulunamadı</string>
+    <string name="launcher_notice_fuel_desc">Yakıt az. En yakın benzin istasyonunu ara</string>
 </resources>
