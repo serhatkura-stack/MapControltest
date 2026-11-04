@@ -246,8 +246,20 @@ class HeaderBar(
     private fun applyClockVisibility() {
         val hide = sport && sportClockHidden
         time.visibility = if (hide) View.GONE else View.VISIBLE
-        // Yalnız tarih kalınca biraz büyür (plaka boş görünmesin).
-        if (sport) date.textSize = if (hide) 20f else 14f
+        if (!sport) return
+        // Yalnız tarih kalınca plaka daralır (yan kapsüllerle aynı boy), tarih ortada biraz büyük ve daha açık; saat varken
+        // tarih saatin altında küçük ve sönük.
+        date.textSize = if (hide) DATE_ONLY_SP else 14f
+        date.setTextColor(if (noticeText != null) SportInk.INK else if (hide) SportInk.INK_2 else SportInk.INK_3)
+        val padH = context.dp(if (hide) DATE_ONLY_PAD_DP else 34)
+        clockPlate.setPadding(padH, 0, padH, if (hide) 0 else context.dp(3))
+        (clockPlate.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            val h = if (hide) context.dp(LauncherTheme.TOUCH_MIN_DP) else FrameLayout.LayoutParams.MATCH_PARENT
+            if (lp.height != h) {
+                lp.height = h
+                clockPlate.layoutParams = lp
+            }
+        }
     }
 
     private fun fillSport() {
@@ -594,3 +606,6 @@ private const val NOTICE_RESTORE_FADE_MS = 250L
 private const val CLUSTER_ICON_DP = 28
 private const val CLUSTER_TEXT_SP = 24f
 private const val WEB_POLL_MS = 5_000L
+/** Spor plakasında yalnız tarih kalınca (analog saat kadranı seçili): tarih boyu ve plakanın yan dolgusu. */
+private const val DATE_ONLY_SP = 18f
+private const val DATE_ONLY_PAD_DP = 24
