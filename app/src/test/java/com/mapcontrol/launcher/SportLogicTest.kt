@@ -278,5 +278,114 @@ class SportLogicTest {
         assertEquals("0,0", SportFormat.g(0.02f))
         assertEquals("-0,3", SportFormat.g(-0.3f))
         assertNull(SportFormat.seconds(null))
+        assertEquals("47", SportFormat.duration(47))
+        assertEquals("dk", SportFormat.durationUnit(47))
+        assertEquals("1:05", SportFormat.duration(65))
+        assertEquals("sa", SportFormat.durationUnit(65))
+        assertNull(SportFormat.duration(null))
+    }
+
+    // --- 0–100 sonucu, tepe devir, 80–120 ---
+
+    @Test fun resultIsReportedEvenWhenNotBest() {
+        val s = SportSession()
+        s.update(0, 0, 800)
+        assertTrue(s.stopped)
+        var t = accelerate(s, 0, 100, stepMs = 90)
+        assertEquals(1, s.results)
+        assertTrue(s.lastWasBest)
+        assertFalse(s.stopped)
+        val best = s.best0to100Ms
+        t += 1_000
+        s.update(t, 0, 800)
+        accelerate(s, t, 100, stepMs = 150)
+        assertEquals(2, s.results)
+        assertFalse(s.lastWasBest)
+        assertEquals(best, s.best0to100Ms)
+        assertTrue(s.last0to100Ms!! > best!!)
+    }
+
+    @Test fun peakRpmFollowsDriveAndResets() {
+        val s = SportSession()
+        s.update(0, 0, 800)
+        s.update(1_000, 30, 5_600)
+        s.update(2_000, 40, 3_000)
+        assertEquals(5_600, s.peakRpm)
+        s.update(3_000, 0, 0)
+        s.update(3_000 + SportSession.NEW_DRIVE_OFF_MS, 0, 0)
+        s.update(4_000 + SportSession.NEW_DRIVE_OFF_MS, 0, 800)
+        assertEquals(800, s.peakRpm)
+    }
+
+    @Test fun eightyToHundredTwentyIsInterpolated() {
+        val s = SportSession()
+        s.update(0, 70, 3_000)
+        s.update(1_000, 90, 4_000) // 80 geçişi t=500
+        s.update(5_000, 110, 4_500)
+        s.update(6_000, 130, 5_000) // 120 geçişi t=5 500
+        assertEquals(5_000L, s.best80to120Ms)
+    }
+
+    @Test fun eightyToHundredTwentyCancels() {
+        val s = SportSession()
+        s.update(0, 70, 3_000)
+        s.update(1_000, 90, 4_000)
+        s.update(2_000, 74, 3_000) // 75'in altı: iptal
+        s.update(3_000, 125, 5_000)
+        assertNull(s.best80to120Ms)
+        // Süre aşımı (20 sn).
+        s.update(4_000, 70, 3_000)
+        s.update(5_000, 85, 3_500)
+        s.update(30_000, 121, 4_000)
+        assertNull(s.best80to120Ms)
+        // Yavaşlarken 80'e inmek başlatmaz; tek adımda 120'yi aşmak da ölçülmez.
+        s.update(31_000, 79, 3_000)
+        s.update(32_000, 125, 5_000)
+        assertNull(s.best80to120Ms)
+    }
+
+    @Test fun eightyToHundredTwentyKeepsBest() {
+        val s = SportSession()
+        s.update(0, 70, 3_000)
+        s.update(1_000, 90, 4_000)
+        s.update(9_000, 130, 4_000) // 80@500 → 120@7 000: 6 500
+        s.update(10_000, 70, 3_000)
+        s.update(11_000, 90, 4_000) // 80@10 500
+        s.update(15_000, 130, 4_000) // 120@14 000: 3 500
+        assertEquals(3_500L, s.best80to120Ms)
+        s.update(16_000, 70, 3_000)
+        s.update(17_000, 90, 4_000)
+        s.update(30_000, 121, 4_000)
+        assertEquals(3_500L, s.best80to120Ms)
+    }
+
+    // --- Küçük kadran seçimi ---
+
+    @Test fun dialDefaultsAndDecode() {
+        assertEquals(listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = true))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = false))
+        assertEquals(listOf(SportDial.CLOCK, SportDial.PASS80, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,p80,range,max", true))
+        // G sensör yoksa düşer; tekrarlar ve bilinmeyenler düşer, boşluk varsayılanla dolar.
+        assertEquals(listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX), SportDials.decode("g,g,xx", false))
+        val d = SportDials.decode("max,max,max,max", true)
+        assertEquals(4, d.toSet().size)
+        assertEquals(SportDial.MAX, d[0])
+        assertFalse(SportDial.G in SportDials.offered(false))
+        assertEquals(SportDial.values().size, SportDials.offered(true).size)
+        val all = SportDials.decode("clock,p80,range,max", true)
+        assertEquals(all, SportDials.decode(SportDials.encode(all), true))
+    }
+
+    @Test fun choosingAUsedDialSwaps() {
+        val cur = SportDials.defaults(true)
+        assertEquals(listOf(SportDial.MAX, SportDial.G, SportDial.INSTANT, SportDial.ZERO100), SportDials.choose(cur, 0, SportDial.MAX))
+        assertEquals(listOf(SportDial.CLOCK, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.choose(cur, 0, SportDial.CLOCK))
+        assertEquals(cur, SportDials.choose(cur, 1, SportDial.G))
+        assertEquals(cur, SportDials.choose(cur, 7, SportDial.CLOCK))
+    }
+
+    @Test fun summaryNeedsSomeData() {
+        assertFalse(SportSummary(null, null, null, null).hasData)
+        assertTrue(SportSummary(null, 120, null, null).hasData)
     }
 }

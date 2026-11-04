@@ -106,6 +106,24 @@ class SportSession {
         private set
     /** Sürmekte olan 0–100 ölçümü var mı. */
     val timing: Boolean get() = runStart != null
+    /** Son biten 0–100 ölçümü (rekor olmasa da), bittiği an ([lastResultAt], monoton ms) ve sürüşün en iyisi mi. */
+    var last0to100Ms: Long? = null
+        private set
+    var lastResultAt = 0L
+        private set
+    var lastWasBest = false
+        private set
+    /** Biten 0–100 ölçümü sayacı (kadran yeni sonucu bundan anlar ve kısa parlar). */
+    var results = 0
+        private set
+    /** Bu sürüşün en iyi 80–120 geçiş süresi (ms). */
+    var best80to120Ms: Long? = null
+        private set
+    /** Bu sürüşün en yüksek devri (devir kadranındaki tepe işareti). */
+    var peakRpm: Int? = null
+        private set
+    /** Araç duruyor (son bilinen hız 0): 0–100 "Hazır". */
+    val stopped: Boolean get() = lastSpeed == 0
 
     private var lastSpeed: Int? = null
     private var lastAt = 0L
@@ -118,35 +136,47 @@ class SportSession {
     private var offSince: Long? = null
 
     fun reset() {
-        maxSpeedKmh = null
-        best0to100Ms = null
-        runStart = null
+        clearDrive()
         lastSpeed = null
         offSince = null
     }
 
+    private fun clearDrive() {
+        maxSpeedKmh = null
+        best0to100Ms = null
+        last0to100Ms = null
+        lastWasBest = false
+        best80to120Ms = null
+        peakRpm = null
+        runStart = null
+        passStart = null
+    }
+
+    /** Sürmekte olan 80–120 ölçümünün başlangıcı (80'i geçiş anı, aradeğerli). */
+    private var passStart: Long? = null
+
+    private fun stateHash(): Long =
+        results * 1_000_003L + (maxSpeedKmh ?: -1) * 7_919L + (best80to120Ms ?: -1L) * 31L + (peakRpm ?: -1) * 131L + (best0to100Ms ?: -1L)
+
     /** Yeni örnek: [now] ms (monoton), hız km/sa (bilinmiyorsa null), devir (bilinmiyorsa null). Bir şey değiştiyse true. */
     fun update(now: Long, speedKmh: Int?, rpm: Int?): Boolean {
-        val beforeMax = maxSpeedKmh
-        val beforeBest = best0to100Ms
+        val before = stateHash()
         // Kontak/yeni sürüş: motor kapalı ve duruyor.
         val off = rpm == 0 && (speedKmh == null || speedKmh == 0)
         if (off) {
             if (offSince == null) offSince = now
         } else {
             val s = offSince
-            if (s != null && now - s >= NEW_DRIVE_OFF_MS && ((rpm ?: 0) > 0 || (speedKmh ?: 0) > 0)) {
-                maxSpeedKmh = null
-                best0to100Ms = null
-                runStart = null
-            }
+            if (s != null && now - s >= NEW_DRIVE_OFF_MS && ((rpm ?: 0) > 0 || (speedKmh ?: 0) > 0)) clearDrive()
             offSince = null
         }
+        if (rpm != null && rpm > (peakRpm ?: 0)) peakRpm = rpm
         if (speedKmh == null) {
             // Bilinmeyen hız ölçümü bozar: iptal.
             runStart = null
+            passStart = null
             lastSpeed = null
-            return beforeMax != maxSpeedKmh || beforeBest != best0to100Ms
+            return before != stateHash()
         }
         if (speedKmh > (maxSpeedKmh ?: 0)) maxSpeedKmh = speedKmh
 
@@ -183,21 +213,129 @@ class SportSession {
                         prevAt + ((now - prevAt) * (TARGET_KMH - prev).toDouble() / (speedKmh - prev)).toLong()
                     else now
                     val run = at - st
-                    if (run in 1..MAX_RUN_MS && run < (best0to100Ms ?: Long.MAX_VALUE)) best0to100Ms = run
+                    if (run in 1..MAX_RUN_MS) {
+                        val best = run < (best0to100Ms ?: Long.MAX_VALUE)
+                        if (best) best0to100Ms = run
+                        last0to100Ms = run
+                        lastResultAt = now
+                        lastWasBest = best
+                        results++
+                    }
                     runStart = null
                 }
             }
         }
+        pass(now, speedKmh, prev, prevAt)
         lastSpeed = speedKmh
         lastAt = now
-        return beforeMax != maxSpeedKmh || beforeBest != best0to100Ms
+        return before != stateHash()
+    }
+
+    /**
+     * 80–120 geçişi: hız artarken [PASS_FROM] eşiğini geçince başlar (önceki örnekle aradeğer), [PASS_TO]'ya ulaşınca
+     * biter. Hız [PASS_CANCEL]'ın altına düşer ya da [PASS_MAX_MS] geçerse iptal. Seyrek örnekte tek adımda 80'in altından
+     * 120'nin üstüne sıçrama ölçülmez. Sürüşün en iyisi tutulur.
+     */
+    private fun pass(now: Long, speed: Int, prev: Int?, prevAt: Long) {
+        val ps = passStart
+        if (ps == null) {
+            if (prev != null && prev < PASS_FROM && speed >= PASS_FROM && speed < PASS_TO && speed > prev)
+                passStart = prevAt + ((now - prevAt) * (PASS_FROM - prev).toDouble() / (speed - prev)).toLong()
+            return
+        }
+        when {
+            speed < PASS_CANCEL || now - ps > PASS_MAX_MS -> passStart = null
+            speed >= PASS_TO -> {
+                val at = if (prev != null && prev < PASS_TO && speed > prev)
+                    prevAt + ((now - prevAt) * (PASS_TO - prev).toDouble() / (speed - prev)).toLong()
+                else now
+                val run = at - ps
+                if (run in 1..PASS_MAX_MS && run < (best80to120Ms ?: Long.MAX_VALUE)) best80to120Ms = run
+                passStart = null
+            }
+        }
     }
 
     companion object {
         const val TARGET_KMH = 100
         const val MAX_RUN_MS = 30_000L
         const val NEW_DRIVE_OFF_MS = 120_000L
+        const val PASS_FROM = 80
+        const val PASS_TO = 120
+        const val PASS_CANCEL = 75
+        const val PASS_MAX_MS = 20_000L
     }
+}
+
+/** Spor modundaki dört küçük kadranın gösterebileceği değerler (yalnız gerçek veri; akü voltajı ve dış sıcaklık yok). */
+enum class SportDial(val key: String) {
+    ZERO100("z100"),
+    G("g"),
+    INSTANT("inst"),
+    MAX("max"),
+    COOLANT("cool"),
+    AVG_SPEED("avg"),
+    TRIP_TIME("time"),
+    RANGE("range"),
+    PASS80("p80"),
+    CLOCK("clock");
+
+    companion object {
+        fun of(key: String): SportDial? = values().firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * Küçük kadran seçimi (saf, JVM'de sınanır). Dört yuva: 0 sol üst, 1 sol alt, 2 sağ üst, 3 sağ alt. Bir değer en çok bir
+ * yuvada; G-metre yalnız ivme sensörü varsa sunulur. Kayıt "z100,g,inst,max" biçiminde; bozuk/eksik kayıt varsayılanla
+ * tamamlanır.
+ */
+object SportDials {
+    const val SLOTS = 4
+
+    fun offered(hasG: Boolean): List<SportDial> = SportDial.values().filter { hasG || it != SportDial.G }
+
+    /** Varsayılan: 0–100, G, Anlık, Maks. Sensör yoksa G'nin yerinde motor suyu sıcaklığı. */
+    fun defaults(hasG: Boolean): List<SportDial> =
+        if (hasG) listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX)
+        else listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX)
+
+    fun encode(dials: List<SportDial>): String = dials.joinToString(",") { it.key }
+
+    fun decode(raw: String?, hasG: Boolean): List<SportDial> {
+        val ok = offered(hasG)
+        val out = ArrayList<SportDial?>()
+        raw?.split(',')?.take(SLOTS)?.forEach { k ->
+            out += SportDial.of(k.trim())?.takeIf { it in ok && it !in out }
+        }
+        while (out.size < SLOTS) out += null
+        // Boş kalan yuva önce kendi varsayılanıyla, o kullanılıyorsa listedeki ilk kullanılmayanla dolar.
+        val def = defaults(hasG)
+        for (i in 0 until SLOTS) if (out[i] == null) out[i] = def[i].takeIf { it !in out }
+        for (i in 0 until SLOTS) if (out[i] == null) out[i] = ok.first { it !in out }
+        return out.map { it!! }
+    }
+
+    /** [slot] yuvasına [dial] seçildi: başka yuvadaysa iki yuva yer değiştirir (bir değer bir kez). */
+    fun choose(current: List<SportDial>, slot: Int, dial: SportDial): List<SportDial> {
+        if (slot !in current.indices || current[slot] == dial) return current
+        val out = current.toMutableList()
+        val other = out.indexOf(dial)
+        if (other >= 0) out[other] = out[slot]
+        out[slot] = dial
+        return out
+    }
+}
+
+/** Spor çıkışındaki sürüş özeti kartının değerleri (bu sürüş; yalnız okunan veri). */
+data class SportSummary(
+    val minutes: Int?,
+    val maxKmh: Int?,
+    val best0to100Ms: Long?,
+    val avgL100: Double?,
+) {
+    /** Gösterilecek bir şey var mı (hepsi bilinmiyorsa kart açılmaz). */
+    val hasData: Boolean get() = minutes != null || maxKmh != null || best0to100Ms != null || avgL100 != null
 }
 
 /**
@@ -282,6 +420,10 @@ object SportFormat {
     fun seconds(ms: Long?): String? = ms?.let { tenths(it / 1000.0) }
     fun l100(v: Double?): String? = v?.let { tenths(it) }
     fun g(v: Float): String = tenths(v.toDouble())
+
+    /** Süre (dk): 60'tan azsa "47", yoksa "1:05" (birimi [durationUnit]). */
+    fun duration(min: Int?): String? = min?.takeIf { it >= 0 }?.let { if (it < 60) it.toString() else "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
+    fun durationUnit(min: Int?): String = if (min != null && min >= 60) "sa" else "dk"
 
     /** Onda bir hassasiyet, virgülle ("9,6"). */
     fun tenths(v: Double): String {
