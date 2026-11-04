@@ -123,6 +123,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         if (appearanceOnly) return
 
         addView(gap(activity, 12, vertical = true))
+        addView(sportAmbientToggle(d), fullWidth())
+
+        addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_favorite_key) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(favoriteKeySegments(d), fullWidth())
@@ -242,6 +245,19 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             d.dismiss()
             LauncherEdition.setWriteTest(activity, !on)
             ThemeTransition.recreate(activity)
+        }
+    }
+
+    /**
+     * "Spor modunda ambiyans rengi" (varsayılan kapalı): spor başlarken ambiyans OEM kırmızı-turuncusuna geçer, bitince eski
+     * renk döner ([SportAmbient]). Yazma doğrulanmadığı için kapı kapalıyken seçim saklanır ama araca bir şey gitmez.
+     */
+    private fun sportAmbientToggle(d: Dialog): View {
+        val on = SportAmbient.isOn(activity)
+        val label = if (SportAmbient.enabled) R.string.launcher_sport_ambient else R.string.launcher_sport_ambient_unverified
+        return onOffControl(label, on) { value ->
+            d.dismiss()
+            SportAmbient.setOn(activity, value)
         }
     }
 

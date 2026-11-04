@@ -73,6 +73,10 @@ internal object WidgetWritePolicy {
         // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik sabit; değer = fade 0..20, balance gönderirken korunur). Uç değeri doğrulanmadı.
         Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, (0..SoundFieldMath.MAX).toSet(),
             listOf(sig("dsp_sound_field", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID))),
+        // Spor ambiyansı: CarSetting 11 renk sırası (OEM tablosu 1..64; spor rengi 45, geri yazmada hatırlanan sıra). Doğrulanmadı.
+        Entry("SportAmbient", CS, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR,
+            (SportAmbientLogic.COLOR_MIN..SportAmbientLogic.COLOR_MAX).toSet(),
+            listOf(sig("cs11_ambient_color", CS, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR), sig("cs7_ambient_light", CS, CarSettingID.ID_CAR_AMBIENT_LIGHT))),
         // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç.
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK))),

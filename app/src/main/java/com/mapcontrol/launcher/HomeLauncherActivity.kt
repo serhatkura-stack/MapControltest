@@ -131,6 +131,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
         else LauncherDemo.applyDriveMode(intent)?.let { LauncherTheme.driveMode = it }
         driveModePolicy.reset(LauncherTheme.driveMode)
+        // Spor ambiyansı: seçenek açıksa ya da geri yazma bekliyorsa sürüş modunu izler (açılışta bekleyen renk geri yazılır).
+        SportAmbient.sync(this)
         // Tema geçişiyle yeniden kurulunca etkin düzen korunur (statik); otomatik seçenek kapalıysa Park.
         activeMode = if (autoLayoutOn) rememberedMode else LayoutMode.PARK
         LauncherMotion.driveLayout = activeMode == LayoutMode.DRIVE
