@@ -25,4 +25,5 @@
     <string name="car_color_gumus">Silver</string>
     <string name="car_color_kirmizi">Red</string>
     <string name="car_color_mavi">Blue</string>
+    <string name="launcher_sahne_psi" formatted="true">%1$d psi</string>
 </resources>

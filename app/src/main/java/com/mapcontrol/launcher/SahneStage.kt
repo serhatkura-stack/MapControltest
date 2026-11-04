@@ -19,7 +19,8 @@ import com.mapcontrol.R
 
 /**
  * Sahne'nin ortası (yuva değil, sabit): ışıklı zeminde araç görseli; sol üstte menzil ve yakıt
- * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol), sol altta araç sağlığı, sağ altta hava kalitesi.
+ * çubuğu, sağ üstte kilit hapı (dokununca kilit kutucuğuyla aynı yol); sol altta araç sağlığı ve sağ altta hava kalitesi
+ * yalnızca bir şey olunca görünür ([StageCorners]).
  * Açık kapı / bagaj / cam / kaput ve lastik / yakıt kapağı uyarıları aracın üstünde turuncu haplarla görünür; araç
  * kartının gösterdiği hiçbir bilgi kaybolmaz.
  *
@@ -107,6 +108,14 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private val words = ResourceOpeningWords(activity)
     private var openings: Openings? = null
     private var lastHealth: StripState? = null
+    /** Köşe notlarının kararı için yolculuk verisi (bakım km, akü, motor suyu, PM2.5); ortak okuyucudan, ek yoklama yok. */
+    private var trip = TripData()
+    private val tripListener = TripSource.Listener {
+        if (it == trip) return@Listener
+        trip = it
+        bindHealth(lastHealth)
+        bindAir()
+    }
 
     // --- Veri yok ---
     /** Araç verisi gelmeden: menzil yerine sabit iskelet çubuklar ve aracın altında tek mesaj (köşe değerleri gizli). */
@@ -137,23 +146,30 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         vehicle.onSummary = { bindVehicle(it) }
         lock.onStripChanged = { bindLock(lock.stripState()) }
         health.onStripChanged = { bindHealth(health.stripState()) }
-        air.onStripChanged = { airNote.bind(air.stripState()) }
+        air.onStripChanged = { bindAir() }
         bindVehicle(vehicle.summary)
         bindLock(lock.stripState())
         bindHealth(health.stripState())
-        airNote.bind(air.stripState())
+        bindAir()
         SahneFonts.apply(rangeNumber, 300, -0.04f)
         rangeNumber.includeFontPadding = false
     }
 
     override val view: View get() = this
 
-    override fun onVisible() = sources.forEach { it.onVisible() }
+    override fun onVisible() {
+        sources.forEach { it.onVisible() }
+        TripSource.add(activity, tripListener)
+    }
 
-    override fun onHidden() = sources.forEach { it.onHidden() }
+    override fun onHidden() {
+        sources.forEach { it.onHidden() }
+        TripSource.remove(tripListener)
+    }
 
     override fun release() {
         vehicle.onSummary = null
+        TripSource.remove(tripListener)
         sources.forEach { it.release() }
     }
 
@@ -187,20 +203,49 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         rangeBlock.visibility = if (waiting) View.INVISIBLE else View.VISIBLE
         skeleton.visibility = if (waiting) View.VISIBLE else View.GONE
         waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
-        airNote.visibility = if (waiting) View.GONE else View.VISIBLE
+        bindAir()
         bindHealth(lastHealth)
         bindLock(lock.stripState())
         requestLayout()
     }
 
-    /** Sağlık notu ya da (bir şey açıksa) onun yerinde turuncu açıklık satırı; veri yokken ikisi de gizli. */
+    /**
+     * Sağlık notu ya da (bir şey açıksa) onun yerinde turuncu açıklık satırı; veri yokken ikisi de gizli. Not normalde gizli:
+     * yalnızca bakım yakın, akü / motor suyu uyarısı ya da lastik uyarısı varken çıkar ([StageCorners.healthShown]).
+     */
     private fun bindHealth(st: StripState?) {
         lastHealth = st
         val phrase = openings?.let { OpeningsText.phrase(it, words) }
         openLine.bind(phrase)
         openLine.visibility = if (phrase != null && !waiting) View.VISIBLE else View.GONE
-        healthNote.visibility = if (phrase == null && !waiting) View.VISIBLE else View.GONE
-        healthNote.bind(st)
+        val s = vehicle.summary
+        val tireAlert = s?.tireAlert == true
+        val shown = StageCorners.healthShown(trip.batteryV, trip.coolantC, trip.serviceKm, trip.serviceDays, tireAlert)
+        healthNote.visibility = if (phrase == null && !waiting && shown) View.VISIBLE else View.GONE
+        // Yalnızca lastik uyarısı varsa sağlık kutucuğu "Her şey normal" der; not lastiği adlandırır.
+        val tireOnly = tireAlert && !StageCorners.serviceNear(trip.serviceKm, trip.serviceDays) &&
+            !StageCorners.healthWarning(trip.batteryV, trip.coolantC)
+        healthNote.bind(if (tireOnly) tireState(st, s?.tireLow) else st)
+    }
+
+    /** Lastik uyarısının not biçimi: başlık sağlık, değer "Lastik basıncı düşük", alt satır tekerlek ve psi (biliniyorsa). */
+    private fun tireState(st: StripState?, low: TireLow?): StripState = StripState(
+        title = st?.title ?: activity.getString(R.string.launcher_widget_health),
+        value = activity.getString(R.string.launcher_tires_warning),
+        icon = R.drawable.ic_mdi_alert,
+        tone = StripTone.ALERT,
+        detail = low?.let { l ->
+            val psi = l.bar?.let { TireDecode.psi(it) }
+            val wheel = l.wheel?.let { activity.getString(TIRE_WHEELS[it]) }
+            listOfNotNull(wheel, psi?.let { activity.getString(R.string.launcher_sahne_psi, it) }).joinToString(" ").ifEmpty { null }
+        },
+    )
+
+    /** Hava notu yalnızca kabin içi PM2.5 kötüyken ([StageCorners.airShown]); o zaman uyarı renginde. */
+    private fun bindAir() {
+        val shown = !waiting && StageCorners.airShown(trip.pm25In)
+        airNote.visibility = if (shown) View.VISIBLE else View.GONE
+        airNote.bind(air.stripState()?.let { if (shown) it.copy(tone = StripTone.ALERT) else it })
     }
 
     /**
@@ -522,5 +567,6 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         const val RANGE_SP = 76f
         /** Araç taslaktaki yerinden bu kadar (tasarım birimi) yukarıda: menzil satırı ile alt notlar arasında ortalı. */
         const val CAR_LIFT = 30f
+        val TIRE_WHEELS = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
     }
 }

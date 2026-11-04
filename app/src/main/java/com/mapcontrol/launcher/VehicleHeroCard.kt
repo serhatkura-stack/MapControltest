@@ -63,6 +63,9 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         val openings: Openings? = null,
         /** Lastik / yakıt kapağı uyarısı (camlar [openings] içinde adlandırılır); yoksa null. */
         val otherAlertsText: String? = null,
+        /** Lastik uyarısı gösteriliyor (uyarı sinyali ya da eşiğin altında bir tekerlek); [tireLow] o tekerlek. */
+        val tireAlert: Boolean = false,
+        val tireLow: TireLow? = null,
     )
 
     internal var onSummary: ((Summary) -> Unit)? = null
@@ -440,6 +443,8 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
             openParts = ui.car.let { CarPart.fromSignals(it.doorLf, it.doorRf, it.doorLr, it.doorRr, it.trunk, it.hood) },
             openings = openings,
             otherAlertsText = if (otherAlerts.isEmpty()) null else alertsText(otherAlerts, tireLow, windows, open.isNotEmpty()),
+            tireAlert = tireAlert,
+            tireLow = tireLow,
         )
         if (sum != summary) {
             summary = sum
