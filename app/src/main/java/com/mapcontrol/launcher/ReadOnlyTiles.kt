@@ -354,7 +354,7 @@ internal object ReadOnlyDemo {
             BodyPart.WINDOW_RR to ("wrr" in LauncherDemo.openParts),
             BodyPart.FUEL_CAP to ("fuel" in LauncherDemo.openParts),
         ),
-        tires = TireReading(listOf(2.4, 2.4, 2.3, 2.2), warning = false),
+        tires = TireReading(LauncherDemo.TIRES, warning = LauncherDemo.TIRE_WARNING),
     )
 }
 

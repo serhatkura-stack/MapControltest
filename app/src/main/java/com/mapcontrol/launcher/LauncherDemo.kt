@@ -137,6 +137,22 @@ internal object LauncherDemo {
     var seatOverride: Int? = null
         private set
 
+    /**
+     * Sahne uyarı önizlemesi: `--ez launcher_demo_alerts true` aynı anda sol ön kapı + bagaj açık, arka sol lastik düşük
+     * (1,6 bar ≈ 23 psi), bakıma 800 km, yakıt az (%8, 60 km) ve kabin havası kötü (PM2.5 80) gösterir; araç parkta (el freni
+     * çekili), böylece bagaj kapsülü belirgin tonda çıkar. `false` hepsini geri alır (açık parçalar `launcher_demo_open` ile
+     * ayrıca da verilebilir; camlar için wlf/wrf/wlr/wrr). Örnek:
+     *   adb shell am start -n <paket>/com.mapcontrol.launcher.HomeLauncherActivity --ez launcher_demo true --ez launcher_demo_alerts true
+     * Hareket halini görmek için `--ez launcher_demo_moving true` eklenir (bagaj kapsülü normal tona döner).
+     */
+    const val EXTRA_ALERTS = "launcher_demo_alerts"
+
+    @Volatile
+    var alerts = false
+        private set
+
+    private val ALERT_PARTS = setOf("lf", "trunk")
+
     /** Araç kartı bunu atar; demo isteği değişince ana iş parçacığında çağrılır. */
     @Volatile
     var onBodyChanged: Runnable? = null
@@ -145,6 +161,11 @@ internal object LauncherDemo {
         if (!enabled || intent == null) return
         if (intent.hasExtra(EXTRA_OPEN)) {
             openParts = parseOpen(intent.getStringExtra(EXTRA_OPEN))
+            onBodyChanged?.let { main.post(it) }
+        }
+        if (intent.hasExtra(EXTRA_ALERTS)) {
+            alerts = intent.getBooleanExtra(EXTRA_ALERTS, false)
+            openParts = if (alerts) openParts + ALERT_PARTS else openParts - ALERT_PARTS
             onBodyChanged?.let { main.post(it) }
         }
         if (intent.hasExtra(EXTRA_DOORS_CYCLE)) setDoorsCycle(intent.getBooleanExtra(EXTRA_DOORS_CYCLE, false))
@@ -195,8 +216,8 @@ internal object LauncherDemo {
         true,   // connected
         0, 0,   // hız
         18_420, // km
-        620,    // yakıt, onda bir (%62,0) — araçtaki gibi
-        540,    // menzil km
+        if (alerts) 80 else 620,  // yakıt, onda bir (%62,0) — araçtaki gibi; uyarı önizlemesinde %8
+        if (alerts) 60 else 540,  // menzil km
         0, 2, 0,
         open("lf"), open("rf"), open("lr"), open("rr"), open("trunk"), // kapılar ve bagaj (varsayılan kapalı)
         if ("sunroof" in openParts) 3 else 2, if ("sunroof" in openParts) 5 else 1, 1,       // tavan (varsayılan kapalı)
@@ -206,7 +227,11 @@ internal object LauncherDemo {
 
     /** Demo kilit: kapılardan biri açıksa kilit açık (araçta kapı açıkken kilitli görünmez), değilse kilitli. */
     val LOCKED: Boolean get() = listOf("lf", "rf", "lr", "rr").none { it in openParts }
-    const val TIRE_WARNING = false
+    /** Lastik uyarı bayrağı (ReadOnly 95): yalnızca uyarı önizlemesinde açık. */
+    val TIRE_WARNING: Boolean get() = alerts
+
+    /** Demo lastik basınçları (bar; ön sol, ön sağ, arka sol, arka sağ): uyarı önizlemesinde arka sol düşük. */
+    val TIRES: List<Double?> get() = if (alerts) listOf(2.4, 2.4, 1.6, 2.2) else listOf(2.4, 2.4, 2.3, 2.2)
 
     /**
      * Demo koltuk seviyeleri (0..3): sürücü ısıtma 2, yolcu soğutma 1. Koltuk seçicisinden yazılan seviye burada tutulur ki
@@ -280,7 +305,8 @@ internal object LauncherDemo {
             "multi" -> base.copy(batteryV = 11.4, coolantC = 118, serviceKm = 640)
             else -> base
         }
-        return sick.copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
+        val alerted = if (alerts) sick.copy(serviceKm = 800, serviceDays = 40, lowFuel = true, pm25In = 80, pm25Out = 95) else sick
+        return alerted.copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
     }
 
     private fun tripBase(): TripData = TripData(
