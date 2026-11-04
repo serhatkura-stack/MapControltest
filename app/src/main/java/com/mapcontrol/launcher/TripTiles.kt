@@ -139,12 +139,14 @@ internal data class TripData(
     val drivingAltMin: Int? = null,
     /** Kendi biriktirdiğimiz motor-açık süresi (dk): hiçbir sinyal sıfırdan büyük değilse son yedek. */
     val engineOnMin: Int? = null,
+    /** Far, sinyaller ve geri vites (canlı katmanda; Sahne dijital ikizi için, bkz. [CarLightSignals]). */
+    val lights: CarLights = CarLights.OFF,
 )
 
 /**
  * Yolculuk sinyallerini yalnızca dinleyen bir widget varken okur (ana ekran gizlenince durur). Tek okuyucu: birden çok
  * widget aynı turu paylaşır. Yalnızca okur. Her sinyal kendi hızında okunur ([PollTiers]):
- *  - canlı (hız + anlık tüketim): 1 sn; motor kapalı ve hız 0 iken 3 sn,
+ *  - canlı (hız, anlık tüketim, far / sinyal / geri vites): 1 sn; motor kapalı ve hız 0 iken 3 sn,
  *  - yolculuk (mesafe, ortalamalar, akü, soğutma suyu, düşük yakıt, motor devri): 5 sn,
  *  - bakım, PM2.5 ve toplamlar (toplam km, toplam yakıt, sürüş süreleri): 60 sn.
  */
@@ -238,7 +240,8 @@ internal object TripSource {
             // Yedek sayaç: devir ya da hız varken geçen süre (yalnızca widget görünürken çalışır; alt sınır).
             engineOnMs = TripTotals.accumulateMs(engineOnMs, if (lastLiveAt == 0L) 0L else now - lastLiveAt, (rpmRaw ?: 0) > 0 || (speed ?: 0) > 0)
             lastLiveAt = now
-            d = d.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant, engineOnMin = (engineOnMs / 60_000L).toInt())
+            d = d.copy(moving = TripDecode.moving(speed, instant), speedKmh = speed, instantL100 = instant, engineOnMin = (engineOnMs / 60_000L).toInt(),
+                lights = CarLightSignals.read(::ro))
         }
         if (mask and T_TRIP != 0) {
             rpmRaw = ro(ReadOnlyID.ID_ENGINE_RPM)

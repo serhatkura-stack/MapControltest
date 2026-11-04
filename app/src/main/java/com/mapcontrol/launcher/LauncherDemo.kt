@@ -204,7 +204,19 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
         if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
+        if (intent.hasExtra(EXTRA_LIGHTS)) lights = CarLights.parse(intent.getStringExtra(EXTRA_LIGHTS))
     }
+
+    /**
+     * Dijital ikiz ışıkları önizlemesi: `--es launcher_demo_lights "head,brake,left,right,reverse,hazard"` (virgülle; boş =
+     * hepsi kapalı). hazard dörtlü anahtarıdır (iki taraf yanıp söner); kilitlenince tek yanış `launcher_demo_open` ile bir
+     * kapı açılıp kapanınca görülür.
+     */
+    const val EXTRA_LIGHTS = "launcher_demo_lights"
+
+    @Volatile
+    var lights: CarLights = CarLights.OFF
+        private set
 
     /**
      * Navigasyon paneli önizlemesi: `--ez launcher_demo_nav true` sahte rota gösterir (300 m sonra sağa, Atatürk Cd.,
@@ -343,7 +355,7 @@ internal object LauncherDemo {
             else -> base
         }
         val alerted = if (alerts) sick.copy(serviceKm = 800, serviceDays = 40, lowFuel = true, pm25In = 80, pm25Out = 95) else sick
-        return alerted.copy(moving = isMoving, speedKmh = speed, instantL100 = instant)
+        return alerted.copy(moving = isMoving, speedKmh = speed, instantL100 = instant, lights = lights)
     }
 
     private fun tripBase(): TripData = TripData(

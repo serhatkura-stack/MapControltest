@@ -2,6 +2,7 @@ package com.mapcontrol.launcher
 
 import android.content.Context
 import androidx.annotation.StringRes
+import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.mapcontrol.R
 
 /**
@@ -171,6 +172,33 @@ object CarAnimSpec {
     val padRight: Float = maxOf(0f, parts.values.maxOf { it.overlay.right } - BASE_W)
     val padBottom: Float = maxOf(0f, parts.values.maxOf { it.overlay.bottom } - BASE_H) + SHADOW_BLUR * 2
 
+    // --- Dijital ikiz ışıkları (§11) ---
+
+    /** Sinyal ritmi: bir yanma + sönme süresi (~79 / dk, araç sinyaline yakın); yanık kısım [BLINK_ON]. */
+    const val BLINK_MS = 760L
+    const val BLINK_ON = 0.55f
+    /** Far / fren / geri lambası açılıp kapanırken yumuşak geçiş. */
+    const val LIGHT_FADE_MS = 180L
+    /** Kilitlenince dörtlülerin tek yanışının yanık süresi. */
+    const val HAZARD_FLASH_MS = 500L
+    /** Boya parlaması: bu aralıkla bir kez, [GLINT_MS] sürer; arada hiçbir şey çizilmez. */
+    const val GLINT_EVERY_MS = 20_000L
+    const val GLINT_MS = 1_500L
+    /**
+     * Parlamanın adım aralığı (~12 kare/sn): bant çok yumuşak ve sönük olduğundan adımlar seçilmez; 60 kare/sn yerine beşte
+     * bir iş (emülatörde ölçüldü, bkz. tasarim-kararlari §11 performans şartı).
+     */
+    const val GLINT_STEP_MS = 80L
+
+    /**
+     * Teker merkezleri (base pikseli; üst kenar aracın solu, burun sağda), [TireDecode] sırasıyla: ön sol, ön sağ, arka sol,
+     * arka sağ. Üstten görünüşte teker gövdenin altında: halka gövde kenarına oturur.
+     */
+    val WHEEL_X = floatArrayOf(622f, 622f, 186f, 186f)
+    val WHEEL_Y = floatArrayOf(24f, 332f, 24f, 332f)
+    const val WHEEL_RX = 54f
+    const val WHEEL_RY = 18f
+
     // --- Eğri yardımcıları (anim.json formülleri) ---
 
     fun clamp01(v: Float): Float = if (v < 0f) 0f else if (v > 1f) 1f else v
@@ -289,4 +317,82 @@ class CubicBezier(x1: Float, y1: Float, x2: Float, y2: Float) : (Float) -> Float
     companion object {
         fun of(p: FloatArray) = CubicBezier(p[0], p[1], p[2], p[3])
     }
+}
+
+/**
+ * Dijital ikizin ışık durumu (§11): far, fren, geri vites, sol / sağ sinyal ve dörtlü anahtarı. Yalnızca okunan sinyaller
+ * ([CarLightSignals]); okunamayan ya da doğrulanmamış olan false kalır (o ışık hiç yanmaz).
+ */
+data class CarLights(
+    val head: Boolean = false,
+    val brake: Boolean = false,
+    val reverse: Boolean = false,
+    val left: Boolean = false,
+    val right: Boolean = false,
+    /** Dörtlü anahtarı açık: iki taraf birlikte yanıp söner. */
+    val hazard: Boolean = false,
+) {
+    val blinkLeft: Boolean get() = left || hazard
+    val blinkRight: Boolean get() = right || hazard
+
+    companion object {
+        @JvmField val OFF = CarLights()
+
+        /** Demo listesi (`--es launcher_demo_lights "head,brake,left,right,reverse,hazard"`); bilinmeyen ad yok sayılır. */
+        fun parse(raw: String?): CarLights {
+            val k = raw.orEmpty().split(',').map { it.trim().lowercase(java.util.Locale.ROOT) }.toSet()
+            return CarLights("head" in k, "brake" in k, "reverse" in k, "left" in k, "right" in k, "hazard" in k)
+        }
+    }
+}
+
+/**
+ * Işık sinyallerinin değerleri (ReadOnly modülü). null = değer araçta doğrulanmadı, sinyal okunmaz ve o ışık kapalı kalır
+ * (karar §11: "fren / geri vites okunamazsa o kısım kapalı kalır; Tur 6'da doğrulanır"). Okuma yalnızca yolculuk
+ * okuyucusunun canlı katmanında ([TripSource], 1 sn; motor kapalı ve hız 0 iken 3 sn) yapılır; yeni bir yoklama yoktur.
+ */
+internal object CarLightSignals {
+    /**
+     * ID_PARKING_LAMP_STATE (1): 1 = lambalar açık. 2026-10-29 far testinde 1 → 0 → 1 değişti (KATALOG "0/1"); yönün
+     * (1 açık mı) ve kısa farla aynı olup olmadığının Tur 6'da doğrulanması gerekiyor.
+     */
+    val HEAD_ON_VALUE: Int? = 1
+
+    /**
+     * ID_DIRECTION_IND_LEFT / RIGHT (35 / 34): 1 = sinyal açık (2026-10-29 ölçüldü). 2 sn'lik okumada yanıp sönme görülmedi,
+     * kol durumu gibi davranıyor; ekrandaki ritim bu yüzden bizim sabit ritmimiz ([CarAnimSpec.BLINK_MS]).
+     */
+    val TURN_ON_VALUE: Int? = 1
+
+    /** ID_GEARBOX_STATE (26): R = 2 (ölçüldü; P = 1, N = 3, D = 5). */
+    val REVERSE_GEAR_VALUE: Int? = 2
+
+    /** TODO(Tur 6): ID_BRAKE_PEDAL (80) taramada hep 0 okundu, frene basınca değişimi ölçülmedi. Doğrulanana kadar okunmaz. */
+    val BRAKE_ON_VALUE: Int? = null
+
+    /**
+     * TODO(Tur 6): ID_HAZARD_LIGHT (79) ölçülmedi; okunmaz. Dörtlüler açıkken 35 ve 34 ikisi birden 1 geliyorsa iki taraf
+     * zaten yanar.
+     */
+    val HAZARD_ON_VALUE: Int? = null
+
+    /** Ham değerlerden ışık durumu (saf). Değeri null olan sinyalin ham okuması yok sayılır. */
+    fun decode(head: Int?, left: Int?, right: Int?, gear: Int?, brake: Int?, hazard: Int?): CarLights = CarLights(
+        head = HEAD_ON_VALUE != null && head == HEAD_ON_VALUE,
+        brake = BRAKE_ON_VALUE != null && brake == BRAKE_ON_VALUE,
+        reverse = REVERSE_GEAR_VALUE != null && gear == REVERSE_GEAR_VALUE,
+        left = TURN_ON_VALUE != null && left == TURN_ON_VALUE,
+        right = TURN_ON_VALUE != null && right == TURN_ON_VALUE,
+        hazard = HAZARD_ON_VALUE != null && hazard == HAZARD_ON_VALUE,
+    )
+
+    /** Yalnızca değeri bilinen sinyalleri okur ([ro]: ReadOnly kimliği → ham değer). */
+    fun read(ro: (Int) -> Int?): CarLights = decode(
+        head = HEAD_ON_VALUE?.let { ro(ReadOnlyID.ID_PARKING_LAMP_STATE) },
+        left = TURN_ON_VALUE?.let { ro(ReadOnlyID.ID_DIRECTION_IND_LEFT) },
+        right = TURN_ON_VALUE?.let { ro(ReadOnlyID.ID_DIRECTION_IND_RIGHT) },
+        gear = REVERSE_GEAR_VALUE?.let { ro(ReadOnlyID.ID_GEARBOX_STATE) },
+        brake = BRAKE_ON_VALUE?.let { ro(ReadOnlyID.ID_BRAKE_PEDAL) },
+        hazard = HAZARD_ON_VALUE?.let { ro(ReadOnlyID.ID_HAZARD_LIGHT) },
+    )
 }
