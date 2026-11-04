@@ -10,7 +10,9 @@ import android.graphics.BitmapFactory
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
@@ -100,7 +102,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private val turnLeft = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
     private val turnRight = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
     /** Lastikler gövdenin altında (yalnızca kenardan taşan kısım ve ışıması görünür); [TireDecode] sırası. */
-    private val tires = Array(4) { sprite(PartArt.tire, 0xFFFFFFFF.toInt()) }
+    private val tires = Array(4) { sprite(if (it % 2 == 0) PartArt.tire else PartArt.tireFlipped, 0xFFFFFFFF.toInt()) }
     private val fuelCap = sprite(PartArt.fuelCap, 0xFFFFFFFF.toInt())
     private val hood = sprite(null, HOOD_GLOW)
     private val glint = GlintLayer(context)
@@ -903,7 +905,57 @@ private object PartArt {
         CarAnimSpec.HOOD_CX + CarAnimSpec.HOOD_RX, CarAnimSpec.HOOD_CY + CarAnimSpec.HOOD_RY,
     )
 
-    val tire: Bitmap? by lazy { lit(CarAnimSpec.TIRE_L, CarAnimSpec.TIRE_W, GLOW_PAD, 10f, 16f) }
+    /** Lastik: dış kenar (gövdeden taşan) üstte; alttaki lastikler için [tireFlipped] dikey çevrilmiş hali. */
+    val tire: Bitmap? by lazy { tireBitmap() }
+
+    val tireFlipped: Bitmap? by lazy {
+        tire?.let { Bitmap.createBitmap(it, 0, 0, it.width, it.height, Matrix().apply { preScale(1f, -1f) }, false) }
+    }
+
+    /**
+     * Üstten görülen lastik: koyu lastik tabanı, enine 5 silik sırt çizgisi, dış kenardan (üst) içe doğru sönen sıcak kehribar
+     * ışık (çekirdek #E8913A, alfa <= 0.85) ve çevrede yumuşak ışıma. Base pikseli ölçeğinde.
+     */
+    private fun tireBitmap(): Bitmap? = try {
+        val w = CarAnimSpec.TIRE_L
+        val h = CarAnimSpec.TIRE_W
+        val pad = GLOW_PAD
+        Bitmap.createBitmap((w + 2 * pad).toInt(), (h + 2 * pad).toInt(), Bitmap.Config.ARGB_8888).also { bmp ->
+            val c = Canvas(bmp)
+            val r = RectF(pad, pad, pad + w, pad + h)
+            val corner = 7f
+            val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x66E8913A
+                maskFilter = BlurMaskFilter(14f, BlurMaskFilter.Blur.NORMAL)
+            }
+            c.drawRoundRect(RectF(r.left, r.top - 3f, r.right, r.bottom), corner, corner, glow)
+            val clip = Path().apply { addRoundRect(r, corner, corner, Path.Direction.CW) }
+            c.save()
+            c.clipPath(clip)
+            // Lastik tabanı: koyu kauçuk.
+            c.drawRect(r, Paint().apply { color = 0xFF14110F.toInt() })
+            // Sırt çizgileri (enine, silik).
+            val tread = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66050403; strokeWidth = 2f }
+            val n = 5
+            for (k in 1..n) {
+                val x = r.left + w * k / (n + 1)
+                c.drawLine(x, r.top, x, r.bottom, tread)
+            }
+            // Kehribar ışık: dış kenarda en parlak, içe doğru söner.
+            c.drawRect(r, Paint().apply {
+                shader = LinearGradient(0f, r.top, 0f, r.bottom,
+                    intArrayOf(0xD9E8913A.toInt(), 0x59E8913A.toInt(), 0x00E8913A), floatArrayOf(0f, 0.3f, 0.62f), Shader.TileMode.CLAMP)
+            })
+            // Sırt çizgileri ışığın üstünde de hafif okunsun.
+            for (k in 1..n) {
+                val x = r.left + w * k / (n + 1)
+                c.drawLine(x, r.top, x, r.bottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x40000000; strokeWidth = 2f })
+            }
+            c.restore()
+        }
+    } catch (e: OutOfMemoryError) {
+        null
+    }
 
     val fuelCap: Bitmap? by lazy { lit(CarAnimSpec.FUEL_CAP.w, CarAnimSpec.FUEL_CAP.h, CAP_PAD, 4f, 8f) }
 

@@ -198,8 +198,8 @@ object CarAnimSpec {
      */
     val TIRE_X = floatArrayOf(622f, 622f, 168f, 168f)
     val TIRE_EDGE = floatArrayOf(26f, 337f, 23f, 338f)
-    const val TIRE_L = 104f
-    const val TIRE_W = 30f
+    const val TIRE_L = 92f
+    const val TIRE_W = 26f
     const val TIRE_OUT = 11f
 
     /** Lastiğin base pikseli kutusu (sol, üst, sağ, alt); [i] [TireDecode] sırası. */
