@@ -146,6 +146,16 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
         }
     }
 
+    override fun startSplitWithMiniDash(done: (String?) -> Unit) {
+        val other = FrostNavWidgetMath.miniDashSplitOther(SplitScreenLauncher.lastOtherApp(app)) { pkg ->
+            try { app.packageManager.getApplicationInfo(pkg, 0); true } catch (e: Exception) { false }
+        }
+        SplitScreenLauncher.startWithMiniDash(app, other) { result ->
+            Log.i(TAG, "split(miniDash, $other) -> $result")
+            done(if (result == SplitScreenLauncher.Result.STARTED) null else SplitScreenMessages.resultText(app, result))
+        }
+    }
+
     // --- Göstergeye yansıt (MapControlService aç/kapa eylemleri → ClusterDisplayManager, Yansıtma sekmesiyle aynı) ---
 
     override fun readCluster() = ClusterState(ClusterNavigationState.getLastKnownOpen(), TargetPackageStore.read(app).ifEmpty { null })

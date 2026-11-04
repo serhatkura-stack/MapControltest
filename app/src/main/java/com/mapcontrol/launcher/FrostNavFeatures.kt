@@ -51,6 +51,12 @@ internal interface FrostNavFeatures {
     /** Bölünmüş ekranı seçili çiftle başlatır; [done] ana iş parçacığında: null = başladı, yoksa kullanıcıya gösterilecek neden. */
     fun startSplit(done: (String?) -> Unit)
 
+    /**
+     * Mini gösterge solda, son seçilen diğer uygulama (yoksa Yandex Haritalar) sağda yarı yarıya bölünmüş ekran açar;
+     * [done] ana iş parçacığında: null = başladı, yoksa kullanıcıya gösterilecek neden.
+     */
+    fun startSplitWithMiniDash(done: (String?) -> Unit)
+
     /** Göstergeye (cluster) yansıtma durumu ve hedef uygulama. */
     fun readCluster(): ClusterState
 
@@ -74,6 +80,7 @@ internal interface FrostNavFeatures {
             override fun setAutomation(id: AutomationId, on: Boolean) = Unit
             override fun readSplitPair() = SplitPair(null, null)
             override fun startSplit(done: (String?) -> Unit) = Unit
+            override fun startSplitWithMiniDash(done: (String?) -> Unit) = Unit
             override fun readCluster() = ClusterState(open = false, target = null)
             override fun setCluster(open: Boolean) = Unit
             override fun openTab(activity: Activity, tab: FrostNavTab) = Unit
@@ -137,6 +144,16 @@ object FrostNavWidgetMath {
         val a = pair.first?.trim().orEmpty()
         val b = pair.second?.trim().orEmpty()
         return a.isNotEmpty() && b.isNotEmpty() && a != b
+    }
+
+    /** Mini gösterge ile bölünecek varsayılan eş: Yandex Haritalar. */
+    const val SPLIT_DEFAULT_PKG = "ru.yandex.yandexmaps"
+
+    /** Mini gösterge bölünmüş ekranının diğer uygulaması: son seçilen, yoksa kuruluysa varsayılan, o da yoksa null. */
+    fun miniDashSplitOther(last: String?, isInstalled: (String) -> Boolean): String? {
+        val l = last?.trim().orEmpty()
+        if (l.isNotEmpty()) return l
+        return SPLIT_DEFAULT_PKG.takeIf(isInstalled)
     }
 
     /**

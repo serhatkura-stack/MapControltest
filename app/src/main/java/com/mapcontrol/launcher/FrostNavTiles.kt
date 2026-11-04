@@ -853,6 +853,18 @@ internal class SplitScreenTile(activity: Activity) :
         }
     }
 
+    /** Kutucuğa/şeride dokunuş: Mini gösterge + son diğer uygulama tek dokunuşta; ayarlar şeritte uzun basışta. */
+    private fun startMiniDash() {
+        if (starting) return
+        starting = true
+        redraw()
+        features.startSplitWithMiniDash { msg ->
+            starting = false
+            redraw()
+            if (msg != null) toast(msg)
+        }
+    }
+
     override fun buildCompact(): View = compact(
         activity.getString(when {
             starting -> R.string.launcher_fn_split_starting
@@ -915,7 +927,7 @@ internal class SplitScreenTile(activity: Activity) :
             LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = activity.dp(8) })
     }
 
-    override fun onTap() = start()
+    override fun onTap() = startMiniDash()
 
     override fun strip(): StripState = StripState(
         activity.getString(labelRes),

@@ -31,6 +31,13 @@ class FrostNavWidgetMathTest {
         assertNull(FrostNavWidgetMath.nextPreset("flat", emptyList()))
     }
 
+    @Test fun miniDashSplitOtherPrefersLastThenYandex() {
+        assertEquals("com.spotify.music", FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { false })
+        assertEquals("ru.yandex.yandexmaps", FrostNavWidgetMath.miniDashSplitOther(null) { it == "ru.yandex.yandexmaps" })
+        assertEquals("ru.yandex.yandexmaps", FrostNavWidgetMath.miniDashSplitOther(" ") { true })
+        assertNull(FrostNavWidgetMath.miniDashSplitOther(null) { false })
+    }
+
     @Test fun automationCount() {
         val items = listOf(
             AutomationItem(AutomationId.CLIMATE, on = true, toggleable = true),
