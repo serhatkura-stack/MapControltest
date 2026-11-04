@@ -90,6 +90,8 @@ public final class LauncherMediaController {
     private String lastSource;
     private MediaSessionManager sessionManager;
     private MediaController activeController;
+    @Nullable private String lastArtworkKey;
+    @Nullable private Bitmap lastArtwork;
     private boolean started;
     private boolean sessionsListenerRegistered;
 
@@ -437,6 +439,32 @@ public final class LauncherMediaController {
         }
     }
 
+    /** Parça kimliği: kaynak, başlık, sanatçı ve albüm. */
+    static String trackKey(@Nullable String source, @Nullable String title,
+                           @Nullable String artist, @Nullable String album) {
+        return source + "\u0001" + title + "\u0001" + artist + "\u0001" + album;
+    }
+
+    interface SameContent<T> {
+        boolean same(T a, T b);
+    }
+
+    /**
+     * Aynı parçada kapak içeriği değişmediyse (ya da kapak geçici yoksa) önceki örneği döndürür;
+     * parça değiştiyse ya da içerik gerçekten farklıysa yenisini.
+     */
+    @Nullable
+    static <T> T stableArtwork(@Nullable String prevKey, @Nullable T prev,
+                               String key, @Nullable T next, SameContent<T> cmp) {
+        if (prev == null || prevKey == null || !prevKey.equals(key)) {
+            return next;
+        }
+        if (next == null || next == prev) {
+            return prev;
+        }
+        return cmp.same(prev, next) ? prev : next;
+    }
+
     private MediaState buildState(@Nullable MediaController controller) {
         boolean access = isNotificationAccessGranted();
         if (controller == null) {
@@ -458,6 +486,15 @@ public final class LauncherMediaController {
         if (artwork == null && metadata != null) {
             artwork = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART);
         }
+        // Bluetooth servisi aynı şarkının üstverisini ~5 sn'de bir yeniden yollar ve her seferinde
+        // yeni Bitmap nesnesi gelir; kapak titremesin diye aynı parçada eski örneği koru.
+        String album = metadata != null
+                ? metadata.getString(MediaMetadata.METADATA_KEY_ALBUM) : null;
+        String trackKey = trackKey(source, title, artist, album);
+        artwork = stableArtwork(lastArtworkKey, lastArtwork, trackKey, artwork,
+                (a, b) -> a.getWidth() == b.getWidth() && a.getHeight() == b.getHeight() && a.sameAs(b));
+        lastArtworkKey = trackKey;
+        lastArtwork = artwork;
 
         long durationMs = metadata != null
                 ? metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) : 0L;
