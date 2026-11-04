@@ -182,7 +182,7 @@ object CarAnimSpec {
     /** Kilitlenince dörtlülerin tek yanışının yanık süresi. */
     const val HAZARD_FLASH_MS = 500L
     /** Boya parlaması: bu aralıkla bir kez, [GLINT_MS] sürer; arada hiçbir şey çizilmez. */
-    const val GLINT_EVERY_MS = 20_000L
+    const val GLINT_EVERY_MS = 60_000L
     const val GLINT_MS = 1_500L
     /**
      * Parlamanın adım aralığı (~12 kare/sn): bant çok yumuşak ve sönük olduğundan adımlar seçilmez; 60 kare/sn yerine beşte

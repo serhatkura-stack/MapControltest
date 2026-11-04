@@ -35,7 +35,7 @@ import com.mapcontrol.R
  *
  * Dijital ikiz (§11, [setLights]): far huzmesi, fren ışığı ve kırmızı zemin havuzu, geri lambası, sinyaller ve kilitlenince
  * dörtlülerin tek yanışı; düşük lastikte o tekerde ince kehribar halka ([setTireAlert]); arabanın altında çok hafif yansıma
- * ve ~20 sn'de bir 1,5 sn'lik boya parlaması. Hepsi önceden çizilmiş küçük maskelerdir (paylaşılan ALPHA_8 bitmap'ler) ve
+ * ve ~60 sn'de bir 1,5 sn'lik boya parlaması. Hepsi önceden çizilmiş küçük maskelerdir (paylaşılan ALPHA_8 bitmap'ler) ve
  * yalnızca görünüm alfası / konumu canlanır: kare başına çizim kaydı ve bellek ayırma yoktur. Işık katmanları çocuk
  * görünümlerdir; zemindekiler gövdenin altında, lambalar üstünde çizilir. [setActive] false iken (ekran görünmezken)
  * yanıp sönme ve parlama durur.
