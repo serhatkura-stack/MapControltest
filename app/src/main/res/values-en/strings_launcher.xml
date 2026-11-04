@@ -210,5 +210,6 @@
     <string name="launcher_favorite_key">Favorite key (steering wheel)</string>
     <string name="launcher_favorite_key_off">Off</string>
     <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
+    <string name="launcher_favorite_key_yandex_maps">Yandex Maps</string>
     <string name="launcher_favorite_key_missing">%1$s is not installed</string>
 </resources>

@@ -25,7 +25,8 @@ import java.lang.ref.WeakReference
  */
 enum class FavoriteAction(val key: String, @StringRes val label: Int, val packageName: String?) {
     OFF("off", R.string.launcher_favorite_key_off, null),
-    YANDEX_NAVI("yandex_navi", R.string.launcher_favorite_key_yandex_navi, "ru.yandex.yandexnavi");
+    YANDEX_NAVI("yandex_navi", R.string.launcher_favorite_key_yandex_navi, "ru.yandex.yandexnavi"),
+    YANDEX_MAPS("yandex_maps", R.string.launcher_favorite_key_yandex_maps, "ru.yandex.yandexmaps");
 
     companion object {
         /** Kayıtlı anahtar; bilinmeyen/boşsa Kapalı (yeni sürümden eski sürüme dönüşte de güvenli). */

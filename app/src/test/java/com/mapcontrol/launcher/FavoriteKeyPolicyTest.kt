@@ -78,5 +78,7 @@ class FavoriteKeyPolicyTest {
     @Test fun actionPackages() {
         assertNull(FavoriteAction.OFF.packageName)
         assertEquals("ru.yandex.yandexnavi", FavoriteAction.YANDEX_NAVI.packageName)
+        assertEquals("ru.yandex.yandexmaps", FavoriteAction.YANDEX_MAPS.packageName)
+        assertEquals(FavoriteAction.YANDEX_MAPS, FavoriteAction.parse("yandex_maps"))
     }
 }
