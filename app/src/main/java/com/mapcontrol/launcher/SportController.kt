@@ -35,6 +35,9 @@ internal class SportController(
     private var busy = false
     private var dim: View? = null
     private var savedGround: Drawable? = null
+    /** Spor zemini (kendi bitmap başvurusunu tutar): yerinde tema yenilemesinde yeniden kullanılır, görsel ana iş
+     *  parçacığında yeniden çözülmez. */
+    private var ground: SportGround? = null
     /** Geçiş kuşağı: iptal edilen ya da yerine yenisi başlayan geçişin geç gelen geri çağrıları hiçbir şey yapmaz. */
     private var gen = 0
 
@@ -109,12 +112,13 @@ internal class SportController(
             rememberedSport = false
             header().setSport(false)
             savedGround = null
+            ground = null
             return
         }
         header().setSportClockHidden(SportDialPrefs.clockChosen(activity))
         r?.let {
             savedGround = it.background
-            it.background = SportGround(activity)
+            it.background = ground ?: SportGround(activity).also { g -> ground = g }
         }
         bar()?.setSport(true)
         val s = sahne() ?: return
@@ -157,19 +161,20 @@ internal class SportController(
         // biterse ve Spor hâlâ isteniyorsa giriş yeniden denenir (bu kez çizim hazır, bekleme yok).
         stage.postDelayed({
             if (my != gen || ready) return@postDelayed
-            abortEnter()
-            stage.whenReady { if (target && !shown && !busy && sahne() === s) request(true) }
+            // Yeniden deneme karartma kalktıktan (busy bitti) sonra kurulur; çizim solma sırasında biterse istek düşmesin.
+            abortEnter { stage.whenReady { if (target && !shown && !busy && sahne() === s) request(true) } }
         }, READY_TIMEOUT_MS)
         fade(0f, DIM_ALPHA, IN_DIM_MS, 0L) { dimmed = true; go() }
     }
 
     /** Giriş yapılamadı (çizim gecikti, düzenleme açıldı): karartma kalkar, Normal kalır. */
-    private fun abortEnter() {
+    private fun abortEnter(then: (() -> Unit)? = null) {
         val my = ++gen
         fade(dim?.alpha ?: 0f, 0f, IN_REVEAL_MS, 0L) {
             if (my != gen) return@fade
             removeDim()
             busy = false
+            then?.invoke()
         }
     }
 
@@ -219,10 +224,11 @@ internal class SportController(
         header().setSport(on)
         header().setSportClockHidden(on && SportDialPrefs.clockChosen(activity))
         bar()?.setSport(on)
+        if (!on) ground = null
         val r = root() ?: return true
         if (on) {
             savedGround = r.background
-            r.background = SportGround(activity)
+            r.background = SportGround(activity).also { ground = it }
         } else {
             savedGround?.let { r.background = it }
             savedGround = null
