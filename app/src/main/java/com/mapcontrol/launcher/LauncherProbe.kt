@@ -28,6 +28,7 @@ import com.desaysv.ivi.vdb.client.bind.VDServiceDef
 import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.desaysv.ivi.vdb.event.id.carlan.VDEventCarLan
+import com.desaysv.ivi.vdb.event.id.carlan.bean.VDNaviDisplayArea
 import java.lang.reflect.Modifier
 
 /**
@@ -47,6 +48,20 @@ import java.lang.reflect.Modifier
 internal object LauncherProbe {
 
     const val EXTRA = "launcher_probe"
+
+    /**
+     * YALNIZCA DEBUG, elle tetiklenir, kendiliğinden hiç çalışmaz: göstergeye navigasyon alanı komutunu
+     * (CarLan 721702 NaviDisplayArea) bir kez YAZAR. Değerler: 9 = mini, 10 = tam, 0 = kapalı.
+     * Araçta test (örnek, paket com.mapcontrol):
+     *   adb shell am start -n com.mapcontrol/com.mapcontrol.launcher.HomeLauncherActivity --ei launcher_nav_area 9
+     *   (10 = tam alan, 0 = kapat)
+     * Sonuç "LauncherProbe" etiketiyle loga düşer: NAV-AREA gönderildi/reddedildi/hata. Geçersiz değer reddedilir.
+     */
+    const val EXTRA_NAV_AREA = "launcher_nav_area"
+    private val NAV_AREA_VALUES = setOf(0, 9, 10)
+
+    /** Test komutu için izin verilen değer mi (yalnızca 0, 9, 10). */
+    internal fun isValidNavArea(value: Int): Boolean = value in NAV_AREA_VALUES
     private const val TAG = "LauncherProbe"
     private const val CONNECT_WAIT_MS = 8_000L
     private const val POLL_MS = 2_000L
@@ -101,6 +116,7 @@ internal object LauncherProbe {
     fun applyFrom(activity: Activity, intent: Intent?) {
         if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         val context = activity.applicationContext
+        sendNavAreaIfRequested(intent)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (intent != null && intent.hasExtra(EXTRA)) {
             if (intent.getBooleanExtra(EXTRA, false)) {
@@ -113,6 +129,30 @@ internal object LauncherProbe {
             }
         }
         if (prefs.getLong(KEY_UNTIL, 0L) > System.currentTimeMillis() && !running) start(context)
+    }
+
+    /** [EXTRA_NAV_AREA] varsa değeri bir kez gönderir; ekstra silinir (aktivite yeniden oluşunca tekrar gitmesin). */
+    private fun sendNavAreaIfRequested(intent: Intent?) {
+        if (intent == null || !intent.hasExtra(EXTRA_NAV_AREA)) return
+        val value = intent.getIntExtra(EXTRA_NAV_AREA, -1)
+        intent.removeExtra(EXTRA_NAV_AREA)
+        if (!isValidNavArea(value)) {
+            Log.w(TAG, "NAV-AREA reddedildi: değer=$value (yalnızca 0, 9, 10)")
+            return
+        }
+        Thread({
+            try {
+                VDBus.getDefault().bindService(VDServiceDef.ServiceType.CAR_LAN)
+                val payload = VDNaviDisplayArea().apply {
+                    naviDisplayArea = value
+                    naviDisplayAreaResult = "true"
+                }
+                VDBus.getDefault().set(VDNaviDisplayArea.createEvent(VDEventCarLan.NAVIGATION_DISPLAY_AREA, payload))
+                Log.i(TAG, "NAV-AREA gönderildi: değer=$value")
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "NAV-AREA hata: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }, "$TAG-navarea").apply { isDaemon = true }.start()
     }
 
     private fun start(context: Context) {
