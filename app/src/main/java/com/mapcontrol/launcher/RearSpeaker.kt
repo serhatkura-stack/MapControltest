@@ -14,8 +14,11 @@ import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
 import com.mapcontrol.R
 
-/** Ses alanı: sol-sağ dengesi ve ön-arka dengesi (fader); okunamayan alan null. */
-internal data class SoundFieldReading(val balance: Int? = null, val fade: Int? = null)
+/**
+ * Ses alanı: sol-sağ dengesi ve ön-arka dengesi (fader); okunamayan alan null. [assumed] true: araçtan okunmadı, bizim son
+ * yazdığımız değerden tahmin (kutucuk düşük güvenle gösterir).
+ */
+internal data class SoundFieldReading(val balance: Int? = null, val fade: Int? = null, val assumed: Boolean = false)
 
 /**
  * Arka hoparlör kapatmanın saf kuralları (JVM'de sınanır). Arka hoparlör doğrudan kapatılamaz: ön-arka dengesi (fader) ön uca
@@ -60,10 +63,13 @@ internal object SoundFieldMath {
 
     /**
      * DSP okunamadığında (araçta `getOnce(SOUND_FIELD)` boş geliyor; üçüncü taraf erişimi SELinux ile kapalı olabilir) kutucuğun
-     * göstereceği tahmin: bizim son yazdığımız değer; hiç yazılmadıysa HAL varsayılanı olan orta (10/10, "Açık").
+     * göstereceği tahmin: bizim son yazdığımız değer ([SoundFieldReading.assumed] = true). Geçerli bir son yazım yoksa null
+     * (kutucuk "Kullanılamıyor" der; emülatör / DSP'siz araçta yalan durum göstermez).
      */
-    fun assumed(lastBalance: Int?, lastFade: Int?): SoundFieldReading =
-        SoundFieldReading(valid(lastBalance) ?: CENTER, valid(lastFade) ?: CENTER)
+    fun assumed(lastBalance: Int?, lastFade: Int?): SoundFieldReading? {
+        val fade = valid(lastFade) ?: return null
+        return SoundFieldReading(valid(lastBalance) ?: CENTER, fade, assumed = true)
+    }
 }
 
 /** DSP servisinden ses alanı okuma/yazma (VDBus, düz Bundle: "type" = balance, "value" = fade). Hatalarda null / sessiz; çökmez. */
@@ -71,6 +77,7 @@ internal object SoundFieldIo {
 
     private var lastLogged: Pair<Int?, Int?>? = null
     private var lastLoggedKeys: String? = null
+    private const val NULL_PAYLOAD = "null-payload"
 
     /** Güncel (balance, fade); DSP yoksa (emülatör) ya da payload boşsa null. */
     fun read(): SoundFieldReading? = try {
@@ -81,9 +88,9 @@ internal object SoundFieldIo {
             lastLogged = balance to fade
             Log.i("RearSpeaker", "SOUND_FIELD read balance=$balance fade=$fade")
         }
-        if (balance == null && fade == null && lastLoggedKeys != payload?.keySet()?.toString()) {
+        if (balance == null && fade == null && lastLoggedKeys != (payload?.keySet()?.toString() ?: NULL_PAYLOAD)) {
             // Teşhis: boş okumada payload anahtarları (anahtar adı farklıysa araç günlüğünden görülür).
-            lastLoggedKeys = payload?.keySet()?.toString()
+            lastLoggedKeys = payload?.keySet()?.toString() ?: NULL_PAYLOAD
             Log.i("RearSpeaker", "SOUND_FIELD read empty, payload keys=$lastLoggedKeys")
         }
         if (balance == null && fade == null) null else SoundFieldReading(balance, fade)
@@ -192,11 +199,15 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
 
     override val view: View get() = root
 
-    /** DSP okunamazsa (araçta fade=null) son yazımızdan, o da yoksa orta değerden tahmin eder; kart çalışmaya devam eder. */
+    /**
+     * DSP okunamazsa (araçta fade=null) son yazımızdan tahmin eder ve "tahmin" diye işaretler; hiç yazımız yoksa eski davranış
+     * ("Kullanılamıyor").
+     */
     override fun readNow(): ComfortReading {
         val read = ComfortReader.readSound()
         if (read.sound != null || LauncherDemo.enabled) return read
-        return ComfortReading(connected = true, sound = SoundFieldMath.assumed(store.lastBalance, store.lastFade))
+        val guess = SoundFieldMath.assumed(store.lastBalance, store.lastFade) ?: return read
+        return ComfortReading(connected = true, sound = guess)
     }
 
     override fun applySpan(span: Span) {
@@ -246,10 +257,12 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         stateText.background = rounded(context, if (muted == true) sleepAccent() else LauncherTheme.CONTROL, 999f)
         stateText.setCompoundDrawablesRelative(if (muted == true) moon() else null, null, null, null)
         stateText.compoundDrawablePadding = context.dp(6)
-        detail.text = when (muted) {
-            true -> context.getString(R.string.launcher_rear_muted_detail)
-            false -> context.getString(R.string.launcher_rear_on_detail)
-            null -> null
+        val assumed = reading.sound?.assumed == true && pendingMuted == null
+        detail.text = when {
+            muted == null -> null
+            assumed -> context.getString(R.string.launcher_rear_assumed_detail)
+            muted -> context.getString(R.string.launcher_rear_muted_detail)
+            else -> context.getString(R.string.launcher_rear_on_detail)
         }
         iconView.setImageResource(if (muted == true) R.drawable.ic_mdi_weather_night else R.drawable.ic_mdi_volume_high)
         iconView.imageTintList = android.content.res.ColorStateList.valueOf(if (muted == true) sleepAccent() else LauncherTheme.TEXT_SECONDARY)
@@ -257,7 +270,7 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         root.contentDescription = context.getString(R.string.launcher_widget_rear_speaker) + ": " + state
         root.isEnabled = muted != null || LauncherEdition.READ_ONLY
         notifyStrip(StripState(context.getString(R.string.launcher_widget_rear_speaker), state, R.drawable.ic_mdi_volume_high,
-            if (muted == null) StripTone.MUTED else StripTone.NORMAL,
+            if (muted == null || assumed) StripTone.MUTED else StripTone.NORMAL,
             detail = detail.text?.toString(), active = muted?.not(), badge = if (muted == true) R.drawable.ic_mdi_weather_night else 0))
     }
 
@@ -273,17 +286,30 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
     private fun onTap() {
         val fade = SoundFieldMath.valid(reading.sound?.fade)
         val target = SoundFieldMath.targetFade(fade, store.restoreFade)
-        // Okunamıyorsa (test sürümü dışında) tahmin etme.
+        // Okunamıyorsa (test sürümü dışında) tahmin etme. Okuma "tahmin" ise (son yazımız) yine de ondan ilerlenir.
         if (target == null && !LauncherEdition.READ_ONLY) return
         val enabled = ComfortWriter.rearSpeakerEnabled
         if (enabled && target != null) {
-            val nowMuted = muted() == true
-            if (!nowMuted && fade != null) store.restoreFade = fade
-            pendingMuted = !nowMuted
+            val wasMuted = muted() == true
             val balance = SoundFieldMath.valid(reading.sound?.balance) ?: SoundFieldMath.CENTER
-            store.lastBalance = balance
-            store.lastFade = target
-            io.runSafely { ComfortWriter.setFader(balance, target) }
+            pendingMuted = !wasMuted
+            render()
+            io.runSafely {
+                val sent = ComfortWriter.setFader(balance, target)
+                main.post {
+                    if (sent) {
+                        // Yalnızca gönderim başarılıysa hatırla (eski fader, son yazım).
+                        if (!wasMuted && fade != null) store.restoreFade = fade
+                        store.lastBalance = balance
+                        store.lastFade = target
+                        afterCommit(true)
+                    } else {
+                        pendingMuted = null
+                        afterCommit(false)
+                    }
+                }
+            }
+            return
         }
         afterCommit(enabled)
     }

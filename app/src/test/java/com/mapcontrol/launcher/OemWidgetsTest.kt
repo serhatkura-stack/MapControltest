@@ -177,9 +177,10 @@ class OemWidgetsTest {
         assertNull(SoundFieldMath.rearMuted(-10000))
         assertNull(SoundFieldMath.rearMuted(99))
         // Okuma boşken: son yazım, yoksa orta (Açık).
-        assertEquals(SoundFieldReading(10, 10), SoundFieldMath.assumed(null, null))
-        assertEquals(SoundFieldReading(7, 0), SoundFieldMath.assumed(7, 0))
-        assertEquals(SoundFieldReading(10, 10), SoundFieldMath.assumed(99, -1))
+        assertNull(SoundFieldMath.assumed(null, null))
+        assertNull(SoundFieldMath.assumed(7, 99))
+        assertEquals(SoundFieldReading(7, 0, assumed = true), SoundFieldMath.assumed(7, 0))
+        assertEquals(SoundFieldReading(10, 5, assumed = true), SoundFieldMath.assumed(99, 5))
         // Açıkken dokunuş: ön uç. Kapalıyken: saklanan değer; yoksa/geçersizse/uçla aynıysa orta.
         assertEquals(front, SoundFieldMath.targetFade(SoundFieldMath.CENTER, null))
         assertEquals(7, SoundFieldMath.targetFade(front, 7))
