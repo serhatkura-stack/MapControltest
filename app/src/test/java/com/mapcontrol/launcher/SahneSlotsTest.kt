@@ -16,7 +16,7 @@ class SahneSlotsTest {
     fun curatedSlotListsMatchTheOwnerDecision() {
         val strip = setOf(
             WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
-            WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
+            WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
             WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
             WidgetType.CLUSTER_MIRROR,
         )
@@ -71,7 +71,7 @@ class SahneSlotsTest {
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.LOCK, WidgetType.SEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
         assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[3]?.extra))
@@ -161,7 +161,7 @@ class SahneSlotsTest {
         assertEquals("a1", c.strip[2]?.id)
         assertEquals("a2", c.strip[3]?.id) // APP birden çok olabilir
         assertNull(c.strip[4]) // aynı kimlik
-        assertEquals(WidgetType.LOCK, c.strip[5]?.type)
+        assertNull(c.strip[5]) // kilit artık şeritte yok (sahnedeki hap)
         assertEquals(STRIP_SLOTS, c.strip.size)
     }
 
@@ -200,7 +200,8 @@ class SahneSlotsTest {
         assertTrue(SahneForm.canPlace(d, strip0, WidgetType.APP))
         assertFalse(SahneForm.canPlace(d, strip0, WidgetType.PHOTO))
         assertTrue(SahneForm.canPlace(d, right, WidgetType.PHOTO))
-        assertFalse(SahneForm.canPlace(d, right, WidgetType.LOCK))     // kilit yalnızca şeritte
+        assertFalse(SahneForm.canPlace(d, right, WidgetType.LOCK))     // kilit hiçbir yuvada yok (sahnedeki hap)
+        assertFalse(SahneForm.canPlace(d, strip0, WidgetType.LOCK))
         assertFalse(SahneForm.canPlace(d, strip0, WidgetType.HEALTH))  // sağlık yalnızca panelde
         assertFalse(SahneForm.canPlace(d, right, WidgetType.VEHICLE))
         // Koltuk her iki taraftan panele de konabilir (şeritte zaten olan taraf hariç).
@@ -213,14 +214,44 @@ class SahneSlotsTest {
     fun setGetAndNewIds() {
         val d = SahneSlots.defaultPark(apps)
         val ref = SahneSlotRef(SahneSlotKind.STRIP, 3)
-        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.DRIVE_MODE), WidgetType.DRIVE_MODE)
+        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.SCREEN_OFF), WidgetType.SCREEN_OFF)
         val e = SahneSlots.set(d, ref, slot)
         assertEquals(slot, SahneSlots.get(e, ref))
         assertEquals(d.left, e.left)
-        assertEquals("drive_mode", slot.id)
-        assertEquals("lock_2", SahneSlots.newId(d, WidgetType.LOCK)) // kilit zaten Park şeridinde
+        assertEquals("screen_off", slot.id)
+        assertEquals("drive_mode_2", SahneSlots.newId(d, WidgetType.DRIVE_MODE)) // sürüş modu zaten Park şeridinde
         assertEquals("app_2", SahneSlots.newId(SahneSlots.set(d, ref, SahneSlot("app", WidgetType.APP)), WidgetType.APP))
         assertNull(SahneSlots.get(SahneSlots.set(e, ref, null), ref))
+    }
+
+    @Test
+    fun oldLockSlotBecomesDriveModeWhenFree() {
+        // Eski Park varsayılanı: kilit 5. yuvada, sürüş modu yok → kilit yerine sürüş modu.
+        val old = "v1|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,rear_speaker~rear_speaker~," +
+            "app~app_pair~a.b+c.d,lock~lock~,seat_passenger~seat_passenger~"
+        val d = SahneSlots.decode(old)!!
+        assertEquals(
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            d.strip.map { it?.type },
+        )
+        assertEquals("drive_mode", d.strip[4]?.id)
+        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d")), d)
+        assertEquals(d, SahneSlots.decode(SahneSlots.encode(d)))
+    }
+
+    @Test
+    fun oldLockSlotEmptiesWhenDriveModeIsPlaced() {
+        val d = SahneSlots.decode("v1|||lock~lock~,drive_mode~drive_mode~,lock~lock2~,,,")!!
+        assertEquals(listOf(null, WidgetType.DRIVE_MODE, null, null, null, null), d.strip.map { it?.type })
+        // Sürüş modu yoksa yalnızca ilk kilit döner, ikincisi boşalır.
+        val e = SahneSlots.decode("v1|||,lock~lock~,,lock~l2~,,")!!
+        assertEquals(listOf(null, WidgetType.DRIVE_MODE, null, null, null, null), e.strip.map { it?.type })
+    }
+
+    @Test
+    fun migrateLockLeavesLayoutsWithoutLockUntouched() {
+        val d = SahneSlots.defaultDrive(apps)
+        assertTrue(d === SahneSlots.migrateLock(d))
     }
 
     @Test

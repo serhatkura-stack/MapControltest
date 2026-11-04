@@ -38,10 +38,13 @@ const val STRIP_SLOTS = 6
  * sahnenin kendisidir); Serbest ızgara tüm kataloğu kullanmaya devam eder. Her listelenen tür en az birine sığar (SahneSlotsTest).
  */
 object SahneForm {
-    /** Şerit (küçük) için izinli türler, seçicideki sırayla. */
+    /**
+     * Şerit (küçük) için izinli türler, seçicideki sırayla. Kapı kilidi yok: sahnenin sağ üstündeki "Kilitli" hapı aynı işi
+     * görür (4 Kasım kararı; çift olmasın). Eski kayıtlardaki kilit yuvası [migrateLock] ile sürüş moduna döner.
+     */
     val STRIP_TYPES: List<WidgetType> = listOf(
         WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
-        WidgetType.LOCK, WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
+        WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
         WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
         WidgetType.CLUSTER_MIRROR,
     )
@@ -109,7 +112,8 @@ object SahneSlots {
     /**
      * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şeritte iki uçta koltuklar (sol direksiyonlu kabine
      * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), arka hoparlör
-     * (arkada uyuyan çocukla beklerken), iki uygulama (yola çıkmadan müzik/harita) ve kapı kilidi (inerken/beklerken).
+     * (arkada uyuyan çocukla beklerken), iki uygulama (yola çıkmadan müzik/harita) ve sürüş modu (kapı kilidi sahnenin
+     * sağ üstündeki hapta; şeritte çift olmasın).
      */
     fun defaultPark(appPackages: List<String> = emptyList()): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
@@ -119,7 +123,7 @@ object SahneSlots {
             SahneSlot("trunk", WidgetType.TRUNK),
             SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
-            SahneSlot("lock", WidgetType.LOCK),
+            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
             SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
         ),
     )
@@ -190,7 +194,25 @@ object SahneSlots {
             return SahneSlot(id, type, f.getOrNull(2)?.ifEmpty { null })
         }
         val strip = parts[3].split(",").map { slot(it) }
-        return sanitize(SahneLayout(slot(parts[1]), slot(parts[2]), strip))
+        return sanitize(migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip)))
+    }
+
+    /**
+     * Kapı kilidi artık şeritte yok (sahnedeki "Kilitli" hapı yeterli): eski kayıttaki ilk kilit yuvası, sürüş modu düzende
+     * yoksa sürüş moduna döner, varsa boşalır; ikinci ve sonraki kilit yuvaları da boşalır. Kilit yoksa düzen aynen döner.
+     */
+    fun migrateLock(layout: SahneLayout): SahneLayout {
+        if (layout.strip.none { it?.type == WidgetType.LOCK }) return layout
+        var hasMode = layout.slots().any { it.type == WidgetType.DRIVE_MODE }
+        var out = layout
+        layout.strip.forEachIndexed { i, s ->
+            if (s?.type != WidgetType.LOCK) return@forEachIndexed
+            val ref = SahneSlotRef(SahneSlotKind.STRIP, i)
+            val cleared = set(out, ref, null)
+            out = if (hasMode) cleared else set(cleared, ref, SahneSlot(newId(cleared, WidgetType.DRIVE_MODE), WidgetType.DRIVE_MODE))
+            hasMode = true
+        }
+        return out
     }
 
     /** Yeni yuva kimliği: tür anahtarı, gerekirse sıra eki (APP birden çok olabilir). */
