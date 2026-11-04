@@ -19,4 +19,18 @@
     <string name="launcher_mini_nav_km" formatted="true">%1$s km</string>
     <string name="launcher_mini_nav_eta" formatted="true">Varış %1$s</string>
     <string name="launcher_mini_title">Mini gösterge</string>
+    <string name="launcher_mini_turn_straight">Düz devam</string>
+    <string name="launcher_mini_turn_slight_left">Hafif sola</string>
+    <string name="launcher_mini_turn_slight_right">Hafif sağa</string>
+    <string name="launcher_mini_turn_left">Sola dönün</string>
+    <string name="launcher_mini_turn_right">Sağa dönün</string>
+    <string name="launcher_mini_turn_hard_left">Keskin sola</string>
+    <string name="launcher_mini_turn_hard_right">Keskin sağa</string>
+    <string name="launcher_mini_turn_uturn">U dönüşü</string>
+    <string name="launcher_mini_turn_roundabout">Kavşak</string>
+    <string name="launcher_mini_turn_exit_left">Soldan çıkın</string>
+    <string name="launcher_mini_turn_exit_right">Sağdan çıkın</string>
+    <string name="launcher_mini_turn_ferry">Feribot</string>
+    <string name="launcher_mini_turn_finish">Varış noktası</string>
+    <string name="launcher_mini_turn_waypoint">Ara nokta</string>
 </resources>

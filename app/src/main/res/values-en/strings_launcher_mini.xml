@@ -19,4 +19,18 @@
     <string name="launcher_mini_nav_km" formatted="true">%1$s km</string>
     <string name="launcher_mini_nav_eta" formatted="true">Arrive %1$s</string>
     <string name="launcher_mini_title">Mini dashboard</string>
+    <string name="launcher_mini_turn_straight">Continue straight</string>
+    <string name="launcher_mini_turn_slight_left">Keep left</string>
+    <string name="launcher_mini_turn_slight_right">Keep right</string>
+    <string name="launcher_mini_turn_left">Turn left</string>
+    <string name="launcher_mini_turn_right">Turn right</string>
+    <string name="launcher_mini_turn_hard_left">Sharp left</string>
+    <string name="launcher_mini_turn_hard_right">Sharp right</string>
+    <string name="launcher_mini_turn_uturn">U-turn</string>
+    <string name="launcher_mini_turn_roundabout">Roundabout</string>
+    <string name="launcher_mini_turn_exit_left">Exit left</string>
+    <string name="launcher_mini_turn_exit_right">Exit right</string>
+    <string name="launcher_mini_turn_ferry">Ferry</string>
+    <string name="launcher_mini_turn_finish">Destination</string>
+    <string name="launcher_mini_turn_waypoint">Waypoint</string>
 </resources>

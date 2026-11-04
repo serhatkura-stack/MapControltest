@@ -121,4 +121,16 @@ class MiniDashLogicTest {
         assertFalse(m.showArtwork)
         assertTrue(m.showLabels)
     }
+
+    // --- Gerçek navigasyon kaynağı ---
+
+    @Test fun navStateBecomesHint() {
+        assertNull(MiniNav.hint(NavigationState.NONE, { "x" }, { "Çıkış $it" }))
+        val h = MiniNav.hint(NavigationState.DEMO, { if (it == NavManeuver.RIGHT) "Sağa dönün" else null }, { "Çıkış $it" })!!
+        assertEquals("Sağa dönün · Atatürk Cd.", h.maneuver)
+        assertEquals(300, h.distanceM)
+        assertEquals(14 * 60 + 52, h.arrivalMinutesOfDay)
+        assertNull(MiniNav.minutesOfDay("25:00"))
+        assertEquals(5, MiniNav.minutesOfDay("0:05"))
+    }
 }

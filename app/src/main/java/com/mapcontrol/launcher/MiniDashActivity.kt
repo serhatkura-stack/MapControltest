@@ -38,8 +38,9 @@ import java.util.Date
  * (launcher) kendisi bölünemediği için bu etkinlik FrostNav'ın serbest pencere bölmesinde ya da uygulama listesinden açılır.
  *
  * Yukarıdan aşağı: saat + menzil + yakıt ("Tam ekran" düğmesiyle), kısa medya (başlık/sanatçı, önceki/oynat/sonraki),
- * navigasyon satırı (yalnızca bir kaynak varken, [MiniNavSource]), uyarı satırı (yalnızca başka yerde görünmeyenler,
- * [MiniAlerts]) ve iki büyük hızlı tuş: sürücü koltuk ısıtma, yolcu koltuk soğutma. Klima yok (fabrika çubuğunda).
+ * navigasyon satırı (Yandex rotası varken, [NavigationMiniSource]), uyarı şeridi (yalnızca başka yerde görünmeyenler,
+ * [MiniAlerts]; Sahne ile aynı [StageStrip]) ve iki büyük hızlı tuş: sürücü koltuk ısıtma, yolcu koltuk soğutma (Sahne koltuk
+ * görselleriyle). Klima yok (fabrika çubuğunda).
  *
  * Veri kaynakları ana ekranınkilerle aynıdır ve paylaşılır ([VehicleMetricsRepository], [TripSource], [ExtraSource],
  * [LauncherMediaController]); koltuk tuşları [SeatHeatModel] üzerinden yazar, yani yazma kapıları (LauncherEdition, test
@@ -64,6 +65,7 @@ class MiniDashActivity : Activity() {
     private var lastAlerts: List<MiniAlerts.Item>? = null
     private var lastMedia: MediaUi? = null
     private var layoutNow: MiniLayout? = null
+    private var detail: CarDetailSheet? = null
 
     private val metricsListener = VehicleMetricsRepository.Listener { s -> main.post { if (started && !LauncherDemo.enabled) { snapshot = s; bindTop() } } }
     private val tripListener = TripSource.Listener { if (it != trip) { trip = it; bindTop(); bindAlerts() } }
@@ -96,8 +98,7 @@ class MiniDashActivity : Activity() {
     private lateinit var navManeuver: TextView
     private lateinit var navDistance: TextView
     private lateinit var navEta: TextView
-    private lateinit var alertRow: LinearLayout
-    private lateinit var alertText: TextView
+    private lateinit var alertRow: StageStrip
     private lateinit var toggles: LinearLayout
     private lateinit var heatTile: SeatToggle
     private lateinit var ventTile: SeatToggle
@@ -108,7 +109,7 @@ class MiniDashActivity : Activity() {
         // Demo bayrakları LauncherDemo'nun kendi okuyucularıyla (yalnızca debug derlemede açılır).
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyPreview(intent)
-        nav = navSourceFactory(intent)
+        nav = navSourceFactory(this, intent)
         media = LauncherMediaController(this)
         val io = LauncherIo.serial()
         seatHeat = SeatHeatModel(this, vent = false, io = io) { heatTile.bind(it.driver, it.connected) }
@@ -123,8 +124,8 @@ class MiniDashActivity : Activity() {
         setIntent(intent)
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyPreview(intent)
-        val nextNav = navSourceFactory(intent)
-        if (nextNav !== nav) {
+        val nextNav = navSourceFactory(this, intent)
+        if (nextNav.javaClass != nav.javaClass) {
             if (started) nav.stop()
             nav = nextNav
             if (started) nav.start(navListener)
@@ -166,6 +167,12 @@ class MiniDashActivity : Activity() {
         nav.stop()
         main.removeCallbacksAndMessages(null)
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        detail?.dialog?.dismiss()
+        detail = null
+        super.onDestroy()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -216,37 +223,26 @@ class MiniDashActivity : Activity() {
         rangeValue.setTextColor(if (low) Sahne.AMBER else Sahne.NUMERAL)
     }
 
+    /** Uyarı şeridi (Sahne ile aynı görünüş ve kurallar, [StageStrip]); hiç uyarı yoksa gizli. */
     private fun bindAlerts() {
+        alertRow.setDriving(if (LauncherDemo.enabled) LauncherDemo.moving == true else trip.moving == true)
         val all = MiniAlerts.build(extra.tires, trip.lowFuel, trip.serviceKm, trip.serviceDays, trip.pm25In)
         if (all == lastAlerts) return
         lastAlerts = all
-        if (all.isEmpty()) {
-            alertRow.visibility = View.GONE
-            return
-        }
-        val (named, more) = MiniAlerts.visible(all)
-        val parts = named.map(::alertText).toMutableList()
-        if (more > 0) parts += getString(R.string.launcher_mini_more, more)
-        alertText.text = parts.joinToString("  ·  ")
-        alertRow.contentDescription = alertText.text
-        alertRow.visibility = View.VISIBLE
+        alertRow.bind(all) { stripText(this, it) }
     }
 
-    private fun alertText(a: MiniAlerts.Item): String = when (a.kind) {
-        MiniAlerts.Kind.TIRE -> {
-            val bar = a.tireLow?.bar
-            val wheel = a.tireLow?.wheel?.let { WHEEL_NAMES.getOrNull(it) }
-            when {
-                bar != null && wheel != null -> getString(R.string.launcher_mini_alert_tire_wheel, getString(wheel), TireDecode.psi(bar))
-                bar != null -> getString(R.string.launcher_mini_alert_tire_psi, TireDecode.psi(bar))
-                else -> getString(R.string.launcher_mini_alert_tire)
-            }
+    /** Şerit dokunuşu: yakıt azda en yakın istasyon; diğerlerinde araç detayı (lastik basınçları, bakım, hava). */
+    private fun onAlertTap(item: MiniAlerts.Item?) {
+        if (item?.kind == MiniAlerts.Kind.FUEL_LOW) {
+            openNearestStation(this)
+            return
         }
-        MiniAlerts.Kind.FUEL_LOW -> getString(R.string.launcher_mini_alert_fuel)
-        MiniAlerts.Kind.SERVICE_OVERDUE -> getString(R.string.launcher_mini_alert_service_overdue)
-        MiniAlerts.Kind.SERVICE_NEAR -> a.serviceKm?.let { getString(R.string.launcher_mini_alert_service_km, it) }
-            ?: getString(R.string.launcher_mini_alert_service)
-        MiniAlerts.Kind.AIR_BAD -> getString(R.string.launcher_mini_alert_air, a.pm25 ?: 0)
+        if (detail != null || isFinishing || isDestroyed) return
+        val sheet = CarDetailSheet(this)
+        detail = sheet
+        sheet.bind(CarDetail.model(null, if (LauncherDemo.enabled) ReadOnlyDemo.extra() else extra, trip, trip.lowFuel), emptySet())
+        sheet.show { detail = null }
     }
 
     private fun bindNav() {
@@ -419,30 +415,16 @@ class MiniDashActivity : Activity() {
         }
         column.addView(navRow, LinearLayout.LayoutParams(MATCH, dp(68)).apply { topMargin = dp(12) })
 
-        // Uyarı satırı (yalnızca bir şey varken).
-        alertText = sahneText(this, 20f, Sahne.AMBER, 500).apply { ellipsize = TextUtils.TruncateAt.END }
-        alertRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = dpF(Sahne.PILL_RADIUS_DP)
-                setColor(Sahne.AMBER_SOFT)
-                setStroke(dp(1), Sahne.AMBER_LINE)
-            }
-            setPadding(dp(18), 0, dp(20), 0)
-            addView(ImageView(context).apply {
-                setImageResource(R.drawable.ic_mdi_alert)
-                imageTintList = ColorStateList.valueOf(Sahne.AMBER)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(10) })
-            addView(alertText, LinearLayout.LayoutParams(0, WRAP, 1f))
-            visibility = View.GONE
-        }
-        column.addView(alertRow, LinearLayout.LayoutParams(MATCH, dp(48)).apply { topMargin = dp(12) })
+        // Uyarı şeridi (yalnızca bir şey varken; Sahne'deki şeritle aynı).
+        alertRow = StageStrip(this) { onAlertTap(it) }
+        column.addView(alertRow, LinearLayout.LayoutParams(WRAP, dp(StageStrip.HEIGHT_DP)).apply {
+            topMargin = dp(12)
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
 
         // Hızlı tuşlar.
-        heatTile = SeatToggle(this, getString(R.string.launcher_mini_seat_heat_driver), Sahne.AMBER) { seatHeat.cycle(driver = true) }
-        ventTile = SeatToggle(this, getString(R.string.launcher_mini_seat_cool_passenger), Sahne.COOL) { seatVent.cycle(driver = false) }
+        heatTile = SeatToggle(this, getString(R.string.launcher_mini_seat_heat_driver), Sahne.AMBER, vent = false) { seatHeat.cycle(driver = true) }
+        ventTile = SeatToggle(this, getString(R.string.launcher_mini_seat_cool_passenger), Sahne.COOL, vent = true) { seatVent.cycle(driver = false) }
         toggles = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(heatTile, LinearLayout.LayoutParams(0, MATCH, 1f))
@@ -522,14 +504,19 @@ class MiniDashActivity : Activity() {
     private fun dpF(v: Float) = (this as Context).dpF(v)
 
     /**
-     * Büyük koltuk tuşu: ikon, başlık, seviye metni ve üç seviye çizgisi. Dokunuş [onTap]'e gider (seviye döngüsü
-     * [SeatHeatModel.cycle]'da; yazma kapıları orada). Okunamıyorsa seviye "—" ve tuş sönük görünür.
+     * Büyük koltuk tuşu: Sahne şeridindeki koltuk görseli (`launcher_art_seat_*`, [SahneArt]; ısıtmada turuncu, soğutmada buz
+     * tonlu, kapalıda sönük koltuk; yolcu koltuğu yatay çevrili), başlık, seviye metni ve üç seviye çizgisi. Dokunuş [onTap]'e
+     * gider (seviye döngüsü [SeatHeatModel.cycle]'da; yazma kapıları orada). Okunamıyorsa seviye "—" ve tuş sönük görünür.
      */
-    private class SeatToggle(context: Context, label: String, private val activeColor: Int, onTap: () -> Unit) : LinearLayout(context) {
+    private class SeatToggle(context: Context, label: String, private val activeColor: Int, private val vent: Boolean, onTap: () -> Unit) : LinearLayout(context) {
         private val icon = ImageView(context).apply {
-            setImageResource(R.drawable.ic_sahne_seat)
+            scaleType = ImageView.ScaleType.FIT_CENTER
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+            // Görsel sürücü koltuğuna bakar; yolcu (soğutma) tuşunda çevrilir.
+            if (vent) scaleX = -1f
+            background = SahneArt.spotlight()
         }
+        private var artKey: String? = null
         private val title = sahneText(context, 20f, Sahne.INK_2, 500).apply {
             text = label
             ellipsize = TextUtils.TruncateAt.END
@@ -543,7 +530,7 @@ class MiniDashActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, shadow = 0f, control = true)
             setPadding(context.dp(22), 0, context.dp(22), 0)
-            addView(icon, LayoutParams(context.dp(40), context.dp(40)).apply { marginEnd = context.dp(16) })
+            addView(icon, LayoutParams(context.dp(72), context.dp(72)).apply { marginEnd = context.dp(14) })
             addView(LinearLayout(context).apply {
                 orientation = VERTICAL
                 addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
@@ -570,7 +557,20 @@ class MiniDashActivity : Activity() {
             val on = (lv ?: 0) > 0
             value.text = if (lv == null) context.getString(R.string.launcher_unavailable) else context.getString(SeatHeatModel.levelLabel(lv))
             value.setTextColor(if (on) activeColor else if (lv == null) Sahne.INK_3 else Sahne.INK)
-            icon.setTint(if (on) activeColor else Sahne.INK_3)
+            val tone = if (!on) StripTone.NORMAL else if (vent) StripTone.COOL else StripTone.HEAT
+            val art0 = SahneArt.seatKey(tone, lv ?: 0)
+            if (art0 != artKey) {
+                artKey = art0
+                val art = SahneArt.drawable(context, art0)
+                if (art != null) {
+                    icon.setImageDrawable(art)
+                    icon.imageTintList = null
+                } else {
+                    icon.setImageResource(R.drawable.ic_sahne_seat)
+                    icon.setTint(if (on) activeColor else Sahne.INK_3)
+                }
+            }
+            icon.colorFilter = SahneArt.filter(lv == null)
             pips.forEachIndexed { i, p ->
                 p.background = GradientDrawable().apply {
                     cornerRadius = context.dpF(3f)
@@ -593,14 +593,12 @@ class MiniDashActivity : Activity() {
         /** Demo navigasyon satırı: `--ez launcher_mini_demo_nav true` (yalnızca demo açıkken). */
         const val EXTRA_DEMO_NAV = "launcher_mini_demo_nav"
 
-        private val WHEEL_NAMES = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
-
         /**
-         * Navigasyon kaynağı seçimi: gerçek kaynak gelene kadar [MiniNavSource.NONE] (satır gizli). Bir kaynak eklenince yalnızca
-         * burası değişir (ör. `YandexNavSource(context)`).
+         * Navigasyon kaynağı: Yandex rehberlik bildirimi ([NavigationMiniSource] → [NavigationSource]; rota yokken satır gizli).
+         * Demo: `--ez launcher_mini_demo_nav true` sabit ipucu, `--ez launcher_demo_nav true` ana ekrandaki demo rotası.
          */
-        internal var navSourceFactory: (Intent?) -> MiniNavSource = { intent ->
-            if (LauncherDemo.enabled && intent?.getBooleanExtra(EXTRA_DEMO_NAV, false) == true) MiniNavSource.DEMO else MiniNavSource.NONE
+        internal var navSourceFactory: (Context, Intent?) -> MiniNavSource = { context, intent ->
+            if (LauncherDemo.enabled && intent?.getBooleanExtra(EXTRA_DEMO_NAV, false) == true) MiniNavSource.DEMO else NavigationMiniSource(context)
         }
     }
 }
