@@ -44,20 +44,41 @@ import java.util.concurrent.Executors
 import kotlin.math.abs
 
 /**
- * Bu sürecin spor sürüş verisi: en yüksek hız ve en iyi 0–100 ([SportSession]). Etkinliğin araç dinleyicisi her
- * örnekte besler (ekran açıkken); kadranlar buradan okur. Yalnız ana iş parçacığından kullanılır.
+ * Bu sürecin spor sürüş verisi: en yüksek hız ve en iyi 0–100 ([SportSession]); kadranlar buradan okur.
+ *
+ * Süreç düzeyinde beslenir: [start] araç deposuna kalıcı bir dinleyici ekler, ana ekran görünmezken de (sürücü çoğu zaman
+ * harita uygulamasındadır) her örnek işlenir. Yalnız okuma; örnek başına iş birkaç karşılaştırma. Sahne kapanınca ([stop])
+ * dinleyici çıkar. Yalnız ana iş parçacığından kullanılır (depo dinleyicileri ana iş parçacığında çağırır).
  */
 internal object SportSessionStore {
     val session = SportSession()
+    private var repo: VehicleMetricsRepository? = null
+    private val listener = VehicleMetricsRepository.Listener { snap -> feed(snap) }
 
-    fun feed(snap: VehicleMetricsSnapshot, rpmRaw: Int) {
-        if (!snap.connected) return
+    fun start(context: Context) {
+        if (repo != null) return
+        val r = VehicleMetricsRepository.getInstance(context.applicationContext)
+        repo = r
+        r.addListener(listener)
+    }
+
+    fun stop() {
+        repo?.removeListener(listener)
+        repo = null
+    }
+
+    private fun feed(snap: VehicleMetricsSnapshot) {
+        val now = SystemClock.elapsedRealtime()
+        // Servis yok (kontak kapanınca düşebilir): kapalı sayılır, yeni sürüş sayacı böylece işler.
+        if (!snap.connected) { session.update(now, null, 0); return }
+        // Gösterge hızı (aracın kadranıyla aynı; bkz. [SportSession]).
         val speed = when {
             VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed) -> snap.preferredSpeed()
             else -> null
         }
-        val rpm = if (VehicleMetricsSnapshot.isValid(rpmRaw)) SportMath.rpm(rpmRaw) else null
-        session.update(SystemClock.elapsedRealtime(), speed, rpm)
+        val raw = repo?.getCombined(ReadOnlyID.ID_ENGINE_RPM) ?: return
+        val rpm = if (VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
+        session.update(now, speed, rpm)
     }
 }
 
@@ -108,21 +129,44 @@ internal class SportStageView(
         background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(SportInk.RED_HOT) }
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-    private val gValue = sahneText(activity, 15f, SportInk.INK_3, 400, dayBump = false).apply { gravity = Gravity.CENTER }
-    private val innerInstant = sahneText(activity, 24f, SportInk.INK_2, 300, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+    private val gValue = sahneText(activity, 28f, SportInk.INK_2, 300, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+    private val innerInstant = sahneText(activity, 40f, SportInk.INK_2, 300, -0.02f, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
     private val media = SportMediaDial(activity)
     private val car = CarStageView(activity).apply {
         contentDescription = activity.getString(R.string.launcher_sahne_car)
         isClickable = true
         setOnClickListener { onCarTap() }
+        // Araç kadranı daha aydınlık (üstten ışık): gövde donanım katmanında bir kez parlatılır (renk matrisi), kare başına iş yok.
+        setLayerType(View.LAYER_TYPE_HARDWARE, Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setScale(CAR_LIFT, CAR_LIFT, CAR_LIFT, 1f) })
+        })
     }
+    private val carLight = CarLightView(activity)
     private val glows = ArrayList<GlowView>()
-    private val live: List<View> get() = listOfNotNull(gear, gValue.takeIf { hasG }, gDot.takeIf { hasG }, innerInstant.takeIf { !hasG }, media, car) + values.values
+    private val live: List<View> get() = listOfNotNull(gear, gValue.takeIf { hasG }, gDot.takeIf { hasG }, innerInstant.takeIf { !hasG }, media, car, carLight) + values.values
 
     private var visibleNow = false
     private var sweeping = false
     private var shownRpm = 0f
-    private var needleAnim: ValueAnimator? = null
+    // Tek ibre animatörü (10 Hz takipte her seferinde yenisi kurulmaz): başlangıç/hedef alanlardan okunur.
+    private var needleFrom = 0f
+    private var needleTo = 0f
+    private var needleEnd: (() -> Unit)? = null
+    private var needleCancelled = false
+    private val needleAnim: ValueAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+        addUpdateListener {
+            shownRpm = needleFrom + (needleTo - needleFrom) * (it.animatedValue as Float)
+            needle.rotation = SportMath.needleDeg(shownRpm)
+        }
+        addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationCancel(animation: Animator) { needleCancelled = true }
+            override fun onAnimationEnd(animation: Animator) {
+                val end = needleEnd
+                needleEnd = null
+                if (!needleCancelled) end?.invoke()
+            }
+        })
+    }
     private val gFilter = GFilter(linear = linearSensor != null)
     private var lastText = HashMap<View, String>()
 
@@ -137,6 +181,7 @@ internal class SportStageView(
         }
         addView(media)
         addView(car)
+        addView(carLight)
         values.values.forEach { addView(it) }
         if (hasG) { addView(gValue); addView(gDot) }
         else addView(innerInstant)
@@ -167,15 +212,21 @@ internal class SportStageView(
         sensors?.unregisterListener(sensorListener)
         main.removeCallbacks(tick)
         main.removeCallbacks(gPost)
+        // Bekleyen G güncellemesi iptal edildi: bayrak da sıfırlanır, yoksa geri gelince nokta donar.
+        gPending = false
     }
 
     /** Spor kapandı: büyük bitmap bırakılır (4–6 MB), yeniden açılınca arka planda yeniden çizilir. */
     fun release() {
         onHidden()
-        needleAnim?.cancel()
+        needleEnd = null
+        needleAnim.cancel()
         glows.forEach { it.animate().cancel() }
         art = null
         artKey = 0
+        released = true
+        readyWaiters.clear()
+        SportGroundImage.release()
         invalidate()
     }
 
@@ -237,29 +288,24 @@ internal class SportStageView(
         v.text = s
     }
 
-    private fun moveNeedle(rpm: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DecelerateInterpolator(), end: (() -> Unit)? = null) {
-        if (abs(rpm - shownRpm) < 10f && end == null && needleAnim?.isRunning != true) return
-        needleAnim?.cancel()
-        val from = shownRpm
-        needleAnim = ValueAnimator.ofFloat(from, rpm).apply {
-            duration = ms
-            startDelay = delay
-            interpolator = interp
-            addUpdateListener {
-                shownRpm = it.animatedValue as Float
-                needle.rotation = SportMath.needleDeg(shownRpm)
-            }
-            if (end != null) addListener(object : AnimatorListenerAdapter() {
-                private var cancelled = false
-                override fun onAnimationCancel(animation: Animator) { cancelled = true }
-                override fun onAnimationEnd(animation: Animator) { if (!cancelled) end() }
-            })
-            start()
-        }
+    private fun moveNeedle(rpm: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DECEL, end: (() -> Unit)? = null) {
+        if (abs(rpm - shownRpm) < 10f && end == null && !needleAnim.isStarted) return
+        // Süren hareketin bitiş işi düşer (yerine yenisi geldi).
+        needleEnd = null
+        needleAnim.cancel()
+        needleCancelled = false
+        needleFrom = shownRpm
+        needleTo = rpm
+        needleEnd = end
+        needleAnim.duration = ms
+        needleAnim.startDelay = delay
+        needleAnim.interpolator = interp
+        needleAnim.start()
     }
 
     private fun snapNeedle(rpm: Float) {
-        needleAnim?.cancel()
+        needleEnd = null
+        needleAnim.cancel()
         shownRpm = rpm
         needle.rotation = SportMath.needleDeg(rpm)
     }
@@ -329,13 +375,13 @@ internal class SportStageView(
                 }.start()
             }
         }
-        moveNeedle(SportMath.RPM_MAX.toFloat(), SWEEP_UP_MS, delay = SWEEP_DELAY_MS, interp = AccelerateDecelerateInterpolator()) {
+        moveNeedle(SportMath.RPM_MAX.toFloat(), SWEEP_UP_MS, delay = SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
             sweeping = false
             refresh()
-            moveNeedle(targetRpm(), SWEEP_DOWN_MS, interp = DecelerateInterpolator(1.5f))
+            moveNeedle(targetRpm(), SWEEP_DOWN_MS, interp = DECEL_SOFT)
         }
         live.forEach { v ->
-            v.animate().alpha(1f).setStartDelay(LIVE_DELAY_MS).setDuration(LIVE_FADE_MS).apply { if (v === media || v === car) withLayer() }.start()
+            v.animate().alpha(1f).setStartDelay(LIVE_DELAY_MS).setDuration(LIVE_FADE_MS).apply { if (v === media) withLayer() }.start()
         }
     }
 
@@ -344,9 +390,9 @@ internal class SportStageView(
         sweeping = true
         live.forEach { v ->
             v.animate().cancel()
-            v.animate().alpha(0f).setStartDelay(0).setDuration(OUTRO_FADE_MS).apply { if (v === media || v === car) withLayer() }.start()
+            v.animate().alpha(0f).setStartDelay(0).setDuration(OUTRO_FADE_MS).apply { if (v === media) withLayer() }.start()
         }
-        moveNeedle(0f, OUTRO_MS, interp = AccelerateDecelerateInterpolator()) {}
+        moveNeedle(0f, OUTRO_MS, interp = ACCEL_DECEL) {}
     }
 
     /** Animasyonsuz: her şey yerinde (animasyonlar kapalı ya da tema yenilemesi). */
@@ -379,28 +425,48 @@ internal class SportStageView(
     /** Durağan çizim hazır mı (boyut biliniyor ve bitmap çizildi). */
     val ready: Boolean get() = art != null
 
-    /** Bitmap hazır olunca bir kez çağrılır (hazırsa hemen). */
+    /**
+     * Bitmap hazır olunca bir kez çağrılır (hazırsa hemen). Çizim [ART_TRIES] denemede de olmazsa (bellek yetmedi)
+     * bekleyenler bırakılır ve çağrılmaz: spor ekranı boş kadranlarla açılmaz, Normal kalır.
+     */
     fun whenReady(block: () -> Unit) {
         if (art != null) { block(); return }
+        if (released) return
         readyWaiters += block
         ensureArt()
     }
 
+    /** Geçişten önce (karar süzgeci sayarken) durağan çizimi arka planda başlatır. */
+    fun prepare() {
+        ensureArt()
+    }
+
     private val readyWaiters = ArrayList<() -> Unit>()
+    private var released = false
+    private var artFailures = 0
 
     private fun ensureArt() {
         val g = geometry ?: return
         val key = (g.w.toLong() shl 32) or g.h.toLong()
         if (artKey == key && art != null) return
-        if (rendering) return
+        if (rendering || released || artFailures >= ART_TRIES) return
         rendering = true
         val ctx = activity.applicationContext
         io.execute {
+            // Kök zemin görseli de burada (arka planda) bir kez çözülür; geçişte ana iş parçacığı beklemez.
+            SportGroundImage.load(ctx)
             val bmp = try { SportArt.render(ctx, g) } catch (t: Throwable) { null }
             main.post {
                 rendering = false
-                if (bmp == null) return@post
+                if (released) return@post
+                if (bmp == null) {
+                    artFailures++
+                    if (artFailures < ART_TRIES) main.postDelayed({ ensureArt() }, ART_RETRY_MS)
+                    else readyWaiters.clear()
+                    return@post
+                }
                 if (geometry?.let { it.w == g.w && it.h == g.h } != true) { ensureArt(); return@post }
+                artFailures = 0
                 art = bmp
                 artKey = key
                 invalidate()
@@ -440,15 +506,17 @@ internal class SportStageView(
             v.measure(exactly((d.r * 1.6f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         }
         g.sub(SportGeometry.Kind.G)?.let { d ->
-            val ds = (d.r * 0.14f).toInt()
+            val ds = (d.r * 0.15f).toInt()
             gDot.measure(exactly(ds), exactly(ds))
-            gValue.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * 0.14f)
-            gValue.measure(exactly((d.r).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+            gValue.setTextSize(TypedValue.COMPLEX_UNIT_PX, d.r * SportGeometry.G_VALUE)
+            gValue.measure(exactly((d.r * 1.0f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         }
         if (!hasG) {
-            innerInstant.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.rpmFace * 0.12f)
-            innerInstant.measure(exactly((g.rpmFace * 0.36f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+            innerInstant.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.rpmFace * SportGeometry.INNER_VALUE)
+            innerInstant.measure(exactly((g.rpmFace * 0.40f).toInt()), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         }
+        val lr = (g.car.r * 2).toInt()
+        carLight.measure(exactly(lr), exactly(lr))
         glows.forEach { v ->
             val s = (v.dial.r * 2 + v.pad * 2).toInt()
             v.measure(exactly(s), exactly(s))
@@ -485,8 +553,9 @@ internal class SportStageView(
         }
         g.sub(SportGeometry.Kind.G)?.let { d ->
             centerAt(gDot, d.cx, d.cy)
-            centerAt(gValue, d.cx, d.cy + d.r * 0.72f)
+            centerAt(gValue, d.cx, d.cy + d.r * SportGeometry.G_VALUE_Y)
         }
+        centerAt(carLight, g.car.cx, g.car.cy)
         if (!hasG) centerAt(innerInstant, g.rpm.cx, g.innerInstantY())
         glows.forEach { centerAt(it, it.dial.cx, it.dial.cy) }
     }
@@ -511,6 +580,16 @@ internal class SportStageView(
         const val LIVE_FADE_MS = 230L
         const val OUTRO_FADE_MS = 300L
         const val OUTRO_MS = 480L
+
+        /** Durağan çizim deneme sayısı ve aralığı (bellek yetmezse). */
+        const val ART_TRIES = 3
+        const val ART_RETRY_MS = 1_000L
+        /** Araç gövdesi parlaklık çarpanı (üstten ışık). */
+        const val CAR_LIFT = 1.3f
+
+        private val DECEL = DecelerateInterpolator()
+        private val DECEL_SOFT = DecelerateInterpolator(1.5f)
+        private val ACCEL_DECEL = AccelerateDecelerateInterpolator()
 
         /** Arka plan işleri (durağan çizim, kapak küçültme): tek iş parçacığı. */
         internal val io = Executors.newSingleThreadExecutor { r -> Thread(r, "sport-art").apply { isDaemon = true } }
@@ -613,7 +692,7 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         imageTintList = android.content.res.ColorStateList.valueOf(SportInk.INK_3)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-    private val source = sahneText(activity, 16f, SportInk.INK_3, 500, dayBump = false).apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+    private val source = sahneText(activity, 17f, SportInk.INK_2, 500, dayBump = false).apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
     private val title = sahneText(activity, TITLE_SP, SportInk.INK, 600, dayBump = false).apply {
         gravity = Gravity.CENTER; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
         breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
@@ -699,7 +778,7 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         }
         val resume = if (mode == Mode.IDLE) controller.lastSourcePackage() else null
         val src = when (mode) { Mode.SESSION -> s.source; Mode.IDLE -> resume; Mode.NO_ACCESS -> null }
-        source.text = src?.let { appLabel(it) } ?: ""
+        bindSource(src)
         title.text = when (mode) {
             Mode.SESSION -> s.title ?: ""
             Mode.IDLE -> activity.getString(R.string.launcher_media_idle_title)
@@ -749,6 +828,39 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         var pos = basePos
         if (playing == true && !LauncherDemo.enabled) pos += SystemClock.elapsedRealtime() - baseAt
         ring.set(if (duration > 0) (pos.toFloat() / duration).coerceIn(0f, 1f) else 0f)
+    }
+
+    private var sourcePkg: String? = null
+    private var sourceIcon: android.graphics.drawable.Drawable? = null
+
+    /** Kaynak: küçük uygulama ikonu + adı (ikon arka planda çözülür, yazının hemen solunda ImageSpan olarak). */
+    private fun bindSource(pkg: String?) {
+        if (pkg != sourcePkg) {
+            sourcePkg = pkg
+            sourceIcon = null
+            if (pkg != null) SportStageView.io.execute {
+                val d = try { com.mapcontrol.util.AppIconHelper.load(activity, pkg) } catch (e: Exception) { null }
+                handler.post {
+                    if (sourcePkg != pkg || d == null) return@post
+                    sourceIcon = d
+                    showSource()
+                }
+            }
+        }
+        showSource()
+    }
+
+    private fun showSource() {
+        val pkg = sourcePkg
+        if (pkg == null) { source.text = ""; return }
+        val label = appLabel(pkg)
+        val icon = sourceIcon
+        if (icon == null) { source.text = label; return }
+        val size = (source.textSize * 1.05f).toInt()
+        icon.setBounds(0, 0, size, size)
+        source.text = android.text.SpannableStringBuilder("\u00A0\u00A0").append(label).apply {
+            setSpan(android.text.style.ImageSpan(icon, android.text.style.DynamicDrawableSpan.ALIGN_CENTER), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     private fun appLabel(pkg: String): String = try {
@@ -853,7 +965,7 @@ internal class ProgressRing(context: Context) : View(context) {
         if (fraction <= 0f) return
         val r = width / 2f
         val rr = r * SportGeometry.PROGRESS_R
-        paint.strokeWidth = r * SportGeometry.PROGRESS_W * 1.5f
+        paint.strokeWidth = r * SportGeometry.PROGRESS_W * 1.15f
         rect.set(r - rr, r - rr, r + rr, r + rr)
         canvas.drawArc(rect, -90f, 360f * fraction, false, paint)
     }

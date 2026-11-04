@@ -115,12 +115,13 @@ class SahneScreen(
     /**
      * Orta alanı spor ekranıyla değiştirir ([on]) ya da geri getirir. Sahne yuvalarındaki widget'lar spor açıkken durur
      * (araç sahnesi açık kapı bilgisini spor araç modülüne verdiği için çalışmaya devam eder); geri gelince aynen sürer.
+     * Düzenleme modunda spor açılmaz: false (çağıran çubukları da değiştirmez).
      */
-    fun showSport(on: Boolean) {
-        if (on == sportShown) return
-        if (on && editMode) return
+    fun showSport(on: Boolean): Boolean {
+        if (on == sportShown) return true
+        if (on && editMode) return false
         sportShown = on
-        val v = if (on) sportStage() else sport ?: return
+        val v = if (on) sportStage() else sport ?: return true
         val normal = if (on) View.INVISIBLE else View.VISIBLE
         stage.visibility = normal
         leftPanel.visibility = normal
@@ -136,6 +137,7 @@ class SahneScreen(
                 hosted.values.flatten().forEach { it.onVisible() }
             }
         }
+        return true
     }
 
     /** Spor tamamen kapandıktan sonra: büyük bitmap ve görünüm bırakılır. */

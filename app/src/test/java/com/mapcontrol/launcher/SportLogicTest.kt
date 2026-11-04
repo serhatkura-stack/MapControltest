@@ -69,7 +69,13 @@ class SportLogicTest {
         assertEquals("D4", SportMath.gearText(5, 4))
         assertEquals("D", SportMath.gearText(5, 0))
         assertEquals("—", SportMath.gearText(null))
-        assertEquals("—", SportMath.gearText(4))
+        // Sürüşte D sinyali 6/7'ye de geçer (araçta görüldü); eski biçimleyici 4'ü D sayar: hepsi "D", kademe uydurulmaz.
+        assertEquals("D", SportMath.gearText(4))
+        assertEquals("D", SportMath.gearText(6))
+        assertEquals("D", SportMath.gearText(7))
+        assertEquals("D", SportMath.gearText(11))
+        assertEquals("—", SportMath.gearText(0))
+        assertEquals("—", SportMath.gearText(16))
     }
 
     // --- 0–100 ve en yüksek hız ---
@@ -90,9 +96,10 @@ class SportLogicTest {
         val s = SportSession()
         s.update(0, 0, 800)
         s.update(500, 0, 800)
-        // 0'dan çıkış t=600 (ilk örnek), 100 km/sa t=600+99*100.
+        // Son 0 örneği t=500, ilk örnek t=600 (1 km/sa), ikinci t=700 (2): geriye uzatma kalkışı t=500 bulur;
+        // 100 km/sa t=600+99*100.
         accelerate(s, 500, 100)
-        assertEquals(9_900L, s.best0to100Ms)
+        assertEquals(10_000L, s.best0to100Ms)
         assertEquals(100, s.maxSpeedKmh)
         assertFalse(s.timing)
     }
@@ -100,11 +107,41 @@ class SportLogicTest {
     @Test fun crossingIsInterpolated() {
         val s = SportSession()
         s.update(0, 0, 800)
-        s.update(1_000, 20, 3_000) // başlangıç
-        s.update(8_000, 90, 4_000)
+        s.update(1_000, 20, 3_000) // başlangıç (kalkış 0..1 000 arasında)
+        s.update(8_000, 90, 4_000) // geriye uzatma t=0'ın da öncesini verir: son 0 örneğine (0) kırpılır
         s.update(9_000, 110, 4_500) // 100'e yarı yolda: 8 500
-        assertEquals(7_500L, s.best0to100Ms)
+        assertEquals(8_500L, s.best0to100Ms)
         assertEquals(110, s.maxSpeedKmh)
+    }
+
+    @Test fun sparseSamplesEstimateTheLaunch() {
+        // ~1 Hz okuma: gerçek kalkış t=500, sabit 12 km/sa/sn (gerçek 0–100 = 8 333 ms).
+        val s = SportSession()
+        s.update(0, 0, 800)
+        var t = 1_000L
+        while (t <= 9_000L) {
+            s.update(t, (12 * (t - 500) / 1000).toInt(), 3_000)
+            t += 1_000
+        }
+        assertEquals(8_333.0, s.best0to100Ms!!.toDouble(), 5.0)
+    }
+
+    @Test fun singleMovingSampleUsesMidpoint() {
+        // İkinci hareket örneği gelmeden 100 aşılırsa (aradeğerle) kalkış son 0 ile ilk hareket örneğinin ortası.
+        val s = SportSession()
+        s.update(0, 0, 800)
+        s.update(1_000, 10, 3_000)
+        s.update(9_000, 10, 4_000) // hız aynı: kestirim yapılamaz
+        s.update(10_000, 110, 4_500) // 100'e geçiş: 9 900
+        assertEquals(9_400L, s.best0to100Ms)
+    }
+
+    @Test fun firstSampleAlreadyAboveTargetDoesNotTime() {
+        val s = SportSession()
+        s.update(0, 0, 800)
+        s.update(10_000, 104, 4_000)
+        s.update(11_000, 110, 4_000)
+        assertNull(s.best0to100Ms)
     }
 
     @Test fun rollingStartDoesNotTime() {
@@ -162,6 +199,26 @@ class SportLogicTest {
         assertNull(s.best0to100Ms)
     }
 
+    @Test fun newDriveWithChangeOnlySamples() {
+        // Değer yalnız değişince gelir: kapalı örnekten sonra 2 dk boyunca örnek yok, sonra motor çalışır.
+        val s = SportSession()
+        s.update(0, 0, 800)
+        accelerate(s, 0, 80)
+        s.update(30_000, 0, 0)
+        s.update(30_000 + SportSession.NEW_DRIVE_OFF_MS + 1, 0, 780)
+        assertNull(s.maxSpeedKmh)
+    }
+
+    @Test fun disconnectCountsAsOff() {
+        // Kontak kapanınca servis düşerse çağıran devir 0, hız bilinmiyor verir.
+        val s = SportSession()
+        s.update(0, 0, 800)
+        accelerate(s, 0, 90)
+        s.update(40_000, null, 0)
+        s.update(40_000 + SportSession.NEW_DRIVE_OFF_MS, 0, 760)
+        assertNull(s.maxSpeedKmh)
+    }
+
     @Test fun unknownSpeedCancelsRun() {
         val s = SportSession()
         s.update(0, 0, 800)
@@ -179,8 +236,8 @@ class SportLogicTest {
         repeat(200) { f.add(t, 0f, 8f, 5.6f); t += 66_666_000L }
         assertEquals(0f, f.lateral, 0.01f)
         assertEquals(0f, f.longitudinal, 0.01f)
-        // Ani 0,5 g yanal ivme: kısa sürede görünür.
-        repeat(8) { f.add(t, 0.5f * GFilter.G, 8f, 5.6f); t += 66_666_000L }
+        // Sola dönüş: ani 0,5 g ivme -x; yolcu sağa itilir, kısa sürede görünür.
+        repeat(8) { f.add(t, -0.5f * GFilter.G, 8f, 5.6f); t += 66_666_000L }
         assertTrue(f.lateral > 0.3f)
     }
 
@@ -189,12 +246,27 @@ class SportLogicTest {
         var t = 0L
         f.add(t, 0f, 0f, 0f)
         t += 66_666_000L
-        f.add(t, GFilter.G, 0f, 0f)
+        f.add(t, -GFilter.G, 0f, 0f)
         assertTrue(f.lateral in 0.05f..0.5f) // tek örnek sıçratmaz
-        repeat(60) { t += 66_666_000L; f.add(t, GFilter.G, 0f, -GFilter.G / 2) }
+        repeat(60) { t += 66_666_000L; f.add(t, -GFilter.G, 0f, -GFilter.G / 2) }
         assertEquals(1f, f.lateral, 0.02f)
         assertEquals(-0.5f, f.longitudinal, 0.02f)
         assertEquals(1.118f, f.magnitude, 0.03f)
+    }
+
+    @Test fun gSignsFollowFeltForce() {
+        fun settle(x: Float, z: Float): GFilter = GFilter(linear = true).also { f ->
+            var t = 0L
+            repeat(60) { f.add(t, x, 0f, z); t += 66_666_000L }
+        }
+        // Sola dönüş (ivme -x): sağa itiş, nokta sağa (+).
+        assertEquals(0.5f, settle(-0.5f * GFilter.G, 0f).lateral, 0.02f)
+        // Sağa dönüş (ivme +x): sola itiş (-).
+        assertEquals(-0.4f, settle(0.4f * GFilter.G, 0f).lateral, 0.02f)
+        // Fren (araç geriye ivmelenir, +z sürücüye/arkaya): öne itiş (+), ekranda nokta yukarı.
+        assertEquals(0.6f, settle(0f, 0.6f * GFilter.G).longitudinal, 0.02f)
+        // Gaz (ivme öne, -z): arkaya itiş (-), nokta aşağı.
+        assertEquals(-0.3f, settle(0f, -0.3f * GFilter.G).longitudinal, 0.02f)
     }
 
     // --- Biçim ---

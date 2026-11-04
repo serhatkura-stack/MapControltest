@@ -64,27 +64,39 @@ object SportMath {
     fun needleDeg(rpm: Float): Float = START_DEG + SWEEP_DEG * (rpm.coerceIn(0f, RPM_MAX.toFloat()) / RPM_MAX)
 
     /**
-     * Vites penceresi: ReadOnly GEARBOX_STATE (26) P=1, R=2, N=3, D=5 (araçta ölçüldü). Kademe numarası bu araçta
-     * okunmuyor; biliniyorsa (demo) D'nin yanına yazılır ("D4"). Bilinmeyen durum "—".
+     * Vites penceresi: ReadOnly GEARBOX_STATE (26) P=1, R=2, N=3; D araçta 5 ölçüldü ve sürüşte 6/7'ye de geçiyor
+     * (6'nın M de olabileceği notu doğrulanmadı). Eski gösterge biçimleyicisi ([com.mapcontrol.vehicle.VehicleMetricsFormatter])
+     * 4'ü D, üstünü D+kademe sayıyor; ikisiyle de uyumlu olmak için [D_MIN]..[D_MAX] hep "D" gösterilir (kademe sinyalden
+     * çıkarılmaz; uydurma veri yok). Kademe numarası biliniyorsa (demo) yanına yazılır ("D4"). Bilinmeyen durum "—".
      */
     fun gearText(state: Int?, gearNumber: Int? = null): String = when (state) {
         1 -> "P"
         2 -> "R"
         3 -> "N"
-        5 -> if (gearNumber != null && gearNumber in 1..9) "D$gearNumber" else "D"
+        in D_MIN..D_MAX -> if (gearNumber != null && gearNumber in 1..9) "D$gearNumber" else "D"
         else -> "—"
     }
+
+    private const val D_MIN = 4
+    private const val D_MAX = 15
 }
 
 /**
  * Bu sürüşün spor verisi (saf, JVM'de sınanır): en yüksek hız ve 0–100 km/sa süresi.
  *
- * 0–100: araç durmuşken (hız 0) hız 0'dan çıkınca sayaç başlar; 100 km/sa'ya ulaşınca durur (iki örnek arası doğrusal
- * aradeğerle). Hız yeniden 0'a düşer ya da [MAX_RUN_MS] geçerse ölçüm iptal olur. Sürüşün en iyisi tutulur.
+ * Hız: çağıran gösterge hızını verir (aracın kadranıyla aynı; gerçek hızdan birkaç yüzde yüksek okur, yani 0–100 süresi
+ * gerçek 0–100'den biraz kısa çıkar). Araç hız sinyalinin (CAR_SPEED) ölçeği bu araçta doğrulanmadığı için o kullanılmıyor.
  *
- * Yeni sürüş: motor kapalı (devir 0) ve hız 0 kesintisiz [NEW_DRIVE_OFF_MS] sürdükten sonra motor çalışınca ya da araç
- * hareket edince en yüksek hız ve en iyi 0–100 sıfırlanır (kontak kapatılıp açıldı sayılır). Süreç yeniden başlayınca da
- * sıfırdır.
+ * 0–100: araç durmuşken (hız 0) hız 0'dan çıkınca ölçüm başlar; 100 km/sa'ya ulaşınca durur (iki örnek arası doğrusal
+ * aradeğerle). Kalkış anı son 0 örneği ile ilk hareket örneği arasında bir yerdedir: ikinci hareket örneği gelince ilk iki
+ * örnekten geriye doğru 0'a uzatılarak kestirilir (o aralığa kırpılır), gelmezse aralığın ortası alınır. Böylece seyrek
+ * örnekte (~1 Hz) başlangıç hatası bir örnek aralığından çok daha küçük kalır. Hız yeniden 0'a düşer ya da [MAX_RUN_MS]
+ * geçerse ölçüm iptal olur. Sürüşün en iyisi tutulur.
+ *
+ * Yeni sürüş: motor kapalı (devir 0) ve hız 0/bilinmiyor durumu ilk gözlendiği andan en az [NEW_DRIVE_OFF_MS] sonra motor
+ * çalışınca ya da araç hareket edince en yüksek hız ve en iyi 0–100 sıfırlanır (kontak kapatılıp açıldı sayılır). Örnekler
+ * yalnız değer değişince gelebilir: süre bir sonraki "açık" örnekte ölçülür, arada örnek gelmesi gerekmez. Bağlantı yoksa
+ * çağıran devir 0, hız null verir (kontak kapanınca servis düşerse de kapalı sayılır). Süreç yeniden başlayınca da sıfırdır.
  */
 class SportSession {
     var maxSpeedKmh: Int? = null
@@ -98,8 +110,12 @@ class SportSession {
     private var lastSpeed: Int? = null
     private var lastAt = 0L
     private var runStart: Long? = null
+    /** Kalkış aralığı: son 0 örneği ve ilk hareket örneği (zaman, hız); ikinci hareket örneğinde kestirim yapılır. */
+    private var zeroAt = 0L
+    private var firstAt = 0L
+    private var firstKmh = 0
+    private var refined = false
     private var offSince: Long? = null
-    private var offLongEnough = false
 
     fun reset() {
         maxSpeedKmh = null
@@ -107,7 +123,6 @@ class SportSession {
         runStart = null
         lastSpeed = null
         offSince = null
-        offLongEnough = false
     }
 
     /** Yeni örnek: [now] ms (monoton), hız km/sa (bilinmiyorsa null), devir (bilinmiyorsa null). Bir şey değiştiyse true. */
@@ -117,16 +132,15 @@ class SportSession {
         // Kontak/yeni sürüş: motor kapalı ve duruyor.
         val off = rpm == 0 && (speedKmh == null || speedKmh == 0)
         if (off) {
-            val s = offSince ?: now.also { offSince = it }
-            if (now - s >= NEW_DRIVE_OFF_MS) offLongEnough = true
+            if (offSince == null) offSince = now
         } else {
-            if (offLongEnough && ((rpm ?: 0) > 0 || (speedKmh ?: 0) > 0)) {
+            val s = offSince
+            if (s != null && now - s >= NEW_DRIVE_OFF_MS && ((rpm ?: 0) > 0 || (speedKmh ?: 0) > 0)) {
                 maxSpeedKmh = null
                 best0to100Ms = null
                 runStart = null
             }
             offSince = null
-            offLongEnough = false
         }
         if (speedKmh == null) {
             // Bilinmeyen hız ölçümü bozar: iptal.
@@ -138,19 +152,40 @@ class SportSession {
 
         val prev = lastSpeed
         val prevAt = lastAt
-        val start = runStart
         when {
             speedKmh == 0 -> runStart = null
-            start == null && prev == 0 -> runStart = now
-            start != null && now - start > MAX_RUN_MS -> runStart = null
-            start != null && speedKmh >= TARGET_KMH -> {
-                // Eşiği geçiş anı: önceki örnekle doğrusal aradeğer.
-                val at = if (prev != null && prev < TARGET_KMH && speedKmh > prev)
-                    prevAt + ((now - prevAt) * (TARGET_KMH - prev).toDouble() / (speedKmh - prev)).toLong()
-                else now
-                val run = at - start
-                if (run in 1..MAX_RUN_MS && run < (best0to100Ms ?: Long.MAX_VALUE)) best0to100Ms = run
-                runStart = null
+            runStart == null && prev == 0 -> {
+                zeroAt = prevAt
+                firstAt = now
+                firstKmh = speedKmh
+                refined = false
+                // Seyrek örnekte ilk hareket örneği zaten 100'ü aşmışsa ölçüm anlamsız: başlatılmaz.
+                runStart = if (speedKmh >= TARGET_KMH) null else prevAt + (now - prevAt) / 2
+            }
+        }
+        val start = runStart
+        if (start != null && speedKmh > 0) {
+            if (!refined && now > firstAt) {
+                // Yalnız ikinci hareket örneğinde (kalkışa en yakın, ivme en doğrusal): ilk iki örnekten hızın 0 olduğu an
+                // geriye uzatılır ve [son 0, ilk hareket] aralığına kırpılır. Hız artmadıysa orta nokta kalır.
+                if (speedKmh > firstKmh) {
+                    val back = ((now - firstAt) * firstKmh.toDouble() / (speedKmh - firstKmh)).toLong()
+                    runStart = (firstAt - back).coerceIn(zeroAt, firstAt)
+                }
+                refined = true
+            }
+            val st = runStart ?: start
+            when {
+                now - st > MAX_RUN_MS -> runStart = null
+                speedKmh >= TARGET_KMH && now > firstAt -> {
+                    // Eşiği geçiş anı: önceki örnekle doğrusal aradeğer.
+                    val at = if (prev != null && prev < TARGET_KMH && speedKmh > prev)
+                        prevAt + ((now - prevAt) * (TARGET_KMH - prev).toDouble() / (speedKmh - prev)).toLong()
+                    else now
+                    val run = at - st
+                    if (run in 1..MAX_RUN_MS && run < (best0to100Ms ?: Long.MAX_VALUE)) best0to100Ms = run
+                    runStart = null
+                }
             }
         }
         lastSpeed = speedKmh
@@ -166,11 +201,15 @@ class SportSession {
 }
 
 /**
- * G-metre süzgeci (saf, JVM'de sınanır). Girdi m/s² (cihaz ekseni x sağ, y yukarı, z ekrandan sürücüye doğru).
+ * G-metre süzgeci (saf, JVM'de sınanır). Girdi m/s², Android cihaz ekseni: x ekranın sağı, y yukarısı, z ekrandan
+ * sürücüye doğru (ekran sürücüye baktığı için +z aracın arkası). Ekran yatay doğal yönde, öne bakan konsolda varsayılır.
  *  - [linear] false (yalnız TYPE_ACCELEROMETER): yerçekimi yavaş bir alçak geçiren süzgeçle ([GRAVITY_TAU_S]) kestirilip
  *    çıkarılır; ekranın eğimi böylece sıfırlanır.
  *  - Sonuç [DISPLAY_TAU_S] ile yumuşatılır (titreşim ve yol pürüzü).
- * Çıktı g biriminde: [lateral] sağ +, [longitudinal] fren (ileri itiş) +. Eksen eşlemesi araçta doğrulanmadı.
+ * Çıktı g biriminde ve **hissedilen kuvvet** yönünde (ivmenin tersi; G-metre noktası yolcuyu iten yöne gider):
+ *  - [lateral] sağa itiş +: sola dönüşte araç sola ivmelenir (ivme -x), yolcu sağa itilir, değer +.
+ *  - [longitudinal] öne itiş +: frende araç geriye ivmelenir (ivme +z), yolcu öne itilir, değer +; gazda -.
+ * Ekranın öne/arkaya eğimi z eksenine y'nin bir kısmını karıştırır (küçük hata). Eşleme araçta doğrulanmadı (Tur 6).
  */
 class GFilter(private val linear: Boolean) {
     private val gravity = FloatArray(3)
@@ -213,8 +252,9 @@ class GFilter(private val linear: Boolean) {
     }
 
     private fun push(lx: Float, lz: Float, a: Float) {
-        // Hissedilen kuvvet ivmenin tersi: sola dönüşte (ivme -x) nokta sağa; frende (ivme +z, geriye) nokta yukarı.
-        val latG = lx / G
+        // Hissedilen kuvvet ivmenin tersi. Yanal: ivme -x (sola dönüş) → sağa itiş +. Boyuna: ivme +z (geriye, fren)
+        // zaten öne itişe denk; işaret aynı kalır.
+        val latG = -lx / G
         val lonG = lz / G
         lateral += a * (latG - lateral)
         longitudinal += a * (lonG - longitudinal)

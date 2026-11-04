@@ -31,8 +31,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val metricsListener = VehicleMetricsRepository.Listener { snap ->
         // Sürüş başlarsa (>5 km/s) düzenleme modu kaydedilip kapanır.
         if (snap.connected && snap.hasDriveMode()) observedDriveMode = snap.driveMode
-        // Spor kadranları için bu sürüşün en yüksek hızı ve 0–100 ölçümü (yalnız okuma).
-        SportSessionStore.feed(snap, metrics.getCombined(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_ENGINE_RPM))
         // Hareket: gösterge hızı > 0 (okunamıyorsa bilinmiyor; sayaçlar sıfırlanır).
         observedMoving = if (snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))) snap.preferredSpeed() > 0 else null
         window.decorView.post {
@@ -405,8 +403,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             sport = null
             SportController.rememberedSport = false
             sportGate.reset(false)
+            SportSessionStore.stop()
             return
         }
+        // En yüksek hız ve 0–100 süreç düzeyinde beslenir (ana ekran görünmezken de; yalnız okuma).
+        SportSessionStore.start(this)
         sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout })
         val keep = SportController.rememberedSport && sportAllowed() && observedSportMode() == DriveAccent.SPORT
         sportGate.reset(keep)
@@ -425,7 +426,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun sportTick() {
         val ctl = sport ?: return
         val observed = if (sportAllowed()) observedSportMode() else DriveAccent.NORMAL
-        val to = sportGate.update(System.currentTimeMillis(), observed, !editing && sheet == null) ?: return
+        // Süzgeç sayarken durağan çizim şimdiden hazırlanır; mod geri dönerse bırakılır.
+        if (observed == DriveAccent.SPORT && !editing) ctl.prepare() else ctl.idle()
+        // Monoton saat: ana ünitenin saati eşitlenince (araç saati yanlış) süzgeç sıçramasın ya da takılmasın.
+        val to = sportGate.update(android.os.SystemClock.elapsedRealtime(), observed, !editing && sheet == null) ?: return
         ctl.request(to)
     }
 
@@ -700,7 +704,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (editing) return
         if (editLocked()) return
         // Düzenleme Sahne yuvalarında yapılır: spor ekranı geçişsiz kapanır, düzenleme bitince yeniden gelir.
-        if (sport?.shown == true) { sport?.applyInstant(false); sportGate.reset(false) }
+        // Geçiş sürerken (karartmada) de kapatılır: orta alan düzenlemeye geçer, çubuklar spor kalmaz.
+        if (sport?.engaged == true) { sport?.applyInstant(false); sportGate.reset(false) }
         sahne?.let { it.editMode = true } ?: run { grid.editMode = true }
         refreshEditLayoutUi()
         dock?.setEditMode(true)

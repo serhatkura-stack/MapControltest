@@ -34,11 +34,30 @@ internal class SportController(
     private var busy = false
     private var dim: View? = null
     private var savedGround: Drawable? = null
+    /** Geçiş kuşağı: iptal edilen ya da yerine yenisi başlayan geçişin geç gelen geri çağrıları hiçbir şey yapmaz. */
+    private var gen = 0
+
+    /** Spor açık ya da açılıp kapanıyor (düzenlemeye girerken kapatılmalı). */
+    val engaged: Boolean get() = shown || busy
 
     fun request(on: Boolean) {
         target = on
         if (busy || on == shown) return
         if (on) enter() else exit()
+    }
+
+    /**
+     * Araç Spor'a geçmek üzere (karar süzgeci sayıyor): durağan çizim şimdiden arka planda hazırlanır, geçiş beklemesin.
+     * Mod geri dönerse ([idle]) hazırlanan görünüm bırakılır.
+     */
+    fun prepare() {
+        if (shown || busy) return
+        sahne()?.sportStage()?.prepare()
+    }
+
+    fun idle() {
+        if (shown || busy || target) return
+        sahne()?.dropSport()
     }
 
     /** Düzenleme/tema yenilemesi gibi durumlarda animasyonsuz uygular. */
@@ -52,30 +71,45 @@ internal class SportController(
             s?.dropSport()
             return
         }
-        // Durağan çizim hazır olunca tek seferde (boş kadranlar görünmesin).
+        // Durağan çizim hazır olunca tek seferde (boş kadranlar görünmesin). Çizim hiç olmazsa Normal kalır.
         val stage = s?.sportStage() ?: return
+        val my = gen
         stage.whenReady {
-            if (!target || shown || sahne() !== s) return@whenReady
-            swap(true)
-            stage.showInstant()
+            if (my != gen || !target || shown || busy || sahne() !== s || s.sportStage() !== stage) return@whenReady
+            if (swap(true)) stage.showInstant()
         }
     }
 
     /**
-     * Sahne/alt çubuk yeniden kuruldu (tema yerinde yenilendi): spor açıksa yeni parçalara anında uygulanır.
-     * Başlık kendi spor durumunu korur; kök zemin yeniden kurulduğu için karbon tekrar konur.
+     * Sahne/alt çubuk yeniden kuruldu (tema yerinde yenilendi): süren geçiş kesilir ve istenen son durum ([target]) yeni
+     * parçalara anında uygulanır. Başlık yeniden kurulmaz (kendi spor durumunu korur); kök zemin yeniden kurulduğu için
+     * Normal zemin yeniden saklanır.
      */
     fun onRebuilt() {
-        if (!shown) return
         cancelRunning()
-        root()?.let { r ->
-            savedGround = r.background
-            r.background = SportGround(activity)
+        if (!shown) {
+            if (target) applyInstant(true)
+            return
+        }
+        val r = root()
+        if (!target) {
+            // Çıkış sürerken yenilendi: yeni parçalar zaten Normal; yalnız başlık ve durum geri alınır.
+            shown = false
+            rememberedSport = false
+            header().setSport(false)
+            savedGround = null
+            return
+        }
+        r?.let {
+            savedGround = it.background
+            it.background = SportGround(activity)
         }
         bar()?.setSport(true)
         val s = sahne() ?: return
-        s.showSport(true)
-        s.sportStage().whenReady { s.sportStage().showInstant() }
+        if (!s.showSport(true)) { applyInstant(false); return }
+        val stage = s.sportStage()
+        val my = gen
+        stage.whenReady { if (my == gen && shown && sahne() === s) stage.showInstant() }
     }
 
     fun release() {
@@ -92,20 +126,38 @@ internal class SportController(
         val s = sahne() ?: return
         if (!animationsOn()) { applyInstant(true); return }
         busy = true
+        val my = ++gen
         val stage = s.sportStage()
         var dimmed = false
         var ready = false
         fun go() {
-            if (!dimmed || !ready || !busy) return
-            swap(true)
+            if (my != gen || !dimmed || !ready || !busy) return
+            // Örtünün altındaki an: sahne bu arada yenilendiyse ya da bırakıldıysa eski görünüm kullanılmaz.
+            val now = sahne()
+            if (now !== s || now.sportStage() !== stage || !swap(true)) { abortEnter(); return }
             stage.prepareIntro()
             stage.playIntro()
-            fade(DIM_ALPHA, 0f, IN_REVEAL_MS, 0L) { finish() }
+            fade(DIM_ALPHA, 0f, IN_REVEAL_MS, 0L) { if (my == gen) finish() }
         }
         stage.whenReady { ready = true; go() }
-        // Durağan çizim gecikirse (ör. ilk ölçüm gelmedi) karartmada takılı kalınmaz: süre dolunca yine geçilir.
-        stage.postDelayed({ if (!ready) { ready = true; go() } }, READY_TIMEOUT_MS)
+        // Durağan çizim gecikirse karartmada takılı kalınmaz: süre dolunca giriş bırakılır (Normal kalır). Çizim sonra
+        // biterse ve Spor hâlâ isteniyorsa giriş yeniden denenir (bu kez çizim hazır, bekleme yok).
+        stage.postDelayed({
+            if (my != gen || ready) return@postDelayed
+            abortEnter()
+            stage.whenReady { if (target && !shown && !busy && sahne() === s) request(true) }
+        }, READY_TIMEOUT_MS)
         fade(0f, DIM_ALPHA, IN_DIM_MS, 0L) { dimmed = true; go() }
+    }
+
+    /** Giriş yapılamadı (çizim gecikti, düzenleme açıldı): karartma kalkar, Normal kalır. */
+    private fun abortEnter() {
+        val my = ++gen
+        fade(dim?.alpha ?: 0f, 0f, IN_REVEAL_MS, 0L) {
+            if (my != gen) return@fade
+            removeDim()
+            busy = false
+        }
     }
 
     private fun exit() {
@@ -113,11 +165,14 @@ internal class SportController(
         if (s == null || !s.sportShown) { swap(false); return }
         if (!animationsOn()) { applyInstant(false); return }
         busy = true
+        val my = ++gen
         val stage = s.sportStage()
         stage.playOutro()
         fade(0f, DIM_ALPHA, OUT_DIM_MS, OUT_DIM_DELAY_MS) {
+            if (my != gen) return@fade
             swap(false)
             fade(DIM_ALPHA, 0f, OUT_REVEAL_MS, 0L) {
+                if (my != gen) return@fade
                 sahne()?.dropSport()
                 finish()
             }
@@ -130,14 +185,19 @@ internal class SportController(
         if (target != shown) request(target)
     }
 
-    /** Asıl değişim (örtünün altında, tek seferde). */
-    private fun swap(on: Boolean) {
+    /** Asıl değişim (örtünün altında, tek seferde). Orta alan spora geçemediyse (düzenleme) hiçbir şey değişmez: false. */
+    private fun swap(on: Boolean): Boolean {
+        if (on) {
+            val s = sahne() ?: return false
+            if (!s.showSport(true)) return false
+        } else {
+            sahne()?.showSport(false)
+        }
         shown = on
         rememberedSport = on
-        sahne()?.showSport(on)
         header().setSport(on)
         bar()?.setSport(on)
-        val r = root() ?: return
+        val r = root() ?: return true
         if (on) {
             savedGround = r.background
             r.background = SportGround(activity)
@@ -145,6 +205,7 @@ internal class SportController(
             savedGround?.let { r.background = it }
             savedGround = null
         }
+        return true
     }
 
     private fun fade(from: Float, to: Float, ms: Long, delay: Long, end: () -> Unit) {
@@ -174,6 +235,7 @@ internal class SportController(
     }
 
     private fun cancelRunning() {
+        gen++
         if (!busy) { removeDim(); return }
         busy = false
         removeDim()

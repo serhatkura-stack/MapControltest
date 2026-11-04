@@ -2,14 +2,10 @@ package com.mapcontrol.launcher
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.ColorFilter
-import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
-import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
 import android.graphics.Rect
@@ -24,15 +20,15 @@ import kotlin.math.sin
 
 /**
  * Spor modu (kronograf dili) renkleri ve çizim yardımcıları. Kırmızı-turuncu yalnız ışık olarak (ibre, kırmızı bölge,
- * dikiş, ilerleme halkası). Spor her temada koyudur (karbon); gündüz/gece ayrımı yok.
+ * ilerleme halkası). Spor her temada koyudur; gündüz/gece ayrımı yok.
  *
- * Bütün durağan çizimler (karbon, kadran yüzleri, çerçeveler, dikişler, yazılar) ya bir kez önbellek bitmap'ine
- * ([SportArt.render]) ya da küçük karo gölgelendiricisiyle çizilir; kare başına bitmap üretimi, bulanıklık ya da gölge yok.
+ * Zemin (karbon, süet, gerçek kırmızı çift dikiş) kodda çizilmez: hazır tek görsel ([SportGroundImage], `sport_ground`),
+ * bir kez çözülür. Kadran yüzleri, çerçeveler ve yazılar bir kez önbellek bitmap'ine ([SportArt.render]) çizilir; kare
+ * başına bitmap üretimi, bulanıklık ya da gölge yok.
  */
 internal object SportInk {
     const val RED = 0xFFEA580C.toInt()
     const val RED_HOT = 0xFFFF7A33.toInt()
-    const val STITCH = 0x8CD9541E.toInt()
     const val INK = 0xFFF1F3F6.toInt()
     const val INK_2 = 0xFFC9CED6.toInt()
     const val INK_3 = 0xFF858B94.toInt()
@@ -43,39 +39,9 @@ internal object SportInk {
     const val METAL_DEEP = 0xFF1C1E22.toInt()
     const val ICON = 0xFFD9DDE3.toInt()
     const val ICON_ACTIVE = RED_HOT
-    const val CARBON_A = 0xFF0C0D0F.toInt()
-    const val CARBON_B = 0xFF1B1D21.toInt()
 }
 
 internal object SportArt {
-
-    /** Karbon örgü karosu (2 × 2 dimi örgü, [cellPx] hücre): bir kez üretilir, BitmapShader ile döşenir. */
-    @Volatile private var tile: Bitmap? = null
-
-    fun carbonTile(cellPx: Int): Bitmap {
-        tile?.let { if (it.width == cellPx * 2) return it }
-        val c = cellPx.coerceAtLeast(3)
-        val bmp = Bitmap.createBitmap(c * 2, c * 2, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        for (i in 0..1) for (j in 0..1) {
-            val l = (i * c).toFloat()
-            val t = (j * c).toFloat()
-            val horizontal = (i + j) % 2 == 0
-            p.shader = if (horizontal) LinearGradient(l, t, l, t + c, intArrayOf(SportInk.CARBON_B, SportInk.CARBON_A, 0xFF070809.toInt()), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
-            else LinearGradient(l, t, l + c, t, intArrayOf(0xFF151719.toInt(), SportInk.CARBON_A, 0xFF060708.toInt()), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawRect(l, t, l + c, t + c, p)
-        }
-        tile = bmp
-        return bmp
-    }
-
-    fun carbonPaint(context: Context, alpha: Int = 255): Paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-        shader = BitmapShader(carbonTile(context.dp(5)), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT).apply {
-            setLocalMatrix(Matrix().apply { setRotate(45f) })
-        }
-        this.alpha = alpha
-    }
 
     // --- Kadran parçaları ---
 
@@ -166,15 +132,6 @@ internal object SportArt {
         c.drawText(text, cx, cy - (fm.ascent + fm.descent) / 2f, p)
     }
 
-    /** Kesik kesik kırmızı dikiş. */
-    fun stitchPaint(width: Float, dash: Float): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = width
-        color = SportInk.STITCH
-        strokeCap = Paint.Cap.ROUND
-        pathEffect = DashPathEffect(floatArrayOf(dash, dash * 0.75f), 0f)
-    }
-
     fun scale(col: Int, k: Float): Int {
         val a = col ushr 24
         val r = (((col shr 16) and 0xFF) * k).toInt().coerceIn(0, 255)
@@ -192,13 +149,12 @@ internal object SportArt {
     // --- Sahne bitmap'i (orta alan) ---
 
     /**
-     * Orta alanın bütün durağan çizimi (saydam zemin; karbon kök zeminden gelir): dikişler, beş/yedi kadranın çerçeveleri,
-     * yüzleri, bölüntüleri ve sabit yazıları. Arka planda çağrılabilir (yazı tipleri önceden yüklü olmalı).
+     * Orta alanın bütün durağan çizimi (saydam zemin; karbon ve dikiş kök zemin görselinden gelir): beş/yedi kadranın
+     * çerçeveleri, yüzleri, bölüntüleri ve sabit yazıları. Arka planda çağrılabilir (yazı tipleri önceden yüklü olmalı).
      */
     fun render(context: Context, g: SportGeometry): Bitmap {
         val bmp = Bitmap.createBitmap(g.w.coerceAtLeast(1), g.h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        stitches(c, g)
         mediaDial(c, g.media)
         carDial(c, g.car, g)
         g.subs.forEach { subDial(context, c, it, g) }
@@ -206,24 +162,13 @@ internal object SportArt {
         return bmp
     }
 
-    private fun stitches(c: Canvas, g: SportGeometry) {
-        val p = stitchPaint(g.r(2.2f), g.r(9f))
-        // Orta küme çevresinde dikişli "kaput": kadranlar üstüne çizildiğinden yalnız aralarda görünür.
-        val l = g.x(470f); val r = g.x(1402f); val t = g.y(10f); val b = g.y(478f)
-        c.drawRoundRect(RectF(l, t, r, b), g.r(200f), g.r(200f), p)
-        // Yan kadranların içe bakan yaylarında ikinci dikiş.
-        val m = g.media
-        c.drawArc(RectF(m.cx - m.r - g.r(14f), m.cy - m.r - g.r(14f), m.cx + m.r + g.r(14f), m.cy + m.r + g.r(14f)), -62f, 124f, false, p)
-        val k = g.car
-        c.drawArc(RectF(k.cx - k.r - g.r(14f), k.cy - k.r - g.r(14f), k.cx + k.r + g.r(14f), k.cy + k.r + g.r(14f)), 118f, 124f, false, p)
-    }
-
     private fun mediaDial(c: Canvas, d: SportGeometry.Dial) {
         val bw = d.r * 0.075f
         bezel(c, d.cx, d.cy, d.r, bw)
         val rf = d.r - bw - 2f
         face(c, d.cx, d.cy, rf)
-        tickRing(c, d.cx, d.cy, rf - 4f, 120, rf * 0.035f, 0x40, red = listOf(150f..210f, 330f..360f, 0f..30f))
+        // Bölüntü yalnız doku: kırmızı yok (ilerleme halkası ikinci bir devir göstergesi gibi okunmasın).
+        tickRing(c, d.cx, d.cy, rf - 4f, 120, rf * 0.035f, 0x38)
         // İlerleme halkasının izi (dolgu canlı çizilir).
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = d.r * SportGeometry.PROGRESS_W; color = 0x1FFFFFFF }
         c.drawCircle(d.cx, d.cy, d.r * SportGeometry.PROGRESS_R, p)
@@ -233,10 +178,13 @@ internal object SportArt {
         val bw = d.r * 0.075f
         bezel(c, d.cx, d.cy, d.r, bw, bright = 1.06f)
         val rf = d.r - bw - 2f
-        face(c, d.cx, d.cy, rf, lift = 0.55f)
-        tickRing(c, d.cx, d.cy, rf - 4f, 120, rf * 0.035f, 0x48, red = listOf(150f..210f, 330f..360f, 0f..30f))
+        face(c, d.cx, d.cy, rf, lift = 0.75f)
+        tickRing(c, d.cx, d.cy, rf - 4f, 120, rf * 0.035f, 0x38)
         val carLen = g.carLength()
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        // Üstten düşen ışık havuzu (aracın arkasında yüz biraz aydınlık; araç üstündeki ışık [CarLightView]).
+        p.shader = RadialGradient(d.cx, d.cy - rf * 0.25f, rf * 0.85f, intArrayOf(0x33B8C4D4, 0x0FB8C4D4, 0x00B8C4D4), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        c.drawCircle(d.cx, d.cy, rf, p)
         // Zemin gölgesi (aracın altı) ve stop lambası parıltısı (burun yukarı, kuyruk aşağıda).
         p.shader = RadialGradient(d.cx, d.cy, carLen * 0.62f, intArrayOf(0x99000000.toInt(), 0x00000000), null, Shader.TileMode.CLAMP)
         c.drawCircle(d.cx, d.cy, carLen * 0.62f, p)
@@ -259,16 +207,17 @@ internal object SportArt {
         val unit = textPaint(context, d.r * 0.15f, SportInk.INK_3, 400)
         when (d.kind) {
             SportGeometry.Kind.G -> {
-                val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0x33FFFFFF }
+                // Artı işareti yalnız 1 g çemberinin içinde: etiket, eksen yazıları ve büyük değer çizgilerin üstüne binmez.
+                val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0x40FFFFFF }
                 val gr = d.r * SportGeometry.G_RANGE
                 c.drawCircle(d.cx, d.cy, gr, p)
                 c.drawCircle(d.cx, d.cy, gr / 2f, p)
-                c.drawLine(d.cx - gr - 6f, d.cy, d.cx + gr + 6f, d.cy, p)
-                c.drawLine(d.cx, d.cy - gr - 6f, d.cx, d.cy + gr + 6f, p)
-                centered(c, "G", d.cx, d.cy - d.r * 0.70f, label)
-                val small = textPaint(context, d.r * 0.12f, SportInk.INK_3, 400)
-                centered(c, "1", d.cx + gr + d.r * 0.12f, d.cy - d.r * 0.10f, small)
-                centered(c, "1", d.cx - gr - d.r * 0.12f, d.cy - d.r * 0.10f, small)
+                c.drawLine(d.cx - gr, d.cy, d.cx + gr, d.cy, p)
+                c.drawLine(d.cx, d.cy - gr, d.cx, d.cy + gr, p)
+                centered(c, "G", d.cx, d.cy - d.r * 0.62f, label)
+                val small = textPaint(context, d.r * 0.15f, SportInk.INK_3, 400)
+                centered(c, "1", d.cx + gr + d.r * 0.12f, d.cy, small)
+                centered(c, "1", d.cx - gr - d.r * 0.12f, d.cy, small)
             }
             else -> {
                 val k = d.kind ?: return
@@ -320,9 +269,8 @@ internal object SportArt {
             val a = Math.toRadians(SportMath.needleDeg(k * 1000f).toDouble())
             centered(c, k.toString(), d.cx + cos(a).toFloat() * rn, d.cy + sin(a).toFloat() * rn, num)
         }
-        // Ortadaki etiketler ve iç halka.
-        centered(c, "RPM", d.cx, d.cy - rf * 0.36f, textPaint(context, rf * 0.085f, SportInk.INK_2, 500))
-        centered(c, "×1000", d.cx, d.cy - rf * 0.26f, textPaint(context, rf * 0.062f, SportInk.INK_3, 400))
+        // Birim etiketi göbekle vites penceresi arasında: ibre seyirde (2 000–4 000) üst yarıdan geçer, üstünü örtmez.
+        centered(c, "RPM ×1000", d.cx, d.cy + rf * 0.205f, textPaint(context, rf * 0.07f, SportInk.INK_2, 500))
         p.style = Paint.Style.STROKE
         p.strokeWidth = 1f
         p.color = 0x22FFFFFF
@@ -340,10 +288,10 @@ internal object SportArt {
         c.drawRoundRect(win, wr, wr, p)
         p.shader = null
         if (!g.hasG) {
-            // G-metre yoksa anlık tüketim devir kadranının altında (sabit etiket ve birim).
+            // G-metre yoksa anlık tüketim devir kadranının altında: büyük değer ortada (canlı), etiket ve birim iki yanda.
             val y = g.innerInstantY()
-            centered(c, g.label(SportGeometry.Kind.INSTANT), d.cx - rf * 0.27f, y, textPaint(context, rf * 0.065f, SportInk.INK_3, 500))
-            centered(c, g.unit(SportGeometry.Kind.INSTANT), d.cx + rf * 0.27f, y, textPaint(context, rf * 0.065f, SportInk.INK_3, 400))
+            centered(c, g.label(SportGeometry.Kind.INSTANT), d.cx - rf * 0.33f, y, textPaint(context, rf * 0.078f, SportInk.INK_2, 500))
+            centered(c, g.unit(SportGeometry.Kind.INSTANT), d.cx + rf * 0.33f, y, textPaint(context, rf * 0.078f, SportInk.INK_2, 400))
         }
     }
 
@@ -354,7 +302,8 @@ internal object SportArt {
         val inner = (r - width).coerceAtLeast(1f)
         val start = inner / outer
         val mid = r / outer
-        p.shader = RadialGradient(cx, cy, outer, intArrayOf(0x00EA580C, 0x00EA580C, 0xCCFF7A33.toInt(), 0x00EA580C),
+        // Işık, neon değil: ince ve yarı saydam.
+        p.shader = RadialGradient(cx, cy, outer, intArrayOf(0x00EA580C, 0x00EA580C, 0x66FF7A33, 0x00EA580C),
             floatArrayOf(0f, start, mid, 1f), Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, outer, p)
     }
@@ -413,7 +362,7 @@ internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
         return RectF(cx - hw, cy - hh, cx + hw, cy + hh)
     }
 
-    fun innerInstantY(): Float = rpm.cy + rpmFace * 0.74f
+    fun innerInstantY(): Float = rpm.cy + rpmFace * 0.76f
 
     /** Araç kadranında aracın gövde boyu (burun yukarı). */
     fun carLength(): Float = (car.r - car.r * 0.075f - 2f) * 1.52f
@@ -438,31 +387,69 @@ internal class SportGeometry(val w: Int, val h: Int, val hasG: Boolean) {
         /** Medya kadranında ilerleme halkası yarıçapı ve kalınlığı (dış yarıçapa oran). */
         const val PROGRESS_R = 0.82f
         const val PROGRESS_W = 0.016f
-        /** G-metre: 1 g'nin kadrandaki yarıçapı (dış yarıçapa oran). */
-        const val G_RANGE = 0.56f
+        /** G-metre: 1 g'nin kadrandaki yarıçapı, büyük değerin boyu ve dikey yeri (dış yarıçapa oran). */
+        const val G_RANGE = 0.42f
+        const val G_VALUE = 0.30f
+        const val G_VALUE_Y = 0.64f
+        /** G-metre yoksa devir kadranındaki anlık tüketim değerinin boyu (yüz yarıçapına oran). */
+        const val INNER_VALUE = 0.20f
     }
 }
 
 /**
- * Spor modunda kök zemin: döşenmiş karbon, kenarlara doğru koyulaşan. Karbon karosu ve vinyet tek gölgelendiricide
- * birleşir (ComposeShader, çarpma): tam ekran tek geçiş, büyük bitmap yok.
+ * Spor zemin görseli (`res/drawable-nodpi/sport_ground.jpg`, 1920 × 720: ortada ışık alan karbon, yanlarda süet ve
+ * gerçek kırmızı çift dikiş, kenar kararması; kendi OpenAI çizimimiz). Bir kez çözülür (~5,5 MB), spor kapanınca
+ * bırakılır. İlk çözüm arka planda ([SportStageView] durağan çizimiyle aynı iş parçacığında) yapılır.
+ */
+internal object SportGroundImage {
+    @Volatile private var bitmap: Bitmap? = null
+
+    fun load(context: Context): Bitmap? {
+        bitmap?.let { return it }
+        synchronized(this) {
+            bitmap?.let { return it }
+            val opts = android.graphics.BitmapFactory.Options().apply {
+                inScaled = false
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bmp = try {
+                android.graphics.BitmapFactory.decodeResource(context.resources, com.mapcontrol.R.drawable.sport_ground, opts)
+            } catch (t: Throwable) { null }
+            bitmap = bmp
+            return bmp
+        }
+    }
+
+    /** Spor kapandı: başvuru bırakılır (geri dönüştürülmez; çizimde kalan bir kare güvende). */
+    fun release() {
+        bitmap = null
+    }
+}
+
+/**
+ * Spor modunda kök zemin: hazır zemin görseli ekranı kaplar (genişliğe ölçeklenir, üstten hizalı; yükseklik yetmezse
+ * kaplayacak kadar büyür). Görsel yoksa (bellek) düz koyu zemin. Tek bitmap çizimi; gradyan ya da karo yok.
  */
 internal class SportGround(context: Context) : Drawable() {
-    private val carbon = BitmapShader(SportArt.carbonTile(context.dp(5)), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT).apply {
-        setLocalMatrix(Matrix().apply { setRotate(45f) })
-    }
+    private val image: Bitmap? = SportGroundImage.load(context)
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val src = Rect()
 
     override fun onBoundsChange(b: Rect) {
-        val cx = b.exactCenterX()
-        val cy = b.exactCenterY()
-        val r = maxOf(b.width(), b.height()) * 0.62f
-        val vignette = RadialGradient(cx, cy, r, intArrayOf(0xFFFFFFFF.toInt(), 0xFFB3B3B3.toInt(), 0xFF333333.toInt()), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
-        paint.shader = android.graphics.ComposeShader(carbon, vignette, android.graphics.PorterDuff.Mode.MULTIPLY)
+        val bmp = image ?: return
+        if (b.isEmpty) return
+        // Kaplama: ölçek = max(genişlik, yükseklik oranı); kaynak dikdörtgeni yatayda ortalanır, dikeyde üstten.
+        val k = maxOf(b.width().toFloat() / bmp.width, b.height().toFloat() / bmp.height)
+        val sw = (b.width() / k).toInt().coerceIn(1, bmp.width)
+        val sh = (b.height() / k).toInt().coerceIn(1, bmp.height)
+        val sx = (bmp.width - sw) / 2
+        src.set(sx, 0, sx + sw, sh)
     }
 
     override fun draw(canvas: Canvas) {
-        canvas.drawRect(bounds, paint)
+        val bmp = image
+        if (bmp == null) { canvas.drawColor(0xFF07080A.toInt()); return }
+        canvas.drawBitmap(bmp, src, bounds, paint)
     }
 
     override fun setAlpha(alpha: Int) {}
@@ -542,8 +529,8 @@ internal class SportPillDrawable(private val context: Context, private val radiu
 }
 
 /**
- * Spor alt çubuğu: tek karbon panel, fırçalanmış metal çerçeve ve üst kenarda ince kırmızı dikiş. Vida yok.
- * Bir kez önbellek bitmap'ine çizilir (çubuk yeniden çizilse de gradyan/dikiş yeniden hesaplanmaz).
+ * Spor alt çubuğu: zemin görselinin koyu bir kesiti (yarı saydam koyu dolgu, altındaki görsel karartılmış görünür) ve
+ * fırçalanmış metal çerçeve. Dikiş ve vida yok (dikiş zemin görselinde). Bir kez önbellek bitmap'ine çizilir.
  */
 internal class SportPanelDrawable(private val context: Context, private val radiusDp: Float) : Drawable() {
     private var cache: Bitmap? = null
@@ -558,17 +545,10 @@ internal class SportPanelDrawable(private val context: Context, private val radi
         val fw = context.dpF(3f)
         val r = min(context.dpF(radiusDp), h / 2f)
         val rect = RectF(fw / 2f, fw / 2f, w - fw / 2f, h - fw / 2f)
-        val p = SportArt.carbonPaint(context)
-        c.drawRoundRect(rect, r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF08090A.toInt() })
-        // Karbonu panelin içine kırp.
-        val clip = Path().apply { addRoundRect(rect, r, r, Path.Direction.CW) }
-        c.save()
-        c.clipPath(clip)
-        c.drawRect(rect, p)
-        c.drawRect(rect, Paint().apply {
-            shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0x1FFFFFFF, 0x00000000, 0x8C000000.toInt()), floatArrayOf(0f, 0.3f, 1f), Shader.TileMode.CLAMP)
+        // Koyu kesit: üstte biraz daha saydam (görselin dokusu sezilir), altta koyu.
+        c.drawRoundRect(rect, r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xB3050607.toInt(), 0xC7050607.toInt(), 0xE6030304.toInt()), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
         })
-        c.restore()
         // Fırçalanmış metal çerçeve: yatay bantlarla.
         val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -581,9 +561,6 @@ internal class SportPanelDrawable(private val context: Context, private val radi
         val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0xFF030304.toInt() }
         val ir = (r - fw).coerceAtLeast(0f)
         c.drawRoundRect(RectF(rect.left + fw / 2f + 0.5f, rect.top + fw / 2f + 0.5f, rect.right - fw / 2f - 0.5f, rect.bottom - fw / 2f - 0.5f), ir, ir, edge)
-        // Üst kenarda dikiş.
-        val sy = fw + context.dpF(7f)
-        c.drawLine(r, sy, w - r, sy, SportArt.stitchPaint(context.dpF(1.6f), context.dpF(7f)))
         return bmp
     }
 
@@ -598,6 +575,28 @@ internal class SportPanelDrawable(private val context: Context, private val radi
     override fun setColorFilter(colorFilter: ColorFilter?) {}
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+/**
+ * Araç kadranında üstten düşen ışık: aracın ve yüzün üst yarısına yumuşak, soğuk beyaz bir parıltı (gradyan; bulanıklık
+ * yok). Aracın üstünde ayrı, dokunulmaz bir görünüm; bir kez çizilir.
+ */
+internal class CarLightView(context: Context) : android.view.View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    override fun hasOverlappingRendering(): Boolean = false
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        val r = w / 2f
+        paint.shader = RadialGradient(r, r * 0.62f, r * 0.62f, intArrayOf(0x2EDCE6F2, 0x12DCE6F2, 0x00DCE6F2), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val r = width / 2f
+        canvas.drawCircle(r, r * 0.62f, r * 0.62f, paint)
+    }
 }
 
 /** Spor yazı tipi: ince kronograf rakamları. */
