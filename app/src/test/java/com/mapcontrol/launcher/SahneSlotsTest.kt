@@ -131,6 +131,14 @@ class SahneSlotsTest {
     }
 
     @Test
+    fun removedHeatsCardEmptiesItsSlotOnDecode() {
+        // Tiggo 7'de direksiyon/ön cam ısıtma donanımı yok: eski "heats" yuvası boşalır, kalanlar korunur.
+        val d = SahneSlots.decode("v1|heats~h~|trip~trip~|")!!
+        assertNull(d.left)
+        assertEquals(WidgetType.TRIP, d.right?.type)
+    }
+
+    @Test
     fun sanitizeDropsMisfitsAndDuplicates() {
         val raw = SahneLayout(
             left = SahneSlot("app", WidgetType.APP),

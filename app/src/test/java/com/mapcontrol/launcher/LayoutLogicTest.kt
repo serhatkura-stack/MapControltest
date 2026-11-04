@@ -128,12 +128,13 @@ class LayoutLogicTest {
 
     @Test
     fun removedNavigationSpeedLimitAndSteeringKeysAreDroppedOnLoad() {
-        listOf("navigation", "speed_limit", "steering_heat").forEach { assertNull(it, WidgetType.fromKey(it)) }
+        listOf("navigation", "speed_limit", "steering_heat", "heats").forEach { assertNull(it, WidgetType.fromKey(it)) }
         val out = LayoutStore.resolveRaw(listOf(
             raw("m", "media", 0, 0, 6, 4),
             raw("n", "navigation", 6, 0, 4, 2),
             raw("s", "speed_limit", 6, 2, 2, 2),
             raw("h", "steering_heat", 8, 2, 2, 2),
+            raw("i", "heats", 8, 4, 2, 2),
             raw("l", "lock", 10, 2, 1, 2),
         ))
         assertEquals(listOf(WidgetType.MEDIA, WidgetType.LOCK), out.map { it.type })
