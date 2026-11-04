@@ -210,10 +210,11 @@ object CarAnimSpec {
     }
 
     /**
-     * Yakıt kapağı: sağ arka çamurlukta (görünüşte alt kenar, arka tekerin gerisi), gövde kenarına oturan küçük kapak.
-     * Yer araç fotoğraflarından tahmin; araçta doğrulanmadı (Tur 6).
+     * Yakıt kapağı: sağ arka çamurlukta (görünüşte alt kenar), arka kemerin arka yarısının üstünde, arka kapı dikişinin
+     * (x≈172) gerisinde; gövde kenarına (y≈338) oturan küçük kapak. Taraf OEM kardeş model görsellerinden (sol yan görünüşte
+     * arka çamurluk temiz) ve araç fotoğraflarından tahmin. TODO(Tur 6): göstergedeki yakıt pompası okunun yönüyle doğrula.
      */
-    val FUEL_CAP = Box(104f, 320f, 26f, 11f)
+    val FUEL_CAP = Box(127f, 321f, 26f, 11f)
 
     /** Kaput ışığı (motor suyu / akü uyarısı): kaputun ortası ve yarıçapları; gövde alfasıyla kırpılır. */
     const val HOOD_CX = 655f
