@@ -37,4 +37,6 @@
     <string name="launcher_detail_doors">Doors</string>
     <string name="launcher_detail_windows">Windows</string>
     <string name="launcher_detail_sunroof">Sunroof</string>
+    <string name="launcher_strip_tire_wheel" formatted="true">%1$s %2$d psi</string>
+    <string name="launcher_strip_air">Poor air quality</string>
 </resources>

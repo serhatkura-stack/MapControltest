@@ -1,180 +1,163 @@
 package com.mapcontrol.launcher
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.mapcontrol.R
 
-/** Kapsülün görünüşü: uyarı (turuncu çizgili), belirgin (dolu turuncu), bilgi (sakin çelik mavisi). */
-internal enum class NoticeTone { WARN, STRONG, INFO }
-
-/** Şeritte çizilecek bir kapsül: bildirim, metin, ikon ve ton. */
-internal data class NoticeItem(val notice: Notice?, val text: String, val icon: Int, val tone: NoticeTone, val action: Boolean = false)
-
 /**
- * Aracın altındaki bildirim şeridi: küçük Sahne kapsülleri, önem sırasıyla soldan sağa ([StageNotices]). Genişliğe ve
- * [StageNotices.MAX_VISIBLE]'a sığan kadarı görünür, kalanı tek "+N" kapsülünde toplanır. Kapsüle dokunmak [onTap]'e gider
- * ("+N" için bildirim null); [tappable] false olan kapsül dokunuş almaz.
+ * Uyarı şeridi (§10, karma çözüm): koyu cam, ince kehribar kenar, kehribar nokta; en çok iki madde ve "+N". Yalnızca arabada
+ * görünmeyen şeyler içindir ([MiniAlerts]: düşük lastik psi ile, bakım, yakıt az, kötü hava); hiç madde yoksa şerit hiç
+ * görünmez. Yükseklik [HEIGHT_DP] (sürüşte basılabilir); her madde kendi dokunma alanıdır, dokunuş [onTap]'e gider ("+N" için
+ * null). Sahne'de aracın altında, mini göstergede uyarı satırında aynı görünüşle kullanılır.
+ *
+ * Sürüşte ([setDriving]) kenar ışığı biraz güçlenir; yanıp sönme yoktur. Görünüm statiktir: yalnızca veri değişince çizilir.
  */
-internal class NoticeRow(
+internal class StageStrip(
     context: Context,
-    private val tappable: (Notice?) -> Boolean,
-    private val onTap: (Notice?) -> Unit,
-) : ViewGroup(context) {
+    private val onTap: (MiniAlerts.Item?) -> Unit,
+) : LinearLayout(context) {
 
-    private var items: List<NoticeItem> = emptyList()
-    private val chips = mutableListOf<NoticeChip>()
-    private val more = NoticeChip(context)
-    private var shown = 0
-    private var moreCount = 0
-    private var moreStyled = -1
+    private val dot = View(context).apply { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+    private val labels = Array(StageNotices.MAX_VISIBLE) { label() }
+    private val seps = Array(StageNotices.MAX_VISIBLE - 1) { sahneText(context, TEXT_SP, Sahne.INK_3, 400).apply { text = "·" } }
+    private val more = label().apply { setTextColor(Sahne.INK_3) }
+    private var items: List<MiniAlerts.Item> = emptyList()
+    private var named: List<MiniAlerts.Item> = emptyList()
+    private var texts: List<String> = emptyList()
+    private var driving: Boolean? = null
 
     init {
-        clipChildren = false
-        // "+N" ikonsuz kapsül biçiminde başlar: ölçümdeki [NoticeChip.widthFor] doğru dolgu ve yazıyla hesaplar.
-        more.style(NoticeItem(null, "", 0, NoticeTone.INFO))
-        addView(more)
-        if (tappable(null)) {
-            more.setOnClickListener { onTap(null) }
-            more.pressFeedback()
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(context.dp(22), 0, context.dp(10), 0)
+        val d = context.dp(DOT_DP + 2 * DOT_RING_DP)
+        addView(dot, LayoutParams(d, d).apply { marginEnd = context.dp(4) })
+        for (i in labels.indices) {
+            if (i > 0) addView(seps[i - 1], LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
+            addView(labels[i], LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
         }
-        more.isClickable = tappable(null)
+        addView(more, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+        dot.background = LayerDrawable(arrayOf(oval(Sahne.AMBER_SOFT), oval(Sahne.AMBER))).apply {
+            val i = context.dp(DOT_RING_DP)
+            setLayerInset(1, i, i, i, i)
+        }
+        setDriving(false)
         visibility = GONE
     }
 
-    fun bind(list: List<NoticeItem>) {
-        if (list == items) return
-        items = list
-        while (chips.size < list.size) {
-            val c = NoticeChip(context)
-            chips += c
-            addView(c, chips.size - 1)
+    private fun label(): TextView = sahneText(context, TEXT_SP, Sahne.INK, 400).apply {
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(context.dp(12), 0, context.dp(12), 0)
+        compoundDrawablePadding = context.dp(4)
+        isClickable = true
+        isFocusable = true
+    }
+
+    /** Maddeler ve metinleri ([stripText] ile aynı sırada). Aynı liste gelirse hiçbir şey yapılmaz. */
+    fun bind(all: List<MiniAlerts.Item>, text: (MiniAlerts.Item) -> String) {
+        val t = all.map(text)
+        if (all == items && t == texts) return
+        items = all
+        texts = t
+        if (all.isEmpty()) {
+            visibility = GONE
+            return
         }
-        chips.forEachIndexed { i, c ->
-            val item = list.getOrNull(i)
-            if (item == null) {
-                c.visibility = GONE
-                return@forEachIndexed
-            }
-            c.visibility = VISIBLE
-            c.style(item)
-            val tap = tappable(item.notice)
-            if (tap) {
-                c.setOnClickListener { onTap(item.notice) }
-                c.pressFeedback()
-            } else {
-                c.setOnClickListener(null)
-                c.setOnTouchListener(null)
-            }
-            c.isClickable = tap
-            c.isFocusable = tap
+        val (shown, extra) = StageNotices.visible(all)
+        named = shown
+        labels.forEachIndexed { i, l ->
+            val item = shown.getOrNull(i)
+            l.visibility = if (item == null) GONE else VISIBLE
+            if (i > 0) seps[i - 1].visibility = l.visibility
+            if (item == null) return@forEachIndexed
+            l.text = t[i]
+            l.setTextColor(Sahne.INK)
+            // Yakıt az bir eylemdir (dokununca benzinlik araması): sonunda küçük ok.
+            val chev = if (item.kind == MiniAlerts.Kind.FUEL_LOW) chevron() else null
+            l.setCompoundDrawablesRelative(null, null, chev, null)
+            l.contentDescription = t[i]
+            l.setOnClickListener { onTap(item) }
         }
-        visibility = if (list.isEmpty()) GONE else VISIBLE
+        more.visibility = if (extra > 0) VISIBLE else GONE
+        more.text = context.getString(R.string.launcher_notice_more, extra)
+        more.contentDescription = context.getString(R.string.launcher_notice_more_desc, extra)
+        more.setOnClickListener { onTap(null) }
+        contentDescription = (shown.indices.map { t[it] } + listOfNotNull(more.text.takeIf { extra > 0 })).joinToString(", ")
+        visibility = VISIBLE
         requestLayout()
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val maxW = MeasureSpec.getSize(widthMeasureSpec)
-        val h = context.dp(CHIP_H_DP)
-        val gap = context.dp(GAP_DP)
-        val exactH = MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY)
-        val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        val n = items.size
-        for (i in 0 until n) chips[i].measure(free, exactH)
-        // Sığan en çok kapsül: sondan bırakarak dene; fazlası varsa "+N" için yer ayrılır.
-        var fit = minOf(n, StageNotices.MAX_VISIBLE)
-        while (fit > 1) {
-            val rest = n - fit
-            var w = (0 until fit).sumOf { chips[it].measuredWidth } + gap * (fit - 1)
-            if (rest > 0) w += gap + more.widthFor(rest)
-            if (w <= maxW) break
-            fit--
-        }
-        val (vis, extra) = StageNotices.visible(items, fit)
-        shown = vis.size
-        moreCount = extra
-        // "+N" yalnızca sayı değişince yeniden boyanır (ölçüm sırasında gereksiz yeniden yerleşim olmasın).
-        if (extra > 0 && extra != moreStyled) {
-            moreStyled = extra
-            more.style(NoticeItem(null, context.getString(R.string.launcher_notice_more, extra), 0, NoticeTone.INFO))
-            more.contentDescription = context.getString(R.string.launcher_notice_more_desc, extra)
-        }
-        more.measure(free, exactH)
-        var used = (0 until shown).sumOf { chips[it].measuredWidth } + gap * maxOf(0, shown - 1)
-        if (extra > 0) used += gap + more.measuredWidth
-        setMeasuredDimension(minOf(used, maxW), h)
+    /** Sürüşte kenar ışığı biraz güçlü (yanıp sönme yok); değişmedikçe arka plan yeniden kurulmaz. */
+    fun setDriving(on: Boolean) {
+        if (driving == on) return
+        driving = on
+        background = GlassDrawable(context, Sahne.PILL_RADIUS_DP, shadow = 0f, border = if (on) EDGE_DRIVE else Sahne.AMBER_LINE)
     }
 
-    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        val gap = context.dp(GAP_DP)
-        var x = 0
-        chips.forEachIndexed { i, c ->
-            if (i < shown) {
-                c.layout(x, 0, x + c.measuredWidth, c.measuredHeight)
-                x += c.measuredWidth + gap
-            } else c.layout(0, 0, 0, 0)
-        }
-        if (moreCount > 0) more.layout(x, 0, x + more.measuredWidth, more.measuredHeight) else more.layout(0, 0, 0, 0)
+    private fun chevron() = context.getDrawable(R.drawable.ic_sahne_chev_right)?.mutate()?.apply {
+        setTint(Sahne.INK_3)
+        val d = context.dp(18)
+        setBounds(0, 0, d, d)
     }
 
-    /** Tek kapsül: 34dp yükseklik, 18dp ikon, 17sp metin; eylemli kapsülde sonda küçük ok. */
-    private class NoticeChip(context: Context) : LinearLayout(context) {
-        private val icon = ImageView(context).apply { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-        private val label = sahneText(context, 17f, Sahne.AMBER, 500).apply { maxLines = 1 }
-        private val chevron = ImageView(context).apply {
-            setImageResource(R.drawable.ic_sahne_chev_right)
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-
-        init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(12), 0, context.dp(14), 0)
-            addView(icon, LayoutParams(context.dp(18), context.dp(18)).apply { marginEnd = context.dp(8) })
-            addView(label, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
-            addView(chevron, LayoutParams(context.dp(16), context.dp(16)).apply { marginStart = context.dp(6) })
-        }
-
-        /** "+N" kapsülünün genişliği (metin ölçülerek; görünümü değiştirmez). */
-        fun widthFor(n: Int): Int = paddingLeft + paddingRight + label.paint.measureText("+$n").toInt() + 1
-
-        fun style(item: NoticeItem) {
-            val (fg, layers) = when (item.tone) {
-                NoticeTone.STRONG -> Sahne.GROUND to arrayOf(pill(Sahne.AMBER, 0))
-                NoticeTone.WARN -> Sahne.AMBER to arrayOf(pill(Sahne.GROUND, 0), pill(Sahne.AMBER_SOFT, Sahne.AMBER_LINE))
-                NoticeTone.INFO -> Sahne.INK_2 to arrayOf(pill(Sahne.GROUND, 0), pill(Sahne.SOFT_FILL, Sahne.STRIP_HAIR))
-            }
-            // Açık parçalar kapsülün altına uzanabilir: zemin renginde dolu katman okunurluğu korur.
-            background = LayerDrawable(layers)
-            label.text = item.text
-            label.setTextColor(fg)
-            SahneFonts.apply(label, if (item.tone == NoticeTone.STRONG) 600 else 500)
-            icon.visibility = if (item.icon == 0) GONE else VISIBLE
-            if (item.icon != 0) {
-                icon.setImageResource(item.icon)
-                icon.imageTintList = ColorStateList.valueOf(fg)
-            }
-            if (item.icon == 0) setPadding(context.dp(14), 0, context.dp(14), 0) else setPadding(context.dp(12), 0, context.dp(14), 0)
-            chevron.visibility = if (item.action) VISIBLE else GONE
-            chevron.imageTintList = ColorStateList.valueOf(fg)
-            contentDescription = item.text
-        }
-
-        private fun pill(fill: Int, stroke: Int) = GradientDrawable().apply {
-            cornerRadius = context.dpF(999f)
-            setColor(fill)
-            if (stroke != 0) setStroke(context.dp(1), stroke)
-        }
+    private fun oval(color: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(color)
     }
 
-    private companion object {
-        const val CHIP_H_DP = 34
-        const val GAP_DP = 10
+    companion object {
+        const val HEIGHT_DP = 64
+        const val TEXT_SP = 20f
+        const val DOT_DP = 8
+        const val DOT_RING_DP = 4
+        /** Sürüşteki kenar: [Sahne.AMBER_LINE]'dan biraz güçlü (gece %62, gündüz %55 kehribar). */
+        private val EDGE_DRIVE: Int get() = if (LauncherTheme.night) 0x9EFFA24A.toInt() else 0x8CB4500A.toInt()
     }
+}
+
+/**
+ * Şerit maddesinin kısa metni (Sahne ve mini gösterge ortak): "Arka sol 23 psi", "Bakıma 800 km", "Yakıt az" (şeritte
+ * sonunda ok: dokununca benzinlik), "Hava kalitesi kötü". Lastikte teker bilinmiyorsa yalnızca psi, psi de yoksa genel metin.
+ */
+internal fun stripText(context: Context, a: MiniAlerts.Item): String = when (a.kind) {
+    MiniAlerts.Kind.TIRE -> {
+        val bar = a.tireLow?.bar
+        val wheel = a.tireLow?.wheel?.let { STRIP_WHEELS.getOrNull(it) }
+        when {
+            bar != null && wheel != null -> context.getString(R.string.launcher_strip_tire_wheel, context.getString(wheel), TireDecode.psi(bar))
+            bar != null -> context.getString(R.string.launcher_mini_alert_tire_psi, TireDecode.psi(bar))
+            else -> context.getString(R.string.launcher_mini_alert_tire)
+        }
+    }
+    MiniAlerts.Kind.FUEL_LOW -> context.getString(R.string.launcher_mini_alert_fuel)
+    MiniAlerts.Kind.SERVICE_OVERDUE -> context.getString(R.string.launcher_mini_alert_service_overdue)
+    MiniAlerts.Kind.SERVICE_NEAR -> a.serviceKm?.let { context.getString(R.string.launcher_mini_alert_service_km, it) }
+        ?: context.getString(R.string.launcher_mini_alert_service)
+    MiniAlerts.Kind.AIR_BAD -> context.getString(R.string.launcher_strip_air)
+}
+
+private val STRIP_WHEELS = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
+
+/** En yakın benzin istasyonu araması (Yandex, açılmazsa genel harita); hiçbiri yoksa kısa bilgi. */
+internal fun openNearestStation(context: Context) {
+    for (uri in listOf(NearestStation.yandexUri(), NearestStation.geoUri())) {
+        try {
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        } catch (e: android.content.ActivityNotFoundException) {
+            // Sıradaki adres denenir.
+        } catch (e: SecurityException) {
+            // Sıradaki adres denenir.
+        }
+    }
+    android.widget.Toast.makeText(context, R.string.launcher_notice_no_maps, android.widget.Toast.LENGTH_SHORT).show()
 }

@@ -49,12 +49,7 @@ internal object StageCorners {
     fun airShown(pm25In: Int?): Boolean = pm25In != null && pm25In >= AIR_BAD_PM25
 }
 
-/**
- * Sahne aracının yeri ve boyu (saf, JVM'de sınanır). Araç, üstteki engellerin (menzil satırları, kilit hapı) altında ve alttaki
- * bildirim şeridi payının üstünde kalan en büyük genişliği alır ([maxW]'den [minW]'ye); o genişlikte yatayda ortaya en yakın
- * sığan konum seçilir, dikeyde kalan boşluğun ortasına oturur. Köşe notları engel sayılmaz (yalnızca sorun varken çıkarlar,
- * cam zeminle aracın üstünde dururlar); böylece araç not çıkınca zıplamaz.
- */
+/** Sahne aracının yeri ve boyu (saf, JVM'de sınanır); bkz. [centered]. */
 internal object StageFit {
 
     /** Sahne pikseli dikdörtgen. */
@@ -64,82 +59,46 @@ internal object StageFit {
     }
 
     /**
-     * [areaLeft]..[areaRight]: aracın yatay sınırı; [minTop]..[maxBottom]: dikey sınır; [above]: üstteki engeller (araç bunlarla
-     * yatayda çakışıyorsa üstü engelin altına [gap] kadar iner); [aspect] = yükseklik / genişlik. Hiçbir genişlik sığmazsa
-     * [minW] ortada, [minTop]'ta döner (çağıran yine çizer; taşma en küçük boyda olur).
+     * Sahnenin tam ortasındaki araç (§10/§11): yatayda [centerX]'e sabit, en büyük genişlik [maxW]'den [minW]'ye aranır.
+     * Üstteki engellerle (omuzlardaki menzil ve kilit) yatayda çakışırsa araç onların altına iner; çakışma hesabında aracın
+     * yuvarlak köşeleri için her iki yandan genişliğin [cornerInset] oranı boş sayılır (omuz köşeye biraz girebilir). Dikeyde
+     * kalan boşluğun ortasına oturur. Hiçbir genişlik sığmazsa [minW] en üstte döner.
      */
-    fun car(
-        areaLeft: Float, areaRight: Float, minTop: Float, maxBottom: Float,
-        maxW: Float, minW: Float, aspect: Float, gap: Float, above: List<Box>, step: Float = 2f,
+    fun centered(
+        centerX: Float, minTop: Float, maxBottom: Float, maxW: Float, minW: Float, aspect: Float, gap: Float,
+        above: List<Box>, cornerInset: Float = 0f, step: Float = 2f,
     ): Box {
-        fun topFor(x: Float, w: Float): Float =
-            above.filter { it.left < x + w + gap && it.right > x - gap }.maxOfOrNull { it.bottom + gap }?.coerceAtLeast(minTop) ?: minTop
-        var w = minOf(maxW, areaRight - areaLeft)
+        var w = maxW
         while (w >= minW) {
             val h = w * aspect
-            val center = (areaLeft + areaRight) / 2f - w / 2f
-            var d = 0f
-            val span = areaRight - areaLeft - w
-            while (d <= span) {
-                for (x in if (d == 0f) listOf(center) else listOf(center + d, center - d)) {
-                    if (x < areaLeft - 0.5f || x + w > areaRight + 0.5f) continue
-                    val top = topFor(x, w)
-                    if (top + h <= maxBottom) {
-                        val y = top + (maxBottom - top - h) / 2f
-                        return Box(x, y, x + w, y + h)
-                    }
-                }
-                d += step
+            val x = centerX - w / 2f
+            val inset = w * cornerInset
+            val top = above.filter { it.left < x + w - inset + gap && it.right > x + inset - gap }
+                .maxOfOrNull { it.bottom + gap }?.coerceAtLeast(minTop) ?: minTop
+            if (top + h <= maxBottom) {
+                val y = top + (maxBottom - top - h) / 2f
+                return Box(x, y, x + w, y + h)
             }
             w -= step
         }
-        val x = (areaLeft + areaRight) / 2f - minW / 2f
+        val x = centerX - minW / 2f
         return Box(x, minTop, x + minW, minTop + minW * aspect)
     }
 }
 
-/** Sahne bildirim kapsülünün türü; sıra önem sırasıdır (küçük = daha önemli). */
-internal enum class NoticeKind { DOOR, HOOD, TRUNK, TIRE, WINDOW, SUNROOF, FUEL_CAP, FUEL_LOW, SERVICE }
-
 /**
- * Bir bildirim kapsülü. [part]: kapı / cam için hangi parça; [strong]: belirgin (dolu) ton — araç parktayken açık bagaj, cam
- * ya da cam tavan (inip gitmeden önce fark edilsin, 4 Kasım kararı §7.6).
- */
-internal data class Notice(val kind: NoticeKind, val part: BodyPart? = null, val strong: Boolean = false)
-
-/**
- * Aracın altındaki bildirim şeridinin saf kuralları (JVM'de sınanır): hangi kapsüller, hangi sırada, kaçı görünür.
- * Kaynaklar: açık kapılar (her biri ayrı), kaput, bagaj, lastik uyarısı, açık camlar (her biri ayrı), cam tavan, yakıt kapağı,
- * düşük yakıt ve yaklaşan bakım. Sıra: belirgin olanlar önce, sonra [NoticeKind] önem sırası, aynı türde [BodyPart] sırası.
+ * "+N" kuralı (saf, JVM'de sınanır): Sahne uyarı şeridi ve mini gösterge en çok [MAX_VISIBLE] maddeyi adlandırır, fazlası tek
+ * bir "+N" olur. §10 (4 Kasım, son karar): araç çiziminde görünen şeyler (kapı, bagaj, kaput, cam, cam tavan) şeride yazılmaz;
+ * şerit yalnızca arabada görünmeyenler içindir ([MiniAlerts]: düşük lastik, bakım, yakıt az, kötü hava).
  */
 internal object StageNotices {
 
-    /** Aynı anda görünen en çok kapsül; fazlası tek bir "+N" kapsülünde toplanır. */
-    const val MAX_VISIBLE = 3
-
-    fun build(
-        openings: Openings?, fuelCapOpen: Boolean, tireAlert: Boolean, lowFuel: Boolean, serviceNear: Boolean, parked: Boolean,
-    ): List<Notice> {
-        val out = mutableListOf<Notice>()
-        val o = openings ?: Openings.NONE
-        if (o.doorFl) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_LF)
-        if (o.doorFr) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_RF)
-        if (o.doorRl) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_LR)
-        if (o.doorRr) out += Notice(NoticeKind.DOOR, BodyPart.DOOR_RR)
-        if (o.hood) out += Notice(NoticeKind.HOOD)
-        if (o.trunk) out += Notice(NoticeKind.TRUNK, strong = parked)
-        if (tireAlert) out += Notice(NoticeKind.TIRE)
-        o.windows.forEach { out += Notice(NoticeKind.WINDOW, it, strong = parked) }
-        if (o.sunroof) out += Notice(NoticeKind.SUNROOF, strong = parked)
-        if (fuelCapOpen) out += Notice(NoticeKind.FUEL_CAP)
-        if (lowFuel) out += Notice(NoticeKind.FUEL_LOW)
-        if (serviceNear) out += Notice(NoticeKind.SERVICE)
-        return out.sortedWith(compareBy<Notice>({ !it.strong }, { it.kind.ordinal }, { it.part?.ordinal ?: -1 }))
-    }
+    /** Aynı anda adlandırılan en çok madde; fazlası tek bir "+N" olur. */
+    const val MAX_VISIBLE = 2
 
     /**
-     * Görünen kapsüller ve "+N" sayısı. [fit]: genişliğe sığan en çok kapsül (çağıran ölçer); fazlası varsa "+N" için yer
-     * açılır. Hiç sığmazsa ilk kapsül yine gösterilir (en önemli bildirim kaybolmaz).
+     * Görünen maddeler ve "+N" sayısı. [fit]: genişliğe sığan en çok madde (çağıran ölçer). Hiç sığmazsa ilk madde yine
+     * gösterilir (en önemli uyarı kaybolmaz).
      */
     fun <T> visible(all: List<T>, fit: Int = MAX_VISIBLE): Pair<List<T>, Int> {
         val n = maxOf(1, minOf(fit, MAX_VISIBLE))

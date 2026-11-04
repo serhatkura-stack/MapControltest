@@ -4,64 +4,41 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Aracın altındaki bildirim şeridi: kaynaklar, önem sırası, park tonu ve "+N". */
+/**
+ * Sahne uyarı şeridi (§10, son karar): yalnızca arabada görünmeyenler (lastik, bakım, yakıt, hava), en çok iki madde ve
+ * "+N"; araç çiziminde görünen açık parçalar yazılmaz.
+ */
 class StageNoticesTest {
 
-    private fun kinds(l: List<Notice>) = l.map { it.kind }
+    private fun kinds(l: List<MiniAlerts.Item>) = l.map { it.kind }
 
     @Test
-    fun calmCarHasNoNotices() {
-        assertTrue(StageNotices.build(null, false, false, false, false, parked = true).isEmpty())
-        assertTrue(StageNotices.build(Openings.NONE, false, false, false, false, parked = false).isEmpty())
+    fun calmCarHasNoStrip() {
+        assertTrue(MiniAlerts.build(false, null, false, 3_978, 155, 4).isEmpty())
+        assertTrue(MiniAlerts.build(false, null, null, null, null, null).isEmpty())
     }
 
     @Test
-    fun everySourceAppearsInImportanceOrder() {
-        val o = Openings(doorFl = true, doorRr = true, trunk = true, hood = true, sunroof = true,
-            windows = listOf(BodyPart.WINDOW_LF, BodyPart.WINDOW_RR))
-        val l = StageNotices.build(o, fuelCapOpen = true, tireAlert = true, lowFuel = true, serviceNear = true, parked = false)
-        assertEquals(
-            listOf(NoticeKind.DOOR, NoticeKind.DOOR, NoticeKind.HOOD, NoticeKind.TRUNK, NoticeKind.TIRE, NoticeKind.WINDOW,
-                NoticeKind.WINDOW, NoticeKind.SUNROOF, NoticeKind.FUEL_CAP, NoticeKind.FUEL_LOW, NoticeKind.SERVICE),
-            kinds(l),
-        )
-        // Her kapı ve cam ayrı kapsül, parça sırasıyla.
-        assertEquals(listOf(BodyPart.DOOR_LF, BodyPart.DOOR_RR), l.filter { it.kind == NoticeKind.DOOR }.map { it.part })
-        assertEquals(listOf(BodyPart.WINDOW_LF, BodyPart.WINDOW_RR), l.filter { it.kind == NoticeKind.WINDOW }.map { it.part })
-        assertTrue(l.none { it.strong }) // hareket halinde belirgin ton yok
+    fun onlyInvisibleThingsInImportanceOrder() {
+        val low = TireLow(2, 1.6)
+        val l = MiniAlerts.build(true, low, true, 800, 40, 80)
+        assertEquals(listOf(MiniAlerts.Kind.TIRE, MiniAlerts.Kind.FUEL_LOW, MiniAlerts.Kind.SERVICE_NEAR, MiniAlerts.Kind.AIR_BAD), kinds(l))
+        assertEquals(low, l.first().tireLow)
+        assertEquals(800, l.first { it.kind == MiniAlerts.Kind.SERVICE_NEAR }.serviceKm)
     }
 
     @Test
-    fun parkedTrunkAndWindowsUseStrongToneAndComeFirst() {
-        val o = Openings(doorFl = true, trunk = true, windows = listOf(BodyPart.WINDOW_LR))
-        val l = StageNotices.build(o, false, tireAlert = true, lowFuel = false, serviceNear = false, parked = true)
-        assertEquals(listOf(NoticeKind.TRUNK, NoticeKind.WINDOW, NoticeKind.DOOR, NoticeKind.TIRE), kinds(l))
-        assertEquals(listOf(true, true, false, false), l.map { it.strong })
-        // Parkta kapı belirgin değil (inip binmek olağan).
-        assertTrue(l.first { it.kind == NoticeKind.DOOR }.strong.not())
-    }
-
-    @Test
-    fun parkedSunroofIsStrongToo() {
-        val l = StageNotices.build(Openings(sunroof = true), false, false, false, false, parked = true)
-        assertEquals(listOf(Notice(NoticeKind.SUNROOF, strong = true)), l)
-    }
-
-    @Test
-    fun atMostThreeVisiblePlusCount() {
-        val o = Openings(doorFl = true, doorFr = true, trunk = true)
-        val all = StageNotices.build(o, false, true, true, true, parked = false)
-        assertEquals(6, all.size)
+    fun atMostTwoNamedPlusCount() {
+        val all = MiniAlerts.build(true, null, true, 0, 0, 80)
+        assertEquals(4, all.size) // lastik, yakıt, bakım geçti, hava
         val (shown, more) = StageNotices.visible(all)
-        assertEquals(3, shown.size)
-        assertEquals(3, more)
-        assertEquals(all.take(3), shown)
-        // Genişlik yalnızca 2'ye yetiyorsa 2 + "+4"; hiç yetmiyorsa en önemlisi yine görünür.
-        assertEquals(2 to 4, StageNotices.visible(all, fit = 2).let { it.first.size to it.second })
-        assertEquals(1 to 5, StageNotices.visible(all, fit = 0).let { it.first.size to it.second })
-        // Az bildirimde "+N" yok.
-        assertEquals(0, StageNotices.visible(all.take(3)).second)
-        assertEquals(0, StageNotices.visible(emptyList<Notice>()).second)
+        assertEquals(2, shown.size)
+        assertEquals(2, more)
+        assertEquals(all.take(2), shown)
+        // Hiç sığmazsa en önemlisi yine görünür.
+        assertEquals(1 to 3, StageNotices.visible(all, fit = 0).let { it.first.size to it.second })
+        assertEquals(0, StageNotices.visible(all.take(2)).second)
+        assertEquals(0, StageNotices.visible(emptyList<MiniAlerts.Item>()).second)
     }
 
     @Test

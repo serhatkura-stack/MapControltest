@@ -4,62 +4,61 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Sahne aracının yerleşimi: üst engellerle çakışmaz, alt payı aşmaz, sığdığı kadar (%20'ye kadar) büyür. */
+/** Sahne aracının yerleşimi (§10/§11): tam ortada, omuzlarla çakışmaz (köşe payı dışında), şerit payını aşmaz. */
 class StageFitTest {
 
     private val aspect = CarAnimSpec.BASE_H / CarAnimSpec.BASE_W
     private val gap = 10f
+    private val inset = 0.02f
 
-    /** 960 genişlikte sahne: menzil rakam satırı, yakıt satırı ve kilit hapı (emülatörde ölçülen ölçüler). */
-    private fun obstacles() = listOf(
-        StageFit.Box(30f, -8f, 290f, 81f),
-        StageFit.Box(30f, 93f, 240f, 115f),
-        StageFit.Box(790f, 14f, 930f, 86f),
+    /** 960 genişlikte sahne: sol omuzda menzil satırı, sağ omuzda kilit hapı (emülatörde ölçülen ölçüler). */
+    private fun shoulders() = listOf(
+        StageFit.Box(24f, 22f, 230f, 78f),
+        StageFit.Box(756f, 12f, 936f, 84f),
     )
 
-    /** Araç sol bilgi sütununun (30 + 220) sağında. */
-    private fun fit(h: Float) = StageFit.car(250f, 930f, 8f, h - 32f, 612f, 510f, aspect, gap, obstacles())
+    /** Sahne yüksekliği [h]; alt pay şerit (64) + kenarlar. */
+    private fun fit(h: Float) = StageFit.centered(480f, 6f, h - 82f, 640f, 420f, aspect, gap, shoulders(), inset)
 
-    private fun overlaps(a: StageFit.Box, b: StageFit.Box) = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+    private fun overlapsInner(c: StageFit.Box, o: StageFit.Box): Boolean {
+        val i = c.width * inset
+        return c.left + i < o.right && c.right - i > o.left && c.top < o.bottom && c.bottom > o.top
+    }
 
     @Test
-    fun neverOverlapsObstaclesOrBottomReserve() {
+    fun alwaysExactlyCentered() {
+        listOf(396f, 423f, 508f, 600f).forEach { h -> assertEquals(480f, (fit(h).left + fit(h).right) / 2f, 0.01f) }
+    }
+
+    @Test
+    fun neverOverlapsShouldersOrStripReserve() {
         listOf(396f, 423f, 508f, 600f).forEach { h ->
             val c = fit(h)
-            obstacles().forEach { o -> assertTrue("$h $c $o", !overlaps(c, o)) }
-            assertTrue(c.bottom <= h - 32f + 0.01f)
-            assertTrue(c.left >= 250f - 0.5f && c.right <= 930f + 0.5f)
+            shoulders().forEach { o -> assertTrue("$h $c $o", !overlapsInner(c, o)) }
+            assertTrue(c.bottom <= h - 82f + 0.01f)
             assertEquals(aspect, c.height / c.width, 0.001f)
         }
     }
 
     @Test
-    fun ourBarStageGrowsAtLeastTwelvePercent() {
-        // Bizim alt çubuk (en alçak sahne, 396 px): araç menzilin sağına kayarak en az %12 büyür.
-        val c = fit(396f)
-        assertTrue("${c.width}", c.width >= 510f * 1.12f)
+    fun ourBarCarStaysLarge() {
+        // Bizim alt çubuk (en alçak sahne): araç omuzların arasında, en az 500 (eski 510 boyuna yakın).
+        assertTrue("${fit(396f).width}", fit(396f).width >= 500f)
+        // Daha yüksek sahnede küçülmez.
+        assertTrue(fit(508f).width >= fit(396f).width)
     }
 
     @Test
-    fun tallerStagesReachTwentyPercent() {
-        assertEquals(612f, fit(423f).width, 0.01f) // OEM çubuğu
-        val tall = fit(508f) // çubuksuz
-        assertEquals(612f, tall.width, 0.01f)
-        // Bol yerde araç kendi alanının yatay ortasında durur (engellerin altına iner).
-        assertEquals(590f, (tall.left + tall.right) / 2f, 1f)
-    }
-
-    @Test
-    fun noObstaclesMeansCenteredMaxCar() {
-        val c = StageFit.car(0f, 960f, 0f, 400f, 612f, 510f, aspect, gap, emptyList())
+    fun noObstaclesMeansMaxCarCenteredVertically() {
+        val c = StageFit.centered(480f, 0f, 400f, 612f, 510f, aspect, gap, emptyList())
         assertEquals(612f, c.width, 0.01f)
-        assertEquals(480f, (c.left + c.right) / 2f, 0.01f)
-        assertEquals(200f, (c.top + c.bottom) / 2f, 0.01f) // dikeyde boşluğun ortasında
+        assertEquals(200f, (c.top + c.bottom) / 2f, 0.01f)
     }
 
     @Test
     fun impossibleSpaceFallsBackToMinimumSize() {
-        val c = StageFit.car(0f, 960f, 0f, 100f, 612f, 510f, aspect, gap, emptyList())
+        val c = StageFit.centered(480f, 0f, 100f, 612f, 510f, aspect, gap, emptyList())
         assertEquals(510f, c.width, 0.01f)
+        assertEquals(480f, (c.left + c.right) / 2f, 0.01f)
     }
 }

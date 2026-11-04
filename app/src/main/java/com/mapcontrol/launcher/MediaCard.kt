@@ -524,6 +524,8 @@ class MediaCard(
 
     /** Kapak değişmediyse (referans ya da generationId) hiçbir şey yapma. */
     private fun bindArtwork(bitmap: Bitmap?) {
+        // Sahne ortam ışığı kapak rengini alır (yalnızca kapak değişince bildirilir).
+        SahneCover.publish(bitmap)
         if (bitmap === shownArtwork) return
         if (bitmap != null && bitmap.generationId == shownGeneration) {
             shownArtwork = bitmap

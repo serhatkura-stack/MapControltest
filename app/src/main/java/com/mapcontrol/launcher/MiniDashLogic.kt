@@ -24,9 +24,24 @@ internal object MiniAlerts {
         serviceKm: Int?,
         serviceDays: Int?,
         pm25In: Int?,
-    ): List<Item> = buildList {
+    ): List<Item> {
         val low = TireDecode.low(tires)
-        if (TireDecode.alertShown(tires?.warning, low)) add(Item(Kind.TIRE, tireLow = low))
+        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In)
+    }
+
+    /**
+     * Sahne uyarı şeridi de aynı kuralları kullanır (§10): araç kartının özetinden gelen lastik uyarısı ([tireAlert],
+     * [tireLow]) ile. Kapı, bagaj, kaput, cam ve cam tavan burada yoktur; onları araç çizimi gösterir.
+     */
+    fun build(
+        tireAlert: Boolean,
+        tireLow: TireLow?,
+        lowFuel: Boolean?,
+        serviceKm: Int?,
+        serviceDays: Int?,
+        pm25In: Int?,
+    ): List<Item> = buildList {
+        if (tireAlert) add(Item(Kind.TIRE, tireLow = tireLow))
         if (lowFuel == true) add(Item(Kind.FUEL_LOW))
         when {
             HealthMath.serviceOverdue(serviceKm, serviceDays) -> add(Item(Kind.SERVICE_OVERDUE))
@@ -63,6 +78,26 @@ internal object MiniNav {
         val tenths = (m + 50) / 100
         if (tenths >= 100) return ((m + 500) / 1_000).toString() to true
         return "${tenths / 10}$decimalSep${tenths % 10}" to true
+    }
+
+    /**
+     * [NavigationSource] durumundan ipucu (mini göstergenin gerçek kaynağı, [NavigationMiniSource]): rota yoksa null; yön
+     * metni "manevra · çıkış · yol" ([label] manevranın kısa adı, bilinmeyende null), mesafe metre, varış "HH:mm" → gün içi
+     * dakika (okunamazsa null).
+     */
+    fun hint(s: NavigationState, label: (NavManeuver) -> String?, exit: (Int) -> String): NavHint? {
+        if (!s.active) return null
+        val text = listOfNotNull(label(s.maneuver), s.roundaboutExit?.let(exit), s.street?.takeIf { it.isNotBlank() })
+            .joinToString(" · ").ifEmpty { null }
+        return NavHint(text, s.distance?.meters, minutesOfDay(s.arrivalTime))
+    }
+
+    /** "14:52" → 892; geçersizse null. */
+    fun minutesOfDay(hhmm: String?): Int? {
+        val m = Regex("""^\s*(\d{1,2})[:.](\d{2})\s*$""").find(hhmm ?: return null) ?: return null
+        val h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].toInt()
+        return if (h in 0..23 && min in 0..59) h * 60 + min else null
     }
 
     /** Varış saati "HH:mm" (24 saat) ya da "h:mm" (12 saat, AM/PM çağıranda); geçersizse null. */
