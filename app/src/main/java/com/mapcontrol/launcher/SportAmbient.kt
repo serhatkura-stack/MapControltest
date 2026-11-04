@@ -194,6 +194,10 @@ internal object SportAmbient {
         // Kapı yazmadan hemen önce yeniden sorulur (test anahtarı bu arada kapanmış olabilir); kapalıysa durum değişmez.
         if (d.write != null) {
             if (!enabled || LauncherDemo.enabled) return
+            // Spor rengi yazılmadan ÖNCE özgün renk ve "geri yazma bekliyor" bayrağı eşzamanlı (commit) kaydedilir; iki
+            // adım arasında süreç ölse bile özgün renk kaybolmaz. Geri yazmada sıra tersi güvenlidir (ölürse renk 45
+            // değildir, açılışta IDLE'a düşer).
+            if (d.next.applied) save(c, d.next)
             LauncherEdition.sendItemValue(proxy, VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR, d.write)
             Log.i(TAG, "want=$want read=$reading write=${d.write}")
         }
