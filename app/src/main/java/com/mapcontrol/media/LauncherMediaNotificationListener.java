@@ -3,12 +3,14 @@ package com.mapcontrol.media;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
+import com.mapcontrol.launcher.NavigationSource;
 import com.mapcontrol.nav.GoogleMapsNavNotificationCoordinator;
 
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
- * Aktif medya oturumlarını okumak ve Google Maps navigasyon bildirimini izlemek için dinleyici.
+ * Aktif medya oturumlarını okumak, Google Maps navigasyon bildirimini izlemek ve Yandex rehberlik bildirimini
+ * Sahne Navigasyon paneline ({@link NavigationSource}) iletmek için dinleyici.
  * Ayarlar &gt; Bildirim erişimi üzerinden etkinleştirilmesi gerekebilir.
  */
 public final class LauncherMediaNotificationListener extends NotificationListenerService {
@@ -38,6 +40,7 @@ public final class LauncherMediaNotificationListener extends NotificationListene
     public void onListenerConnected() {
         GoogleMapsNavNotificationCoordinator.onListenerConnected(this);
         GoogleMapsNavNotificationCoordinator.resyncActiveNotifications(this);
+        NavigationSource.onListenerConnected(this);
         Listener current = listener;
         if (current != null) {
             current.onListenerConnected();
@@ -50,16 +53,19 @@ public final class LauncherMediaNotificationListener extends NotificationListene
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         GoogleMapsNavNotificationCoordinator.onNotificationPosted(this, sbn);
+        NavigationSource.onNotificationPosted(this, sbn);
     }
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
         GoogleMapsNavNotificationCoordinator.onNotificationRemoved(this, sbn);
+        NavigationSource.onNotificationRemoved(this, sbn);
     }
 
     @Override
     public void onListenerDisconnected() {
         GoogleMapsNavNotificationCoordinator.onListenerDisconnected();
+        NavigationSource.onListenerDisconnected();
         for (Runnable watcher : accessLostWatchers) {
             watcher.run();
         }

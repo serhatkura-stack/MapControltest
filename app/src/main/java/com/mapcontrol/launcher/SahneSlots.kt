@@ -50,10 +50,11 @@ object SahneForm {
     )
 
     /**
-     * Panel (büyük) için izinli türler, seçicideki sırayla: yalnız bu boyuta göre çizilmiş üç widget (4 Kasım kararı §2).
+     * Panel (büyük) için izinli türler, seçicideki sırayla: yalnız bu boyuta göre çizilmiş widget'lar (4 Kasım kararı §2;
+     * Navigasyon §3'ten: Yandex bildiriminden sonraki dönüş).
      * Diğer türler Serbest ızgarada kalır; eski Sahne kayıtlarındaki yuvalar [SahneSlots.decode]'da yedeğe döner.
      */
-    val PANEL_TYPES: List<WidgetType> = listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION)
+    val PANEL_TYPES: List<WidgetType> = listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION)
 
     fun fitsPanel(type: WidgetType): Boolean = type in PANEL_TYPES
     fun fitsStrip(type: WidgetType): Boolean = type in STRIP_TYPES

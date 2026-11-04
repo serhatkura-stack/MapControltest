@@ -20,7 +20,7 @@ class SahneSlotsTest {
             WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
             WidgetType.CLUSTER_MIRROR,
         )
-        val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION)
+        val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION)
         assertEquals(strip, SahneForm.STRIP_TYPES.toSet())
         assertEquals(panel, SahneForm.PANEL_TYPES.toSet())
         assertEquals(SahneForm.STRIP_TYPES.size, strip.size) // yinelenen yok

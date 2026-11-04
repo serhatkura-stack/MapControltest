@@ -48,6 +48,7 @@ internal object LauncherDemo {
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
         if (!enabled) main.removeCallbacks(cycle)
+        if (!enabled) NavigationSource.setDemo(false)
         if (enabled && intent.hasExtra(VehicleProfile.EXTRA_PROFILE)) VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
         if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
@@ -202,7 +203,14 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_SPORT)) sportForced = intent.getBooleanExtra(EXTRA_SPORT, false)
         if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
+        if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
     }
+
+    /**
+     * Navigasyon paneli önizlemesi: `--ez launcher_demo_nav true` sahte rota gösterir (300 m sonra sağa, Atatürk Cd.,
+     * Varış 14:52 · 18 km; [NavigationState.DEMO]), `false` gerçek bildirim durumuna döner.
+     */
+    const val EXTRA_NAV = "launcher_demo_nav"
 
     /** Virgüllü parça listesi → kart anahtarları (lf, lr, rf, rr, trunk, hood; tanınmayan olduğu gibi, ör. sunroof). */
     internal fun parseOpen(raw: String?): Set<String> =

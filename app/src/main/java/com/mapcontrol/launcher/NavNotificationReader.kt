@@ -1,0 +1,183 @@
+package com.mapcontrol.launcher
+
+import android.app.Notification
+import android.content.Context
+import android.content.res.Resources
+import android.graphics.drawable.Icon
+import android.os.Bundle
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import android.widget.RemoteViews
+import com.mapcontrol.BuildConfig
+import java.lang.reflect.Field
+
+/**
+ * Yandex bildiriminden [NavNotificationInput] çıkarır: extras metinleri ve özel düzenin (RemoteViews) eylem listesi.
+ * Manevra oku bildirimde bitmap değil, Yandex paketindeki bir çizimin kaynak numarası olarak gelir
+ * (`setImageViewResource(primaryIcon, R.drawable.notification_right_sdl)`); numara sürümden sürüme değişir, ad değişmez.
+ * Bu yüzden numara Yandex'in kendi kaynaklarıyla ([Resources.getResourceEntryName]) ada çevrilir.
+ *
+ * RemoteViews eylem listesi (`mActions`) gizli API'dir (targetSdk 28'de gri liste, Android 11'de erişilebilir); erişilemezse
+ * yalnız extras metinleri kullanılır (mesafe ve sokak yine gelir, ok [NavManeuver.UNKNOWN] kalır).
+ *
+ * Debug derlemede her yeni bildirim düzeni (extras anahtarları + görünüm adları) bir kez "NavSource" etiketiyle günlüğe
+ * yazılır (araçta gerçek düzeni öğrenmek için); sürüm derlemesinde hiçbir metin yazılmaz.
+ */
+internal object NavNotificationReader {
+    private const val TAG = "NavSource"
+    private const val MAX_DUMPS = 12
+
+    private val resourcesCache = HashMap<String, Resources>()
+    private val dumped = HashSet<String>()
+
+    fun read(context: Context, sbn: StatusBarNotification): NavNotificationInput {
+        val pkg = sbn.packageName
+        val n = sbn.notification
+        val extras: Bundle? = n.extras
+        val res = resources(context, pkg)
+        val texts = ArrayList<Pair<String?, String>>()
+        val images = ArrayList<Pair<String?, String>>()
+        val actionsLog = if (BuildConfig.DEBUG) ArrayList<String>() else null
+        @Suppress("DEPRECATION")
+        listOfNotNull(n.contentView, n.bigContentView, n.headsUpContentView).forEach { rv ->
+            collect(rv, res, texts, images, actionsLog, depth = 0)
+        }
+        val smallIcon = n.smallIcon?.let { icon -> iconResName(icon, res) }
+        val input = NavNotificationInput(
+            packageName = pkg,
+            title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+            text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            subText = extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
+            bigText = extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+            infoText = extras?.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString(),
+            viewTexts = texts,
+            images = images,
+            smallIconName = smallIcon,
+        )
+        if (BuildConfig.DEBUG) dump(sbn, extras, input, actionsLog.orEmpty())
+        return input
+    }
+
+    /** Yandex'in kaynakları (paket başına bir kez yüklenir). */
+    private fun resources(context: Context, pkg: String): Resources? = resourcesCache[pkg] ?: try {
+        context.packageManager.getResourcesForApplication(pkg).also { resourcesCache[pkg] = it }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Uygulama güncellenince kaynak tablosu değişir: önbelleği bırak. */
+    fun forget(pkg: String) {
+        resourcesCache.remove(pkg)
+    }
+
+    private fun name(res: Resources?, id: Int): String? {
+        if (res == null || id == 0 || id == -1) return null
+        return try {
+            res.getResourceEntryName(id)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
+    }
+
+    private fun iconResName(icon: Icon, res: Resources?): String? = try {
+        if (icon.type == Icon.TYPE_RESOURCE) name(res, icon.resId) else null
+    } catch (e: Exception) {
+        null
+    }
+
+    /** RemoteViews eylemlerini dolaşır: metin ("setText") ve çizim ("setImageResource", "setImageIcon"); iç içe görünümlere de iner. */
+    private fun collect(
+        rv: RemoteViews,
+        res: Resources?,
+        texts: MutableList<Pair<String?, String>>,
+        images: MutableList<Pair<String?, String>>,
+        log: MutableList<String>?,
+        depth: Int,
+    ) {
+        if (depth > 4) return
+        val actions = try {
+            field(RemoteViews::class.java, "mActions")?.get(rv) as? List<*>
+        } catch (e: Exception) {
+            null
+        } ?: return
+        for (action in actions) {
+            if (action == null) continue
+            try {
+                val cls = action.javaClass
+                val viewId = (field(cls, "viewId")?.get(action) as? Int) ?: 0
+                val viewName = name(res, viewId)
+                val method = field(cls, "methodName")?.get(action) as? String
+                val value = field(cls, "value")?.get(action)
+                when {
+                    method == "setText" && value is CharSequence -> texts += viewName to value.toString()
+                    method == "setImageResource" && value is Int -> name(res, value)?.let { images += viewName to it }
+                    method == "setImageIcon" && value is Icon -> iconResName(value, res)?.let { images += viewName to it }
+                }
+                log?.add("${cls.simpleName} view=$viewName method=$method value=${describe(value, res)}")
+                // İç içe RemoteViews (ViewGroupActionAdd.mNestedViews vb.).
+                allFields(cls).filter { RemoteViews::class.java.isAssignableFrom(it.type) }.forEach { f ->
+                    (f.get(action) as? RemoteViews)?.let { collect(it, res, texts, images, log, depth + 1) }
+                }
+            } catch (e: Exception) {
+                // Bir eylem okunamazsa diğerlerine devam.
+            }
+        }
+    }
+
+    private fun describe(value: Any?, res: Resources?): String = when (value) {
+        null -> "null"
+        is CharSequence -> "\"$value\""
+        is Int -> name(res, value)?.let { "@$it" } ?: value.toString()
+        else -> value.javaClass.simpleName
+    }
+
+    private val fieldCache = HashMap<Pair<Class<*>, String>, Field?>()
+
+    private fun field(cls: Class<*>, name: String): Field? = fieldCache.getOrPut(cls to name) {
+        var c: Class<*>? = cls
+        var found: Field? = null
+        while (c != null && found == null) {
+            found = try {
+                c.getDeclaredField(name).apply { isAccessible = true }
+            } catch (e: NoSuchFieldException) {
+                null
+            } catch (e: SecurityException) {
+                null
+            }
+            c = c.superclass
+        }
+        found
+    }
+
+    private fun allFields(cls: Class<*>): List<Field> {
+        val out = ArrayList<Field>()
+        var c: Class<*>? = cls
+        while (c != null && c != Any::class.java) {
+            c.declaredFields.forEach { f ->
+                try {
+                    f.isAccessible = true
+                    out += f
+                } catch (e: Exception) {
+                }
+            }
+            c = c.superclass
+        }
+        return out
+    }
+
+    /** Debug: yeni bir düzen (paket + extras anahtarları + görünüm adları) ilk görüldüğünde tam dökümü yazar. */
+    private fun dump(sbn: StatusBarNotification, extras: Bundle?, input: NavNotificationInput, actions: List<String>) {
+        val keys = extras?.keySet()?.sorted().orEmpty()
+        val signature = sbn.packageName + "|" + keys.joinToString(",") + "|" +
+            (input.viewTexts.map { it.first } + input.images.map { it.first }).joinToString(",")
+        if (dumped.size >= MAX_DUMPS || !dumped.add(signature)) return
+        Log.d(TAG, "pkg=${sbn.packageName} id=${sbn.id} tag=${sbn.tag} ongoing=${sbn.isOngoing} category=${sbn.notification.category}")
+        keys.forEach { k ->
+            @Suppress("DEPRECATION") val v = extras?.get(k)
+            Log.d(TAG, "  extra $k = ${if (v is CharSequence) "\"$v\"" else v?.javaClass?.simpleName}")
+        }
+        Log.d(TAG, "  smallIcon=${input.smallIconName}")
+        actions.forEach { Log.d(TAG, "  action $it") }
+        Log.d(TAG, "  parsed=${NavParse.parse(input)}")
+    }
+}
