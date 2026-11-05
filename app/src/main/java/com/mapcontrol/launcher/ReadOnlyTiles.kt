@@ -413,13 +413,6 @@ internal class BreakTile(context: Context) :
             return
         }
         val duration = durationText(minutes)
-        // Panel: önerilen mola süresine doğru ilerleme ve kalan süre.
-        val left = ReadOnlyDecode.BREAK_AFTER_MIN - minutes
-        setPanelExtras(
-            listOf(context.getString(R.string.launcher_break_left_label) to
-                if (left > 0) durationText(left) else context.getString(R.string.launcher_break_now)),
-            (minutes.toFloat() / ReadOnlyDecode.BREAK_AFTER_MIN).coerceIn(0f, 1f),
-        )
         if (ReadOnlyDecode.breakDue(minutes)) {
             setAlertSurface(true)
             setIcon(R.drawable.ic_mdi_alert, LauncherTheme.ALERT)

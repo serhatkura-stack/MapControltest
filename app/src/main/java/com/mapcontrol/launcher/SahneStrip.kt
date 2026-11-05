@@ -135,10 +135,6 @@ data class StripState(
     @DrawableRes val badge: Int = 0,
     /** Panel biçiminde değerin altında küçük çubuk geçmişi (ör. son tüketim ölçümleri, eskiden yeniye); boşsa çizilmez. */
     val history: List<Float> = emptyList(),
-    /** Panel biçiminde ilerleme çubuğu 0..1 (ör. mola önerisine kadar geçen süre); null = yok. */
-    val progress: Float? = null,
-    /** Panel biçiminde [detail] yerine gösterilecek alt satır (satırlar aynı bilgiyi taşıyorsa kısa özet); null = [detail]. */
-    val panelDetail: String? = null,
 )
 
 /**

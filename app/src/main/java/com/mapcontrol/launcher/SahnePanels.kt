@@ -337,7 +337,6 @@ internal class SahneValuePanel(
         addView(chartLabel)
         addView(chart, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(CHART_DP)).apply { topMargin = context.dp(6) })
     }
-    private val progress = ProgressLine(context)
     private val rowsBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val rowsDivider = View(context).apply { setBackgroundColor(Sahne.HAIR_2) }
     private val root = LinearLayout(context).apply {
@@ -352,7 +351,6 @@ internal class SahneValuePanel(
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(value, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(6) })
-        addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(PROGRESS_DP)).apply { topMargin = context.dp(18) })
         addView(chartBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(16) })
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(rowsDivider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)))
@@ -378,16 +376,13 @@ internal class SahneValuePanel(
         // Sürüşte tüketim: ortalama ayrı satır yerine büyük değerin altında tek satır.
         val foldRows = calm && type == WidgetType.CONSUMPTION
         val sub = if (foldRows && s.rows.isNotEmpty()) context.getString(R.string.launcher_consumption_avg_short, s.rows[0].second)
-        else s.panelDetail ?: s.detail
+        else s.detail
         detail.text = sub ?: ""
         detail.visibility = if (sub.isNullOrEmpty()) View.GONE else View.VISIBLE
         val hasChart = !calm && s.history.size >= 2
         chartBox.visibility = if (hasChart) View.VISIBLE else View.GONE
         if (hasChart) chart.setValues(s.history)
-        val p = s.progress
-        progress.visibility = if (p == null) View.GONE else View.VISIBLE
-        if (p != null) progress.set(p, if (p >= 1f) Sahne.AMBER else Sahne.ICE)
-        // Ek satırlar (sağlık: akü, motor, bakım; tüketim: ortalama; mola: kalan süre): yolculuk panelindeki "Toplam" satırlarıyla aynı dil.
+        // Ek satırlar (tüketim: ortalama): yolculuk panelindeki "Toplam" satırlarıyla aynı dil.
         rowsBox.removeAllViews()
         val rows = if (foldRows) emptyList() else s.rows
         rows.take(MAX_ROWS).forEachIndexed { i, (label, v) ->
@@ -428,7 +423,6 @@ internal class SahneValuePanel(
         const val CHART_VALUE_SP = 48f
         const val MAX_ROWS = 4
         const val CHART_DP = 84
-        const val PROGRESS_DP = 8
     }
 }
 
@@ -463,34 +457,6 @@ internal class HistoryBars(context: Context) : View(context) {
             paint.color = if (i == n - 1) Sahne.ICE else Sahne.TRACK
             canvas.drawRoundRect(rect, r, r, paint)
         }
-    }
-}
-
-/** İnce ilerleme çubuğu: iz üstünde [set] ile verilen oran ve renk; uçlar yuvarlak. */
-internal class ProgressLine(context: Context) : View(context) {
-    private var fraction = 0f
-    private var color = 0
-    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-    private val rect = android.graphics.RectF()
-
-    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-
-    fun set(f: Float, c: Int) {
-        if (f == fraction && c == color) return
-        fraction = f.coerceIn(0f, 1f)
-        color = c
-        invalidate()
-    }
-
-    override fun onDraw(canvas: android.graphics.Canvas) {
-        val r = height / 2f
-        rect.set(0f, 0f, width.toFloat(), height.toFloat())
-        paint.color = Sahne.TRACK
-        canvas.drawRoundRect(rect, r, r, paint)
-        if (fraction <= 0f) return
-        rect.set(0f, 0f, maxOf(height.toFloat(), width * fraction), height.toFloat())
-        paint.color = color
-        canvas.drawRoundRect(rect, r, r, paint)
     }
 }
 

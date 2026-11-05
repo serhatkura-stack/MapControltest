@@ -197,13 +197,9 @@
     <string name="launcher_wifi_connecting">%1$s ağına bağlanılıyor…</string>
     <string name="launcher_wifi_connect_failed">Bağlanılamadı</string>
     <string name="launcher_wifi_list_in_settings">Ağ listesi için Wi-Fi ayarlarını açın</string>
-    <string name="launcher_break_left_label">Molaya kalan</string>
     <string name="launcher_consumption_recent">Son ölçümler</string>
     <string name="launcher_screen_off_title">Ekran</string>
     <string name="launcher_screen_off_action">Karart</string>
-    <string name="launcher_air_row_in">Kabin içi PM2.5</string>
-    <string name="launcher_air_row_out">Dışarı PM2.5</string>
-    <string name="launcher_air_ugm" formatted="true">%1$d µg/m³</string>
     <string name="launcher_favorite_key">Favori tuşu (direksiyon)</string>
     <string name="launcher_favorite_key_off">Kapalı</string>
     <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
