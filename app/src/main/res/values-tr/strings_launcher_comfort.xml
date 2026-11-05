@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="launcher_comfort_on">Açık</string>
-    <string name="launcher_comfort_off">Kapalı</string>
     <string name="launcher_read_only_comfort">Test sürümü: araçtan değiştirilir</string>
     <string name="launcher_comfort_pending">Araç testinden sonra açılacak</string>
     <string name="launcher_widget_trunk">Bagaj</string>
