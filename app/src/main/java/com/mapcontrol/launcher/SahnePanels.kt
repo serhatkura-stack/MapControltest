@@ -38,12 +38,10 @@ internal object SahnePanelFactory {
 
     /**
      * Büyük biçimi olmayan, yalnızca bilgi gösteren türler: panelde kutucuk büyütülmez, yolculuk paneliyle aynı dilde
-     * başlık + büyük değer + alt satır olarak çizilir ([SahneValuePanel]; veri ve dokunuş kutucuğun kendisinden).
+     * başlık + büyük değer + alt satır olarak çizilir ([SahneValuePanel]; veri ve dokunuş kutucuğun kendisinden). Panelde
+     * izinli türlerden ([SahneForm.PANEL_TYPES]) yalnız tüketim bu biçimdedir.
      */
-    val VALUE_PANEL_TYPES = setOf(
-        WidgetType.CONSUMPTION, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER, WidgetType.DRIVE_MODE,
-        WidgetType.HEALTH, WidgetType.AIR,
-    )
+    val VALUE_PANEL_TYPES = setOf(WidgetType.CONSUMPTION)
 
     /** Özel Sahne düzeni olan türler kendi iç boşluğunu verir; diğerlerine panel bir pay ekler. */
     fun panelPaddingDp(type: WidgetType): Int = when (type) {

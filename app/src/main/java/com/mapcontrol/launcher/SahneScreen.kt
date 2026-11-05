@@ -366,8 +366,6 @@ class SahneScreen(
             val sub = when {
                 here -> context.getString(R.string.launcher_sahne_in_this_slot)
                 !ok -> context.getString(R.string.launcher_edit_on_screen)
-                ref.kind == SahneSlotKind.PANEL && !SahneForm.hasLargeForm(type) && type !in SahnePanelFactory.VALUE_PANEL_TYPES ->
-                    context.getString(R.string.launcher_sahne_enlarged)
                 else -> ""
             }
             // Alt satır her kutuda yer kaplar (boşsa görünmez): başlıklar aynı hizada kalır.

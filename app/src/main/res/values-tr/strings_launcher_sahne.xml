@@ -7,7 +7,6 @@
     <string name="launcher_sahne_pick_strip">Alt sıraya ekle</string>
     <string name="launcher_sahne_in_slot" formatted="true">Şu an: %1$s</string>
     <string name="launcher_sahne_in_this_slot">Şu an</string>
-    <string name="launcher_sahne_enlarged">Büyütülmüş kutucuk</string>
     <string name="launcher_sahne_change">Değiştir</string>
     <string name="launcher_sahne_add_here">Widget ekle</string>
     <string name="launcher_sahne_helper_park">Değiştirmek için bir alana dokun</string>

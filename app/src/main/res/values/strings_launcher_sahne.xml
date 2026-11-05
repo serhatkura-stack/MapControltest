@@ -7,7 +7,6 @@
     <string name="launcher_sahne_pick_strip">Add to bottom row</string>
     <string name="launcher_sahne_in_slot" formatted="true">Now: %1$s</string>
     <string name="launcher_sahne_in_this_slot">Now</string>
-    <string name="launcher_sahne_enlarged">Enlarged tile</string>
     <string name="launcher_sahne_change">Change</string>
     <string name="launcher_sahne_add_here">Add widget</string>
     <string name="launcher_sahne_helper_park">Tap an area to change it</string>
