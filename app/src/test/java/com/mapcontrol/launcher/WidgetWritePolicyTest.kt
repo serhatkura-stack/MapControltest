@@ -68,7 +68,6 @@ class WidgetWritePolicyTest {
         assertNotNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_TEMPERATURE_COPILOT, 30))
         assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_BLOW_SPEED_LEVEL, 11))
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_DRIVER_SEAT_HEAT, 5))
-        assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, 0))   // direksiyon ısıtma yalnızca 1 (anahtar)
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, 0))  // bagaj: yalnızca 1 aç / 2 kapat (durdurma yok)
         assertNull(WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, 3))
         assertNull(WidgetWritePolicy.find(0, 0, 0))

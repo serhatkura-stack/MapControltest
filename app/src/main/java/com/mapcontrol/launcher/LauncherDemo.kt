@@ -348,8 +348,6 @@ internal object LauncherDemo {
         // Bagaj, sahne aracıyla aynı demo anahtarından (`launcher_demo_open "trunk"`): tek kaynak.
         trunk = if ("trunk" in openParts) TrunkReading(position = TrunkMath.FULL_OPEN, latchOpen = 1, motion = TrunkMath.MOTION_STOPPED)
         else TrunkReading(position = 0, latchOpen = 0, motion = TrunkMath.MOTION_STOPPED),
-        keys = ClimateKeysReading(ac = true, auto = true, recirc = false, power = true),
-        heat = HeatReading(steering = false, windshield = false),
         sound = SoundFieldReading(balance = SoundFieldMath.CENTER, fade = if (rearOff) SoundFieldMath.FRONT_EXTREME else SoundFieldMath.CENTER),
     )
 

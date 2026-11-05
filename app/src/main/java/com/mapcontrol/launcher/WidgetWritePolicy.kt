@@ -62,14 +62,6 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
         // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
         Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),
-        // Klima tuşları (HVAC 1 A/C, 4 Oto, 8 devridaim): 1 aç / 2 kapat; devridaimde 1 iç hava / 2 dış hava (OEM HvacModel, SVVrControl a/b.java).
-        Entry("ClimateAc", HV, HvacID.ID_AC_STATE, setOf(1, 2), listOf(sig("hvac1_ac", HV, HvacID.ID_AC_STATE))),
-        Entry("ClimateAuto", HV, HvacID.ID_AC_AUTO_STATE, setOf(1, 2), listOf(sig("hvac4_auto", HV, HvacID.ID_AC_AUTO_STATE))),
-        Entry("ClimateRecirc", HV, HvacID.ID_AC_CIRCULATION_MODE, setOf(1, 2), listOf(sig("hvac8_circulation", HV, HvacID.ID_AC_CIRCULATION_MODE))),
-        // Isıtmalar: direksiyon anahtarı (HVAC 9 ← 1, ardından CarSetting 160 ← 1) ve ön cam ısıtma (HVAC 65: 1 aç / 2 kapat).
-        Entry("SteerHeatDisplay", HV, HvacID.ID_AC_DISPLAY_ACTIVE, setOf(1), listOf(sig("hvac9_display_active", HV, HvacID.ID_AC_DISPLAY_ACTIVE))),
-        Entry("SteerHeat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, setOf(1), listOf(sig("cs160_steer_wheel_heat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT))),
-        Entry("WindshieldHeat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT, setOf(1, 2), listOf(sig("hvac65_front_glass_heat", HV, HvacID.ID_AC_FRONT_GLASS_HEAT))),
         // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik sabit; değer = fade 0..20, balance gönderirken korunur). Uç değeri doğrulanmadı.
         Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, (0..SoundFieldMath.MAX).toSet(),
             listOf(sig("dsp_sound_field", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID))),

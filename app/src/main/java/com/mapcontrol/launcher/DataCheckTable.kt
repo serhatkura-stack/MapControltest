@@ -79,6 +79,9 @@ internal class CheckSignal(
  * boyamaz (aralık yoksa), yani yeşil nokta "cevap geldi" demektir, "anlamı doğrulandı" demek değildir.
  */
 internal object DataCheckTable {
+
+    /** HvacID.ID_CIRCULATION_MODE: yeni yazılımda devridaim durumu (bu SDK jar'ında yok); yalnızca veri denetimi tablosunda okunur. */
+    private const val ID_CIRCULATION_MODE_NEW = 111
     private const val RO = VDEventCarInfo.MODULE_READONLY_INFO
     private const val SET = VDEventCarInfo.MODULE_CAR_SETTING
     private const val HVAC = VDEventCarInfo.MODULE_HVAC
@@ -271,7 +274,7 @@ internal object DataCheckTable {
         s(oem, "Klima Oto (HVAC 4)", HVAC, HvacID.ID_AC_AUTO_STATE, unverified)
         s(oem, "Klima gücü (HVAC 18)", HVAC, HvacID.ID_AC_WORKING, unverified)
         s(oem, "Devridaim (HVAC 8)", HVAC, HvacID.ID_AC_CIRCULATION_MODE, unverified)
-        s(oem, "Devridaim (HVAC 111)", HVAC, ClimateKeysMath.ID_CIRCULATION_MODE_NEW, unverified)
+        s(oem, "Devridaim (HVAC 111)", HVAC, ID_CIRCULATION_MODE_NEW, unverified)
     }
 
     /** Grup sırası, tablodaki ilk görünüşe göre. */

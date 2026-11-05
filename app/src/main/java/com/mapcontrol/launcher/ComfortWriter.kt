@@ -119,7 +119,7 @@ internal object TrunkMath {
 }
 
 /**
- * Konfor widget'larının (bagaj, klima tuşları, ısıtmalar, arka hoparlör) yazma noktası. [COMFORT_WRITE_VERIFIED] ve ilgili
+ * Konfor widget'larının (bagaj, arka hoparlör) yazma noktası. [COMFORT_WRITE_VERIFIED] ve ilgili
  * özellik bayrağı true olmadıkça (ve test sürümünde anahtar kapalıyken) araca HİÇBİR ŞEY gitmez. Araca ulaşan tek yol `LauncherEdition.sendItemValue` (test sürümünde boş).
  * Kapı [ClimateWriter.canWrite] ile aynıdır.
  */
@@ -138,12 +138,10 @@ internal object ComfortWriter {
     val trunkStopKnown: Boolean get() = TRUNK_STOP_VALUE != null
 
     /**
-     * OEM komutlarından türetilen yeni kutucukların yazması (klima tuşları, ısıtmalar, arka hoparlör) araçta DOĞRULANMADI:
+     * OEM komutlarından türetilen yeni kutucukların yazması (arka hoparlör) araçta DOĞRULANMADI:
      * gerçek sürümde kapalı (dokunuş bilgi mesajı gösterir), test sürümünde yalnızca "widget'lardan yaz" anahtarı açıkken
      * beyaz listeden geçerek ([WidgetWritePolicy]) gider.
      */
-    const val CLIMATE_KEYS_WRITE_VERIFIED = false
-    const val HEAT_WRITE_VERIFIED = false
     const val REAR_SPEAKER_WRITE_VERIFIED = false
 
     /** Saf kapı: ana anahtar ve özellik bayrağı true ve salt-okur sürüm değilse yazılır. */
@@ -151,8 +149,6 @@ internal object ComfortWriter {
         ClimateWriter.canWrite(master && feature, readOnly)
 
     val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(TRUNK_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
-    val climateKeysEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(CLIMATE_KEYS_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
-    val heatEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(HEAT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
     val rearSpeakerEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(REAR_SPEAKER_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
 
     /**
@@ -205,10 +201,6 @@ internal object ComfortWriter {
         return writeTrunk(trunkEnabled, listOf(cmd), ::sendToCar)
     }
 
-    /** Klima tuşu aç/kapat (iç hava = açık). Kapalıyken false döner ve araca dokunmaz. */
-    fun setClimateKey(key: ClimateKey, on: Boolean): Boolean =
-        writeAll(climateKeysEnabled, ClimateKeysMath.commands(key, on), ::sendToCar)
-
     /**
      * Arka hoparlör: ses alanını yazar; [balance] korunur, [fade] ön-arka dengesidir (0..[SoundFieldMath.MAX]). Kapalıyken false döner ve araca dokunmaz.
      * Gönderim `LauncherEdition.sendSoundField` üzerindendir (test sürümünde beyaz liste kapısından geçer).
@@ -218,10 +210,6 @@ internal object ComfortWriter {
         LauncherEdition.sendSoundField(balance.coerceIn(0, SoundFieldMath.MAX), fade.coerceIn(0, SoundFieldMath.MAX))
         return true
     }
-
-    /** Isıtma anahtarı (direksiyon ya da ön cam). Kapalıyken false döner ve araca dokunmaz. */
-    fun setHeat(key: HeatKey, on: Boolean): Boolean =
-        writeAll(heatEnabled, HeatMath.commands(key, on), ::sendToCar)
 
     private fun sendToCar(cmd: ComfortCmd) {
         val proxy = CarInfoProxy.getInstance()
@@ -234,9 +222,6 @@ internal object ComfortWriter {
 internal data class ComfortReading(
     val connected: Boolean = false,
     val trunk: TrunkReading? = null,
-    /** Yalnızca ilgili kutucuğun okuyucusu doldurur (bkz. ClimateKeys.kt, HeatTiles.kt, RearSpeaker.kt). */
-    val keys: ClimateKeysReading? = null,
-    val heat: HeatReading? = null,
     /** Arka hoparlör: ön-arka dengesi (fader) ve sol-sağ dengesi; okunamayan null. */
     val sound: SoundFieldReading? = null,
 )
