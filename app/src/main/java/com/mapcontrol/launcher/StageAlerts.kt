@@ -15,35 +15,9 @@ internal object StageCorners {
      */
     const val AIR_BAD_PM25 = AirGrade.MODERATE_MAX + 1
 
-    /** Köşeyi açan sağlık uyarıları. Düşük yakıt yok (menzil bloğunda ve bildirim kapsülünde); bakım ayrıca [serviceNear]. */
-    private val WARNINGS = setOf(HealthMath.Issue.ENGINE_HOT, HealthMath.Issue.BATTERY_LOW, HealthMath.Issue.BATTERY_HIGH)
-
     /** Bakım yakın: kalan <= [SERVICE_NEAR_KM] km ya da bakım zamanı geçmiş (km ya da gün 0'a inmiş). */
     fun serviceNear(serviceKm: Int?, serviceDays: Int?): Boolean =
         (serviceKm != null && serviceKm <= SERVICE_NEAR_KM) || HealthMath.serviceOverdue(serviceKm, serviceDays)
-
-    /** Akü / motor suyu uyarısı var mı (okunamayan değer uyarı sayılmaz). */
-    fun healthWarning(batteryV: Double?, coolantC: Int?): Boolean =
-        HealthMath.issues(batteryV, coolantC, null, null, null).any { it in WARNINGS }
-
-    /** Sağlık notunda adlandırılan sorunlar, önem sırasıyla (ilki başlık olur). Düşük yakıt yok (kendi kapsülü var). */
-    enum class HealthNote { ENGINE_HOT, BATTERY_LOW, BATTERY_HIGH, TIRE, SERVICE_OVERDUE, SERVICE_NEAR }
-
-    fun healthNotes(batteryV: Double?, coolantC: Int?, serviceKm: Int?, serviceDays: Int?, tireAlert: Boolean): List<HealthNote> = buildList {
-        val issues = HealthMath.issues(batteryV, coolantC, null, null, null)
-        if (HealthMath.Issue.ENGINE_HOT in issues) add(HealthNote.ENGINE_HOT)
-        if (HealthMath.Issue.BATTERY_LOW in issues) add(HealthNote.BATTERY_LOW)
-        if (HealthMath.Issue.BATTERY_HIGH in issues) add(HealthNote.BATTERY_HIGH)
-        if (tireAlert) add(HealthNote.TIRE)
-        when {
-            HealthMath.serviceOverdue(serviceKm, serviceDays) -> add(HealthNote.SERVICE_OVERDUE)
-            serviceNear(serviceKm, serviceDays) -> add(HealthNote.SERVICE_NEAR)
-        }
-    }
-
-    /** Sağlık köşesi: bakım yakın, sağlık uyarısı ya da lastik uyarısı varsa. */
-    fun healthShown(batteryV: Double?, coolantC: Int?, serviceKm: Int?, serviceDays: Int?, tireAlert: Boolean): Boolean =
-        healthNotes(batteryV, coolantC, serviceKm, serviceDays, tireAlert).isNotEmpty()
 
     /** Hava köşesi: yalnızca kabin içi PM2.5 >= [AIR_BAD_PM25] iken. */
     fun airShown(pm25In: Int?): Boolean = pm25In != null && pm25In >= AIR_BAD_PM25

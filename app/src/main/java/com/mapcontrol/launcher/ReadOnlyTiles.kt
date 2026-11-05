@@ -75,10 +75,6 @@ internal object ReadOnlyDecode {
      */
     fun batterySoc(raw: Int?): Int? = raw?.takeIf { it in 1..100 }
 
-    /** Akü uyarısı: gerilim 11,0 V altında ya da 15,5 V üstünde, ya da şarj %30 altında. */
-    fun batteryLow(volts: Double?, soc: Int?): Boolean =
-        (volts != null && (volts < 11.0 || volts > 15.5)) || (soc != null && soc < 30)
-
     const val PAD_EMPTY = 0
     const val PAD_CHARGING = 1
     const val PAD_FULL = 2
@@ -203,8 +199,6 @@ internal data class ExtraData(
 
     /** Açık parçalar, [BodyPart] sırasıyla. */
     fun openParts(): List<BodyPart> = BodyPart.values().filter { parts[it] == true }
-
-    fun anyWindowOpen(): Boolean = openParts().any { it.name.startsWith("WINDOW_") }
 
     fun hoodOpen(): Boolean = parts[BodyPart.HOOD] == true
 }

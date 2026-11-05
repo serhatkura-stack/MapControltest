@@ -54,15 +54,6 @@ class ReadOnlyDecodeTest {
         assertNull(ReadOnlyDecode.batterySoc(null))
     }
 
-    @Test fun batteryLowThresholds() {
-        assertFalse(ReadOnlyDecode.batteryLow(14.1, 85))
-        assertFalse(ReadOnlyDecode.batteryLow(11.35, null))
-        assertTrue(ReadOnlyDecode.batteryLow(10.5, null))
-        assertTrue(ReadOnlyDecode.batteryLow(16.0, null))
-        assertTrue(ReadOnlyDecode.batteryLow(null, 20))
-        assertFalse(ReadOnlyDecode.batteryLow(null, null))
-    }
-
     @Test fun padState() {
         assertEquals(ReadOnlyDecode.PAD_EMPTY, ReadOnlyDecode.padState(0))
         assertEquals(ReadOnlyDecode.PAD_CHARGING, ReadOnlyDecode.padState(1))
@@ -128,10 +119,8 @@ class ReadOnlyDecodeTest {
         )
         assertTrue(data.bodyKnown)
         assertEquals(listOf(BodyPart.WINDOW_LF, BodyPart.HOOD), data.openParts())
-        assertTrue(data.anyWindowOpen())
         assertTrue(data.hoodOpen())
         assertFalse(ExtraData().bodyKnown)
         assertTrue(ExtraData(parts = mapOf(BodyPart.HOOD to false)).openParts().isEmpty())
-        assertFalse(ExtraData(parts = mapOf(BodyPart.DOOR_LF to true)).anyWindowOpen())
     }
 }

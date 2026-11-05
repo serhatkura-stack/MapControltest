@@ -14,11 +14,9 @@ internal enum class ClimateSide { DRIVER, PASSENGER }
  */
 internal object ClimateMath {
     /**
-     * Geçerli aralık (OEM `VRC a/a.java`, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
+     * Sıcaklık adımı. Geçerli aralık (OEM `VRC a/a.java`, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
      * 30 °C üstü (ham 31..33) OEM'de yoktur ve yazılmaz.
      */
-    const val MIN_TEMP = 16.0
-    const val MAX_TEMP = 30.0
     const val TEMP_STEP = 0.5
 
     /** LO ve HI uçları; sıcaklık hep bu ikisi arasındadır. LO = ham 0, HI = ham 30 (sıcaklık değeri değil, uç işaretidir). */

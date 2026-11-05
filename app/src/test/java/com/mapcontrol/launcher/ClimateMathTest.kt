@@ -58,8 +58,6 @@ class ClimateMathTest {
         assertFalse(ClimateMath.isLo(16.0))
         assertTrue(ClimateMath.isHi(30.5))
         assertFalse(ClimateMath.isHi(30.0))
-        assertEquals(16.0, ClimateMath.MIN_TEMP, 0.0)
-        assertEquals(30.0, ClimateMath.MAX_TEMP, 0.0)
         assertEquals(15.5, OurBottomBar.decodeTemp(ClimateMath.RAW_LO)!!, 0.0)
         assertEquals(30.5, OurBottomBar.decodeTemp(ClimateMath.RAW_HI)!!, 0.0)
         assertEquals(30.0, OurBottomBar.decodeTemp(29)!!, 0.0)

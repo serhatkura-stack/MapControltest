@@ -22,15 +22,6 @@ class FrostNavWidgetMathTest {
         assertFalse(FrostNavWidgetMath.isLoopback("192.168.43.1"))
     }
 
-    @Test fun presetCyclesAndWraps() {
-        val p = listOf("flat", "bass", "vocal", "treble")
-        assertEquals("bass", FrostNavWidgetMath.nextPreset("flat", p))
-        assertEquals("flat", FrostNavWidgetMath.nextPreset("treble", p))
-        // Elle ayar (custom) listede yok: ilk hazır ayara döner.
-        assertEquals("flat", FrostNavWidgetMath.nextPreset("custom", p))
-        assertNull(FrostNavWidgetMath.nextPreset("flat", emptyList()))
-    }
-
     @Test fun miniDashSplitOtherPrefersLastThenYandex() {
         assertEquals("com.spotify.music", FrostNavWidgetMath.miniDashSplitOther("com.spotify.music") { true })
         assertEquals("a.b/a.b.Main", FrostNavWidgetMath.miniDashSplitOther("a.b/a.b.Main") { it == "a.b" })

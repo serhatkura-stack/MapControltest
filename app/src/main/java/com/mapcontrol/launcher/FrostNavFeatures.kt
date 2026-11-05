@@ -129,13 +129,6 @@ object FrostNavWidgetMath {
     /** Yalnızca cihazın kendisinden erişilen adres (telefon okuyamaz). */
     fun isLoopback(host: String?): Boolean = host == null || host.startsWith("127.") || host == "localhost"
 
-    /** Listede bir sonraki hazır ayar (sonda başa döner); listede yoksa (elle ayar) ilk hazır ayar. */
-    fun nextPreset(current: String, presets: List<String>): String? {
-        if (presets.isEmpty()) return null
-        val i = presets.indexOf(current)
-        return presets[if (i < 0) 0 else (i + 1) % presets.size]
-    }
-
     /** Açık otomasyon sayısı ve toplam. */
     fun automationCount(items: List<AutomationItem>): Pair<Int, Int> = items.count { it.on } to items.size
 
