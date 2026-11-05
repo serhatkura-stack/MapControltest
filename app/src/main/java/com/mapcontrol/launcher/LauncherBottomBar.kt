@@ -78,9 +78,6 @@ object LauncherBottomBar {
     /** OEM gezinme çubuğu gizlenir mi (Bizimki ya da Gizli). */
     fun hidesOemBar(context: Context): Boolean = mode(context).hidesOemBar
 
-    /** Launcher'ın kendi alt çubuğu çizilir mi. */
-    fun showsOurBar(context: Context): Boolean = mode(context) == BottomBarMode.OURS
-
     /**
      * Debug ekstrası varsa (yalnızca debug yapıda) tercihi ayarlar. `launcher_bottom_bar` önceliklidir;
      * tanınmayan değer yok sayılır. Eski `launcher_fullscreen` mantıksal ekstrası takma addır.

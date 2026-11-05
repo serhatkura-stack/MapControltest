@@ -82,13 +82,10 @@ object Sahne {
     val AMBER_HI: Int get() = if (n) 0xFFFFC07E.toInt() else 0xFFE2852F.toInt()
     val AMBER_SOFT: Int get() = if (n) 0x24FFA24A else 0x24E2852F
     val AMBER_LINE: Int get() = if (n) 0x52FFA24A else 0x4DB4500A
-    val AMBER_SUB: Int get() = if (n) 0xCCFFC896.toInt() else 0xD18C3E08.toInt()
-    val AMBER_GLOW: Int get() = if (n) 0x59FFA24A else 0x47E2852F
     val ICE: Int get() = if (n) 0xFFA9D1FF.toInt() else 0xFF1D5FC4.toInt()
     val ICE_LO: Int get() = if (n) 0xFF6F9FD8.toInt() else 0xFF5F94DE.toInt()
     val COOL: Int get() = if (n) 0xFF7FE0F0.toInt() else 0xFF0E7C93.toInt()
     val OK: Int get() = if (n) 0xFF86E3B0.toInt() else 0xFF17935A.toInt()
-    val OK_RING: Int get() = if (n) 0x2486E3B0 else 0x2917935A
     val ALERT: Int get() = if (n) 0xFFFF7A6E.toInt() else 0xFFC4352B.toInt()
 
     /** Cam: üst/alt (opak, zemine harmanlanmış), üst kenar parıltısı, kenar çizgisi. */

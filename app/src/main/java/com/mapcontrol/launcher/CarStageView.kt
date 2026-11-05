@@ -508,8 +508,6 @@ class CarStageView(context: Context) : ViewGroup(context) {
         for (v in over) if (v.visibility == VISIBLE) drawChild(canvas, v, t)
     }
 
-    val isAnimating: Boolean get() = running > 0
-
     /**
      * Karşılamada araç belirirken true: görünüm alfası ekran dışı katman açmadan her çizime ayrı uygulanır (katman görünüm
      * kutusuyla sınırlı olur, kutudan taşan far huzmesini ve fren havuzunu keserdi).

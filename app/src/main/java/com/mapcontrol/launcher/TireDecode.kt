@@ -6,7 +6,6 @@ package com.mapcontrol.launcher
  */
 internal data class TireReading(val values: List<Double?>, val warning: Boolean? = null) {
     val perWheel: Boolean get() = values.size == WHEELS
-    val anyValue: Boolean get() = values.any { it != null }
 
     companion object {
         const val WHEELS = 4

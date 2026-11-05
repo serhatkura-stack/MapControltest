@@ -12,7 +12,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import kotlin.math.cos
 import kotlin.math.min
@@ -778,6 +777,3 @@ internal class CarLightView(context: Context) : android.view.View(context) {
         canvas.drawCircle(r, r * 0.62f, r * 0.62f, paint)
     }
 }
-
-/** Spor yazı tipi: ince kronograf rakamları. */
-internal fun sportType(context: Context, weight: Int): Typeface = SahneFonts.get(context, weight)

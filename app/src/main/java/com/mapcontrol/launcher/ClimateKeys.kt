@@ -1,6 +1,5 @@
 package com.mapcontrol.launcher
 
-import android.util.Log
 import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 
@@ -23,7 +22,7 @@ internal data class ClimateKeysReading(
  */
 internal object ClimateKeysMath {
 
-    /** HvacID.ID_CIRCULATION_MODE: yeni yazılımda devridaim durumu (bu SDK jar'ında yok); yalnızca okunur, günlüğe yazılır. */
+    /** HvacID.ID_CIRCULATION_MODE: yeni yazılımda devridaim durumu (bu SDK jar'ında yok); yalnızca veri denetimi tablosunda okunur. */
     const val ID_CIRCULATION_MODE_NEW = 111
 
     const val ON = 1
@@ -60,31 +59,3 @@ internal object ClimateKeysMath {
         ClimateKey.POWER -> r?.power
     }
 }
-
-/** Klima tuşlarını okur (yalnızca okuma; arka plan thread'inde). */
-internal fun ComfortReader.readClimateKeys(): ComfortReading {
-    if (LauncherDemo.enabled) return LauncherDemo.comfort()
-    val proxy = com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy.getInstance()
-    if (!proxy.isServiceConnnected) return ComfortReading()
-    val hv = VDEventCarInfo.MODULE_HVAC
-    return try {
-        val new111 = CarSignals.readInt(hv, ClimateKeysMath.ID_CIRCULATION_MODE_NEW)
-        if (new111 != null && new111 != lastCirc111) {
-            lastCirc111 = new111
-            Log.i("ClimateKeys", "HVAC 111 (ID_CIRCULATION_MODE) = $new111")
-        }
-        ComfortReading(
-            connected = true,
-            keys = ClimateKeysReading(
-                ac = ClimateKeysMath.decodeOn(CarSignals.readInt(hv, HvacID.ID_AC_STATE)),
-                auto = ClimateKeysMath.decodeOn(CarSignals.readInt(hv, HvacID.ID_AC_AUTO_STATE)),
-                recirc = ClimateKeysMath.decodeRecirc(CarSignals.readInt(hv, HvacID.ID_AC_CIRCULATION_MODE)),
-                power = ClimateKeysMath.decodeOn(CarSignals.readInt(hv, HvacID.ID_AC_WORKING)),
-            ),
-        )
-    } catch (e: RuntimeException) {
-        ComfortReading()
-    }
-}
-
-private var lastCirc111: Int? = null

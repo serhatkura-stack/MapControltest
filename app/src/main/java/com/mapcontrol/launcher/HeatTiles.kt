@@ -2,7 +2,6 @@ package com.mapcontrol.launcher
 
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
-import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 
 /** Isıtmalar: direksiyon ve ön cam. */
@@ -39,22 +38,4 @@ internal object HeatMath {
     }
 
     fun current(r: HeatReading?, key: HeatKey): Boolean? = if (key == HeatKey.STEERING) r?.steering else r?.windshield
-}
-
-/** Isıtmaları okur (yalnızca okuma; arka plan thread'inde). */
-internal fun ComfortReader.readHeat(): ComfortReading {
-    if (LauncherDemo.enabled) return LauncherDemo.comfort()
-    val proxy = CarInfoProxy.getInstance()
-    if (!proxy.isServiceConnnected) return ComfortReading()
-    return try {
-        ComfortReading(
-            connected = true,
-            heat = HeatReading(
-                steering = HeatMath.decodeOn(CarSignals.readInt(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_STEER_WHEEL_HEAT)),
-                windshield = HeatMath.decodeOn(CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_FRONT_GLASS_HEAT)),
-            ),
-        )
-    } catch (e: RuntimeException) {
-        ComfortReading()
-    }
 }

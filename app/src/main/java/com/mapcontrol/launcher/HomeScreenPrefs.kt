@@ -46,10 +46,6 @@ object HomeScreenPrefs {
      */
     @JvmStatic fun carColorIndex(context: Context): Int = CarColorPrefs.get(context).ordinal
 
-    @JvmStatic fun setCarColorIndex(context: Context, index: Int) {
-        CarColor.values().getOrNull(index)?.let { CarColorPrefs.set(context, it) }
-    }
-
     /** "Ana ekran düzeni": true Sahne (varsayılan), false Serbest ızgara. Launcher bir sonraki öne gelişinde yeniden kurulur. */
     @JvmStatic fun sahneStyle(context: Context): Boolean = HomeStylePrefs.get(context) == HomeStyle.SAHNE
 

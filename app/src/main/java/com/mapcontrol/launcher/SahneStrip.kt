@@ -38,9 +38,6 @@ object SahneArt {
         return if (id == 0) null else context.getDrawable(id)
     }
 
-    /** Şerit/panel öğesinin illüstrasyonu (varsa). */
-    fun illustration(context: android.content.Context, type: WidgetType): Drawable? = drawable(context, type.key)
-
     /**
      * Duruma bağlı şerit görseli anahtarı (yoksa null): koltukta ısıtma açıkken "seat_heat_on", soğutma açıkken "seat_vent_on",
      * kapalıyken "seat_off"; diğer türlerde türün anahtarı. Kaynak yoksa null (vektör ikon kullanılır). Ayrılmış nesne üretmez.

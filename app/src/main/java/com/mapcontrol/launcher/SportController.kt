@@ -41,8 +41,6 @@ internal class SportController(
     /** Geçiş kuşağı: iptal edilen ya da yerine yenisi başlayan geçişin geç gelen geri çağrıları hiçbir şey yapmaz. */
     private var gen = 0
 
-    /** Spor açık ya da açılıp kapanıyor. */
-    val engaged: Boolean get() = shown || busy
     /** Geçiş sürüyor (karartma altında): düzenlemeye girerken kesilir. */
     val transitioning: Boolean get() = busy
     /** Spor ekranının açıldığı an (monoton ms); özet kartı yalnız [MIN_STINT_MS]'den uzun spor açıklığında. */
