@@ -650,6 +650,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     override fun onResume() {
         super.onResume()
         hideSystemBars()
+        LauncherEdition.setHomeForeground(true)
         resumed = true
         syncAutoNight()
         // FrostNav "Ana ekran" sekmesinde tema/alt çubuk/düzen tercihleri değiştiyse (renkler ve çubuklar kurulumda okunur) yeniden kur.
@@ -676,6 +677,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         welcome?.finish()
         welcomeArmUntil = 0L
         LauncherTheme.stopAutoNight()
+        LauncherEdition.setHomeForeground(false)
         super.onPause()
     }
 

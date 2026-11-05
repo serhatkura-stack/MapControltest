@@ -154,6 +154,16 @@ class MiniDashActivity : Activity() {
         nav.start(navListener)
     }
 
+    override fun onResume() {
+        super.onResume()
+        LauncherEdition.setHomeForeground(true)
+    }
+
+    override fun onPause() {
+        LauncherEdition.setHomeForeground(false)
+        super.onPause()
+    }
+
     override fun onStop() {
         started = false
         try { unregisterReceiver(timeReceiver) } catch (e: IllegalArgumentException) { }

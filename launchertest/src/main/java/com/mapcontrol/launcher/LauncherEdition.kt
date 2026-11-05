@@ -30,6 +30,10 @@ internal object LauncherEdition {
 
     const val HAS_SETTINGS = false
 
+    /** Bu derlemede ok resmi ayrı resmi FrostNav uygulamasına ait; denetlenemez, işlem yok. */
+    @Suppress("UNUSED_PARAMETER")
+    fun setHomeForeground(front: Boolean) = Unit
+
     /** Koltuk soğutma yazması araçta doğrulandı (sürücü, CS 93); yine de yazma yalnızca test anahtarı açıkken ([READ_ONLY]) gider. */
     const val SEAT_VENT_WRITE_VERIFIED = true
 

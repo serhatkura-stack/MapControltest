@@ -34,6 +34,9 @@ internal object LauncherEdition {
     @Suppress("UNUSED_PARAMETER")
     fun init(context: Context) = Unit
 
+    /** Launcher (ana ekran / Mini gösterge) öndeyken yüzen FrostNav geri okunu gizler; başka uygulama önde iken eskisi gibi. */
+    fun setHomeForeground(front: Boolean) = com.mapcontrol.manager.FloatingBackButtonManager.setSuppressed(front)
+
     @Suppress("UNUSED_PARAMETER")
     fun setWriteTest(context: Context, on: Boolean) = Unit
 
