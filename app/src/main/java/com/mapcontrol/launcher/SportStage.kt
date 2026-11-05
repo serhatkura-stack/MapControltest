@@ -959,7 +959,7 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
     private val source = sahneText(activity, 17f, SportInk.INK_2, 500, dayBump = false).apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
     private val title = sahneText(activity, TITLE_SP, SportInk.INK, 600, dayBump = false).apply {
         gravity = Gravity.CENTER; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
-        breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
+        breakStrategy = android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE
         hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
     }
     private val artist = sahneText(activity, 18f, SportInk.INK_2, 400, dayBump = false).apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
@@ -1145,7 +1145,7 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         while (sp > TITLE_MIN_SP) {
             paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, dm)
             val l = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
-                .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .setIncludePad(title.includeFontPadding).build()
             if (l.lineCount <= 2 && (0 until l.lineCount - 1).none { splits(text, l.getLineEnd(it)) }) break
