@@ -382,26 +382,22 @@ internal object CarLightSignals {
     val HEAD_ON_VALUE: Int? = 1
 
     /**
-     * ID_DIRECTION_IND_LEFT / RIGHT (35 / 34): 1 = sinyal açık (2026-10-29 ölçüldü). 2 sn'lik okumada yanıp sönme görülmedi,
-     * kol durumu gibi davranıyor; ekrandaki ritim bu yüzden bizim sabit ritmimiz ([CarAnimSpec.BLINK_MS]).
+     * ID_DIRECTION_IND_LEFT / RIGHT (35 / 34): 1 = sinyal açık. Araçta doğrulandı (2026-10-29 ve 2026-11-06): sinyal açık olduğu
+     * sürece hep 1 (kol durumu; yanıp sönme ritmi yok), dörtlülerde ikisi birden 1. Ekrandaki ritim bizim ([CarAnimSpec.BLINK_MS]).
      */
     val TURN_ON_VALUE: Int? = 1
 
     /** ID_GEARBOX_STATE (26): R = 2 (ölçüldü; P = 1, N = 3, D = 5). */
     val REVERSE_GEAR_VALUE: Int? = 2
 
-    /**
-     * ID_BRAKE_PEDAL (80): 1 = pedala basılı, başka her değer (0) bırakılmış. OEM ayar ve şarj sunucuları yalnızca `== 1`
-     * sınar (Tiggo 8 dökümü); taramamızda basılmadan 0 okundu. Salt okuma: değer araçta güncellenmezse stop yalnızca hiç
-     * yanmaz. TODO(Tur 6): Tiggo 7'de frene basınca 0 → 1 → 0 değişimini ölç.
-     */
+    /** ID_BRAKE_PEDAL (80): 1 = basılı, 0 = bırakılmış (araçta doğrulandı 2026-11-06). */
     val BRAKE_ON_VALUE: Int? = 1
 
     /**
-     * TODO(Tur 6): ID_HAZARD_LIGHT (79) ölçülmedi ve hiçbir OEM uygulaması okumuyor (döküm), değer anlamı bilinmiyor; okunmaz.
-     * Dörtlüler açıkken 35 ve 34 ikisi birden 1 geliyorsa iki taraf zaten aynı ritimde yanar.
+     * ID_HAZARD_LIGHT (79): 1 = dörtlüler açık (araçta doğrulandı 2026-11-06; o sırada 35 ve 34 de 1 okunur). Selektör / uzun far
+     * için değişen bir sinyal görülmedi, okunmaz.
      */
-    val HAZARD_ON_VALUE: Int? = null
+    val HAZARD_ON_VALUE: Int? = 1
 
     /** Ham değerlerden ışık durumu (saf). Değeri null olan sinyalin ham okuması yok sayılır. */
     fun decode(head: Int?, left: Int?, right: Int?, gear: Int?, brake: Int?, hazard: Int?): CarLights = CarLights(

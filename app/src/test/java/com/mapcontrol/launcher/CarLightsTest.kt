@@ -16,9 +16,10 @@ class CarLightsTest {
         assertTrue(l.left)
         assertFalse(l.right)
         assertTrue(l.reverse)
-        // Fren pedalı OEM'deki gibi 1 = basılı; dörtlü anahtarı (79) doğrulanmadı: okunsa bile yanmaz.
+        // Araçta doğrulandı: fren pedalı 1 = basılı, dörtlü anahtarı (79) 1 = açık.
         assertTrue(l.brake)
-        assertFalse(l.hazard)
+        assertTrue(l.hazard)
+        assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = 0, hazard = 0).hazard)
         assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = 0, hazard = 0).brake)
         assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = 2, hazard = 0).brake)
         assertFalse(CarLightSignals.decode(head = 0, left = 0, right = 0, gear = 1, brake = null, hazard = 0).brake)
@@ -27,17 +28,26 @@ class CarLightsTest {
     }
 
     @Test
-    fun unverifiedSignalsAreNotEvenRead() {
+    fun verifiedSignalsAreRead() {
         val asked = mutableListOf<Int>()
         CarLightSignals.read { asked += it; 0 }
         assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_BRAKE_PEDAL in asked)
-        assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_HAZARD_LIGHT !in asked)
-        assertEquals(5, asked.size)
+        assertTrue(com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_HAZARD_LIGHT in asked)
+        assertEquals(6, asked.size)
     }
 
     @Test
-    fun hazardWithoutSwitchSignalBlinksBothFromIndicators() {
-        // Dörtlü anahtarı okunmuyor; dörtlülerde iki sinyal birden 1 gelirse iki taraf da yanar.
+    fun hazardSignalsBlinkBothSides() {
+        // Dörtlülerde araçta 79, 35 ve 34 birden 1; yalnızca iki sinyal 1 gelse bile iki taraf yanar.
+        val h = CarLightSignals.read { id ->
+            when (id) {
+                com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_HAZARD_LIGHT,
+                com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_DIRECTION_IND_LEFT,
+                com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_DIRECTION_IND_RIGHT -> 1
+                else -> 0
+            }
+        }
+        assertTrue(h.hazard && h.blinkLeft && h.blinkRight)
         val l = CarLightSignals.read { id ->
             when (id) {
                 com.desaysv.ivi.extra.project.carinfo.ReadOnlyID.ID_DIRECTION_IND_LEFT,
