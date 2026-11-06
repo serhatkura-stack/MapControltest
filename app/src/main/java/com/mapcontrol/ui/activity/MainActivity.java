@@ -1423,6 +1423,11 @@ public class MainActivity extends AppCompatActivity {
         if (intent == null || !intent.hasExtra(EXTRA_OPEN_TAB)) {
             return;
         }
+        if (tabContentArea == null) {
+            // Arayüz henüz kurulmadı (soğuk başlangıç: initializeApp sırada ya da açılış/yasal ekranı açık) ve
+            // switchTab sessizce döner. Extra tüketilmez: onNewIntent setIntent yaptı, initializeApp onu uygular.
+            return;
+        }
         int tab = intent.getIntExtra(EXTRA_OPEN_TAB, 0);
         intent.removeExtra(EXTRA_OPEN_TAB);
         switchTab(tab);
