@@ -235,5 +235,6 @@
     <string name="launcher_cluster_window_mid">Center</string>
     <string name="launcher_cluster_window_wide">Wide</string>
     <string name="launcher_cluster_window_full">Full</string>
+    <string name="launcher_cluster_ambient">Match ambient light colour</string>
     <string name="launcher_cluster_map_next">Applies the next time the map is projected to the cluster</string>
 </resources>

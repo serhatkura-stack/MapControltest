@@ -235,5 +235,6 @@
     <string name="launcher_cluster_window_mid">Orta</string>
     <string name="launcher_cluster_window_wide">Geniş</string>
     <string name="launcher_cluster_window_full">Tam</string>
+    <string name="launcher_cluster_ambient">Ambiyans rengiyle uyum</string>
     <string name="launcher_cluster_map_next">Göstergeye yansıt bir sonraki açılışında uygulanır</string>
 </resources>

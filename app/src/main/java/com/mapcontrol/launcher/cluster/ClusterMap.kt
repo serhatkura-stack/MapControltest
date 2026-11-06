@@ -23,6 +23,10 @@ import android.util.Log
 import android.view.Display
 import android.view.View
 import android.view.WindowManager
+import com.desaysv.ivi.extra.project.carinfo.CarSettingID
+import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
+import com.mapcontrol.launcher.CarSignals
+import com.mapcontrol.launcher.LauncherDemo
 import com.mapcontrol.launcher.LauncherTheme
 import com.mapcontrol.util.AppLaunchHelper
 import com.mapcontrol.launcher.cluster.ClusterMapMath.Box
@@ -56,6 +60,7 @@ import com.mapcontrol.launcher.cluster.ClusterMapMath.WindowSize
  *   --ei launcher_cluster_map_display <id>        gösterge ekran numarasını zorla
  *   --es launcher_cluster_image /sdcard/Download/x.png   görseli göstergede tam ekran göster (1920x720'ye ölçeklenir)
  *   --ez launcher_cluster_image_off true          görseli kaldır
+ *   --es launcher_cluster_accent ff4200|off       ambiyans vurgusunu taklit et (araç okuması yerine; açık katmana)
  */
 internal object ClusterMap {
 
@@ -69,12 +74,14 @@ internal object ClusterMap {
 
     /** Debug: B yolu denemesi (kendi VirtualDisplay'imize harita açmak); sonuç yalnızca loga yazılır. */
     const val EXTRA_VD_PROBE = "launcher_cluster_vd_probe"
+    const val EXTRA_ACCENT = "launcher_cluster_accent"
 
     private const val PREFS = "launcher_cluster_map"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_FRAME = "frame"
     private const val KEY_APP = "app"
     private const val KEY_WINDOW = "window"
+    private const val KEY_AMBIENT = "ambient_match"
 
     private const val SETTING_FREEFORM = "enable_freeform_support"
     private const val WINDOWING_MODE_FREEFORM = 5
@@ -113,7 +120,38 @@ internal object ClusterMap {
     fun windowSize(c: Context): WindowSize = WindowSize.of(prefs(c).getString(KEY_WINDOW, null))
     fun setWindowSize(c: Context, v: WindowSize) = prefs(c).edit().putString(KEY_WINDOW, v.key).apply()
 
+    /** "Ambiyans rengiyle uyum" (varsayılan kapalı): kıl çizgi ve iç ışık aracın ambiyans rengine uyar (okunabilirse). */
+    fun ambientMatch(c: Context): Boolean = prefs(c).getBoolean(KEY_AMBIENT, false)
+    fun setAmbientMatch(c: Context, on: Boolean) {
+        prefs(c).edit().putBoolean(KEY_AMBIENT, on).apply()
+        refreshAmbient(c)
+    }
+
     fun isRunning(): Boolean = frameView != null
+
+    /**
+     * Ayar açıksa ambiyansı arka planda okur (CS 7 açık mı, CS 11 renk; yalnız okuma) ve katmana verir; kapalı, demo,
+     * ambiyans kapalı ya da renk okunamıyor/tanınmıyorsa vurgu kalkar (stil renkleri).
+     */
+    fun refreshAmbient(context: Context) {
+        val c = context.applicationContext
+        val token = session
+        if (frameView == null) return
+        if (!ambientMatch(c) || LauncherDemo.enabled) { frameView?.setAccent(null); return }
+        Thread({
+            val rgb = try {
+                val on = CarSignals.readInt(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_AMBIENT_LIGHT)
+                val raw = CarSignals.readInt(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR)
+                val rgb = if (on == 1) ClusterMapMath.ambientRgb(raw) else null
+                Log.i(TAG, "ambiyans: açık=$on renk(ham)=$raw → ${rgb?.let { Integer.toHexString(it) } ?: "yok sayıldı"}")
+                rgb
+            } catch (e: Throwable) {
+                Log.w(TAG, "ambiyans okunamadı: ${e.javaClass.simpleName}: ${e.message}")
+                null
+            }
+            main.post { if (token == session) frameView?.setAccent(rgb) }
+        }, "ClusterMapAmbient").apply { isDaemon = true }.start()
+    }
 
     /** Gösterge ekranı var mı (ayar satırları yalnızca o zaman görünür). */
     fun hasCluster(c: Context): Boolean = findDisplay(c, null, log = false) != null
@@ -187,6 +225,7 @@ internal object ClusterMap {
         }
         launchedPkg = target
         listen(c, true)
+        refreshAmbient(c)
         Log.i(TAG, "çerçeveli harita açıldı: $target ekran=${display.displayId} pencere=$hole sınır=$b çerçeve=${currentFrame(c).key}")
         main.postDelayed({ verify(c, token, target, display.displayId, b) }, VERIFY_DELAY_MS)
         return true
@@ -349,7 +388,7 @@ internal object ClusterMap {
     /** HomeLauncherActivity onCreate/onNewIntent: debug yapıda ekstraları işler, işlenen ekstralar silinir. */
     fun applyFrom(activity: Activity, intent: Intent?) {
         if (intent == null || !isDebug(activity)) return
-        val keys = listOf(EXTRA_MAP, EXTRA_FRAME, EXTRA_RECT, EXTRA_DISPLAY, EXTRA_IMAGE, EXTRA_IMAGE_OFF, EXTRA_VD_PROBE)
+        val keys = listOf(EXTRA_MAP, EXTRA_FRAME, EXTRA_RECT, EXTRA_DISPLAY, EXTRA_IMAGE, EXTRA_IMAGE_OFF, EXTRA_VD_PROBE, EXTRA_ACCENT)
         if (keys.none { intent.hasExtra(it) }) return
         val c = activity.applicationContext
         if (intent.hasExtra(EXTRA_DISPLAY)) forcedDisplay = intent.getIntExtra(EXTRA_DISPLAY, -1).takeIf { it >= 0 }
@@ -369,6 +408,7 @@ internal object ClusterMap {
         val imageOff = intent.getBooleanExtra(EXTRA_IMAGE_OFF, false)
         val map: Boolean? = if (intent.hasExtra(EXTRA_MAP)) intent.getBooleanExtra(EXTRA_MAP, false) else null
         val vdProbe = intent.getBooleanExtra(EXTRA_VD_PROBE, false)
+        val accent = intent.getStringExtra(EXTRA_ACCENT)
         keys.forEach { intent.removeExtra(it) }
         main.post {
             if (frame != null) {
@@ -381,6 +421,11 @@ internal object ClusterMap {
             if (imageOff) hideImage()
             if (!image.isNullOrBlank()) showImage(c, image)
             if (vdProbe) probeVirtualDisplay(c, 0)
+            if (accent != null) {
+                val rgb = accent.trim().removePrefix("#").toIntOrNull(16)?.and(0xFFFFFF)
+                Log.i(TAG, "debug ambiyans vurgusu: ${rgb?.let { Integer.toHexString(it) } ?: "yok"}")
+                frameView?.setAccent(rgb)
+            }
             when (map) {
                 true -> if (!startFramed(c)) Log.w(TAG, "debug: çerçeveli harita açılamadı (yukarıdaki sebep)")
                 false -> stop(c, "debug komutu")

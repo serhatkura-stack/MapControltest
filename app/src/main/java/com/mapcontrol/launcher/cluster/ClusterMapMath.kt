@@ -196,21 +196,132 @@ internal object ClusterMapMath {
     const val HINT_RX = 380f
     const val HINT_RY = 140f
 
-    /**
-     * Tek katmanın rengi ve güçleri. Katman yalnızca yumuşak geçişler çizer (çizgi, kutu, ışık yok): pencere dışı opak
-     * [base]; pencerenin içinde kenarlardan [base]'e erime, gece oval vinyeti ([oval]), sağ alt yazı köşesi ([hint]) ve
-     * üst QNX sırasının altında hafif koyulaşma ([topRow]). Güçler 0..1 (o etkinin en fazla örtmesi).
-     */
-    data class Veil(val base: Int, val oval: Float, val hint: Float, val topRow: Float)
+    /** Ufuk sisi: pencere üstünden [HAZE_FADE] px aşağıya kadar söner (üstte kenar erimesiyle karanlığa karışır). */
+    const val HAZE_FADE = 190
+
+    /** İç ışık: haritanın alt-ortası (araç imleci/rota genelde orada); yarıçaplar pencere boyunun oranı. */
+    const val LIGHT_CY = 0.70f
+    const val LIGHT_RX = 0.42f
+    const val LIGHT_RY = 0.50f
+
+    /** Işık kılavuzu kıl çizgisi: QNX üst sırasının hemen altı, ekran ortasında en parlak, uçlarda yok olur. */
+    const val LINE_Y = 120f
+    const val LINE_CX = 960f
+    const val LINE_HALF = 620f
+    const val LINE_WIDTH = 1.5f
+
+    /** Açılışta siyahtan son katmana, stil değişiminde çapraz geçiş süreleri (tek seferlik). */
+    const val OPEN_FADE_MS = 600L
+    const val STYLE_FADE_MS = 400L
 
     /**
-     * Gece/uydu: siyah zemin (gece QNX'in kendi oval vinyetiyle aynı dil). Gündüz: açık grafit, daha hafif etkiler;
-     * QNX gündüz bunun üstüne açık tül serip koyu yazı çizer, siyah kutu soluk/puslu görünürdü.
+     * Tek katmanın rengi ve güçleri. Pencere dışı opak [base]; pencerenin içinde kenarlardan [base]'e erime, gece oval
+     * vinyeti ([oval]), sağ alt yazı köşesi ([hint]), üst QNX sırasının altında koyulaşma ([topRow]). Güçler 0..1.
+     * Katman bir pencere olduğundan haritayla yalnız alfa karışımı (SRC_OVER) yapılabilir:
+     *  - [grade]/[gradeAlpha]: birleştirici renk tonu. MULTIPLY pencereler arasında yok; renkli koyu tonla SRC_OVER
+     *    ona yakın sonuç verir (ör. gece mavi: kırmızı/sarı kanallar maviden fazla iner).
+     *  - [light]/[lightAlpha]: iç ışık. Beyaz ile SRC_OVER, SCREEN ile birebir aynıdır (1-(1-m)(1-a)).
+     *  - [haze]/[hazeAlpha]: ufuk sisi rengi ve en fazla örtmesi.
+     *  - [line]/[lineAlpha]: ışık kılavuzu kıl çizgisinin rengi ve tepe alfası.
+     */
+    data class Veil(
+        val base: Int, val oval: Float, val hint: Float, val topRow: Float,
+        val grade: Int = 0, val gradeAlpha: Float = 0f,
+        val light: Int = 0xFFFFFF, val lightAlpha: Float = 0f,
+        val haze: Int = 0, val hazeAlpha: Float = 0f,
+        val line: Int = 0xFFFFFF, val lineAlpha: Float = 0f,
+    )
+
+    /**
+     * Gece/uydu: siyah zemin (gece QNX'in kendi oval vinyetiyle aynı dil), gece serin gece mavisi ton, derin mavi-siyah
+     * sis, serin beyaz çizgi. Uydu: nötr (ton yok). Gündüz: açık grafit zemin, hafif sıcak ton, sıcak-nötr açık sis,
+     * grafit çizgi; QNX gündüz bunun üstüne açık tül serip koyu yazı çizer.
      */
     fun veil(frame: Frame): Veil = when (frame) {
-        Frame.GECE -> Veil(base = 0xFF000000.toInt(), oval = 0.55f, hint = 0.80f, topRow = 0.55f)
-        Frame.UYDU -> Veil(base = 0xFF020406.toInt(), oval = 0.62f, hint = 0.82f, topRow = 0.60f)
-        Frame.GUNDUZ -> Veil(base = 0xFF4A5058.toInt(), oval = 0.30f, hint = 0.55f, topRow = 0.35f)
+        Frame.GECE -> Veil(base = 0xFF000000.toInt(), oval = 0.55f, hint = 0.80f, topRow = 0.55f,
+            grade = 0x0E1A3A, gradeAlpha = 0.10f, light = 0xFFFFFF, lightAlpha = 0.06f,
+            haze = 0x0A1424, hazeAlpha = 0.55f, line = 0xDCE6F2, lineAlpha = 0.85f)
+        Frame.UYDU -> Veil(base = 0xFF020406.toInt(), oval = 0.62f, hint = 0.82f, topRow = 0.60f,
+            grade = 0x000000, gradeAlpha = 0f, light = 0xFFFFFF, lightAlpha = 0.05f,
+            haze = 0x0C141C, hazeAlpha = 0.50f, line = 0xC4D2DE, lineAlpha = 0.75f)
+        Frame.GUNDUZ -> Veil(base = 0xFF4A5058.toInt(), oval = 0.30f, hint = 0.55f, topRow = 0.35f,
+            grade = 0xFFC890, gradeAlpha = 0.06f, light = 0xFFFFFF, lightAlpha = 0.05f,
+            haze = 0xD6CEC2, hazeAlpha = 0.35f, line = 0x2A2E34, lineAlpha = 0.80f)
+    }
+
+    /** Ufuk sisinin (x, y) noktasındaki örtmesi: pencerenin üst kenarında tepe, [HAZE_FADE] px aşağıda sıfır. */
+    fun hazeAlpha(y: Float, hole: Box, v: Veil): Float {
+        if (y < hole.top || y >= hole.bottom) return 0f
+        return v.hazeAlpha * (1f - smoothstep(0f, HAZE_FADE.toFloat(), y - hole.top))
+    }
+
+    /** İç ışığın örtmesi: alt-orta elipsin merkezinde [Veil.lightAlpha], elips kenarında sıfır. */
+    fun lightAlpha(x: Float, y: Float, hole: Box, v: Veil): Float {
+        if (x < hole.left || x >= hole.right || y < hole.top || y >= hole.bottom) return 0f
+        val dx = (x - (hole.left + hole.right) / 2f) / (hole.width * LIGHT_RX)
+        val dy = (y - (hole.top + hole.height * LIGHT_CY)) / (hole.height * LIGHT_RY)
+        return v.lightAlpha * (1f - smoothstep(0f, 1f, Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()))
+    }
+
+    /** Kıl çizginin x boyunca alfası: ortada [Veil.lineAlpha], [LINE_CX] ± [LINE_HALF] dışında sıfır. */
+    fun lineAlpha(x: Float, v: Veil): Float {
+        val t = 1f - smoothstep(0f, 1f, Math.abs(x - LINE_CX) / LINE_HALF)
+        return v.lineAlpha * t * t
+    }
+
+    /** SRC_OVER biriktirici (premultiplied 0..1); piksel başına nesne ayırmamak için yeniden kullanılır. */
+    class Mix {
+        var r = 0f; var g = 0f; var b = 0f; var a = 0f
+        fun reset() { r = 0f; g = 0f; b = 0f; a = 0f }
+        fun over(rgb: Int, alpha: Float) {
+            if (alpha <= 0f) return
+            val k = 1f - alpha
+            r = alpha * ((rgb shr 16) and 0xFF) / 255f + k * r
+            g = alpha * ((rgb shr 8) and 0xFF) / 255f + k * g
+            b = alpha * (rgb and 0xFF) / 255f + k * b
+            a = alpha + k * a
+        }
+    }
+
+    /** İki RGB'nin karışımı (t=0 → [a], t=1 → [b]). */
+    fun mixRgb(a: Int, b: Int, t: Float): Int {
+        fun ch(s: Int) = Math.round(((a shr s) and 0xFF) * (1f - t) + ((b shr s) and 0xFF) * t)
+        return (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+    }
+
+    /**
+     * Katmanın (x, y) pikseli: ton → iç ışık → ufuk sisi → zemin örtmesi sırasıyla SRC_OVER. [accent] (ambiyans
+     * rengi, RGB) verilirse iç ışık beyazla yarı yarıya o renge döner. Dönüş: [Mix] içinde premultiplied sonuç.
+     */
+    fun overlay(x: Float, y: Float, hole: Box, v: Veil, accent: Int?, m: Mix): Mix {
+        m.reset()
+        val cover = veilCover(x, y, hole, v)
+        if (cover < 1f) {
+            m.over(v.grade, v.gradeAlpha)
+            m.over(if (accent != null) mixRgb(v.light, accent, 0.5f) else v.light, lightAlpha(x, y, hole, v))
+            m.over(v.haze, hazeAlpha(y, hole, v))
+        }
+        m.over(v.base and 0xFFFFFF, cover)
+        return m
+    }
+
+    /** Ambiyans renk sırası → RGB: yalnız araçta doğrulanan sıralar (45 = (255, 66, 0), OEM tablosu). */
+    private val AMBIENT_TABLE = mapOf(45 to 0xFF4200)
+
+    /**
+     * CS 11 ham değeri → okunur ambiyans rengi (RGB) ya da null. Kodlama belirsiz: 1..64 sıra (bilinen tablo), 0x10000
+     * üstü doğrudan 0xRRGGBB kabul edilir. Çok koyu renk (göstergede okunmaz) yok sayılır.
+     */
+    fun ambientRgb(raw: Int?): Int? {
+        val rgb = when {
+            raw == null -> null
+            raw in 1..64 -> AMBIENT_TABLE[raw]
+            raw in 0x10000..0xFFFFFF -> raw
+            else -> null
+        } ?: return null
+        val lum = 0.2126f * ((rgb shr 16) and 0xFF) + 0.7152f * ((rgb shr 8) and 0xFF) + 0.0722f * (rgb and 0xFF)
+        val peak = maxOf((rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
+        return if (peak >= 160 && lum >= 40f) rgb else null
     }
 
     fun smoothstep(e0: Float, e1: Float, x: Float): Float {

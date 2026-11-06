@@ -338,6 +338,12 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             // Açık haritaya dokunulmaz: sonraki yansıtmada uygulanır.
             if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
         }
+        // Ambiyans rengiyle uyum: açık katmana hemen uygulanır (renk okunamazsa stil renkleri kalır).
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_cluster_ambient, ClusterMap.ambientMatch(activity)) { value ->
+            d.dismiss()
+            ClusterMap.setAmbientMatch(activity, value)
+        }, fullWidth())
     }
 
     /** Küçük etiket + eşit parçalı seçim (tema seçimiyle aynı görünüm); seçili olana dokunmak bir şey yapmaz. */
