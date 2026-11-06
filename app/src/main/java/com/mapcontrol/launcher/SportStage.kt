@@ -260,6 +260,7 @@ internal class SportStageView(
         visibleNow = true
         lastGearState = null
         media.onVisible()
+        car.setActive(true)
         TripSource.add(activity, tripListener)
         registerSensor()
         main.removeCallbacks(tick)
@@ -274,6 +275,7 @@ internal class SportStageView(
         if (!visibleNow) return
         visibleNow = false
         media.onHidden()
+        car.setActive(false)
         TripSource.remove(tripListener)
         sensors?.unregisterListener(sensorListener)
         main.removeCallbacks(tick)
@@ -349,7 +351,11 @@ internal class SportStageView(
     private val consumption = ConsumptionSmoother()
     private var fedTrip: TripData? = null
     private var instantDisplay = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
-    private val tripListener = TripSource.Listener { trip = it }
+    private val tripListener = TripSource.Listener {
+        trip = it
+        // Dijital ikiz ışıkları spor kadranındaki araçta da (fren çubuğu, köşe sinyalleri; durum aynıysa iş yok).
+        car.setLights(it.lights)
+    }
     private val metrics by lazy { VehicleMetricsRepository.getInstance(activity.applicationContext) }
 
     private val tick = object : Runnable {

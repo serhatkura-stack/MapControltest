@@ -174,11 +174,26 @@ object CarAnimSpec {
 
     // --- Dijital ikiz ışıkları (§11) ---
 
-    /** Sinyal ritmi: bir yanma + sönme süresi (~79 / dk, araç sinyaline yakın); yanık kısım [BLINK_ON]. */
+    /** Sinyal ritmi: bir yanma + sönme süresi (~79 / dk, araç sinyaline yakın); döngü içindeki parlaklık [blinkLevel]. */
     const val BLINK_MS = 760L
-    const val BLINK_ON = 0.55f
-    /** Far / fren / geri lambası açılıp kapanırken yumuşak geçiş. */
+    /** Döngüde yanışın bittiği ve sönüşün başladığı yer (0..1): ~270 ms yumuşak yanış, kısa tepe, ~380 ms yumuşak sönüş. */
+    const val BLINK_RISE = 0.35f
+    const val BLINK_FALL = 0.5f
+    /** Sinyal kapanınca son yanığın sönme süresi. */
+    const val TURN_OFF_MS = 220L
+    /** Far / geri lambası açılıp kapanırken yumuşak geçiş. */
     const val LIGHT_FADE_MS = 180L
+    /** Fren: basınca yumuşak yanış, bırakınca biraz daha yavaş sönüş. */
+    const val BRAKE_IN_MS = 220L
+    const val BRAKE_OUT_MS = 380L
+
+    /** Sinyal döngüsünde [p] (0..1) anındaki parlaklık (0..1): yumuşak yükseliş, kısa tepe, yumuşak iniş; uçlarda 0. */
+    fun blinkLevel(p: Float): Float = when {
+        p <= 0f || p >= 1f -> 0f
+        p < BLINK_RISE -> smooth(p, 0f, BLINK_RISE)
+        p < BLINK_FALL -> 1f
+        else -> 1f - smooth(p, BLINK_FALL, 1f)
+    }
     /** Kilitlenince dörtlülerin tek yanışının yanık süresi. */
     const val HAZARD_FLASH_MS = 500L
     /** Boya parlaması: bu aralıkla bir kez, [GLINT_MS] sürer; arada hiçbir şey çizilmez. */

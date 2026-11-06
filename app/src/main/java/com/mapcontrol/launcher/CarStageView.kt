@@ -91,16 +91,18 @@ class CarStageView(context: Context) : ViewGroup(context) {
     // --- Işıklar (§11): zemindekiler gövdenin altında, lambalar üstünde ---
     private val beamTop = sprite(LightMasks.beam, HEAD_BEAM)
     private val beamBottom = sprite(LightMasks.beam, HEAD_BEAM)
-    private val brakePool = sprite(LightMasks.glow, BRAKE_POOL)
+    private val brakePool = sprite(LightMasks.pool, BRAKE_POOL)
     private val reverseFloor = sprite(LightMasks.glow, REVERSE_FLOOR)
     private val reflection = LightSprite(context, null, 0xFFFFFFFF.toInt()).apply { alpha = REFLECTION_ALPHA }
     private val headTop = sprite(LightMasks.glow, HEAD_LAMP)
     private val headBottom = sprite(LightMasks.glow, HEAD_LAMP)
-    private val tail = sprite(LightMasks.glow, TAIL_LAMP)
+    /** Stop lambası: arka kenarın çizgisini izleyen ince ışık çubuğu (gövde silüetinden bir kez çizilir, [PartArt.tailBarOf]). */
+    private val tail = sprite(null, 0xFFFFFFFF.toInt())
     private val reverseTop = sprite(LightMasks.glow, REVERSE_LAMP)
     private val reverseBottom = sprite(LightMasks.glow, REVERSE_LAMP)
-    private val turnLeft = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
-    private val turnRight = arrayOf(sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN), sprite(LightMasks.hot, TURN))
+    /** Sinyaller yalnızca köşe lambalarında (ön, arka); aynada ışık yok. Küçük, yumuşak, düşük alfalı kehribar. */
+    private val turnLeft = arrayOf(sprite(LightMasks.glow, TURN), sprite(LightMasks.glow, TURN))
+    private val turnRight = arrayOf(sprite(LightMasks.glow, TURN), sprite(LightMasks.glow, TURN))
     /** Lastikler gövdenin altında (yalnızca kenardan taşan kısım ve ışıması görünür); [TireDecode] sırası. */
     private val tires = Array(4) { sprite(if (it % 2 == 0) PartArt.tire else PartArt.tireFlipped, 0xFFFFFFFF.toInt()) }
     private val fuelCap = sprite(PartArt.fuelCap, 0xFFFFFFFF.toInt())
@@ -112,20 +114,18 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private val boxes: Map<View, FloatArray> = mapOf(
         beamTop to floatArrayOf(735f, -23f, 985f, 167f),
         beamBottom to floatArrayOf(735f, 189f, 985f, 379f),
-        brakePool to floatArrayOf(-190f, 28f, 120f, 328f),
+        brakePool to floatArrayOf(-300f, -40f, 30f, 396f),
         reverseFloor to floatArrayOf(-160f, 88f, 40f, 268f),
         reflection to floatArrayOf(0f, CarAnimSpec.BASE_H - 10f, CarAnimSpec.BASE_W, CarAnimSpec.BASE_H + 86f),
         headTop to floatArrayOf(690f, 36f, 772f, 104f),
         headBottom to floatArrayOf(690f, 252f, 772f, 320f),
-        tail to floatArrayOf(-16f, 22f, 64f, 334f),
+        tail to floatArrayOf(PartArt.TAIL_X0, PartArt.TAIL_Y0, PartArt.TAIL_X1, PartArt.TAIL_Y1),
         reverseTop to floatArrayOf(0f, 95f, 56f, 145f),
         reverseBottom to floatArrayOf(0f, 211f, 56f, 261f),
-        turnLeft[0] to floatArrayOf(686f, 0f, 796f, 110f),
-        turnLeft[1] to floatArrayOf(-30f, 0f, 80f, 110f),
-        turnLeft[2] to floatArrayOf(476f, -18f, 544f, 50f),
-        turnRight[0] to floatArrayOf(686f, 246f, 796f, 356f),
-        turnRight[1] to floatArrayOf(-30f, 246f, 80f, 356f),
-        turnRight[2] to floatArrayOf(471f, 306f, 539f, 374f),
+        turnLeft[0] to floatArrayOf(690f, 17f, 760f, 87f),
+        turnLeft[1] to floatArrayOf(2f, 17f, 72f, 87f),
+        turnRight[0] to floatArrayOf(690f, 269f, 760f, 339f),
+        turnRight[1] to floatArrayOf(2f, 269f, 72f, 339f),
         tires[0] to PartArt.tireViewBox(0),
         tires[1] to PartArt.tireViewBox(1),
         tires[2] to PartArt.tireViewBox(2),
@@ -139,22 +139,46 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private var active = false
     private var wantActive = false
     /**
-     * Sinyal ritmi: yalnızca yanma / sönme anında iki alfa değişimi (LED gibi anlık); arada hiç kare çizilmez. İki taraf aynı
-     * saatten beslenir (dörtlü aynı ritimde). [flashUntil] kilitlenince tek yanışın bitişi (0 = yok).
+     * Sinyal ritmi: [CarAnimSpec.BLINK_MS]'lik döngüde yumuşak yanış ve sönüş ([CarAnimSpec.blinkLevel]); yalnızca iki köşe
+     * lambasının görünüm alfası canlanır (kare başına çizim kaydı ve bellek ayırma yok). Sinyal açıkken döngü sürer, kapanınca
+     * yumuşakça söner ve döngü durur. İki taraf aynı animatörden beslenir (dörtlü aynı ritimde). [flashing] kilitlenince tek döngü.
      */
-    private var blinkOn = false
     private var blinking = false
     private var flashing = false
-    private val blinkTick = object : Runnable {
-        override fun run() {
-            blinkOn = !blinkOn
-            applyBlink()
-            postDelayed(this, if (blinkOn) BLINK_ON_MS else BLINK_OFF_MS)
-        }
+    private val blinkAnim: ValueAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = CarAnimSpec.BLINK_MS
+        interpolator = LinearInterpolator()
+        addUpdateListener { setTurnLevel(CarAnimSpec.blinkLevel(it.animatedFraction)) }
+        addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (flashing && !blinking) {
+                    flashing = false
+                    hideTurns()
+                }
+            }
+        })
     }
-    private val flashEnd = Runnable {
-        flashing = false
-        applyBlink()
+
+    private fun setTurnLevel(level: Float) {
+        val l = lights
+        val left = (blinking && l.left) || flashing
+        val right = (blinking && l.right) || flashing
+        for (t in turnLeft) t.alpha = if (left) level else 0f
+        for (t in turnRight) t.alpha = if (right) level else 0f
+    }
+
+    private fun showTurns() {
+        for (t in turnLeft) { t.animate().cancel(); t.visibility = VISIBLE }
+        for (t in turnRight) { t.animate().cancel(); t.visibility = VISIBLE }
+    }
+
+    /** Sinyal kapandı: yanık köşe kısa sürede söner, sonra çizimden çıkar. */
+    private fun hideTurns() {
+        for (t in turnLeft + turnRight) {
+            t.animate().cancel()
+            if (t.visibility != VISIBLE || t.alpha == 0f) { t.alpha = 0f; t.visibility = GONE; continue }
+            t.animate().alpha(0f).setDuration(CarAnimSpec.TURN_OFF_MS).withEndAction { t.visibility = GONE }.start()
+        }
     }
     private val glintRun = Runnable { startGlint() }
 
@@ -166,7 +190,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         for (v in over) addView(v)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         bitmaps = CarBitmaps.get(context, CarColorPrefs.get(context))
-        bitmaps?.let { reflection.setMask(it.reflection); hood.setMask(it.hoodMask) }
+        bitmaps?.let { reflection.setMask(it.reflection); hood.setMask(it.hoodMask); tail.setMask(it.tailBar) }
         glint.mask = bitmaps?.base
         for (i in parts.indices) {
             val s = specs[i]
@@ -273,6 +297,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         bitmaps = CarBitmaps.get(context, color)
         reflection.setMask(bitmaps?.reflection)
         hood.setMask(bitmaps?.hoodMask)
+        tail.setMask(bitmaps?.tailBar)
         glint.mask = bitmaps?.base
         invalidate()
     }
@@ -280,7 +305,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
     /**
      * Dijital ikiz ışıkları (§11). [head] far huzmesi ve far lambaları (stoplar hafif yanar); [brake] stoplar parlar ve
      * arkada kırmızı zemin havuzu; [reverse] geri lambası ve arkada beyaz zemin ışığı; [turnLeft] / [turnRight] o taraftaki
-     * köşelerde ve ayna sinyalinde kehribar yanıp sönme (ikisi birlikte = dörtlü, aynı ritimde); [hazardFlash] dörtlülerin
+     * ön ve arka köşe lambasında yumuşak kehribar yanıp sönme (aynada yok; ikisi birlikte = dörtlü, aynı ritimde); [hazardFlash] dörtlülerin
      * tek yanışı (kilitlenince). Değişmeyen durum hiçbir şey yapmaz; ekran görünmezken yalnızca durum saklanır.
      */
     fun setLights(head: Boolean, brake: Boolean, reverse: Boolean, turnLeft: Boolean, turnRight: Boolean, hazardFlash: Boolean = false) {
@@ -294,13 +319,14 @@ class CarStageView(context: Context) : ViewGroup(context) {
 
     fun setLights(l: CarLights) = setLights(l.head, l.brake, l.reverse, l.blinkLeft, l.blinkRight)
 
-    /** Dörtlülerin tek yanışı (kilitlenince); görünmezken ya da sinyal zaten yanıp sönerken atlanır. */
+    /** Dörtlülerin tek yanışı (kilitlenince): bir sinyal döngüsü; görünmezken ya da sinyal zaten yanıp sönerken atlanır. */
     fun flashHazard() {
         if (!active || blinking) return
         flashing = true
-        applyBlink()
-        removeCallbacks(flashEnd)
-        postDelayed(flashEnd, CarAnimSpec.HAZARD_FLASH_MS)
+        showTurns()
+        blinkAnim.cancel()
+        blinkAnim.repeatCount = 0
+        blinkAnim.start()
     }
 
     /** Showroom zemini: arabanın altında çok hafif yansıma (Sahne; spor ekranında dönmüş araçta kapalı). Bir kez çizilir. */
@@ -389,10 +415,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
             applyLights(animate = false)
             scheduleGlint()
         } else {
-            stopBlink()
-            removeCallbacks(flashEnd)
             flashing = false
-            applyBlink()
+            stopBlink()
             removeCallbacks(glintRun)
             glint.stop()
         }
@@ -404,9 +428,10 @@ class CarStageView(context: Context) : ViewGroup(context) {
         fade(beamBottom, l.head, animate)
         fade(headTop, l.head, animate)
         fade(headBottom, l.head, animate)
-        // Stoplar: farla birlikte hafif (park lambası), frende tam.
-        fade(tail, l.head || l.brake, animate, if (l.brake) 1f else TAIL_POSITION_ALPHA)
-        fade(brakePool, l.brake, animate)
+        // Stop çubuğu: farla birlikte hafif (park lambası), frende tam; basınca yumuşak yanar, bırakınca daha yavaş söner.
+        val brakeMs = if (l.brake) CarAnimSpec.BRAKE_IN_MS else CarAnimSpec.BRAKE_OUT_MS
+        fade(tail, l.head || l.brake, animate, if (l.brake) 1f else TAIL_POSITION_ALPHA, brakeMs)
+        fade(brakePool, l.brake, animate, 1f, brakeMs)
         fade(reverseTop, l.reverse, animate)
         fade(reverseBottom, l.reverse, animate)
         fade(reverseFloor, l.reverse, animate)
@@ -415,37 +440,26 @@ class CarStageView(context: Context) : ViewGroup(context) {
         if (want && !blinking) {
             blinking = true
             flashing = false
-            removeCallbacks(flashEnd)
-            blinkOn = false
-            blinkTick.run()
+            showTurns()
+            blinkAnim.cancel()
+            blinkAnim.repeatCount = ValueAnimator.INFINITE
+            blinkAnim.start()
         } else if (!want && blinking) {
             stopBlink()
+        } else if (want) {
+            // Taraf değişti (ör. sol → dörtlü): döngü sürer, yeni taraf aynı fazda yanar.
+            setTurnLevel(CarAnimSpec.blinkLevel(blinkAnim.animatedFraction))
         }
-        applyBlink()
     }
 
     private fun stopBlink() {
         blinking = false
-        blinkOn = false
-        removeCallbacks(blinkTick)
-    }
-
-    /** Sinyal görünümlerinin anlık hali: yanıp sönerken ritimdeki faz, tek yanışta açık, aksi halde gizli. */
-    private fun applyBlink() {
-        val l = lights
-        side(turnLeft, if (blinking && l.left) blinkOn else flashing)
-        side(turnRight, if (blinking && l.right) blinkOn else flashing)
-    }
-
-    private fun side(views: Array<LightSprite>, lit: Boolean) {
-        for (t in views) {
-            t.alpha = if (lit) 1f else 0f
-            t.visibility = if (lit) VISIBLE else GONE
-        }
+        blinkAnim.cancel()
+        hideTurns()
     }
 
     /** Lamba / huzme yumuşakça yanar ya da söner; söndüğünde çizimden çıkar (GONE). */
-    private fun fade(v: View, on: Boolean, animate: Boolean, level: Float = 1f) {
+    private fun fade(v: View, on: Boolean, animate: Boolean, level: Float = 1f, ms: Long = CarAnimSpec.LIGHT_FADE_MS) {
         val target = if (on) level else 0f
         v.animate().cancel()
         if (!animate) {
@@ -458,7 +472,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
             if (!on) v.visibility = GONE
             return
         }
-        v.animate().alpha(target).setDuration(CarAnimSpec.LIGHT_FADE_MS).withEndAction { if (!on) v.visibility = GONE }.start()
+        v.animate().alpha(target).setDuration(ms).setInterpolator(if (on) FADE_IN_EASE else FADE_OUT_EASE)
+            .withEndAction { if (!on) v.visibility = GONE }.start()
     }
 
     private fun scheduleGlint() {
@@ -653,6 +668,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
         val reflection: Bitmap? = base?.let { reflectionOf(it) }
         /** Kaput ışığı maskesi: gövde alfası × yumuşak elips (renk başına bir kez, küçük ALPHA_8). */
         val hoodMask: Bitmap? by lazy { base?.let { PartArt.hoodMaskOf(it) } }
+        /** Stop çubuğu: arka kenarın çizgisini izleyen ince kırmızı ışık (renk başına bir kez, küçük ARGB). */
+        val tailBar: Bitmap? by lazy { base?.let { PartArt.tailBarOf(it) } }
 
         companion object {
             /** Süreç boyunca yalnızca son kullanılan renk tutulur; tema değişimiyle yeniden kurulan ekran yeniden çözmez. */
@@ -712,7 +729,27 @@ private const val REFL_H = 24
 private object LightMasks {
     val glow: Bitmap? by lazy { radial(intArrayOf(0xFF000000.toInt(), 0x8C000000.toInt(), 0x33000000, 0x0D000000, 0)) }
 
-    val hot: Bitmap? by lazy { radial(intArrayOf(0xFF000000.toInt(), 0xE0000000.toInt(), 0x80000000.toInt(), 0x26000000, 0)) }
+    /**
+     * Fren zemin yansıması: arabanın arkasında geniş ve yumuşak; arka tampona yakın tarafta (sağ kenar) en dolu, geriye ve
+     * yanlara doğru söner. ALPHA_8, 96 × 128.
+     */
+    val pool: Bitmap? by lazy {
+        try {
+            val w = 96
+            val h = 128
+            val px = ByteArray(w * h)
+            for (y in 0 until h) for (x in 0 until w) {
+                val u = x / (w - 1f)
+                val v = (y - (h - 1) / 2f) / ((h - 1) / 2f)
+                val along = Math.pow(u.toDouble(), 1.8).toFloat()
+                val across = Math.exp(-(v * v) / (2.0 * 0.34 * 0.34)).toFloat()
+                px[y * w + x] = (255 * along * across).toInt().coerceIn(0, 255).toByte()
+            }
+            Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8).also { it.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(px)) }
+        } catch (e: OutOfMemoryError) {
+            null
+        }
+    }
 
     private fun radial(colors: IntArray): Bitmap? = try {
         Bitmap.createBitmap(64, 64, Bitmap.Config.ALPHA_8).also {
@@ -863,18 +900,18 @@ private class GlintLayer(context: Context) : ViewGroup(context) {
     }
 }
 
-/** Sinyalin yanık ve sönük süreleri ([CarAnimSpec.BLINK_MS] ritmi, [CarAnimSpec.BLINK_ON] yanık oran). */
-private val BLINK_ON_MS = (CarAnimSpec.BLINK_MS * CarAnimSpec.BLINK_ON).toLong()
-private val BLINK_OFF_MS = CarAnimSpec.BLINK_MS - BLINK_ON_MS
+private val FADE_IN_EASE = android.view.animation.DecelerateInterpolator()
+private val FADE_OUT_EASE = AccelerateDecelerateInterpolator()
 
 // Işık renkleri: alfa kanalı ışığın tam parlaklığıdır, görünüm alfası 0..1 açar / kapatır.
 private val HEAD_BEAM: Int get() = if (LauncherTheme.night) 0xB3DCE8FF.toInt() else 0x73DCE8FF
 private const val HEAD_LAMP = 0xE6EAF2FF.toInt()
-private const val TAIL_LAMP = 0xFFFF2A20.toInt()
-private const val BRAKE_POOL = 0x80FF2A20.toInt()
+/** Zemindeki fren yansıması: geniş, yumuşak, düşük alfa (maskenin en dolu yerinde ~%30). */
+private const val BRAKE_POOL = 0x4DFF2A20
 private const val REVERSE_LAMP = 0xE6F2F6FF.toInt()
 private const val REVERSE_FLOOR = 0x6BF2F6FF
-private const val TURN = 0xFFFFA24A.toInt()
+/** Sinyal köşesi: yumuşak kehribar, en parlak yerinde ~%70 (premium, göz almayan). */
+private const val TURN = 0xB3FFAA50.toInt()
 /** Kaput ışığı (motor suyu / akü): maskenin en dolu yerinde ~%45 kehribar. */
 private const val HOOD_GLOW = 0x73FFA040
 private const val PART_FADE_MS = 360L
@@ -983,6 +1020,64 @@ private object PartArt {
                     floatArrayOf(0f, 0.22f, 0.5f, 0.78f, 1f), Shader.TileMode.CLAMP)
             })
         }
+    } catch (e: OutOfMemoryError) {
+        null
+    }
+
+    /** Stop çubuğunun kutusu (base pikseli): arka kenar boyunca, köşelere kadar. */
+    const val TAIL_X0 = -12f
+    const val TAIL_X1 = 72f
+    const val TAIL_Y0 = 20f
+    const val TAIL_Y1 = 336f
+    /** Çubuğun gövde kenarından içeri uzaklığı ve uçlardaki sönüm boyu (base px). */
+    private const val TAIL_INSET = 7f
+    private const val TAIL_TAPER = 34f
+
+    /**
+     * Stop çubuğu: her satırda gövdenin arka kenarı (base alfası) bulunur, çubuk ondan [TAIL_INSET] içeride ince ve keskin bir
+     * çekirdek (σ 1,3 px, ortası açık pembe-beyaz) + dar kırmızı ışıma (σ 5 px) olarak çizilir; kenar satırlar arasında
+     * yumuşatılır, uçlar söner. ARGB, ~84 × 316 px, renk başına bir kez.
+     */
+    fun tailBarOf(base: Bitmap): Bitmap? = try {
+        val w = (TAIL_X1 - TAIL_X0).toInt()
+        val h = (TAIL_Y1 - TAIL_Y0).toInt()
+        val scanW = minOf(90, base.width)
+        val y0 = TAIL_Y0.toInt()
+        val edge = FloatArray(h) { Float.NaN }
+        val row = IntArray(scanW)
+        for (yy in 0 until h) {
+            val by = y0 + yy
+            if (by < 0 || by >= base.height) continue
+            base.getPixels(row, 0, scanW, 0, by, scanW, 1)
+            val x = row.indexOfFirst { (it ushr 24) > 140 }
+            if (x >= 0) edge[yy] = x.toFloat()
+        }
+        // Satırlar arası yumuşatma (9 satırlık ortalama): kenar pürüzü çubuğu titretmesin.
+        val smooth = FloatArray(h) { i ->
+            var sum = 0f
+            var n = 0
+            for (k in -4..4) { val e = edge.getOrNull(i + k) ?: continue; if (!e.isNaN()) { sum += e; n++ } }
+            if (n == 0) Float.NaN else sum / n
+        }
+        val out = IntArray(w * h)
+        for (yy in 0 until h) {
+            val e = smooth[yy]
+            if (e.isNaN()) continue
+            val along = CarAnimSpec.smooth(minOf(yy, h - 1 - yy).toFloat(), 0f, TAIL_TAPER)
+            val c = e + TAIL_INSET - TAIL_X0
+            for (x in 0 until w) {
+                val d = x - c
+                val core = Math.exp(-(d * d) / (2.0 * 1.3 * 1.3)).toFloat()
+                val glow = 0.38f * Math.exp(-(d * d) / (2.0 * 5.0 * 5.0)).toFloat()
+                val a = (core + glow).coerceAtMost(1f) * along
+                if (a <= 0.004f) continue
+                val hot = core * core * 0.55f
+                val g = (42 + (176 - 42) * hot).toInt()
+                val b = (32 + (160 - 32) * hot).toInt()
+                out[yy * w + x] = ((a * 255).toInt().coerceIn(0, 255) shl 24) or (255 shl 16) or (g shl 8) or b
+            }
+        }
+        Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
     } catch (e: OutOfMemoryError) {
         null
     }

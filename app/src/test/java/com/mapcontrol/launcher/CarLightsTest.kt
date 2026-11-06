@@ -61,6 +61,23 @@ class CarLightsTest {
     }
 
     @Test
+    fun blinkFadesSoftlyWithinOneCycle() {
+        // Döngü uçlarında sönük, ortada tepe; yükseliş ve iniş yumuşak (sert aç/kapa yok).
+        assertEquals(0f, CarAnimSpec.blinkLevel(0f), 0f)
+        assertEquals(0f, CarAnimSpec.blinkLevel(1f), 0f)
+        assertEquals(1f, CarAnimSpec.blinkLevel(0.42f), 0f)
+        val rise = CarAnimSpec.blinkLevel(CarAnimSpec.BLINK_RISE / 2)
+        assertTrue(rise > 0.3f && rise < 0.7f)
+        val fall = CarAnimSpec.blinkLevel((CarAnimSpec.BLINK_FALL + 1f) / 2)
+        assertTrue(fall > 0.3f && fall < 0.7f)
+        assertTrue(CarAnimSpec.blinkLevel(0.05f) < CarAnimSpec.blinkLevel(0.2f))
+        assertTrue(CarAnimSpec.blinkLevel(0.9f) < CarAnimSpec.blinkLevel(0.7f))
+        // Yanış ~270 ms, sönüş ~380 ms (760 ms döngüde).
+        assertEquals(266f, CarAnimSpec.BLINK_MS * CarAnimSpec.BLINK_RISE, 1f)
+        assertEquals(380f, CarAnimSpec.BLINK_MS * (1f - CarAnimSpec.BLINK_FALL), 1f)
+    }
+
+    @Test
     fun demoListParses() {
         val l = CarLights.parse(" head, Brake ,left,hazard,nope")
         assertEquals(CarLights(head = true, brake = true, left = true, hazard = true), l)
