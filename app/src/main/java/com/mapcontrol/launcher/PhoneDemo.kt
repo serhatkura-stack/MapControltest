@@ -120,9 +120,9 @@ internal class DemoBackend : CallBackend, DataBackend, AssistantBackend {
     override fun read(pinnedIds: List<String>): PhoneData =
         PhoneData(PhoneDemo.contacts, PhoneDemo.recents(System.currentTimeMillis()))
 
-    override fun start(done: (Boolean) -> Unit) {
+    override fun start(done: (AssistantResult) -> Unit) {
         Log.i("PhoneSource", "demo asistan")
-        done(true)
+        done(AssistantResult.STARTED)
     }
 
     private fun cancelPending() {

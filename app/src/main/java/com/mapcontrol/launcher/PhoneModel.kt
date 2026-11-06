@@ -454,8 +454,9 @@ object PhoneSource {
             val target = !snap.call.muted
             val be = callBackendFor(PhoneBackendChooser.callBackend(caps))
             val app = appContext
+            // VDBus: DIAL_MIC_MODE {"status": 2 sessiz / 1 açık} (OEM servisi sistem uid'siyle AudioManager'ı çağırır).
+            // HFP/diğerleri ya da VDBus başarısızsa doğrudan AudioManager.
             var ok = be?.setMute(target) == true
-            // VDBus mikrofon olayının yükü bilinmiyor: AudioManager'a düşülür.
             if (!ok && be != null && be.name != PhoneBackendName.DEMO && app != null) ok = MicMute.set(app, target)
             if (ok && be?.name != PhoneBackendName.DEMO) mutedByMic = target
             if (ok) update { it.copy(call = it.call.copy(muted = target)) } else fail(PhoneError.NOT_SUPPORTED)
@@ -470,14 +471,23 @@ object PhoneSource {
         assistantAt != 0L && SystemClock.elapsedRealtime() - assistantAt < ASSISTANT_IDLE_CLOSE_MS
 
     /**
-     * Bağlı telefonun sesli asistanını (Siri / Google, HFP BVRA) başlatır. Launcher görünmezken de çalışır (direksiyon
-     * tuşu): HFP vekili gerekirse açılır, sahip yoksa kullanımdan 10 sn sonra kapanır.
+     * Bağlı telefonun sesli asistanı (Siri / Google, HFP BVRA): aç/kapa. Açıksa (bizim ya da telefonun başlattığı
+     * oturum, AG_EVENT ile izlenir) kapatır. Launcher görünmezken de çalışır (direksiyon tuşu): HFP vekili gerekirse
+     * açılır, sahip yoksa kullanımdan 10 sn sonra kapanır.
+     *
+     * Süren arama varken hiçbir şey yapmaz (true döner, uyarı yok): OEM de BT araması sırasında kendi asistanını
+     * kapatır (SVVRService manager/b/a.java) ve SCO sırasında BVRA istenmez. Başarı yalnızca telefon doğrulayınca
+     * (+BVRA:1 ya da SCO sesi) sayılır; doğrulanmazsa ASSISTANT_UNAVAILABLE.
      */
     fun startVoiceAssistant(): Boolean {
         val app = appContext
         if (app == null) {
             fail(PhoneError.ASSISTANT_UNAVAILABLE)
             return false
+        }
+        if (started && snap.call.inCall && !demoActive()) {
+            Log.i(TAG, "asistan: arama sürüyor, yok sayıldı")
+            return true
         }
         val backend: AssistantBackend
         if (demoActive()) {
@@ -494,22 +504,40 @@ object PhoneSource {
         }
         assistantAt = SystemClock.elapsedRealtime()
         main.removeCallbacks(idleClose)
-        io.execute {
-            backend.start { ok ->
-                Log.i(TAG, if (ok) "asistan başladı" else "asistan başlatılamadı")
-                if (!ok) fail(PhoneError.ASSISTANT_UNAVAILABLE)
-                if (!started) {
-                    main.removeCallbacks(idleClose)
-                    main.postDelayed(idleClose, ASSISTANT_IDLE_CLOSE_MS)
-                }
-            }
-        }
+        io.execute { backend.start(::onAssistantResult) }
         return true
+    }
+
+    /** Asistan açıksa kapatır (direksiyon kısa basışı: OEM kendi asistanını açarken mikrofon bölünmesin). */
+    fun stopVoiceAssistant() {
+        val a = hfpAssistant ?: return
+        if (!a.active) return
+        assistantAt = SystemClock.elapsedRealtime()
+        main.removeCallbacks(idleClose)
+        io.execute { a.stop(::onAssistantResult) }
+    }
+
+    /** Telefonun asistan oturumu açık (bildiğimiz kadarıyla). Herhangi bir iş parçacığında. */
+    fun voiceAssistantActive(): Boolean = hfpAssistant?.active == true
+
+    /** io: asistan sonucu. Kişisel veri yok. */
+    private fun onAssistantResult(r: AssistantResult) {
+        Log.i(TAG, when (r) {
+            AssistantResult.STARTED -> "asistan başladı (telefon doğruladı)"
+            AssistantResult.STOPPED -> "asistan kapatıldı"
+            AssistantResult.BUSY -> "asistan: arama sürüyor, yok sayıldı"
+            AssistantResult.FAILED -> "asistan başlatılamadı/doğrulanmadı"
+        })
+        if (r == AssistantResult.FAILED) fail(PhoneError.ASSISTANT_UNAVAILABLE)
+        if (!started) {
+            main.removeCallbacks(idleClose)
+            main.postDelayed(idleClose, ASSISTANT_IDLE_CLOSE_MS)
+        }
     }
 
     /**
      * Rehber/geçmiş/arama izinlerini ister (READ_CONTACTS, READ_CALL_LOG, CALL_PHONE; Telecom hesabını okumak için
-     * aynı gruptaki READ_PHONE_STATE). Araçta sistem penceresi yoksa `adb shell pm grant` ile verilir.
+     * aynı gruptaki READ_PHONE_STATE; Telecom ile cevap/kapat için ANSWER_PHONE_CALLS). Araçta sistem penceresi yoksa `adb shell pm grant` ile verilir.
      */
     fun requestPermissions(activity: Activity) {
         try {
@@ -519,6 +547,7 @@ object PhoneSource {
                     Manifest.permission.READ_CALL_LOG,
                     Manifest.permission.CALL_PHONE,
                     Manifest.permission.READ_PHONE_STATE,
+                    Manifest.permission.ANSWER_PHONE_CALLS,
                 ),
                 REQ_PERMISSIONS,
             )
@@ -597,9 +626,10 @@ object PhoneSource {
             demo = demoActive(),
             vdbusBt = vdOk,
             telecomHfpAccount = telecom?.available() == true,
-            hfpClientProxy = HfpLink.proxy != null,
+            hfpClientProxy = hfp?.available() == true,
             contactsPermission = contactsData?.available() == true,
             vdbusData = vdOk,
+            telecomCallControl = telecom?.canControl() == true,
         )
         val call = PhoneBackendChooser.callBackend(c)
         val data = PhoneBackendChooser.dataBackend(c)
@@ -656,11 +686,21 @@ object PhoneSource {
             return
         }
         val pinned = PhonePrefs.pinnedIds(app)
-        val data = try {
-            backend.read(pinned)
+        fun readFrom(be: DataBackend, label: String): PhoneData? = try {
+            be.read(pinned)
         } catch (t: Throwable) {
-            Log.w(TAG, "veri ($name): ${t.javaClass.simpleName}")
+            Log.w(TAG, "veri ($label): ${t.javaClass.simpleName}")
             null
+        }
+        var data = readFrom(backend, name)
+        // Sağlayıcı boşsa (araç BT servisi açılışta pbapsink/CallLog'u siler; OEM indirmesi gelene kadar boş) OEM önbelleği.
+        val second = PhoneBackendChooser.dataFallback(caps, name)
+        if (second != null && (data == null || (data.contacts.isEmpty() && data.recents.isEmpty()))) {
+            val alt = dataBackendFor(second)?.let { readFrom(it, second) }
+            if (alt != null && (data == null || alt.contacts.isNotEmpty() || alt.recents.isNotEmpty())) {
+                Log.i(TAG, "veri: $name boş, $second kullanıldı")
+                data = alt
+            }
         }
         if (data == null) {
             update { it.copy(loaded = true) }
@@ -718,6 +758,8 @@ object PhoneSource {
     private fun unmuteIfNeeded() {
         if (!mutedByMic) return
         mutedByMic = false
+        // Sessize alan yol neyse onunla açılır (VDBus sistem uid'siyle kapatır); ayrıca AudioManager da açılır.
+        runCatching { callBackendFor(PhoneBackendChooser.callBackend(caps))?.takeIf { it.name != PhoneBackendName.DEMO }?.setMute(false) }
         appContext?.let { MicMute.set(it, false) }
     }
 

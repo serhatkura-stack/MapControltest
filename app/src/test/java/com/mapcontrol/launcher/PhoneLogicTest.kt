@@ -313,4 +313,63 @@ class PhoneLogicTest {
                 PhoneBackendChooser.permissionNeeded(Caps(demo = demo, contactsPermission = perm, vdbusData = vd)))
         }
     }
+
+    // ---- Döküm analizi (6 Kasım): VDBus uuid seçimi, projeksiyon, yedek veri yolu ----
+
+    @Test fun vdRejectPicksIncomingOrWaitingUuid() {
+        val list = listOf(DialInfoLite(0, uuid = "a"), DialInfoLite(5, uuid = "w"))
+        assertEquals("w", VdCallPick.forReject(list))
+        assertEquals("i", VdCallPick.forReject(listOf(DialInfoLite(4, uuid = "i"))))
+        assertNull(VdCallPick.forReject(listOf(DialInfoLite(0, uuid = "a"))))
+        assertNull(VdCallPick.forReject(listOf(DialInfoLite(4, uuid = ""))))
+        assertNull(VdCallPick.forReject(emptyList()))
+    }
+
+    @Test fun vdHangUpPicksLiveCallThenRelevant() {
+        assertEquals("a", VdCallPick.forHangUp(listOf(DialInfoLite(5, uuid = "w"), DialInfoLite(0, uuid = "a"))))
+        assertEquals("d", VdCallPick.forHangUp(listOf(DialInfoLite(2, uuid = "d"))))
+        assertEquals("r", VdCallPick.forHangUp(listOf(DialInfoLite(3, uuid = "r"))))
+        // Yalnız beklemedeki arama: ekranda gösterilen (relevantIndex) kapatılır.
+        assertEquals("h", VdCallPick.forHangUp(listOf(DialInfoLite(1, uuid = "h"))))
+        assertNull(VdCallPick.forHangUp(listOf(DialInfoLite(0, uuid = null))))
+        assertNull(VdCallPick.forHangUp(emptyList()))
+    }
+
+    @Test fun acceptTypeIsNone() = assertEquals(0, VdCallPick.ACCEPT_TYPE)
+
+    @Test fun projectionLinkActive() {
+        assertTrue(ProjectionLink.active(2, 1))
+        assertTrue(ProjectionLink.active(2, 4))
+        assertTrue(ProjectionLink.active(2, 7))
+        assertTrue(ProjectionLink.active(2, 8))
+        assertFalse(ProjectionLink.active(1, 1))
+        assertFalse(ProjectionLink.active(0, 4))
+        assertFalse(ProjectionLink.active(2, 0))
+        assertFalse(ProjectionLink.active(2, -1))
+    }
+
+    @Test fun telecomControlIsLastForCallControlOnly() {
+        val c = Caps(vdbusBt = true, telecomHfpAccount = true, hfpClientProxy = true, telecomCallControl = true)
+        val v = PhoneBackendName.VDBUS; val t = PhoneBackendName.TELECOM; val h = PhoneBackendName.HFP_CLIENT
+        assertEquals(listOf(v, t, h), PhoneBackendChooser.fallbackOrder(c, PhoneAction.DIAL))
+        assertEquals(listOf(v, h, t), PhoneBackendChooser.fallbackOrder(c, PhoneAction.ANSWER))
+        assertEquals(listOf(v, h, t), PhoneBackendChooser.fallbackOrder(c, PhoneAction.HANG_UP))
+        assertEquals(listOf(t), PhoneBackendChooser.fallbackOrder(Caps(telecomCallControl = true), PhoneAction.REJECT))
+        assertEquals(emptyList<String>(), PhoneBackendChooser.fallbackOrder(Caps(telecomCallControl = true), PhoneAction.DIAL))
+    }
+
+    @Test fun dataFallbackToVdbusOnlyFromProvider() {
+        assertEquals(PhoneBackendName.VDBUS,
+            PhoneBackendChooser.dataFallback(Caps(contactsPermission = true, vdbusData = true), PhoneBackendName.CONTACTS_PROVIDER))
+        assertNull(PhoneBackendChooser.dataFallback(Caps(contactsPermission = true), PhoneBackendName.CONTACTS_PROVIDER))
+        assertNull(PhoneBackendChooser.dataFallback(Caps(vdbusData = true), PhoneBackendName.VDBUS))
+        assertNull(PhoneBackendChooser.dataFallback(Caps(demo = true, vdbusData = true), PhoneBackendName.CONTACTS_PROVIDER))
+    }
+
+    /** VDBTRecord.dateTime = ham vCard X-IRMC-CALL-DATETIME; OEM arayüzü Z sonekini yok sayıp yerel saat sayar. */
+    @Test fun vdRecordDateTimeFromVcard() {
+        val utc = TimeZone.getTimeZone("UTC")
+        assertEquals(1_793_975_130_000L, PhoneStateMap.parseVdDateTime("20261106T142530", utc))
+        assertEquals(1_793_975_130_000L, PhoneStateMap.parseVdDateTime("20261106T142530Z", utc))
+    }
 }

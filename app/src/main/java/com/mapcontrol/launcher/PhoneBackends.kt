@@ -16,6 +16,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Parcelable
+import android.os.Process
+import android.os.SystemClock
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telecom.PhoneAccountHandle
@@ -26,15 +28,23 @@ import com.desaysv.ivi.vdb.client.VDBus
 import com.desaysv.ivi.vdb.client.bind.VDServiceDef
 import com.desaysv.ivi.vdb.client.listener.VDBindListener
 import com.desaysv.ivi.vdb.event.VDEvent
+import com.desaysv.ivi.vdb.event.base.VDKey
 import com.desaysv.ivi.vdb.event.id.bt.VDEventBT
 import com.desaysv.ivi.vdb.event.id.bt.VDValueBT
 import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTContacts
 import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTDial
 import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTDialInfo
+import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTListProgress
+import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTPhoneBookSync
 import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTRecord
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /*
  * Telefon arka uçları. Bütün yöntemler PhoneSource'un io kuyruğunda çağrılır (ana iş parçacığında asla); binder ya da
@@ -70,10 +80,17 @@ internal interface DataBackend {
     fun read(pinnedIds: List<String>): PhoneData?
 }
 
+/** Asistan isteğinin sonucu. BUSY: süren arama var (OEM de arama sırasında kendi asistanını kapatır). */
+internal enum class AssistantResult { STARTED, STOPPED, BUSY, FAILED }
+
 internal interface AssistantBackend {
     fun available(): Boolean
-    /** Eşzamansız: sonuç [done] ile (io kuyruğunda) gelir. */
-    fun start(done: (Boolean) -> Unit)
+    /** Asistan oturumu açık (bildiğimiz kadarıyla). */
+    val active: Boolean get() = false
+    /** Aç/kapa: açıksa kapatır, değilse açar. Eşzamansız: sonuç [done] ile (io kuyruğunda) gelir. */
+    fun start(done: (AssistantResult) -> Unit)
+    /** Açıksa kapatır. */
+    fun stop(done: (AssistantResult) -> Unit) = done(AssistantResult.FAILED)
 }
 
 private const val TAG = "PhoneSource"
@@ -128,6 +145,12 @@ internal object HfpLink {
     const val ACTION_CONNECTION = "android.bluetooth.headsetclient.profile.action.CONNECTION_STATE_CHANGED"
     const val ACTION_CALL = "android.bluetooth.headsetclient.profile.action.AG_CALL_CHANGED"
     const val EXTRA_CALL = "android.bluetooth.headsetclient.extra.CALL"
+    /** +BVRA (telefonun sesli tanıma durumu) değişince; ek: VOICE_RECOGNITION 0/1 (HeadsetClientStateMachine). */
+    const val ACTION_AG_EVENT = "android.bluetooth.headsetclient.profile.action.AG_EVENT"
+    const val EXTRA_VOICE_RECOGNITION = "android.bluetooth.headsetclient.extra.VOICE_RECOGNITION"
+    /** SCO ses bağlantısı; ek: BluetoothProfile.EXTRA_STATE (0 kopuk, 1 bağlanıyor, 2 bağlı). */
+    const val ACTION_AUDIO = "android.bluetooth.headsetclient.profile.action.AUDIO_STATE_CHANGED"
+    const val AUDIO_CONNECTED = 2
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -238,6 +261,23 @@ internal object HfpLink {
         }
     }
 
+    /**
+     * Yansıma çağrıları gerçekten yapılabilir: vekil açık, gizli API muafiyeti alındı ve bağlı cihaz var. Değilse
+     * seçici HFP'yi atlar (çağrı anında başarısız olmak yerine). io kuyruğunda.
+     */
+    fun usable(): Boolean = proxy != null && HiddenApi.exempt() && connectedDevice() != null
+
+    /**
+     * HFP istemci yayınları (AG_CALL_CHANGED, AG_EVENT, AUDIO_STATE_CHANGED) UserHandle.ALL ile değil, Bluetooth
+     * sürecinin kullanıcısına gönderilir (HeadsetClientStateMachine.java:212). Süreç kullanıcı 0'da değilse yayınlar
+     * gelmeyebilir: o zaman durum yoklamayla okunur.
+     */
+    val userId: Int by lazy {
+        val id = Process.myUid() / 100_000
+        Log.i(TAG, "süreç kullanıcısı: $id")
+        id
+    }
+
     /** Bağlı ilk telefon (vekil yoksa null). */
     fun connectedDevice(): BluetoothDevice? = try {
         proxy?.connectedDevices?.firstOrNull()
@@ -305,8 +345,16 @@ internal object HfpClientApi {
     fun currentCalls(proxy: Any, device: BluetoothDevice): List<Any>? =
         (invoke(proxy, "getCurrentCalls", arrayOf(DEV), device).getOrNull() as? List<*>)?.filterNotNull()
 
+    /**
+     * AT+BVRA=1. Dikkat: araç yığını yalnızca kendi durumu 0 iken gönderir, değilse sessizce düşürür ama yine de true
+     * döner (HeadsetClientStateMachine.java:977-985); true "başladı" demek değildir.
+     */
     fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean =
         invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device).getOrNull() == true
+
+    /** AT+BVRA=0 (yalnızca yığının durumu 1 iken gönderilir). */
+    fun stopVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean =
+        invoke(proxy, "stopVoiceRecognition", arrayOf(DEV), device).getOrNull() == true
 
     /** Bir BluetoothHeadsetClientCall'ın kimliği, durumu, numarası, giden mi. */
     data class CallInfo(val id: Int, val state: Int, val number: String?, val outgoing: Boolean) {
@@ -347,7 +395,17 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         }
     }
 
-    override fun available(): Boolean = HfpLink.proxy != null
+    private val main = Handler(Looper.getMainLooper())
+    /** Kullanıcı 0 dışında yayın gelmeyebilir: açıkken 2 sn'de bir getCurrentCalls. */
+    private val poll = object : Runnable {
+        override fun run() {
+            if (onState == null) return
+            io.execute { readCurrent() }
+            main.postDelayed(this, POLL_MS)
+        }
+    }
+
+    override fun available(): Boolean = HfpLink.usable()
 
     private inline fun withDevice(block: (Any, BluetoothDevice) -> Boolean): Boolean {
         val p = HfpLink.proxy ?: return false
@@ -375,6 +433,10 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         }
         // Şu anki aramalar (yayın yalnızca değişiklikleri getirir): ana ekrana dönüşte süren görüşme de görünsün.
         io.execute { readCurrent() }
+        if (HfpLink.userId != 0) {
+            main.removeCallbacks(poll)
+            main.postDelayed(poll, POLL_MS)
+        }
     }
 
     /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. */
@@ -390,6 +452,7 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
 
     override fun close() {
         onState = null
+        main.removeCallbacks(poll)
         calls.clear()
         if (registered) runCatching { ctx.unregisterReceiver(receiver) }
         registered = false
@@ -410,11 +473,16 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         calls.entries.removeAll { it.value.state == PhoneStateMap.TERMINATED }
         onState?.invoke(kind, null, src?.number?.takeIf { it.isNotBlank() })
     }
+
+    private companion object {
+        const val POLL_MS = 2_000L
+    }
 }
 
 /**
- * Telecom yolu: yalnızca arama başlatır (HfpClientConnectionService hesabı varsa). Cevap/ret/kapat desteklenmez;
- * durum dinlemez (VDBus ya da HFP yayını verir).
+ * Telecom yolu: arama başlatır (HfpClientConnectionService "hfpc" hesabı varsa). ANSWER_PHONE_CALLS verildiyse
+ * (araçta `adb shell pm grant`) cevap ve kapatma da yapar: araç HFP yığını her HFP aramasını Telecom'a ekler
+ * (HfpClientDeviceBlock). Yansıma gerektirmeyen son yedek. Durum dinlemez (VDBus ya da HFP yayını verir).
  */
 internal class TelecomCallBackend(private val ctx: Context) : CallBackend {
     override val name: String = PhoneBackendName.TELECOM
@@ -446,10 +514,30 @@ internal class TelecomCallBackend(private val ctx: Context) : CallBackend {
         }
     }
 
-    override fun answer(): Boolean = false
-    override fun reject(): Boolean = false
-    /** TelecomManager.endCall ANSWER_PHONE_CALLS ister; istenmiyor. */
-    override fun hangUp(): Boolean = false
+    /** Cevap/kapatma için izin var. */
+    fun canControl(): Boolean = granted(ctx, Manifest.permission.ANSWER_PHONE_CALLS)
+
+    private inline fun control(label: String, block: (TelecomManager) -> Boolean): Boolean {
+        if (!canControl()) return false
+        return try {
+            val tm = ctx.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager ?: return false
+            block(tm)
+        } catch (t: Throwable) {
+            Log.w(TAG, "telecom $label: ${t.javaClass.simpleName}")
+            false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun answer(): Boolean = control("acceptRingingCall") { it.acceptRingingCall(); true }
+
+    /** endCall çalan aramayı da reddeder. targetSdk 28 olduğu için hâlâ çalışır (29+ hedefte kaldırıldı). */
+    @Suppress("DEPRECATION")
+    override fun reject(): Boolean = control("endCall") { it.endCall() }
+
+    @Suppress("DEPRECATION")
+    override fun hangUp(): Boolean = control("endCall") { it.endCall() }
+
     override fun setMute(on: Boolean): Boolean = false
     override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {}
     override fun close() {}
@@ -466,6 +554,8 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     private var bindRegistered = false
     private var event: VDEvent? = null
     @Volatile private var onState: ((CallKind, String?, String?) -> Unit)? = null
+    /** Son arama listesi (durum + OEM uuid; isim/numara yok): kapatma/reddetme hangi uuid'yi göndereceğini buradan seçer. */
+    @Volatile private var lastCalls: List<DialInfoLite> = emptyList()
 
     private val notify = object : IVDBusNotify.Stub() {
         override fun onVDBusNotify(e: VDEvent?) {
@@ -526,11 +616,16 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         false
     }
 
-    private fun send(ctrl: Int, number: String?): Boolean {
+    /**
+     * DIAL (262545) yükü her zaman bir VDBTDial içerir: OEM sunucusu getValue sonucunu null denetimi yapmadan kullanır
+     * (SVVDSBluetooth m/m.java:350-354), boş yük sistem BT servisini çökertir. Adres boşsa servis bağlı cihazı
+     * kullanır (m/l.java); büyük/küçük harf fark etmez.
+     */
+    private fun send(ctrl: Int, number: String?, uuid: String? = null, acceptType: Int? = null): Boolean {
         val b = bus ?: return false
         if (!available()) return false
         return try {
-            // Adres (MAC): HFP vekili açıksa bağlı telefonun adresi (araç testinde boş adres doğrulanmadı). Günlüğe yazılmaz.
+            // Adres (MAC): HFP vekili açıksa bağlı telefonun adresi. Günlüğe yazılmaz.
             val address = try {
                 HfpLink.connectedDevice()?.address
             } catch (t: Throwable) {
@@ -539,6 +634,8 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
             b.set(VDBTDial.createEvent(VDEventBT.DIAL, VDBTDial().apply {
                 if (address != null) putAddress(address)
                 if (number != null) putNumber(number)
+                if (uuid != null) putUuid(uuid)
+                if (acceptType != null) putAcceptCallType(acceptType)
                 putDialCtrl(ctrl)
             }))
             true
@@ -549,15 +646,38 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     }
 
     override fun dial(number: String): Boolean = send(VDValueBT.DialCtrl.DIAL, number)
-    override fun answer(): Boolean = send(VDValueBT.DialCtrl.ACCEPT, null)
-    override fun reject(): Boolean = send(VDValueBT.DialCtrl.HUNG_UP, null)
-    override fun hangUp(): Boolean = send(VDValueBT.DialCtrl.HUNG_UP, null)
+
+    /** acceptCallType 0 (NONE): VDBTDial varsayılanı 1, tek gelen aramada araç yığınınca yok sayılır. */
+    override fun answer(): Boolean = send(VDValueBT.DialCtrl.ACCEPT, null, acceptType = VdCallPick.ACCEPT_TYPE)
+
+    /** dialCtrl 3 uuid'siz hiçbir şey yapmaz: uuid yoksa false (sıradaki yol denenir). */
+    override fun reject(): Boolean {
+        val uuid = VdCallPick.forReject(lastCalls) ?: return false.also { Log.i(TAG, "vdbus reddet: uuid yok") }
+        return send(VDValueBT.DialCtrl.HUNG_UP, null, uuid = uuid)
+    }
+
+    override fun hangUp(): Boolean {
+        val uuid = VdCallPick.forHangUp(lastCalls) ?: return false.also { Log.i(TAG, "vdbus kapat: uuid yok") }
+        return send(VDValueBT.DialCtrl.HUNG_UP, null, uuid = uuid)
+    }
 
     /**
-     * DIAL_MIC_MODE (262547) yük biçimi bilinmiyor (VDValueBT.MicMode MUTE 2 / UNMUTE 1 var, anahtar yok) →
-     * desteklenmiyor; PhoneSource AudioManager'a düşer. TODO araç testi.
+     * DIAL_MIC_MODE (262547): {"status": 2 sessiz / 1 açık}; OEM servisi AudioManager.setMicrophoneMute'u sistem
+     * uid'siyle çağırır (m/m.java:403-416, m/l.java:294-301).
      */
-    override fun setMute(on: Boolean): Boolean = false
+    override fun setMute(on: Boolean): Boolean {
+        val b = bus ?: return false
+        if (!available()) return false
+        return try {
+            b.set(VDEvent(VDEventBT.DIAL_MIC_MODE, Bundle().apply {
+                putInt(VDKey.STATUS, if (on) VDValueBT.MicMode.MUTE else VDValueBT.MicMode.UNMUTE)
+            }))
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus DIAL_MIC_MODE: ${t.javaClass.simpleName}")
+            false
+        }
+    }
 
     override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
@@ -576,6 +696,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 
     override fun close() {
         onState = null
+        lastCalls = emptyList()
         val e = event
         if (e != null) runCatching { bus?.unsubscribe(e, notify) }
         event = null
@@ -593,7 +714,10 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         }
     }
 
-    /** Binder ya da io iş parçacığında: listeyi çözüp durumu io'ya aktarır. */
+    /**
+     * Binder ya da io iş parçacığında: listeyi çözüp durumu io'ya aktarır. Yayın yükünde "data" listesinin yanında
+     * "status" = VDBTListProgress da vardır (m/m.java:310-318); o sınıf olmadan Bundle hiç açılamıyordu.
+     */
     private fun handle(e: VDEvent) {
         val list: List<VDBTDialInfo> = try {
             VDBTDialInfo.getList(e)?.filterNotNull() ?: emptyList()
@@ -601,7 +725,8 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
             Log.w(TAG, "vdbus DialInfo: ${t.javaClass.simpleName}")
             return
         }
-        val lite = list.map { DialInfoLite(it.state, it.isOutGoing) }
+        val lite = list.map { DialInfoLite(it.state, it.isOutGoing, it.uuid) }
+        lastCalls = lite
         val kind = PhoneStateMap.fromVdDialInfos(lite)
         val src = list.getOrNull(PhoneStateMap.relevantIndex(lite))
         val name = src?.name?.takeIf { it.isNotBlank() }
@@ -610,43 +735,119 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     }
 }
 
-/** VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan). */
+/**
+ * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan). OEM servisinde PHONE_BOOK_*_LIST* için
+ * onGet yok (SVVDSBluetooth q/v.java:197-243): getOnce hep boş döner. Gerçek yol (OEM'in kendi önbellek yolu):
+ *
+ * 1. ..._LIST_CACHE yayınına abone ol, PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber /
+ *    6 geçmiş, adres null = bağlı cihaz, key = bizim etiketimiz} gönder.
+ * 2. Yanıt 10'arlık parçalar: {"data": liste, "status": VDBTListProgress(index = parçanın son sırası, total, key)};
+ *    index == total-1 ya da total 0 olunca biter (v/o.java:52-110). Başkalarının istekleri key ile ayıklanır.
+ * 3. Önbellek boşsa PHONE_BOOK_SYNC_DB (262378) ile servis kendi veritabanından okur; ..._LIST_DB key=null yayımlanır.
+ *
+ * PHONE_BOOK_SYNC (262346) KULLANILMAZ: telefondan baştan PBAP indirmesi başlatır. Hiç yanıt gelmezse null döner
+ * (boş rehber gibi görünmesin).
+ */
 internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBackend {
     override val name: String = PhoneBackendName.VDBUS
 
     override fun available(): Boolean = call.available()
 
-    private fun once(id: Int, cacheId: Int, parse: (VDEvent) -> List<*>?): List<*>? {
+    /** VDBTPhoneBookSync'li istek (bean'siz SYNC* sunucuyu çökertir: q/r.java:96-100). */
+    private fun request(b: VDBus, eventId: Int, syncType: Int, key: String?) {
+        b.set(VDBTPhoneBookSync.createEvent(eventId, VDBTPhoneBookSync().apply {
+            putSyncCtrl(VDValueBT.SyncCtrl.START)
+            putSyncType(syncType)
+            if (key != null) putSyncKey(key)
+        }))
+    }
+
+    /**
+     * io: [listId] parçalarını toplar ([key] eşleşenler). Bitti, [IDLE_MS] boyunca yeni parça yok ya da [HARD_MS]
+     * doldu. Hiç parça gelmediyse null.
+     */
+    private fun <T> collect(listId: Int, key: String?, trigger: (VDBus) -> Unit, parse: (VDEvent) -> List<*>?, cls: Class<T>): List<T>? {
         val b = call.bus ?: return null
-        for (eventId in intArrayOf(id, cacheId)) {
-            val list = try {
-                b.getOnce(VDEvent(eventId, Bundle()))?.let(parse)
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "vdbus getOnce($eventId): ${e.javaClass.simpleName}")
-                null
+        val out = ArrayList<T>()
+        val finished = CountDownLatch(1)
+        val any = AtomicBoolean(false)
+        val lastAt = AtomicLong(SystemClock.uptimeMillis())
+        val notify = object : IVDBusNotify.Stub() {
+            override fun onVDBusNotify(e: VDEvent?) {
+                if (e == null || e.id != listId) return
+                try {
+                    val progress = VDBTListProgress.getValue(e)
+                    if (progress?.key != key) return
+                    val items = parse(e)?.filterIsInstance(cls).orEmpty()
+                    synchronized(out) { out.addAll(items) }
+                    any.set(true)
+                    lastAt.set(SystemClock.uptimeMillis())
+                    if (progress == null || progress.total <= 0 || progress.index >= progress.total - 1) finished.countDown()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "vdbus liste($listId): ${t.javaClass.simpleName}")
+                }
             }
-            if (list != null) return list
         }
-        return null
+        val ev = VDEvent(listId, Bundle())
+        try {
+            b.subscribe(ev, notify)
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus subscribe($listId): ${t.javaClass.simpleName}")
+            return null
+        }
+        try {
+            trigger(b)
+            val hardEnd = SystemClock.uptimeMillis() + HARD_MS
+            while (true) {
+                val now = SystemClock.uptimeMillis()
+                val left = minOf(lastAt.get() + IDLE_MS, hardEnd) - now
+                if (left <= 0) break
+                if (finished.await(left, TimeUnit.MILLISECONDS)) break
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus istek($listId): ${t.javaClass.simpleName}")
+        } finally {
+            runCatching { b.unsubscribe(ev, notify) }
+        }
+        if (!any.get()) return null
+        return synchronized(out) { ArrayList(out) }
+    }
+
+    /** Önbellek, boşsa veritabanı. Önbellek hiç yanıt vermezse veritabanı denenmez (servis bu yolu bilmiyor). */
+    private fun <T> load(syncType: Int, cacheId: Int, dbId: Int, parse: (VDEvent) -> List<*>?, cls: Class<T>): List<T>? {
+        val key = "ml-" + UUID.randomUUID().toString().take(8)
+        val cache = collect(cacheId, key, { request(it, VDEventBT.PHONE_BOOK_SYNC_CACHE, syncType, key) }, parse, cls)
+            ?: return null
+        if (cache.isNotEmpty()) return cache
+        return collect(dbId, null, { request(it, VDEventBT.PHONE_BOOK_SYNC_DB, syncType, null) }, parse, cls) ?: cache
     }
 
     override fun read(pinnedIds: List<String>): PhoneData? {
         if (!available()) return null
         return try {
-            val records = once(VDEventBT.PHONE_BOOK_RECORD_LIST, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE) { VDBTRecord.getList(it) }
-                ?.filterIsInstance<VDBTRecord>().orEmpty()
-            val recents = records.mapNotNull { r ->
+            val records = load(
+                VDValueBT.PhoneBookSyncType.CALLLOG_SYNC, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
+                { VDBTRecord.getList(it) }, VDBTRecord::class.java,
+            )
+            val recents = records.orEmpty().mapNotNull { r ->
                 val type = PhoneStateMap.recentTypeFromVd(r.recordType) ?: return@mapNotNull null
                 val number = r.number?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                // Tarih çözülemezse 0: favori sıklığına girmez, panel zaman yazısı göstermez (1970 tarihi görünmesin).
+                // dateTime: ham vCard X-IRMC-CALL-DATETIME (yyyyMMdd'T'HHmmss). Çözülemezse 0: favori sıklığına girmez,
+                // panel zaman yazısı göstermez. duration OEM'de hiç doldurulmuyor.
                 PhoneRecent(type, r.name?.takeIf { it.isNotBlank() }, number, PhoneStateMap.parseVdDateTime(r.dateTime) ?: 0L)
+            }
+            val raw = load(
+                VDValueBT.PhoneBookSyncType.CONTACT_SYNC, VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB,
+                { VDBTContacts.getList(it) }, VDBTContacts::class.java,
+            )
+            if (records == null && raw == null) {
+                Log.i(TAG, "vdbus veri: yanıt yok")
+                return null
             }
             val wanted = recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
             val pinned = pinnedIds.toHashSet()
-            val raw = once(VDEventBT.PHONE_BOOK_CONTACTS_LIST, VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE) { VDBTContacts.getList(it) }
-                ?.filterIsInstance<VDBTContacts>().orEmpty()
             val contacts = ArrayList<PhoneContact>()
-            for (c in raw) {
+            for (c in raw.orEmpty()) {
                 val name = c.name?.takeIf { it.isNotBlank() } ?: continue
                 val id = "v:" + (c.id ?: continue)
                 val numbers = buildList {
@@ -663,6 +864,11 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             Log.w(TAG, "vdbus veri: ${e.javaClass.simpleName}")
             null
         }
+    }
+
+    private companion object {
+        const val IDLE_MS = 1_500L
+        const val HARD_MS = 5_000L
     }
 }
 
@@ -753,18 +959,139 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
     }
 }
 
-/** Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Vekil hazır değilse 1,5 sn bekler. */
+/**
+ * Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Döküm analizi (6 Kasım): OEM yazılımı
+ * BVRA'yı hiç çağırmaz ve bunun için VDBus olayı ya da dışa açık intent yoktur; tek yol BluetoothHeadsetClient
+ * (yalnızca android.permission.BLUETOOTH + etkin kullanıcı denetimi, HeadsetClientService.java:158-169,492-505).
+ *
+ * Durum: yığın kendi isteğimizin OK'inde yayın yapmaz, yalnızca telefondan gelen +BVRA'da AG_EVENT yayınlar
+ * (HeadsetClientStateMachine.java:1057-1062, 1138-1146). Başarı bu yüzden "AG_EVENT VOICE_RECOGNITION=1 ya da SCO
+ * sesi bağlandı" ile [CONFIRM_MS] içinde doğrulanır; binder'ın true dönmesi yetmez (durum 1'de takılıysa istek sessizce
+ * düşer ama true döner). Açıkken ikinci basış kapatır. Durum 1 ama SCO yoksa oturum bayat sayılır: önce kapatılır,
+ * kısa beklemeden sonra yeniden açılır. Alıcı ilk kullanımda uygulama bağlamına kaydedilir ve açık kalır (hafif).
+ */
 internal class HfpAssistant(private val ctx: Context, private val io: Executor) : AssistantBackend {
+    private val main = Handler(Looper.getMainLooper())
+    /** Telefonun sesli tanıma durumu (bildiğimiz kadarıyla). */
+    @Volatile private var vr = false
+    /** SCO sesi bağlı. */
+    @Volatile private var audio = false
+    private var registered = false
+    // io kuyruğunda: doğrulama bekleyen istek.
+    private var pending: ((AssistantResult) -> Unit)? = null
+    private var pendingTimeout: Runnable? = null
+
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, intent: Intent?) {
+            when (intent?.action) {
+                HfpLink.ACTION_AG_EVENT -> {
+                    if (!intent.hasExtra(HfpLink.EXTRA_VOICE_RECOGNITION)) return
+                    val on = intent.getIntExtra(HfpLink.EXTRA_VOICE_RECOGNITION, 0) == 1
+                    io.execute {
+                        vr = on
+                        Log.i(TAG, "asistan durumu (telefon): ${if (on) "açık" else "kapalı"}")
+                        if (on) confirm()
+                    }
+                }
+                HfpLink.ACTION_AUDIO -> {
+                    val on = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1) == HfpLink.AUDIO_CONNECTED
+                    io.execute {
+                        audio = on
+                        if (on) confirm()
+                    }
+                }
+                HfpLink.ACTION_CONNECTION -> {
+                    if (intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1) != BluetoothProfile.STATE_CONNECTED) {
+                        io.execute { vr = false; audio = false }
+                    }
+                }
+            }
+        }
+    }
+
     override fun available(): Boolean = HfpLink.proxy != null
 
-    override fun start(done: (Boolean) -> Unit) {
+    override val active: Boolean get() = vr
+
+    private fun register() {
+        if (registered) return
+        registered = try {
+            ctx.applicationContext.registerReceiver(receiver, IntentFilter().apply {
+                addAction(HfpLink.ACTION_AG_EVENT)
+                addAction(HfpLink.ACTION_AUDIO)
+                addAction(HfpLink.ACTION_CONNECTION)
+            })
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "asistan alıcı: ${t.javaClass.simpleName}")
+            false
+        }
+    }
+
+    override fun start(done: (AssistantResult) -> Unit) {
+        register()
         HfpLink.withProxy(ctx, PROXY_WAIT_MS, io) { p ->
             val d = if (p != null) HfpLink.connectedDevice() else null
-            done(p != null && d != null && HfpClientApi.startVoiceRecognition(p, d))
+            if (p == null || d == null) return@withProxy done(AssistantResult.FAILED)
+            if (vr && audio) {
+                // Açık oturum: ikinci basış kapatır.
+                val ok = HfpClientApi.stopVoiceRecognition(p, d)
+                if (ok) vr = false
+                return@withProxy done(if (ok) AssistantResult.STOPPED else AssistantResult.FAILED)
+            }
+            val busy = HfpClientApi.currentCalls(p, d)?.mapNotNull { HfpClientApi.callInfo(it) }
+                ?.any { it.state != PhoneStateMap.TERMINATED } == true
+            if (busy) return@withProxy done(AssistantResult.BUSY)
+            if (vr) {
+                // Bayat (SCO yok): yığın 1'de takılıysa başlatma düşer; önce kapat, OK'i bekleyip yeniden aç.
+                Log.i(TAG, "asistan: bayat oturum kapatılıp yeniden açılıyor")
+                HfpClientApi.stopVoiceRecognition(p, d)
+                vr = false
+                main.postDelayed({ io.execute { begin(p, d, done) } }, STALE_RESTART_MS)
+                return@withProxy
+            }
+            begin(p, d, done)
+        }
+    }
+
+    /** io: AT+BVRA=1 ve doğrulama beklemesi. */
+    private fun begin(p: Any, d: BluetoothDevice, done: (AssistantResult) -> Unit) {
+        finishPending(AssistantResult.FAILED)
+        if (!HfpClientApi.startVoiceRecognition(p, d)) return done(AssistantResult.FAILED)
+        pending = done
+        val t = Runnable { io.execute { finishPending(AssistantResult.FAILED) } }
+        pendingTimeout = t
+        main.postDelayed(t, CONFIRM_MS)
+    }
+
+    /** io: +BVRA:1 ya da SCO bağlandı → bekleyen istek başarılı. */
+    private fun confirm() {
+        if (pending == null) return
+        vr = true
+        finishPending(AssistantResult.STARTED)
+    }
+
+    private fun finishPending(result: AssistantResult) {
+        val cb = pending ?: return
+        pending = null
+        pendingTimeout?.let { main.removeCallbacks(it) }
+        pendingTimeout = null
+        cb(result)
+    }
+
+    override fun stop(done: (AssistantResult) -> Unit) {
+        if (!vr) return done(AssistantResult.FAILED)
+        HfpLink.withProxy(ctx, PROXY_WAIT_MS, io) { p ->
+            val d = if (p != null) HfpLink.connectedDevice() else null
+            val ok = p != null && d != null && HfpClientApi.stopVoiceRecognition(p, d)
+            if (ok) vr = false
+            done(if (ok) AssistantResult.STOPPED else AssistantResult.FAILED)
         }
     }
 
     private companion object {
         const val PROXY_WAIT_MS = 1_500L
+        const val CONFIRM_MS = 2_500L
+        const val STALE_RESTART_MS = 700L
     }
 }

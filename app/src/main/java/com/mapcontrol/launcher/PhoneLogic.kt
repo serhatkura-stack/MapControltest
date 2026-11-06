@@ -11,8 +11,52 @@ import java.util.TimeZone
  * GİZLİLİK: buradaki hiçbir işlev isim/numara günlüğe yazmaz.
  */
 
-/** VDBus VDBTDialInfo'nun test edilebilir özeti (Parcel gerektirmez). [state] = VDValueBT.DialStatus. */
-internal data class DialInfoLite(val state: Int, val outGoing: Boolean = false)
+/**
+ * VDBus VDBTDialInfo'nun test edilebilir özeti (Parcel gerektirmez). [state] = VDValueBT.DialStatus. [uuid]: OEM
+ * servisinin arama kimliği (kişisel veri değil); VDBus ile kapatma/reddetme bunu ister.
+ */
+internal data class DialInfoLite(val state: Int, val outGoing: Boolean = false, val uuid: String? = null)
+
+/**
+ * VDBus DIAL (262545) için hangi aramanın kimliğinin (uuid) gönderileceği. OEM servisi kapatmayı (dialCtrl 3)
+ * terminateCall(addr, uuid) ile yapar ve uuid boşsa hiçbir şey yapmaz (SVVDSBluetooth n/a.java:93-98); ayrı bir
+ * "reddet" komutu yok, OEM arayüzü de gelen aramayı aynı yolla reddeder (PhoneCallActivity.java:1007-1018).
+ */
+internal object VdCallPick {
+    /** Reddedilecek: gelen ya da bekleyen arama. Yoksa null (arka uç başarısız sayılır, sıradaki yol denenir). */
+    fun forReject(list: List<DialInfoLite>): String? =
+        list.firstOrNull { (it.state == PhoneStateMap.INCOMING || it.state == PhoneStateMap.WAITING) && !it.uuid.isNullOrBlank() }?.uuid
+
+    /** Kapatılacak: konuşma/aranıyor/çalıyor; yoksa ekranda gösterilen arama ([PhoneStateMap.relevantIndex]). */
+    fun forHangUp(list: List<DialInfoLite>): String? {
+        val live = list.firstOrNull {
+            (it.state == PhoneStateMap.ACTIVE || it.state == PhoneStateMap.DIALING || it.state == PhoneStateMap.ALERTING) &&
+                !it.uuid.isNullOrBlank()
+        }
+        return live?.uuid ?: list.getOrNull(PhoneStateMap.relevantIndex(list))?.uuid?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Cevaplama türü (VDValueBT.AcceptCallType). Araç HFP yığını tek gelen aramada (durum 4) bayrak 0 değilse hiçbir şey
+     * yapmaz (DsvBluetooth HeadsetClientStateMachine.acceptCall); bekleyen aramada (5) 0 ve 1 ikisi de "kabul et, ötekini
+     * beklet" demektir. Bu yüzden her zaman NONE (0); VDBTDial'ın varsayılanı 1 tek gelen aramada yok sayılıyordu.
+     */
+    const val ACCEPT_TYPE = 0
+}
+
+/**
+ * Projeksiyon (CarPlay/Android Auto/HiCar/CarLife/CarLink) bağlantısı: VDBus PHONELINK PHONE_STATE (851970)
+ * yükündeki "status" ve "type" (CommonLinkService PhoneLinkVDDispatcher). Bağlıyken direksiyon ses tuşunu OEM
+ * projeksiyon uygulaması telefona iletir (DesaySVAndroidAuto/CarPlay KeyEventImpl, tuş 6 → projeksiyon VR tuşu).
+ */
+internal object ProjectionLink {
+    /** PhoneLinkProto.PhoneStatus.CONNECTED. */
+    const val STATUS_CONNECTED = 2
+    /** LinkDeviceProto.DeviceType: CARPLAY 1, APPLE_CARLIFE 2, ANDROID_CARLIFE 3, ANDROID_AUTO 4, HICAR 7, CARLINK 8. */
+    private val TYPES = setOf(1, 2, 3, 4, 7, 8)
+
+    fun active(status: Int, type: Int): Boolean = status == STATUS_CONNECTED && type in TYPES
+}
 
 /** Arama durumu eşlemeleri (VDBus, HFP istemci, arama geçmişi). */
 internal object PhoneStateMap {
@@ -270,6 +314,10 @@ internal enum class PhoneAction { DIAL, ANSWER, REJECT, HANG_UP }
 
 /** Yeteneklere göre arka uç seçimi (sıra: demo → VDBus → Telecom → HFP istemci). */
 internal object PhoneBackendChooser {
+    /**
+     * [hfpClientProxy]: HFP istemci vekili açık, gizli API muafiyeti alındı ve bağlı cihaz var (yansıma çağrıları
+     * gerçekten yapılabilir). [telecomCallControl]: ANSWER_PHONE_CALLS verildi (Telecom ile cevap/kapat).
+     */
     data class Caps(
         val demo: Boolean = false,
         val vdbusBt: Boolean = false,
@@ -277,11 +325,13 @@ internal object PhoneBackendChooser {
         val hfpClientProxy: Boolean = false,
         val contactsPermission: Boolean = false,
         val vdbusData: Boolean = false,
+        val telecomCallControl: Boolean = false,
     )
 
     /**
-     * Eylemin deneneceği arka uçlar, sırayla (ilki başarısızsa bir sonraki bir kez denenir). Telecom yalnızca arama
-     * başlatabilir: cevaplama InCallService ister, kapatma ANSWER_PHONE_CALLS ister (istenmiyor).
+     * Eylemin deneneceği arka uçlar, sırayla (ilki başarısızsa bir sonraki bir kez denenir). Arama: VDBus → Telecom
+     * (hfpc hesabı) → HFP. Cevap/ret/kapat: VDBus → HFP → Telecom (yalnızca ANSWER_PHONE_CALLS verilmişse; araç HFP
+     * yığını her aramayı Telecom'a da koyar, HfpClientDeviceBlock).
      */
     fun fallbackOrder(c: Caps, action: PhoneAction): List<String> {
         if (c.demo) return listOf(PhoneBackendName.DEMO)
@@ -289,6 +339,7 @@ internal object PhoneBackendChooser {
         if (c.vdbusBt) out.add(PhoneBackendName.VDBUS)
         if (action == PhoneAction.DIAL && c.telecomHfpAccount) out.add(PhoneBackendName.TELECOM)
         if (c.hfpClientProxy) out.add(PhoneBackendName.HFP_CLIENT)
+        if (action != PhoneAction.DIAL && c.telecomCallControl) out.add(PhoneBackendName.TELECOM)
         return out
     }
 
@@ -302,6 +353,14 @@ internal object PhoneBackendChooser {
         c.vdbusData -> PhoneBackendName.VDBUS
         else -> PhoneBackendName.NONE
     }
+
+    /**
+     * Birincil veri yolu boş döndüğünde (0 kişi ve 0 geçmiş) bir kez denenecek ikinci yol; yoksa null. Araç Bluetooth
+     * servisi her açılışta pbapsink hesaplarını ve tüm CallLog'u siler (PbapClientService.removeUncleanAccounts) ve
+     * sağlayıcı yalnızca OEM servisi indirme başlatınca dolar; bu arada OEM önbelleği (VDBus) dolu olabilir.
+     */
+    fun dataFallback(c: Caps, primary: String): String? =
+        if (!c.demo && primary == PhoneBackendName.CONTACTS_PROVIDER && c.vdbusData) PhoneBackendName.VDBUS else null
 
     fun assistantBackend(c: Caps): String = when {
         c.demo -> PhoneBackendName.DEMO
