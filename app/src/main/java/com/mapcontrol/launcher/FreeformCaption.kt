@@ -31,14 +31,46 @@ internal object FreeformCaption {
     /** Yerleşimden sonra ve yapılandırma değişince çağrılır; serbest pencere değilse (başlık görünümü yoksa) bir şey yapmaz. */
     fun apply(activity: Activity) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
-        val holder = (0 until decor.childCount).map(decor::getChildAt)
-            .firstOrNull { it.javaClass.name.endsWith(CAPTION_VIEW) } as? ViewGroup ?: return
-        // DecorCaptionView'un ilk çocuğu başlık şeridi (id/caption), ikincisi içerik.
-        val caption = holder.getChildAt(0) ?: return
+        val caption = captionOf(activity) ?: return
         if (caption.visibility == View.GONE) return
         val loc = IntArray(2)
         decor.getLocationOnScreen(loc)
         if (shouldHide(loc[1], usableTop(activity))) caption.visibility = View.GONE
+    }
+
+    /**
+     * Saf kural (birim testlenir): görünen başlığın içeriğin üstünü örttüğü pay (px). Başlık görünmüyorsa ya da içerik zaten
+     * başlığın altından başlıyorsa 0.
+     */
+    fun overlap(captionShown: Boolean, captionBottom: Int, contentTop: Int): Int =
+        if (!captionShown) 0 else maxOf(0, captionBottom - contentTop)
+
+    /**
+     * Başlık gizlenemediyse (ör. durum çubuğu başlıktan kısa, pencere yukarı itilemedi) [content]'in üstünde kalan pay (px):
+     * içerik bu kadar aşağıdan başlamalı ki saat ve düğmeler başlığın altında kalmasın.
+     */
+    fun overlapPx(activity: Activity, content: View): Int {
+        val caption = captionOf(activity) ?: return 0
+        val c = IntArray(2)
+        val r = IntArray(2)
+        caption.getLocationOnScreen(c)
+        content.getLocationOnScreen(r)
+        return overlap(caption.isShown && caption.height > 0, c[1] + caption.height, r[1])
+    }
+
+    /**
+     * DecorCaptionView'un başlık şeridi (`android:id/caption`); serbest pencere değilse null. Çocuk sırasına güvenilmez: Android
+     * 11 öykünücüde ilk çocuk içerik kökü, başlık ikinci çocuk (6 Kasım; sıraya göre gizlemek içeriğin tamamını gizliyordu).
+     * Kimlik bulunamazsa içerik (`android:id/content`) taşımayan çocuk alınır.
+     */
+    private fun captionOf(activity: Activity): View? {
+        val decor = activity.window?.decorView as? ViewGroup ?: return null
+        val holder = (0 until decor.childCount).map(decor::getChildAt)
+            .firstOrNull { it.javaClass.name.endsWith(CAPTION_VIEW) } as? ViewGroup ?: return null
+        val children = (0 until holder.childCount).map(holder::getChildAt)
+        val id = activity.resources.getIdentifier("caption", "id", "android")
+        return children.firstOrNull { id != 0 && it.id == id }
+            ?: children.firstOrNull { it.findViewById<View>(android.R.id.content) == null }
     }
 
     /** Durum çubuğunun altı (px); bölünmüş ekranın kullandığı ölçüyle aynı (en büyük pencere ölçüsünün üst inset'i). */

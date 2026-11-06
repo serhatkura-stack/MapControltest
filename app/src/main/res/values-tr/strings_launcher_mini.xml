@@ -4,8 +4,6 @@
     <string name="launcher_mini_fullscreen">Tam ekran</string>
     <string name="launcher_mini_range">Menzil</string>
     <string name="launcher_mini_fuel">Yakıt</string>
-    <string name="launcher_mini_seat_heat_driver">Sürücü koltuk ısıtma</string>
-    <string name="launcher_mini_seat_cool_passenger">Yolcu koltuk soğutma</string>
     <string name="launcher_mini_alert_tire">Lastik basıncı düşük</string>
     <string name="launcher_mini_alert_tire_psi" formatted="true">Lastik düşük %1$d psi</string>
     <string name="launcher_mini_alert_fuel">Yakıt az</string>
@@ -30,4 +28,11 @@
     <string name="launcher_mini_turn_ferry">Feribot</string>
     <string name="launcher_mini_turn_finish">Varış noktası</string>
     <string name="launcher_mini_turn_waypoint">Ara nokta</string>
+    <string name="launcher_mini_seat_driver">Sürücü</string>
+    <string name="launcher_mini_seat_passenger">Yolcu</string>
+    <string name="launcher_mini_mode_heat">Isıtma</string>
+    <string name="launcher_mini_mode_cool">Soğutma</string>
+    <string name="launcher_mini_open_music">Müzik aç</string>
+    <!-- Koltuk tuşu değeri: kip · seviye ("Isıtma · Orta"). -->
+    <string name="launcher_mini_seat_value" formatted="true">%1$s · %2$s</string>
 </resources>

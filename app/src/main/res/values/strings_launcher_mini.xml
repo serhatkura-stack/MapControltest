@@ -4,8 +4,6 @@
     <string name="launcher_mini_fullscreen">Full screen</string>
     <string name="launcher_mini_range">Range</string>
     <string name="launcher_mini_fuel">Fuel</string>
-    <string name="launcher_mini_seat_heat_driver">Driver seat heat</string>
-    <string name="launcher_mini_seat_cool_passenger">Passenger seat cooling</string>
     <string name="launcher_mini_alert_tire">Low tire pressure</string>
     <string name="launcher_mini_alert_tire_psi" formatted="true">Low tire %1$d psi</string>
     <string name="launcher_mini_alert_fuel">Low fuel</string>
@@ -30,4 +28,11 @@
     <string name="launcher_mini_turn_ferry">Ferry</string>
     <string name="launcher_mini_turn_finish">Destination</string>
     <string name="launcher_mini_turn_waypoint">Waypoint</string>
+    <string name="launcher_mini_seat_driver">Driver</string>
+    <string name="launcher_mini_seat_passenger">Passenger</string>
+    <string name="launcher_mini_mode_heat">Heat</string>
+    <string name="launcher_mini_mode_cool">Cooling</string>
+    <string name="launcher_mini_open_music">Open music</string>
+    <!-- Koltuk tuşu değeri: kip · seviye ("Isıtma · Orta"). -->
+    <string name="launcher_mini_seat_value" formatted="true">%1$s · %2$s</string>
 </resources>

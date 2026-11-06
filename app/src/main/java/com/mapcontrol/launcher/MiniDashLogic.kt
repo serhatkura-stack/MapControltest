@@ -136,25 +136,46 @@ internal object MiniNav {
 }
 
 /**
- * Pencere boyutuna göre ölçüler (dp). Hedef bir yarı: ~960 × 540 (durum çubuğu 70 px ile fabrika çubuğu 110 px arası; serbest pencere başlığı durum çubuğunun altına itilir). Daha dar ya da
- * kısa pencerede (ör. üçte bir bölme) düğmeler küçülür ama sürüşte dokunma alanı [MIN_TOUCH_DP] altına inmez.
+ * Pencere boyutuna göre yerleşim (dp); saf kural, JVM'de sınanır. İki biçim vardır:
+ *
+ * - Bölünmüş yarı (Tiggo 7 sol yarı ~960 × 606 dp, serbest pencere başlığı altında): üstte saat + menzil + yakıt + düğmeler
+ *   (tek satır), ortada araç sahnesi | koltuk tuşları sütunu, altta tam genişlikte ince medya şeridi.
+ * - Geniş ve kısa pencere ([wide]; tam ekran 1920 × 648, Tiggo 8 üst yarısı 1707 × ~470): solda bilgi sütunu (saat, menzil,
+ *   yakıt, rota, düğmeler), ortada araç sahnesi ve altında medya şeridi, sağda koltuk tuşları.
+ *
+ * Çalan bir şey yokken medya şeridi hiç yer tutmaz (yalnızca üstteki "Müzik aç" düğmesi kalır); araç ve koltuklar büyür.
+ * Dokunma alanları sürüşte de [MIN_TOUCH_DP] altına inmez.
  */
 internal data class MiniLayout(
+    val wide: Boolean,
     val paddingDp: Int,
+    /** Bloklar arası boşluk. */
+    val gapDp: Int,
     val clockSp: Float,
+    /** Menzil ve yakıt rakamları; birim ("km") bunun yarısı. */
     val valueSp: Float,
+    /** Bölünmüş biçimde üst satırın yüksekliği (geniş biçimde 0). */
+    val headerDp: Int,
+    /** "Tam ekran" / "Müzik aç" düğmelerinde yazı (dar pencerede yalnızca simge, yine 64 dp kare). */
+    val pillText: Boolean,
+    /** Koltuk tuşları sütununun genişliği. */
+    val seatsDp: Int,
+    /** Geniş biçimde bilgi sütununun genişliği (bölünmüşte 0). */
+    val infoDp: Int,
+    /** Medya şeridi yüksekliği (çalan bir şey varken). */
+    val mediaDp: Int,
+    /** Kapak resmi kenarı; 0 = kapak yok (yer yetmiyorsa). */
+    val coverDp: Int,
     val playDp: Int,
     val skipDp: Int,
-    val toggleHeightDp: Int,
-    /** Medya panelinde kapak resmi (yükseklik yetiyorsa). */
-    val showArtwork: Boolean,
-    /** Üst satırda "Menzil" / "Yakıt" etiketleri (yer yetiyorsa). */
-    val showLabels: Boolean,
-    /**
-     * Geniş ve kısa pencere (Tiggo 8 üst yarısı, 2560 × ~700 px ≈ 1707 × ~470 dp): tek satır yatay yerleşim (saat + menzil |
-     * medya | rota / uyarı | koltuk tuşları), Tiggo 7 ana ekranının oranına benzer. 960 genişlikli yarılarda hep false.
-     */
-    val wide: Boolean = false,
+    /** Koltuk görseli kenarı (tuş yüksekliğiyle büyür: uzun tuş boş görünmesin). */
+    val seatArtDp: Int,
+    /** Koltuk değeri ("Isıtma · Orta") yazı boyu. */
+    val seatValueSp: Float,
+    /** Medya şeridi varken her koltuk tuşunun beklenen yüksekliği (yerleşim ağırlıklarla aynı sonucu verir). */
+    val seatDp: Int,
+    /** Rota satırı yalnızca tam ekranda: bölünmüş ekranda harita zaten yanda, aynı bilgiyi tekrarlamaz. */
+    val showNav: Boolean,
 ) {
     companion object {
         const val MIN_TOUCH_DP = 64
@@ -167,20 +188,44 @@ internal data class MiniLayout(
         fun isWide(widthDp: Int, heightDp: Int): Boolean =
             heightDp > 0 && widthDp >= WIDE_MIN_WIDTH_DP && widthDp.toFloat() / heightDp >= WIDE_MIN_ASPECT
 
-        fun forSize(widthDp: Int, heightDp: Int): MiniLayout {
-            val wide = isWide(widthDp, heightDp)
-            val compact = widthDp < 760 || heightDp < 520
-            val tight = heightDp < 440
+        /**
+         * [heightDp] pencerenin içerik yüksekliği; [captionDp] serbest pencere başlığının içeriğin üstünü örttüğü pay
+         * ([FreeformCaption.overlap]); içerik bu payın altından başlar.
+         */
+        fun forSize(widthDp: Int, heightDp: Int, captionDp: Int = 0): MiniLayout {
+            val usableH = heightDp - captionDp.coerceAtLeast(0)
+            val wide = isWide(widthDp, usableH)
+            val compact = widthDp < 760 || usableH < 520
+            val tight = usableH < 440
+            val padding = if (compact) 16 else 24
+            val gap = if (compact) 12 else 16
+            val header = if (wide) 0 else if (compact) 72 else 84
+            var media = if (tight) 88 else if (compact) 96 else if (wide && usableH >= 560) 120 else 108
+            val contentH = usableH - 2 * padding
+            // Koltuk sütunu: bölünmüşte araçla aynı satırda (medya şeridi altta, tam genişlik), genişte tam yükseklik.
+            fun seat(mediaH: Int): Int =
+                if (wide) (contentH - gap) / 2 else (contentH - header - gap - mediaH - gap - gap) / 2
+            // Koltuklar sığmıyorsa medya şeridi en ince haline iner.
+            if (seat(media) < 96) media = 88
+            val seatH = seat(media)
             return MiniLayout(
-                paddingDp = if (compact) 16 else 24,
-                clockSp = if (compact) 48f else 60f,
-                valueSp = if (compact) 28f else 34f,
-                playDp = if (tight) 72 else if (compact) 76 else 88,
-                skipDp = if (tight || compact) MIN_TOUCH_DP else 72,
-                toggleHeightDp = if (tight) 88 else if (compact) 104 else 120,
-                showArtwork = if (wide) heightDp >= 360 else heightDp >= 520 && widthDp >= 700,
-                showLabels = widthDp >= 640,
                 wide = wide,
+                paddingDp = padding,
+                gapDp = gap,
+                clockSp = if (wide) (if (usableH >= 560) 80f else 64f) else if (compact) 48f else 60f,
+                valueSp = if (wide) 48f else if (compact) 30f else 38f,
+                headerDp = header,
+                pillText = wide || widthDp >= 860,
+                seatsDp = if (wide) (widthDp * 0.29f).toInt().coerceIn(420, 600) else (widthDp * 0.38f).toInt().coerceIn(260, 380),
+                infoDp = if (wide) (widthDp * 0.2f).toInt().coerceIn(340, 420) else 0,
+                mediaDp = media,
+                coverDp = if (media >= 96) media - 24 else 0,
+                playDp = if (tight) 72 else 80,
+                skipDp = MIN_TOUCH_DP,
+                seatArtDp = (seatH * 0.5f).toInt().coerceIn(56, 120),
+                seatValueSp = if (seatH >= 200) 28f else 24f,
+                seatDp = seatH,
+                showNav = wide,
             )
         }
     }

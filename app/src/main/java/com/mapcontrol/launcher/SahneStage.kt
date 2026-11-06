@@ -158,6 +158,19 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** Düzenleme modunda sahne dokunulmaz (yalnızca yuvalar düzenlenir). */
     var locked = false
 
+    /**
+     * false: menzil omzu (ve veri beklerken yerindeki iskelet) gizlenir; araç yalnızca kilit hapını ve şerit payını gözetir.
+     * Mini gösterge menzil ile yakıtı kendi üst satırında büyük gösterir ([MiniDashActivity]); ana ekranda hep true.
+     */
+    internal var showRange = true
+        set(value) {
+            if (field == value) return
+            field = value
+            fitKey = emptyList()
+            applyWaiting()
+            requestLayout()
+        }
+
     /** Spor ekranının araç modülü için açık parçalar ve camlar (her araç özetinde; [animate] ilk özetten sonra). */
     internal var onCar: ((parts: Set<CarPart>, windows: Collection<BodyPart>, sunroof: Boolean, animate: Boolean) -> Unit)? = null
         set(value) {
@@ -335,14 +348,18 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         if (s != null) carSeeded = true
         openings = o
         waiting = s == null || (s.rangeKm == null && s.fuel == null && s.locked == null && o == null)
-        rangeBlock.visibility = if (waiting) View.INVISIBLE else View.VISIBLE
-        skeleton.visibility = if (waiting) View.VISIBLE else View.GONE
-        waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
+        applyWaiting()
         bindPartAlerts()
         bindStrip()
         refreshDetail()
         bindLock(lock.stripState())
         requestLayout()
+    }
+
+    private fun applyWaiting() {
+        rangeBlock.visibility = if (!showRange) View.GONE else if (waiting) View.INVISIBLE else View.VISIBLE
+        skeleton.visibility = if (waiting && showRange) View.VISIBLE else View.GONE
+        waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
     }
 
     /** Arabada yanan parçalar (§10 genel kural): yakıt kapağı açıkken kapak, motor suyu / akü uyarısında kaput. */
@@ -523,11 +540,11 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
             rangeRow.measuredWidth - rangeNumber.measuredWidth + rangeNumber.paint.measureText("000").toInt() + 1,
             fuelRow.measuredWidth - fuelText.measuredWidth + fuelText.paint.measureText(activity.getString(R.string.launcher_percent, 100)).toInt() + 1,
         )
-        val rangeRight = side + maxOf(rangeBlock.measuredWidth, reserve)
+        val rangeRight = if (showRange) side + maxOf(rangeBlock.measuredWidth, reserve) else side
         val cTop = chipTop(w)
         val chipLeft = w - side - lockChip.measuredWidth
         val maxBottom = stripTop(h) - context.dp(CAR_STRIP_GAP_DP)
-        val key = listOf(w, h, rTop, rangeRight, rangeBlock.measuredHeight, chipLeft, cTop + lockChip.measuredHeight, maxBottom)
+        val key = listOf(w, h, if (showRange) 1 else 0, rTop, rangeRight, rangeBlock.measuredHeight, chipLeft, cTop + lockChip.measuredHeight, maxBottom)
         if (key == fitKey) return
         fitKey = key
         // Uzun sahne (Tiggo 8): araç büyür, omuzlar ile şerit arasında ortalanır, bagaj kayması sahne kenarına göre.
@@ -537,8 +554,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         carBox = StageFit.centered(
             centerX = w / 2f, minTop = context.dpF(6f), maxBottom = maxBottom.toFloat(),
             maxW = maxW, minW = CAR_W_MIN * k, aspect = CAR_ASPECT, gap = context.dpF(FIT_GAP_DP),
-            above = listOf(
-                StageFit.Box(side.toFloat(), rTop.toFloat(), rangeRight.toFloat(), (rTop + rangeBlock.measuredHeight).toFloat()),
+            above = listOfNotNull(
+                if (showRange) StageFit.Box(side.toFloat(), rTop.toFloat(), rangeRight.toFloat(), (rTop + rangeBlock.measuredHeight).toFloat()) else null,
                 StageFit.Box(chipLeft.toFloat(), cTop.toFloat(), (w - side).toFloat(), (cTop + lockChip.measuredHeight).toFloat()),
             ),
             cornerInset = CORNER_INSET,
@@ -650,7 +667,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     }
 
     /** İnce yakıt çubuğu: iz ve buz mavisi gradyan dolgu; düşük yakıtta kehribar. Yalnızca değer değişince çizilir. */
-    private class FuelGauge(context: Context) : View(context) {
+    internal class FuelGauge(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rect = RectF()
         private var percent: Int? = null

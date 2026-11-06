@@ -125,29 +125,54 @@ class MiniDashLogicTest {
 
     // --- Ölçüler ---
 
-    @Test fun halfScreenGetsFullSizes() {
-        val m = MiniLayout.forSize(960, 610)
-        assertEquals(88, m.playDp)
-        assertEquals(72, m.skipDp)
-        assertTrue(m.showArtwork)
-        assertTrue(m.showLabels)
+    @Test fun halfScreenUnderCaptionKeepsEverythingGlanceable() {
+        // Tiggo 7 sol yarı: 960 × 648 pencere, başlık 42 dp örtüyor.
+        val m = MiniLayout.forSize(960, 648, captionDp = 42)
+        assertFalse(m.wide)
+        assertTrue(m.pillText)
+        assertTrue(m.coverDp > 0)
+        assertFalse("bölünmüşte harita yanda, rota satırı yok", m.showNav)
+        assertTrue(m.clockSp >= 56f)
+        assertTrue(m.valueSp >= 36f)
+        assertTrue("koltuk tuşları rahat dokunulur: ${m.seatDp}", m.seatDp >= 120)
+    }
+
+    @Test fun captionShrinksUsableHeight() {
+        val free = MiniLayout.forSize(960, 560)
+        val covered = MiniLayout.forSize(960, 560, captionDp = 42)
+        assertTrue("başlık payı kısa pencere kurallarını tetikler", covered.clockSp < free.clockSp)
+        assertEquals(MiniLayout.forSize(960, 518), covered)
     }
 
     @Test fun touchTargetsNeverBelowMinimum() {
-        for (w in listOf(480, 640, 760, 960, 1280)) for (h in listOf(360, 440, 520, 610, 720)) {
-            val m = MiniLayout.forSize(w, h)
-            assertTrue("$w x $h", m.skipDp >= MiniLayout.MIN_TOUCH_DP)
-            assertTrue("$w x $h", m.playDp >= MiniLayout.MIN_TOUCH_DP)
-            assertTrue("$w x $h", m.toggleHeightDp >= MiniLayout.MIN_TOUCH_DP)
+        for (w in listOf(640, 760, 960, 1280, 1707, 1920)) for (h in listOf(440, 520, 610, 648, 720)) for (cap in listOf(0, 42)) {
+            val m = MiniLayout.forSize(w, h, cap)
+            val at = "$w x $h (başlık $cap)"
+            assertTrue(at, m.skipDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at, m.playDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at, m.mediaDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at + " koltuk ${m.seatDp}", m.seatDp >= MiniLayout.MIN_TOUCH_DP)
         }
+    }
+
+    @Test fun fullScreenUsesWideColumnsWithRoute() {
+        // 1920 × 720 ekran, durum çubuğu ve gezinme çubuğu dışında 1920 × 648.
+        val m = MiniLayout.forSize(1920, 648)
+        assertTrue(m.wide)
+        assertTrue(m.showNav)
+        assertEquals(0, m.headerDp)
+        assertTrue(m.infoDp in 340..420)
+        assertTrue(m.seatsDp in 420..600)
+        // Bilgi ve koltuk sütunlarından sonra araç sahnesine en az yarı ekran kalır.
+        assertTrue(1920 - m.infoDp - m.seatsDp - 2 * m.paddingDp - 2 * m.gapDp >= 800)
+        assertTrue(m.clockSp > MiniLayout.forSize(960, 606).clockSp)
     }
 
     @Test fun tiggo8TopHalfUsesWideRow() {
         // 2560 x ~700 px @240 dpi = 1707 x ~467 dp
         val m = MiniLayout.forSize(1707, 467)
         assertTrue(m.wide)
-        assertTrue(m.showArtwork)
-        assertTrue(m.showLabels)
+        assertTrue(m.coverDp > 0)
         assertTrue(m.skipDp >= MiniLayout.MIN_TOUCH_DP)
         assertTrue(MiniLayout.forSize(1707, 480).wide)
     }
@@ -161,11 +186,18 @@ class MiniDashLogicTest {
         assertFalse(MiniLayout.isWide(1707, 0))
     }
 
-    @Test fun thirdScreenIsCompact() {
+    @Test fun thirdScreenIsCompactWithIconPills() {
         val m = MiniLayout.forSize(640, 610)
-        assertEquals(MiniLayout.MIN_TOUCH_DP, m.skipDp)
-        assertFalse(m.showArtwork)
-        assertTrue(m.showLabels)
+        assertFalse(m.pillText)
+        assertTrue(m.clockSp < MiniLayout.forSize(960, 610).clockSp)
+        assertTrue(m.seatsDp >= 260)
+    }
+
+    @Test fun shortWindowThinsMediaBeforeSeats() {
+        val m = MiniLayout.forSize(960, 462, captionDp = 42)
+        assertEquals(88, m.mediaDp)
+        assertEquals(0, m.coverDp)
+        assertTrue(m.seatDp >= MiniLayout.MIN_TOUCH_DP)
     }
 
     // --- Gerçek navigasyon kaynağı ---
