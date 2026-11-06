@@ -1080,17 +1080,23 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         val resume = if (mode == Mode.IDLE) controller.lastSourcePackage() else null
         val src = when (mode) { Mode.SESSION -> s.source; Mode.IDLE -> resume; Mode.NO_ACCESS -> null }
         bindSource(src)
-        title.text = when (mode) {
+        val newTitle = when (mode) {
             Mode.SESSION -> s.title ?: ""
             Mode.IDLE -> activity.getString(R.string.launcher_media_idle_title)
             Mode.NO_ACCESS -> activity.getString(R.string.launcher_media_title_neutral)
         }
-        artist.text = when (mode) {
+        val newArtist = when (mode) {
             Mode.SESSION -> s.artist ?: ""
             Mode.IDLE -> activity.getString(if (resume != null) R.string.launcher_media_idle_resume else R.string.launcher_media_idle_hint)
             Mode.NO_ACCESS -> activity.getString(R.string.launcher_media_access_hint)
         }
-        fitTitle()
+        // Aynı metni yeniden atamak TextView'i yeniden ölçtürür ve çizdirir (araçta medya her ~0,4 sn durum yayınlıyor):
+        // yalnız değişince ata.
+        if (title.text.toString() != newTitle || artist.text.toString() != newArtist) {
+            title.text = newTitle
+            artist.text = newArtist
+            fitTitle()
+        }
         val session = mode == Mode.SESSION
         prev.visibility = if (session) View.VISIBLE else View.INVISIBLE
         next.visibility = prev.visibility
@@ -1268,7 +1274,8 @@ internal class ProgressRing(context: Context) : View(context) {
     init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
 
     fun set(f: Float) {
-        val q = (f * 720).toInt() / 720f
+        // 180 adım (2 derece): 3-4 dk şarkıda yaklaşık saniyede bir çizim; 720 adım saniyede 3 kez çizdiriyordu.
+        val q = (f * 180).toInt() / 180f
         if (q == fraction) return
         fraction = q
         invalidate()
