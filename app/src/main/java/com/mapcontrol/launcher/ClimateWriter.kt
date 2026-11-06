@@ -87,7 +87,14 @@ internal object ClimateMath {
      */
     fun powerOnBeforeWrite(quiet: Boolean, powerRaw: Int?): Boolean = !quiet && needsPowerOn(powerRaw)
 
-    /** Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. 0 (HVAC 12 ← 0) OEM'de doğrulanmadı, hiç yazılmaz. */
+    /**
+     * Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. Fanı 1'in altına indirmek klimayı KAPATMAZ ve 0 yazılmaz:
+     * OEM de böyle (T1E24 dökümü, 6 Kasım). Otomatik panel çubuğu ilerleme + 1 yazar, en az 1 (`SVHvac/.../HvacPageView.java:303`,
+     * `:327`; eksi düğmesi ilerleme 0'da durur `:2135-2138`); alt dock `Math.max(1, ilerleme)` ve yalnız `p > 1` iken azaltır
+     * (`SVSystemUI/.../i/a/x.java:29`, `:108`); sesli komut "MIN/MINUS" alt sınır `J() = 1`'de kalır, "zaten en düşük" der
+     * (`SVVrControl/.../vrcontrol/a/b.java:897`, `:925-965`, `a.java:32-34`). Kapatma yalnızca ayrı güç düğmesi: HVAC 18 ← 2
+     * (`SVHvac/.../model/svhvac/f/e.java:875-880` y(); sesli "klimayı kapat" `b.java:663`).
+     */
     fun encodeFan(level: Int): Int = level.coerceIn(1, FAN_MAX)
 }
 

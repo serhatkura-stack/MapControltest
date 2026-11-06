@@ -53,6 +53,21 @@ class ClimateMathTest {
         assertEquals(1, ClimateMath.encodeFan(-3))
     }
 
+    /**
+     * OEM (T1E24) fanı 1'in altına indirince klimayı kapatmaz: panel, dock ve sesli komut 1'de durur; kapatma ayrı güç
+     * düğmesidir (HVAC 18 ← 2). Biz de aynısını yaparız: sürükleme 1'de durur, 0 hiçbir fan kimliğine yazılamaz.
+     */
+    @Test fun fanBelowOneDoesNotTurnClimateOff() {
+        assertEquals(ClimateMath.FAN_MIN, ClimateMath.targetFan(1, -1))
+        assertEquals(ClimateMath.FAN_MIN, ClimateMath.targetFan(3, -9))
+        assertEquals(ClimateMath.FAN_MIN, ClimateMath.encodeFan(0))
+        val hv = com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo.MODULE_HVAC
+        for (quiet in listOf(true, false)) {
+            assertNull(WidgetWritePolicy.find(hv, ClimateWriter.fanId(quiet), 0))
+            assertFalse(ClimateWriter.setFan(0, quiet))
+        }
+    }
+
     @Test fun loAndHiEnds() {
         assertTrue(ClimateMath.isLo(15.5))
         assertFalse(ClimateMath.isLo(16.0))

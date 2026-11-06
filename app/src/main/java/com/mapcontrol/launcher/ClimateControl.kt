@@ -132,7 +132,8 @@ internal class ClimateControl(
         pendingFan = level
         if (level > 0) lastOnFan = level
         afterCommit()
-        // Fan 0 araca yazılmaz (HVAC 12 ← 0 OEM'de doğrulanmadı); arayüz 0/kapalı gösterebilir.
+        // Fan 0 araca yazılmaz ve klimayı kapatmaz: OEM panel/dock/sesli komut da fanı 1'de durdurur, kapatma ayrı (18 ← 2),
+        // bkz. ClimateMath.encodeFan. Arayüz 0/kapalı gösterebilir.
         if (level <= 0 || !ClimateWriter.enabled) return
         val quiet = quietWrite("fan")
         io.runSafely { ClimateWriter.setFan(level, quiet) }
