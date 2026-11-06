@@ -291,7 +291,40 @@ class SahneGround : Drawable() {
         drawTop = Sahne.AMBIENT_TOP ushr 24 != 0
     }
 
+    /**
+     * Üç tam ekran gradyan her karede GPU'da yeniden doldurulmasın (6 Kasım araç: slow issue draw commands 1.169):
+     * zemin bir kez yarı çözünürlükte bitmap'e çizilir, sonra tek doku olarak (süzgeçli) basılır. Gradyanlar yumuşak
+     * olduğundan yarı çözünürlük görünmez; bellek 960x360x4 ≈ 1,4 MB. Tema değişince yeni [SahneGround] kurulur.
+     */
+    private var cache: android.graphics.Bitmap? = null
+    private val blit = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
+
+    private fun buildCache(): android.graphics.Bitmap? {
+        val b = bounds
+        val cw = (b.width() + 1) / CACHE_DIV
+        val ch = (b.height() + 1) / CACHE_DIV
+        if (cw <= 0 || ch <= 0) return null
+        val bmp = try {
+            android.graphics.Bitmap.createBitmap(cw, ch, android.graphics.Bitmap.Config.ARGB_8888)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
+        val c = Canvas(bmp)
+        c.scale(cw / b.width().toFloat(), ch / b.height().toFloat())
+        c.translate(-b.left.toFloat(), -b.top.toFloat())
+        drawDirect(c)
+        return bmp
+    }
+
     override fun draw(canvas: Canvas) {
+        val b = bounds
+        val cached = cache?.takeIf { it.width == (b.width() + 1) / CACHE_DIV && it.height == (b.height() + 1) / CACHE_DIV }
+            ?: buildCache().also { cache?.recycle(); cache = it }
+        if (cached == null) { drawDirect(canvas); return }
+        canvas.drawBitmap(cached, null, b, blit)
+    }
+
+    private fun drawDirect(canvas: Canvas) {
         val b = bounds
         canvas.drawRect(b, base)
         if (drawTop) canvas.drawRect(b, top)
@@ -304,6 +337,8 @@ class SahneGround : Drawable() {
     override fun getOpacity(): Int = PixelFormat.OPAQUE
 
     companion object {
+        private const val CACHE_DIV = 2
+
         /** (cx, cy) merkezli, rx × ry yarıçaplı eliptik radyal gradyan: merkezde [color], [stop] oranında saydam. */
         fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float, color: Int, stop: Float): Shader =
             RadialGradient(0f, 0f, rx, intArrayOf(color, color and 0x00FFFFFF), floatArrayOf(0f, stop), Shader.TileMode.CLAMP).apply {
