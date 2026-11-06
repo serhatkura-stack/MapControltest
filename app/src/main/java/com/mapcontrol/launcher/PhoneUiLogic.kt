@@ -148,31 +148,34 @@ internal object PhoneUiLogic {
     /** Dokunma hedefi alt sınırı (dp): sürüşte de dokunulur. */
     const val TOUCH_MIN_DP = 64
 
-    /** Favori ızgarasının bir hücresi: kişi · boş (hizayı korur) · "Tümü". */
+    /** Favori ızgarasının bir hücresi: kişi · "Tümü". */
     sealed class FavCell {
         data class Contact(val contact: PhoneContact) : FavCell()
-        object Empty : FavCell()
         object All : FavCell()
     }
 
+    /** Tek satırda en çok favori (kişi 3 ise "Tümü" ile dört hücre olur; boş ikinci satır açılmaz). */
+    const val COMPACT_ONE_ROW_FAVORITES = 3
+    /** Bir ızgara satırının en küçük yüksekliği (dp): en küçük avatar (48) + ad satırı + arası. */
+    const val COMPACT_ROW_MIN_DP = 48 + COMPACT_NAME_ROW_DP + COMPACT_NAME_GAP_DP
+
     /**
-     * Favori hücreleri satır satır. Asistanlı düzen: tek satır, en çok [PANEL_FAVORITES] kişi, eksikler boş, dördüncü
-     * hücre "Tümü" (bugünkü görünüm). Asistansız düzen: 3 sütun; en çok [COMPACT_FAVORITES] isimli kişi; 2 ya da daha az
-     * kişi varsa tek satır, yoksa iki satır. "Tümü" hep son satırın son hücresi (sürücü yerini ezberler); kişiler baştan
-     * dolar, aradaki eksikler boş hücre.
+     * Asistansız düzenin favori hücreleri satır satır; boş hücre yok. En çok [COMPACT_FAVORITES] isimli kişi, "Tümü" hep
+     * son kişinin hemen ardından. 3 ya da daha az kişi tek satır (3 kişide KKKT); 4-5 kişi iki satır (KKK/KT, KKK/KKT;
+     * kısa satır ortalanır, [compactSlots]). İki satır [bodyDp] gövdeye sığmıyorsa ([COMPACT_ROW_MIN_DP]) tek satıra
+     * iner ve ilk [COMPACT_ONE_ROW_FAVORITES] kişi gösterilir.
      */
-    fun favoriteGrid(favorites: List<PhoneContact>, showAssistant: Boolean): List<List<FavCell>> {
-        if (showAssistant) {
-            val named = favoriteCells(favorites, PANEL_FAVORITES)
-            val row = named.map { FavCell.Contact(it) } + List(PANEL_FAVORITES - named.size) { FavCell.Empty } + FavCell.All
-            return listOf(row)
-        }
+    fun compactGrid(favorites: List<PhoneContact>, bodyDp: Int, hasLast: Boolean): List<List<FavCell>> {
         val named = favoriteCells(favorites, COMPACT_FAVORITES)
-        val rows = if (named.size + 1 <= COMPACT_COLUMNS) 1 else 2
-        val total = rows * COMPACT_COLUMNS
-        val cells = named.map<PhoneContact, FavCell> { FavCell.Contact(it) } + List(total - 1 - named.size) { FavCell.Empty } + FavCell.All
-        return cells.chunked(COMPACT_COLUMNS)
+        val twoRows = named.size > COMPACT_ONE_ROW_FAVORITES &&
+            compactSizes(bodyDp, 2, hasLast).rowDp >= COMPACT_ROW_MIN_DP
+        val shown = if (twoRows) named else named.take(COMPACT_ONE_ROW_FAVORITES)
+        val cells = shown.map<PhoneContact, FavCell> { FavCell.Contact(it) } + FavCell.All
+        return if (twoRows) cells.chunked(COMPACT_COLUMNS) else listOf(cells)
     }
+
+    /** Izgaranın sütun sayısı: hücre genişliği tüm satırlarda aynı, kısa satır ortalanır (en az [COMPACT_COLUMNS]). */
+    fun compactSlots(grid: List<List<FavCell>>): Int = maxOf(COMPACT_COLUMNS, grid.maxOfOrNull { it.size } ?: 0)
 
     /** Asistansız düzenin ölçüleri (dp): son arama kartı ve avatarı, favori satırı ve avatarı. */
     data class CompactSizes(val lastDp: Int, val lastAvatarDp: Int, val rowDp: Int, val favAvatarDp: Int)
@@ -181,14 +184,15 @@ internal object PhoneUiLogic {
      * Asistansız gövdenin [bodyDp] yüksekliğini boşluksuz paylaştırır: son arama kartı (varsa) iki satırlı ızgarada
      * ~%36, tek satırda yarısı; kalan satırlara eşit. Avatarlar satıra sığacak kadar büyür (sınırlı).
      */
-    fun compactSizes(bodyDp: Int, rows: Int, hasLast: Boolean): CompactSizes {
+    fun compactSizes(bodyDp: Int, rows: Int, hasLast: Boolean, cellWidthDp: Int = Int.MAX_VALUE): CompactSizes {
         val r = rows.coerceAtLeast(1)
         val gaps = PANEL_GAP_DP * (if (hasLast) r else r - 1)
         val avail = (bodyDp - gaps).coerceAtLeast(0)
         val last = if (!hasLast) 0 else (avail * (if (r >= 2) 36 else 50) / 100).coerceIn(COMPACT_LAST_MIN_DP, 160)
         val row = (avail - last) / r
         val lastAvatar = (last - 2 * COMPACT_CARD_PAD_DP).coerceIn(56, 88)
-        val favAvatar = (row - COMPACT_NAME_ROW_DP - COMPACT_NAME_GAP_DP).coerceIn(48, 96)
+        // Hücre genişliği de sınırlar (dört hücreli satırda avatar yanındakine değmesin).
+        val favAvatar = (row - COMPACT_NAME_ROW_DP - COMPACT_NAME_GAP_DP).coerceAtMost(cellWidthDp - 16).coerceIn(48, 96)
         return CompactSizes(last, if (hasLast) lastAvatar else 0, row, favAvatar)
     }
 

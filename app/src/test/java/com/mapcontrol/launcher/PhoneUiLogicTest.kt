@@ -184,64 +184,90 @@ class PhoneUiLogicTest {
         row.joinToString("") {
             when (it) {
                 is PhoneUiLogic.FavCell.Contact -> "K"
-                PhoneUiLogic.FavCell.Empty -> "_"
                 PhoneUiLogic.FavCell.All -> "T"
             }
         }
     }
 
+    /** Gerçek kart yüzünün gövdesi (362dp kart: ekran görüntüsünde y 100-462) ve alt çubuk sayfasınınki. */
+    private val faceBody = 290
+    private val sheetBody = 402
+
+    private fun grid(n: Int, body: Int = faceBody, hasLast: Boolean = true) =
+        shape(PhoneUiLogic.compactGrid(people(n), body, hasLast))
+
     @Test
-    fun assistantLayoutGridIsTodaysSingleRow() {
-        assertEquals(listOf("KKKT"), shape(PhoneUiLogic.favoriteGrid(people(6), showAssistant = true)))
-        assertEquals(listOf("K__T"), shape(PhoneUiLogic.favoriteGrid(people(1), showAssistant = true)))
-        assertEquals(listOf("___T"), shape(PhoneUiLogic.favoriteGrid(emptyList(), showAssistant = true)))
-        // Aynı kişiler, aynı sıra: favoriteCells ile.
-        val cells = PhoneUiLogic.favoriteGrid(people(6), true)[0].filterIsInstance<PhoneUiLogic.FavCell.Contact>().map { it.contact }
-        assertEquals(PhoneUiLogic.favoriteCells(people(6)), cells)
+    fun compactGridHasNoEmptyCellsAndAllRightAfterLastFavorite() {
+        for (body in listOf(faceBody, sheetBody)) {
+            assertEquals(listOf("KKK", "KKT"), grid(6, body))
+            assertEquals(listOf("KKK", "KKT"), grid(5, body))
+            assertEquals(listOf("KKK", "KT"), grid(4, body))
+            // Üç kişi: tek satırda dört hücre (yalnız "Tümü" taşıyan ikinci satır yok).
+            assertEquals(listOf("KKKT"), grid(3, body))
+            assertEquals(listOf("KKT"), grid(2, body))
+            assertEquals(listOf("KT"), grid(1, body))
+            assertEquals(listOf("T"), grid(0, body))
+        }
     }
 
     @Test
-    fun compactGridHasUpToFiveFavoritesAndAllLast() {
-        assertEquals(listOf("KKK", "KKT"), shape(PhoneUiLogic.favoriteGrid(people(6), showAssistant = false)))
-        assertEquals(listOf("KKK", "KKT"), shape(PhoneUiLogic.favoriteGrid(people(5), showAssistant = false)))
-        assertEquals(listOf("KKK", "K_T"), shape(PhoneUiLogic.favoriteGrid(people(4), showAssistant = false)))
-        assertEquals(listOf("KKK", "__T"), shape(PhoneUiLogic.favoriteGrid(people(3), showAssistant = false)))
-        // İki ya da daha az kişi: tek satır, boş ikinci satır yok.
-        assertEquals(listOf("KKT"), shape(PhoneUiLogic.favoriteGrid(people(2), showAssistant = false)))
-        assertEquals(listOf("K_T"), shape(PhoneUiLogic.favoriteGrid(people(1), showAssistant = false)))
-        assertEquals(listOf("__T"), shape(PhoneUiLogic.favoriteGrid(emptyList(), showAssistant = false)))
+    fun compactSlotsKeepCellWidthAcrossRows() {
+        assertEquals(3, PhoneUiLogic.compactSlots(PhoneUiLogic.compactGrid(people(4), faceBody, true)))
+        assertEquals(4, PhoneUiLogic.compactSlots(PhoneUiLogic.compactGrid(people(3), faceBody, true)))
+        assertEquals(3, PhoneUiLogic.compactSlots(PhoneUiLogic.compactGrid(people(1), faceBody, true)))
     }
 
     @Test
     fun compactGridSkipsUnnamedAndKeepsOrder() {
         val bare = PhoneContact("n:1", "0555 000 00 09", "0555 000 00 09")
-        val grid = PhoneUiLogic.favoriteGrid(listOf(bare) + people(6), showAssistant = false)
+        val grid = PhoneUiLogic.compactGrid(listOf(bare) + people(6), faceBody, true)
         val names = grid.flatten().filterIsInstance<PhoneUiLogic.FavCell.Contact>().map { it.contact.name }
         assertEquals(listOf("Kişi 1", "Kişi 2", "Kişi 3", "Kişi 4", "Kişi 5"), names)
     }
 
     @Test
+    fun compactGridDropsToOneRowWhenTwoRowsDoNotFit() {
+        // İki satırın en küçük gövdesi (son aramalı): 100dp kart + 2 × 76dp satır + 2 boşluk = 272dp.
+        assertEquals(2, PhoneUiLogic.compactGrid(people(5), 272, true).size)
+        assertEquals(listOf("KKKT"), grid(5, 271))
+        assertEquals(listOf("KKKT"), grid(5, 200))
+        // Son arama yoksa daha küçük gövdede de iki satır sığar.
+        assertEquals(2, PhoneUiLogic.compactGrid(people(5), 200, false).size)
+    }
+
+    @Test
     fun compactSizesFillTheBodyWithLargeTouchTargets() {
-        // Kart yüzü (378 - 18 - 16 - 28 - 10 = 306dp) ve alt çubuk sayfası (440 - 28 - 10 = 402dp).
-        val face = PhoneUiLogic.PANEL_H_DP - PhoneUiLogic.PANEL_PAD_TOP_DP - PhoneUiLogic.PANEL_PAD_BOTTOM_DP -
-            PhoneUiLogic.PANEL_HEADER_DP - PhoneUiLogic.PANEL_GAP_DP
-        for (body in listOf(face, 402)) for (rows in 1..2) for (hasLast in listOf(true, false)) {
+        // En küçük iki satırlı gövdeden (272dp) sayfaya (402dp) kadar her ölçü; tek satır (son aramalı) 186dp: 100 + 10 + 76.
+        for (body in 186..sheetBody) for (hasLast in listOf(true, false)) for (n in 0..6) {
+            val g = PhoneUiLogic.compactGrid(people(n), body, hasLast)
+            val rows = g.size
             val z = PhoneUiLogic.compactSizes(body, rows, hasLast)
             val gaps = PhoneUiLogic.PANEL_GAP_DP * (if (hasLast) rows else rows - 1)
             val used = z.lastDp + rows * z.rowDp + gaps
+            val tag = "body=$body n=$n last=$hasLast rows=$rows z=$z"
             // Boşluk kalmaz (tam bölünmeden gelen en çok satır sayısı kadar dp).
-            assertTrue("body=$body rows=$rows last=$hasLast used=$used", used in (body - rows)..body)
-            assertTrue(z.rowDp >= PhoneUiLogic.TOUCH_MIN_DP)
-            assertTrue(z.favAvatarDp + PhoneUiLogic.COMPACT_NAME_ROW_DP + PhoneUiLogic.COMPACT_NAME_GAP_DP <= z.rowDp)
+            assertTrue(tag, used in (body - rows)..body)
+            // Satır taşmaz: avatar + ad satıra sığar, dokunma hedefi ≥ 64dp.
+            assertTrue(tag, z.rowDp >= PhoneUiLogic.COMPACT_ROW_MIN_DP)
+            assertTrue(tag, z.favAvatarDp + PhoneUiLogic.COMPACT_NAME_ROW_DP + PhoneUiLogic.COMPACT_NAME_GAP_DP <= z.rowDp)
             if (hasLast) {
-                // Büyük kart: bugünkü 96dp karttan küçük değil, avatar karta sığar, Geri ara ≥ 64dp.
-                assertTrue(z.lastDp >= PhoneUiLogic.COMPACT_LAST_MIN_DP && z.lastDp >= PhoneUiLogic.PANEL_LAST_CALL_DP)
-                assertTrue(z.lastAvatarDp + 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP <= z.lastDp)
-                assertTrue(z.lastDp - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP >= PhoneUiLogic.TOUCH_MIN_DP)
+                assertTrue(tag, z.lastDp >= PhoneUiLogic.COMPACT_LAST_MIN_DP && z.lastDp >= PhoneUiLogic.PANEL_LAST_CALL_DP)
+                assertTrue(tag, z.lastAvatarDp + 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP <= z.lastDp)
+                assertTrue(tag, z.lastDp - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP >= PhoneUiLogic.TOUCH_MIN_DP)
             } else {
                 assertEquals(0, z.lastDp)
             }
         }
+    }
+
+    @Test
+    fun compactSizesOnRealCardFace() {
+        val z = PhoneUiLogic.compactSizes(faceBody, 2, true, cellWidthDp = 392 / 3)
+        assertEquals(100, z.lastDp)
+        assertEquals(85, z.rowDp)
+        assertEquals(57, z.favAvatarDp)
+        // Dört hücreli satırda avatar hücre genişliğiyle sınırlanır.
+        assertTrue(PhoneUiLogic.compactSizes(sheetBody, 1, true, cellWidthDp = 80).favAvatarDp <= 64)
     }
 
     @Test

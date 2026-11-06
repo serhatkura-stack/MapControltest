@@ -12,6 +12,7 @@ import android.view.Display
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -32,7 +33,7 @@ import java.text.DateFormatSymbols
  *  4. "Sesli asistan" şeridi (76dp, tam genişlik).
  * "Sesli asistan düğmesi: Kapalı" ([PhonePrefs.showAssistant]; adb: `--ez launcher_phone_assistant false`): şerit kalkar,
  * "Son arama" kartı büyür (büyük avatar/ad, geniş **Geri ara**) ve favoriler 3 sütunlu ızgara olur (en çok 5 kişi + Tümü,
- * [PhoneUiLogic.favoriteGrid]); yükseklik [PhoneUiLogic.compactSizes] ile boşluksuz paylaşılır. Açıkken düzen değişmez.
+ * [PhoneUiLogic.compactGrid]); yükseklik [PhoneUiLogic.compactSizes] ile boşluksuz paylaşılır. Açıkken düzen değişmez.
  * Son aramalar listesi panelde yok; "Tümü"de. Veri yalnızca [PhoneSource]'tan, olay güdümlü; görünmezken dinleme yok.
  * Bölümler yalnız verisi değişince yeniden kurulur; tek zamanlayıcı "Son arama" zamanının dakikalık tazelemesidir.
  *
@@ -66,8 +67,12 @@ internal class PhonePanel(
 
     /** "Sesli asistan düğmesi" ayarı ([PhonePrefs.showAssistant]); kapalıyken asistansız düzen ([compactCol]). */
     private var showAssistant = PhonePrefs.showAssistant(context)
-    /** Asistansız düzende gövdenin yüksekliği (dp; ölçülünce). */
+    /**
+     * Asistansız düzende gövdenin yüksekliği ve genişliği (dp). Yalnız ayar kapalıyken ölçülür: açıkken şerit yer
+     * tuttuğu için gövde kısadır, o ölçüyle kurulan düzen bir kare ezik görünürdü.
+     */
     private var compactBodyDp = 0
+    private var compactBodyWDp = 0
     /** Asistansız düzenin son kurulduğu veri + ölçü (değişmedikçe yeniden kurulmaz). */
     private var compactKey: Any? = null
     private var cLast: CompactLast? = null
@@ -218,11 +223,7 @@ internal class PhonePanel(
     private val body = object : FrameLayout(context) {
         override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             super.onSizeChanged(w, h, oldw, oldh)
-            val dp = (h / resources.displayMetrics.density + 0.5f).toInt()
-            if (dp == compactBodyDp) return
-            compactBodyDp = dp
-            // Yerleşim sırasında görünüm ağacı değiştirilmez: bir sonraki karede kurulur.
-            if (!showAssistant) post { rebuildCompact() }
+            if (!showAssistant) measureCompactBody()
         }
     }.apply {
         addView(contentCol, FrameLayout.LayoutParams(MATCH, WRAP))
@@ -360,6 +361,17 @@ internal class PhonePanel(
         root.clipToPadding = showAssistant
     }
 
+    /** Gövde ölçüsünü alır; değiştiyse asistansız düzen bir sonraki karede kurulur (yerleşim sırasında ağaç değişmez). */
+    private fun measureCompactBody() {
+        val d = context.resources.displayMetrics.density
+        val h = (body.height / d + 0.5f).toInt()
+        val w = (body.width / d + 0.5f).toInt()
+        if (h <= 0 || (h == compactBodyDp && w == compactBodyWDp)) return
+        compactBodyDp = h
+        compactBodyWDp = w
+        body.post { rebuildCompact() }
+    }
+
     /** Ayar değişti (ya da panel yeniden göründü): düzen seçilir; asistanlı düzen bugünküyle aynıdır. */
     private fun applyMode() {
         val show = PhonePrefs.showAssistant(context)
@@ -371,7 +383,18 @@ internal class PhonePanel(
         cLast = null
         state?.let { applyContentVisibility(it) }
         snap?.let { assistant.visibility = assistantVisibility(it) }
-        rebuildCompact()
+        if (show) return
+        // Kapanınca hemen kurulmaz: şerit kalktıktan sonraki yerleşimde ölçülen gövdeyle kurulur (onSizeChanged; boyut
+        // değişmezse bu tek seferlik dinleyici).
+        compactBodyDp = 0
+        compactBodyWDp = 0
+        body.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                body.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                if (!showAssistant) measureCompactBody()
+            }
+        })
+        body.requestLayout()
     }
 
     private fun applyContentVisibility(st: PhoneUiLogic.PanelState) {
@@ -473,15 +496,17 @@ internal class PhonePanel(
 
     /**
      * Asistansız düzeni kurar: kart ve ızgara gövdenin yüksekliğini [PhoneUiLogic.compactSizes] ile boşluksuz paylaşır,
-     * hücreler [PhoneUiLogic.favoriteGrid]'den. Veri ya da ölçü değişmedikçe hiçbir şey yapmaz.
+     * hücreler [PhoneUiLogic.compactGrid]'den. Veri ya da ölçü değişmedikçe hiçbir şey yapmaz.
      */
     private fun rebuildCompact() {
         if (showAssistant || state != PhoneUiLogic.PanelState.CONTENT || compactBodyDp <= 0) return
         val s = snap ?: return
-        val grid = PhoneUiLogic.favoriteGrid(s.favorites, showAssistant = false)
         val last = shownLast
-        val sizes = PhoneUiLogic.compactSizes(compactBodyDp, grid.size, last != null)
-        val key = listOf(grid, sizes, last, shownLastPhoto, shownDirVersion)
+        val grid = PhoneUiLogic.compactGrid(s.favorites, compactBodyDp, last != null)
+        val slots = PhoneUiLogic.compactSlots(grid)
+        val cellW = if (compactBodyWDp > 0) compactBodyWDp / slots else Int.MAX_VALUE
+        val sizes = PhoneUiLogic.compactSizes(compactBodyDp, grid.size, last != null, cellW)
+        val key = listOf(grid, sizes, slots, last, shownLastPhoto, shownDirVersion)
         if (key == compactKey) return
         compactKey = key
         compactCol.removeAllViews()
@@ -496,6 +521,9 @@ internal class PhonePanel(
             val rowView = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 clipChildren = false
+                // Hücre genişliği tüm satırlarda aynı; kısa satır (KKK/KT) ortalanır, boş hücre yok.
+                weightSum = slots.toFloat()
+                gravity = Gravity.CENTER_HORIZONTAL
                 row.forEach { cell -> addView(compactCell(cell, sizes.favAvatarDp), LinearLayout.LayoutParams(0, MATCH, 1f)) }
             }
             compactCol.addView(rowView, LinearLayout.LayoutParams(MATCH, context.dp(sizes.rowDp)).apply {
@@ -510,21 +538,23 @@ internal class PhonePanel(
         val pad = context.dp(PhoneUiLogic.COMPACT_CARD_PAD_DP)
         val time = sahneText(context, C_CAPTION_SP, Sahne.INK_3, 400).apply { maxLines = 1 }
         val callH = (sizes.lastDp - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP).coerceAtLeast(PhoneUiLogic.TOUCH_MIN_DP)
+        // Sayfada geniş yan yana düğme; kart yüzünde (dar) simge yazının üstünde, ada yer kalsın.
         val call = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (sheet) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             background = ctaBackground()
-            setPadding(context.dp(16), 0, context.dp(20), 0)
+            if (sheet) setPadding(context.dp(16), 0, context.dp(20), 0) else setPadding(context.dp(12), 0, context.dp(12), 0)
+            val icon = if (sheet) 32 else 28
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_sahne_call)
                 imageTintList = ColorStateList.valueOf(Sahne.CALL_ACCEPT)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(context.dp(32), context.dp(32)))
-            addView(sahneText(context, C_CALLBACK_SP, Sahne.CTA_INK, 600).apply {
+            }, LinearLayout.LayoutParams(context.dp(icon), context.dp(icon)))
+            addView(sahneText(context, if (sheet) C_CALLBACK_SP else C_CALLBACK_FACE_SP, Sahne.CTA_INK, 600).apply {
                 setText(R.string.phone_call_back)
                 maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (sheet) marginStart = context.dp(10) else topMargin = context.dp(2) })
             contentDescription = context.getString(R.string.phone_call_back) + ", " + name
             isClickable = true
             isFocusable = true
@@ -569,9 +599,8 @@ internal class PhonePanel(
         return CompactLast(card, time)
     }
 
-    /** Izgara hücresi: kişi (dokun: ara, basılı tut: sabitle) · boş · "Tümü". İçerik hücrede ortalı. */
+    /** Izgara hücresi: kişi (dokun: ara, basılı tut: sabitle) · "Tümü". İçerik hücrede ortalı. */
     private fun compactCell(cell: PhoneUiLogic.FavCell, avatarDp: Int): View = when (cell) {
-        PhoneUiLogic.FavCell.Empty -> View(context)
         PhoneUiLogic.FavCell.All -> compactCellFrame(context.getString(R.string.phone_all), FrameLayout(context).apply {
             background = GlassDrawable(context, avatarDp / 2f, shadow = 0.4f, control = true)
             addView(ImageView(context).apply {
@@ -711,6 +740,7 @@ internal class PhonePanel(
         const val C_LAST_NAME_SP = 22f
         const val C_LAST_INITIALS_SP = 28f
         const val C_CALLBACK_SP = 19f
+        const val C_CALLBACK_FACE_SP = 16f
         const val C_FAV_INITIALS_SP = 24f
         const val C_NAME_SP = 17f
         const val MINUTE_MS = 60_000L
