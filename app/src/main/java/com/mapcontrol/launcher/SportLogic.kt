@@ -62,11 +62,12 @@ object SportMath {
 
     /** İbre açısı (tuval derecesi): devir 0..[RPM_MAX] aralığına kırpılır. */
     /**
-     * İbre yeni devre gitsin mi: dururken yalnız [deadband]'den büyük farkta (rölanti kıpırtısı çizdirmez); hareket
-     * sürerken her yeni hedefe hemen döner (hızlı gaz/bırakma kaçmaz), aynı hedef yeniden başlatılmaz.
+     * İbre yeni devre gitsin mi: yalnız [deadband]'den büyük farkta. Dururken fark gösterilen devirden, hareket sürerken
+     * gidilen hedeften ölçülür: rölanti kıpırtısı süren hareketi her 100 ms yeniden başlatıp ekranı durmadan çizdirmez
+     * (6 Kasım emülatör ölçümü: kıpırtıda saniyede ~50 kare), hızlı gaz/bırakma (100 ms'de yüzlerce devir) yine kaçmaz.
      */
     fun needleShouldMove(moving: Boolean, target: Float, shown: Float, rpm: Float, deadband: Float): Boolean =
-        if (moving) rpm != target else kotlin.math.abs(rpm - shown) >= deadband
+        kotlin.math.abs(rpm - if (moving) target else shown) >= deadband
 
     fun needleDeg(rpm: Float): Float = START_DEG + SWEEP_DEG * (rpm.coerceIn(0f, RPM_MAX.toFloat()) / RPM_MAX)
 

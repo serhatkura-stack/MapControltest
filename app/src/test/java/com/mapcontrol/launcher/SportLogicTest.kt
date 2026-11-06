@@ -452,13 +452,17 @@ class SportLogicTest {
         assertEquals("88", r.next(1_510, 88)) // yeniden açılınca beklemeden
     }
 
-    @Test fun needleDeadbandOnlyAtRest() {
+    @Test fun needleDeadbandAgainstShownOrTarget() {
         // Dururken rölanti kıpırtısı (< 50) oynatmaz, büyük fark oynatır.
         assertFalse(SportMath.needleShouldMove(false, 800f, 800f, 830f, 50f))
         assertTrue(SportMath.needleShouldMove(false, 800f, 800f, 1_400f, 50f))
-        // Hareket sürerken küçük düzeltme de hemen yeni hedef olur; aynı hedef yeniden başlatılmaz.
-        assertTrue(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_020f, 50f))
+        // Hareket sürerken: hedefe göre küçük kıpırtı yeniden başlatmaz (sonsuz çizim olmaz), büyük değişim hemen yeni hedef.
+        assertFalse(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_020f, 50f))
         assertFalse(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_000f, 50f))
+        assertTrue(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_300f, 50f))
+        assertTrue(SportMath.needleShouldMove(true, 3_000f, 2_000f, 2_900f, 50f))
+        // Rölanti kıpırtısı (735–785) hareket sürerken de hedefi oynatmaz.
+        assertFalse(SportMath.needleShouldMove(true, 760f, 900f, 785f, 50f))
     }
 
     @Test fun speedSitsBetweenNeedleTailAndGearWindow() {
