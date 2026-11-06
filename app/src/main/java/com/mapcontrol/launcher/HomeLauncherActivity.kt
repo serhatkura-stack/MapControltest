@@ -84,6 +84,21 @@ class HomeLauncherActivity : Activity() {
     private var ourBar: OurBottomBar? = null
     /** Gelen/aktif arama şeridi (üst orta, tüm içeriğin üstünde); sabit widget'larla aynı ömür. */
     private lateinit var callBanner: CallBanner
+    /** Tam ekran arama sayfası (içerik FrameLayout'una eklenen örtü; karar §15). */
+    private lateinit var callScreen: CallScreen
+    /** Etkinlik ömrü boyunca arama durumunu izler: arama başlayınca launcher'ı öne getirir ("Arama ekranı: Launcher"). */
+    private val callWatcher = object : PhoneListener {
+        override fun onPhoneChanged(snapshot: PhoneSnapshot) = onCallWatch(snapshot.call.kind)
+    }
+    private var callWatching = false
+    private var watchKind = CallKind.NONE
+    /** Bu aramada öne getirmenin yapıldığı geçişler (aynı geçiş tekrarlanmaz). */
+    private val broughtFor = HashSet<CallKind>()
+    /** Kullanıcı bu aramada arama sayfasını küçülttü: kendiliğinden yeniden açılmaz (şerit kalır). */
+    private var callMinimized = false
+    /** Varsayılan ana ekran biz miyiz (PackageManager Binder'ı arka planda, onStart'ta tazelenir). */
+    @Volatile private var defaultHome = false
+    private val bringTask = Runnable { bringToFrontForCall() }
     private var rootLayout: View? = null
     private var mockBar: View? = null
 
@@ -149,7 +164,7 @@ class HomeLauncherActivity : Activity() {
         // bizim çubuğa düşer. "Gizli"de çubuk yok.
         ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), oemBar)) OurBottomBar(this, onPhoneTap = ::onPhoneButton) else null
         val ourBar = this.ourBar
-        callBanner = CallBanner(this, onIncoming = ::onIncomingCall)
+        callBanner = CallBanner(this, onIncoming = ::onIncomingCall, onOpen = { openCallScreen(fromUser = true) })
         fixedWidgets = listOfNotNull(header, ourBar, callBanner)
         editBar = buildEditBar()
         sahne = newSahneScreen()
@@ -202,7 +217,11 @@ class HomeLauncherActivity : Activity() {
             addView(callBanner.view, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL,
             ).apply { topMargin = dp(CALL_BANNER_TOP_DP) })
+            // Arama sayfası açılınca en üste eklenir; açıkken şerit gizlenir (süre iki yerde birden sayılmaz).
+            callScreen = CallScreen(this@HomeLauncherActivity, this, ::onCallScreenChanged)
         })
+        syncCallWatcher()
+        if (savedInstanceState == null) consumeShowCall(intent)
         loadForMode()
         setupSport()
         setupWelcome(root)
@@ -227,6 +246,7 @@ class HomeLauncherActivity : Activity() {
         }
         consumeAppearanceExtra(intent)
         consumeEditExtra(intent)
+        consumeShowCall(intent)
         // Debug: launcher açıkken gelen --ei launcher_nav_area (ekstra işlenince silinir, tekrarlanmaz).
         LauncherProbe.applyFrom(this, intent)
         PhoneDataProbe.applyFrom(this, intent)
@@ -322,6 +342,7 @@ class HomeLauncherActivity : Activity() {
         }
         mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
         callBanner.applyTheme()
+        callScreen.applyTheme()
         fixedWidgets = listOfNotNull(header, ourBar, callBanner)
 
         // Orta alan yeni jetonlarla baştan kurulur (örtünün altında); düzen ve mod aynı kalır.
@@ -608,6 +629,7 @@ class HomeLauncherActivity : Activity() {
         // Ana ekrana dönüş: araç uykusunda düşmüş olabilecek favori tuşu aboneliği tazelenir.
         FavoriteKey.refresh()
         PhoneSource.refreshVoiceKey()
+        refreshDefaultHome()
     }
 
     override fun onResume() {
@@ -654,6 +676,8 @@ class HomeLauncherActivity : Activity() {
         wifiPanel?.dismiss()
         bluetoothPanel?.dismiss()
         exitEditMode()
+        // Görünmezken arama sayfası çizilmez/sayılmaz; arama sürerken öne gelince şerit ya da sayfa yeniden açılır.
+        callScreen.close()
         metrics.removeListener(metricsListener)
         fixedWidgets.forEach { it.onHidden() }
         sahne.onHidden()
@@ -671,6 +695,8 @@ class HomeLauncherActivity : Activity() {
         dataCheckExtra = null
         FavoriteKey.stop(this)
         PhoneSource.stopVoiceKey(this)
+        if (::callScreen.isInitialized) callScreen.release()
+        stopCallWatcher()
         super.onDestroy()
     }
 
@@ -693,6 +719,10 @@ class HomeLauncherActivity : Activity() {
     /** Ana ekrandayken geri tuşu yalnızca düzenleme modundan çıkar. */
     @Deprecated("Activity.onBackPressed, API 33 öncesi araçta geçerli yol")
     override fun onBackPressed() {
+        if (::callScreen.isInitialized && callScreen.isOpen) {
+            minimizeCallScreen()
+            return
+        }
         if (editing) exitEditMode()
     }
 
@@ -839,12 +869,135 @@ class HomeLauncherActivity : Activity() {
         bluetoothPanel?.dismiss()
     }
 
+    // --- Arama sayfası ve öne getirme (karar §15) ---
+
+    /** Arama sayfasını açar: üstteki sayfa/paneller kapanır (diyalog pencereleri örtünün üstünde kalırdı). */
+    private fun openCallScreen(fromUser: Boolean) {
+        if (isFinishing || isDestroyed || !::callScreen.isInitialized) return
+        if (fromUser) callMinimized = false
+        if (editing) exitEditMode()
+        sheet?.dismiss()
+        sheet = null
+        wifiPanel?.dismiss()
+        bluetoothPanel?.dismiss()
+        callScreen.open()
+    }
+
+    private fun minimizeCallScreen() = callScreen.close()
+
+    /** Arama sayfası açıldı/kapandı: şerit gizlenir/gelir. Ön plandayken arama sürerken kapandıysa kullanıcı küçülttü. */
+    private fun onCallScreenChanged(open: Boolean) {
+        callBanner.setCovered(open)
+        if (!open && resumed && PhoneSource.snapshot().call.inCall) callMinimized = true
+    }
+
+    /** [EXTRA_SHOW_CALL] ile gelindi (öne getirme): arama sürüyorsa ve kullanıcı küçültmediyse sayfa açılır. */
+    private fun consumeShowCall(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_SHOW_CALL, false) != true) return
+        intent.removeExtra(EXTRA_SHOW_CALL)
+        window.decorView.post { if (!callMinimized && PhoneSource.snapshot().call.inCall) openCallScreen(fromUser = false) }
+    }
+
+    /**
+     * "Arama ekranı: Launcher" iken izleyici etkinlik ömrü boyunca açık (yalnız arama durumu; rehber okunmaz, arama yokken
+     * yoklama yok). "Fabrika"da kapalı. Ayar değişince [LauncherSettings] çağırır.
+     */
+    internal fun syncCallWatcher() {
+        val want = CallScreenPrefs.launcher(this)
+        if (want == callWatching) return
+        if (!want) {
+            stopCallWatcher()
+            return
+        }
+        callWatching = true
+        watchKind = PhoneSource.snapshot().call.kind
+        refreshDefaultHome()
+        PhoneSource.start(this, callWatcher, wantsData = false)
+        PhoneSource.addListener(callWatcher)
+    }
+
+    private fun stopCallWatcher() {
+        window.decorView.removeCallbacks(bringTask)
+        if (!callWatching) return
+        callWatching = false
+        PhoneSource.removeListener(callWatcher)
+        PhoneSource.stop(callWatcher)
+    }
+
+    /** Arama durumu geçişi: gelen arama / aranıyor / konuşmaya ilk geçişte 700 ms sonra launcher öne getirilir. */
+    private fun onCallWatch(next: CallKind) {
+        val prev = watchKind
+        watchKind = next
+        val prevIn = prev == CallKind.INCOMING || prev == CallKind.DIALING || prev == CallKind.ACTIVE
+        val nextIn = next == CallKind.INCOMING || next == CallKind.DIALING || next == CallKind.ACTIVE
+        if (!nextIn) {
+            if (next == CallKind.NONE) window.decorView.removeCallbacks(bringTask)
+            return
+        }
+        // Yeni arama: geçmiş geçişler ve küçültme sıfırlanır.
+        if (!prevIn) {
+            broughtFor.clear()
+            callMinimized = false
+        }
+        if (!PhoneUiLogic.shouldBringToFront(prev, next, defaultHome, next in broughtFor)) return
+        broughtFor += next
+        window.decorView.removeCallbacks(bringTask)
+        window.decorView.postDelayed(bringTask, BRING_TO_FRONT_DELAY_MS)
+    }
+
+    /**
+     * OEM arama ekranı (com.desaysv.bluetooth.phone) açıldıktan sonra launcher öne alınır ve arama sayfası açılır. Ana
+     * ekran süreci Android 10/11'de arka plan etkinlik başlatma kısıtından muaf (araçta doğrulanacak).
+     */
+    private fun bringToFrontForCall() {
+        if (isFinishing || isDestroyed || !callWatching || !defaultHome) return
+        val call = PhoneSource.snapshot().call
+        if (!call.inCall) return
+        if (resumed) {
+            if (!callMinimized) openCallScreen(fromUser = false)
+            return
+        }
+        try {
+            startActivity(android.content.Intent(this, javaClass)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                .putExtra(EXTRA_SHOW_CALL, true))
+            android.util.Log.i(CALL_TAG, "arama: launcher öne getirildi (${call.kind})")
+        } catch (t: Throwable) {
+            android.util.Log.w(CALL_TAG, "arama: öne getirilemedi ${t.javaClass.simpleName}")
+        }
+    }
+
+    /** Varsayılan HOME biz miyiz: PackageManager sorgusu arka planda (Binder ana iş parçacığında değil). */
+    private fun refreshDefaultHome() {
+        val app = applicationContext
+        LauncherIo.serial().execute {
+            defaultHome = try {
+                app.packageManager.resolveActivity(
+                    android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),
+                    android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+                )?.activityInfo?.packageName == app.packageName
+            } catch (t: Throwable) {
+                false
+            }
+        }
+    }
+
+    /** "Tümü" sayfası (Son aramalar / Kişiler): açık sayfanın yerini alır; gelen aramada kapanır. */
+    internal fun openPhoneAll() {
+        if (editing || isFinishing || isDestroyed) return
+        sheet?.dismiss()
+        lateinit var d: android.app.Dialog
+        d = PhoneAllSheet.show(this) { if (sheet === d) sheet = null }
+        sheet = d
+    }
+
     /** Telefon sayfası: Sahne paneliyle aynı görünüm; arama başlayınca kapanır, kapanınca panel bırakılır. */
     private fun openPhoneSheet() {
         sheet?.dismiss()
         var panel: PhonePanel? = null
         val d = showLauncherSheet(this, R.string.launcher_phone_title, PHONE_SHEET_WIDTH_DP) { dialog ->
-            val p = PhonePanel(this@HomeLauncherActivity, sheet = true, onDialed = { dialog.dismiss() })
+            val p = PhonePanel(this@HomeLauncherActivity, sheet = true, onDialed = { dialog.dismiss() },
+                onOpenAll = { dialog.dismiss(); openPhoneAll() })
             panel = p
             addView(p.view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(PHONE_SHEET_HEIGHT_DP)))
             p.onVisible()
@@ -934,5 +1087,10 @@ class HomeLauncherActivity : Activity() {
         const val PHONE_SHEET_HEIGHT_DP = 500
         /** Arama şeridinin üst kenardan payı (başlığın üstünde durur). */
         const val CALL_BANNER_TOP_DP = 12
+        /** Öne getirmede arama sayfasını açtıran ekstra (karar §15). */
+        const val EXTRA_SHOW_CALL = "launcher_show_call"
+        /** OEM arama ekranı açıldıktan sonra launcher'ın öne alınma gecikmesi. */
+        const val BRING_TO_FRONT_DELAY_MS = 700L
+        const val CALL_TAG = "PhoneUi"
     }
 }

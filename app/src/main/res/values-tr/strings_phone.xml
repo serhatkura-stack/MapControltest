@@ -38,4 +38,26 @@
     <string name="launcher_time_now">Şimdi</string>
     <string name="launcher_phone_permission_settings_sub">Ayarlar &gt; Uygulamalar &gt; izinler bölümünden açın</string>
     <string name="launcher_phone_open_settings">Ayarları aç</string>
+    <!-- Arama ekranı ve yeni panel (6 Kasım). -->
+    <string name="call_screen_mute">Sessiz</string>
+    <string name="call_audio_phone">Telefona aktar</string>
+    <string name="call_audio_car">Araca aktar</string>
+    <string name="call_keypad">Tuş takımı</string>
+    <string name="call_minimize">Küçült</string>
+    <string name="call_hangup">Kapat</string>
+    <string name="call_screen_open_cd">Arama ekranını aç</string>
+    <string name="phone_last_call">Son arama</string>
+    <string name="phone_call_back">Geri ara</string>
+    <string name="phone_all">Tümü</string>
+    <string name="phone_tab_recents">Son aramalar</string>
+    <string name="phone_tab_contacts">Kişiler</string>
+    <string name="phone_all_empty">Henüz bir şey yok</string>
+    <string name="phone_all_empty_sub">Rehber ve geçmiş telefondan alınıyor</string>
+    <string name="phone_assistant_strip">Sesli asistan</string>
+    <string name="phone_ago_minutes">%d dk önce</string>
+    <string name="phone_ago_hours">%d sa önce</string>
+    <string name="pref_call_screen">Arama ekranı</string>
+    <string name="pref_call_screen_launcher">Launcher</string>
+    <string name="pref_call_screen_oem">Fabrika</string>
+    <string name="pref_call_screen_hint">Launcher: arama başlayınca ana ekran öne gelir, arama bizim ekranda sürer. Fabrika: aracın kendi arama ekranı kalır.</string>
 </resources>

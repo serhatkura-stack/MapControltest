@@ -159,6 +159,19 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setText(R.string.launcher_phone_voice_key_hint)
         }, fullWidth())
 
+        // Arama ekranı: Launcher (arama başlayınca ana ekran öne gelir, bizim arama sayfası) / Fabrika. Varsayılan Launcher.
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.pref_call_screen, CallScreenPrefs.launcher(activity),
+            R.string.pref_call_screen_launcher, R.string.pref_call_screen_oem) { value ->
+            d.dismiss()
+            CallScreenPrefs.setLauncher(activity, value)
+            (activity as? HomeLauncherActivity)?.syncCallWatcher()
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.pref_call_screen_hint)
+        }, fullWidth())
+
         // Gösterge haritası (deneysel): yalnızca gösterge ekranı varsa. Varsayılan kapalı.
         if (ClusterMap.hasCluster(activity)) addClusterMapControls(d)
 

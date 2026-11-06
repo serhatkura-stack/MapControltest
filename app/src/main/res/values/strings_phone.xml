@@ -38,4 +38,26 @@
     <string name="launcher_time_now">Now</string>
     <string name="launcher_phone_permission_settings_sub">Turn it on in Settings &gt; Apps &gt; permissions</string>
     <string name="launcher_phone_open_settings">Open settings</string>
+    <!-- Call screen and new panel (6 Nov). -->
+    <string name="call_screen_mute">Mute</string>
+    <string name="call_audio_phone">Use phone</string>
+    <string name="call_audio_car">Use car</string>
+    <string name="call_keypad">Keypad</string>
+    <string name="call_minimize">Minimize</string>
+    <string name="call_hangup">End</string>
+    <string name="call_screen_open_cd">Open call screen</string>
+    <string name="phone_last_call">Last call</string>
+    <string name="phone_call_back">Call back</string>
+    <string name="phone_all">All</string>
+    <string name="phone_tab_recents">Recent calls</string>
+    <string name="phone_tab_contacts">Contacts</string>
+    <string name="phone_all_empty">Nothing here yet</string>
+    <string name="phone_all_empty_sub">Contacts and history come from your phone</string>
+    <string name="phone_assistant_strip">Voice assistant</string>
+    <string name="phone_ago_minutes">%d min ago</string>
+    <string name="phone_ago_hours">%d h ago</string>
+    <string name="pref_call_screen">Call screen</string>
+    <string name="pref_call_screen_launcher">Launcher</string>
+    <string name="pref_call_screen_oem">Factory</string>
+    <string name="pref_call_screen_hint">Launcher: when a call starts the home screen comes to the front and the call continues on our screen. Factory: the car\'s own call screen stays.</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.mapcontrol.launcher
 
 import com.mapcontrol.launcher.PhoneUiLogic.BannerMode
+import com.mapcontrol.launcher.PhoneUiLogic.CallControl
 import com.mapcontrol.launcher.PhoneUiLogic.PanelState
 import com.mapcontrol.launcher.PhoneUiLogic.PhoneButtonAction
 import com.mapcontrol.launcher.PhoneUiLogic.RelTime
@@ -143,5 +144,102 @@ class PhoneUiLogicTest {
         val ids = PhoneError.values().map { PhoneUiLogic.errorRes(it) }
         ids.forEach { assertNotEquals(0, it) }
         assertEquals(PhoneError.values().size, ids.toSet().size)
+    }
+
+    // --- 6 Kasım: panel yeniden tasarımı, arama sayfası, öne getirme ---
+
+    @Test
+    fun panelRowsFitTheNaturalPanelHeight() {
+        assertTrue(PhoneUiLogic.panelContentDp() <= PhoneUiLogic.PANEL_H_DP)
+        // Dokunma alanları: asistan şeridi ve favori hücresi (76dp avatar) en az 76dp.
+        assertTrue(PhoneUiLogic.PANEL_ASSIST_DP >= 76)
+        assertTrue(PhoneUiLogic.PANEL_FAVORITES_DP >= 76)
+        assertTrue(PhoneUiLogic.PANEL_LAST_CALL_DP >= 76)
+    }
+
+    @Test
+    fun lastCallSkipsRecentsWithoutName() {
+        val noName = PhoneRecent(RecentType.INCOMING, null, "0555 000 00 03", 3_000L)
+        val numberAsName = PhoneRecent(RecentType.OUTGOING, "0555 000 00 04", "0555 000 00 04", 2_000L)
+        assertEquals(recent, PhoneUiLogic.lastNamedRecent(listOf(noName, numberAsName, recent)))
+        assertEquals(null, PhoneUiLogic.lastNamedRecent(listOf(noName, numberAsName)))
+        assertEquals(null, PhoneUiLogic.lastNamedRecent(emptyList()))
+    }
+
+    @Test
+    fun favoriteCellsAreOnlyNamedAndAtMostThree() {
+        val bare = PhoneContact("n:1", "0555 000 00 09", "0555 000 00 09")
+        val blank = PhoneContact("c:9", "  ", "0555 000 00 08")
+        val list = listOf(bare, ayse, blank, PhoneContact("c:2", "Mehmet", "1"), PhoneContact("c:3", "Zeynep", "2"), PhoneContact("c:4", "Ali", "3"))
+        val cells = PhoneUiLogic.favoriteCells(list)
+        assertEquals(listOf("Ayşe", "Mehmet", "Zeynep"), cells.map { it.name })
+        assertTrue(PhoneUiLogic.favoriteCells(listOf(bare, blank)).isEmpty())
+    }
+
+    @Test
+    fun recentPhotoKeyFallsBackToMatchingContact() {
+        val withPhoto = PhoneContact("v:7", "Mehmet", "+90 555 000 00 02", photoKey = "v:7")
+        // Kaydın kendi anahtarı önce gelir.
+        assertEquals("call:x", PhoneUiLogic.recentPhotoKey(recent.copy(photoKey = "call:x"), listOf(withPhoto)))
+        // Kimlikle eşleşme.
+        assertEquals("v:7", PhoneUiLogic.recentPhotoKey(recent.copy(contactId = "v:7"), listOf(withPhoto)))
+        // Numaranın son hanesiyle eşleşme (ülke kodu farkı önemsiz).
+        assertEquals("v:7", PhoneUiLogic.recentPhotoKey(recent, listOf(withPhoto)))
+        // Eşleşme yok ya da fotoğraf yok: null (UI baş harf gösterir).
+        assertEquals(null, PhoneUiLogic.recentPhotoKey(recent, listOf(withPhoto.copy(photoKey = null))))
+        assertEquals(null, PhoneUiLogic.recentPhotoKey(recent.copy(number = "112"), listOf(withPhoto)))
+    }
+
+    @Test
+    fun callLabelShowsNumberOnlyUnderAName() {
+        assertEquals(PhoneUiLogic.CallLabel("Ayşe", "0555"), PhoneUiLogic.callLabel(CallState(CallKind.ACTIVE, " Ayşe ", "0555")))
+        assertEquals(PhoneUiLogic.CallLabel("0555", null), PhoneUiLogic.callLabel(CallState(CallKind.ACTIVE, null, "0555")))
+        assertEquals(PhoneUiLogic.CallLabel("", null), PhoneUiLogic.callLabel(CallState(CallKind.DIALING)))
+        // toString isim/numara içermez.
+        assertFalse(PhoneUiLogic.CallLabel("Ayşe", "0555").toString().contains("Ayşe"))
+    }
+
+    @Test
+    fun callControlsFollowCapabilities() {
+        assertEquals(listOf(CallControl.REJECT, CallControl.ANSWER), PhoneUiLogic.callControls(CallKind.INCOMING, true, true, true))
+        assertEquals(listOf(CallControl.MUTE, CallControl.AUDIO, CallControl.KEYPAD, CallControl.MINIMIZE, CallControl.HANGUP), PhoneUiLogic.callControls(CallKind.ACTIVE, true, true, true))
+        assertEquals(listOf(CallControl.MINIMIZE, CallControl.HANGUP), PhoneUiLogic.callControls(CallKind.ACTIVE, false, false, false))
+        assertEquals(listOf(CallControl.MUTE, CallControl.KEYPAD, CallControl.MINIMIZE, CallControl.HANGUP), PhoneUiLogic.callControls(CallKind.DIALING, true, false, true))
+        assertEquals(listOf(CallControl.MINIMIZE), PhoneUiLogic.callControls(CallKind.ENDED, true, true, true))
+        assertTrue(PhoneUiLogic.keypadEnabled(CallKind.ACTIVE))
+        assertFalse(PhoneUiLogic.keypadEnabled(CallKind.DIALING))
+        assertFalse(PhoneUiLogic.keypadEnabled(CallKind.INCOMING))
+    }
+
+    @Test
+    fun keypadKeepsOnlyValidKeysAndTrimsFromTheStart() {
+        var s = ""
+        for (c in "12a*#9 ") s = PhoneUiLogic.keypadAppend(s, c)
+        assertEquals("12*#9", s)
+        val long = (1..30).fold("") { acc, i -> PhoneUiLogic.keypadAppend(acc, ('0' + i % 10)) }
+        assertEquals(PhoneUiLogic.KEYPAD_MAX, long.length)
+        assertTrue(long.endsWith("890"))
+    }
+
+    @Test
+    fun callScreenClosesOnlyWhenCallIsGone() {
+        assertTrue(PhoneUiLogic.callScreenShouldClose(CallKind.NONE))
+        for (k in listOf(CallKind.INCOMING, CallKind.DIALING, CallKind.ACTIVE, CallKind.ENDED)) assertFalse(PhoneUiLogic.callScreenShouldClose(k))
+    }
+
+    @Test
+    fun bringToFrontOncePerTransitionAndOnlyAsDefaultHome() {
+        // Gelen arama, aranıyor ve konuşmaya geçişte.
+        assertTrue(PhoneUiLogic.shouldBringToFront(CallKind.NONE, CallKind.INCOMING, isDefaultHome = true, alreadyForThisCall = false))
+        assertTrue(PhoneUiLogic.shouldBringToFront(CallKind.NONE, CallKind.DIALING, isDefaultHome = true, alreadyForThisCall = false))
+        assertTrue(PhoneUiLogic.shouldBringToFront(CallKind.DIALING, CallKind.ACTIVE, isDefaultHome = true, alreadyForThisCall = false))
+        assertTrue(PhoneUiLogic.shouldBringToFront(CallKind.INCOMING, CallKind.ACTIVE, isDefaultHome = true, alreadyForThisCall = false))
+        // Aynı aramada aynı geçiş tekrar yok; varsayılan ana ekran değilsek hiç yok.
+        assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.DIALING, CallKind.ACTIVE, isDefaultHome = true, alreadyForThisCall = true))
+        assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.NONE, CallKind.INCOMING, isDefaultHome = false, alreadyForThisCall = false))
+        // Durum değişmeden (ör. sessiz/ses yönü değişimi) ya da arama biterken yok.
+        assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.ACTIVE, CallKind.ACTIVE, isDefaultHome = true, alreadyForThisCall = false))
+        assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.ACTIVE, CallKind.ENDED, isDefaultHome = true, alreadyForThisCall = false))
+        assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.ENDED, CallKind.NONE, isDefaultHome = true, alreadyForThisCall = false))
     }
 }

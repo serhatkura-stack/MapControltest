@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Outline
+import android.graphics.drawable.InsetDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -14,22 +15,22 @@ import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
 
 /**
- * Arama şeridi: ekranın üstünde ortada, cam bir şerit. Yalnızca bir arama varken görünür ([PhoneUiLogic.bannerMode]):
- *  - Gelen arama: arayanın adı (yoksa numarası), "Gelen arama"; sağda iki büyük düğme, solda kırmızı **Reddet**, sağda
- *    yeşil **Cevapla** (≥ 96dp).
- *  - Aranıyor: ad/numara, "Aranıyor…" ve kırmızı **Kapat**.
- *  - Konuşma: ad, süre (mm:ss), **Sessiz** (yol yoksa gizli) ve **Kapat**.
- *  - Bitti: "Arama bitti" (arka uç ~2 sn sonra NONE yapar, şerit kapanır).
- * Aranıyor ve konuşma kipinde şerit kompakt bir hapa küçülür (başlık bandı yüksekliğinde, en çok [COMPACT_MAX_W_DP]
- * genişliğinde, düğmeler 76dp): dakikalarca süren konuşmada başlığı, Sahne panellerini ya da spor göstergelerini
- * örtmesin. Yalnızca gelen arama büyük düzeni kullanır.
- * Tek zamanlayıcı konuşma süresidir: yalnızca konuşma sürerken ve şerit görünürken saniyede bir, yazı değişince.
- * OEM telefon uygulaması kendi ekranını da gösterebilir; bu şerit onu bastırmaz, tamamlar.
+ * Arama şeridi: ekranın üstünde ortada TEK parça cam şerit (karar §15). Yalnızca bir arama varken görünür
+ * ([PhoneUiLogic.bannerMode]); süre yalnızca burada ve bir kez yazılır (ayrı yeşil hap ya da ikinci süre yok).
+ *
+ *  - Aranıyor / konuşma / bitti: başlık bandı yüksekliğinde (76dp), en çok 640dp genişlikte hap. Soldan sağa: 44dp
+ *    yuvarlak fotoğraf (yoksa baş harf), ad (yoksa numara, tek satır), " · " ve süre ya da "Aranıyor…" / "Arama bitti",
+ *    yalnızca sessizdeyken küçük mikrofon-kapalı işareti (parça AMBER yanar, rozet yok) ve sağda 76×76 **Kapat**.
+ *  - Gelen arama: büyük düzen; arayanın adı, "Gelen arama"; solda kırmızı **Reddet**, sağda yeşil **Cevapla** (96dp).
+ *
+ * Şeridin gövdesine (düğmeler dışı) dokunmak tam ekran arama sayfasını açar ([onOpen]). Tek zamanlayıcı konuşma
+ * süresidir: yalnızca konuşma sürerken, şerit görünürken ve arama sayfası onu örtmüyorken saniyede bir, yazı değişince.
  *
  * Yalnızca ana ekran görünürken dinler ([onVisible]/[onHidden]). İsim/numara günlüğe yazılmaz.
  */
@@ -37,51 +38,79 @@ internal class CallBanner(
     private val activity: Activity,
     /** Gelen arama şeridi göründüğünde (ana iş parçacığı): etkinlik üstteki sayfaları kapatır ki düğmeler örtülmesin. */
     private val onIncoming: (() -> Unit)? = null,
+    /** Şerit gövdesine dokunuş: tam ekran arama sayfası. */
+    private val onOpen: (() -> Unit)? = null,
 ) : LauncherWidget, PhoneListener {
 
     private val context: Context = activity
     private val main = Handler(Looper.getMainLooper())
     private var visible = false
+    /** Tam ekran arama sayfası açık: şerit gizli, süre burada sayılmaz. */
+    private var covered = false
     private var call: CallState = CallState.IDLE
-    private var canMute = false
     private var mode = PhoneUiLogic.BannerMode.HIDDEN
-    /** Kurulu düğme dizisi (kip ya da Sessiz görünürlüğü değişince yeniden kurulur). */
-    private var builtFor: Pair<PhoneUiLogic.BannerMode, Boolean>? = null
-    private var muteButton: LinearLayout? = null
+    /** Kurulu düğme dizisinin kipi (kip değişince yeniden kurulur). */
+    private var builtFor: PhoneUiLogic.BannerMode? = null
     private var compact = false
+    /** Kip düzeni (pay, yazı boyu, avatar) en az bir kez uygulandı. */
+    private var layoutApplied = false
+    private var shownPhotoKey: String? = "\u0000"
     private val actionButtons = ArrayList<View>()
 
+    private val avatar = PhoneAvatarView(context, AVATAR_DP, AVATAR_SP)
     private val title = sahneText(context, TITLE_SP, Sahne.INK, 600).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+    }
+    /** Kompakt hapta başlığın yanında " · süre" (ya da durum); büyük düzende başlığın altında durum. */
+    private val status = sahneText(context, COMPACT_STATUS_SP, Sahne.INK_2, 500).apply {
+        maxLines = 1
     }
     private val sub = sahneText(context, SUB_SP, Sahne.INK_3, 400).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
+    private val mutedMark = ImageView(context).apply {
+        setImageResource(R.drawable.ic_sahne_mic_off)
+        imageTintList = ColorStateList.valueOf(Sahne.AMBER)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        visibility = View.GONE
+    }
     private val buttons = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
+    /** Ad + (kompaktta) durum tek satırda; büyük düzende altta [sub]. */
+    private val titleRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        // Satır kendi içeriği kadar geniş: ad sığmazsa yalnız ad kısalır (ağırlık), süre hep adın hemen yanında görünür.
+        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(mutedMark, LinearLayout.LayoutParams(context.dp(MUTED_DP), context.dp(MUTED_DP)).apply { marginStart = context.dp(12) })
+    }
+    private val texts = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(titleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(sub, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = context.dp(2)
+        })
+    }
     private val card = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(context.dp(28), context.dp(14), context.dp(14), context.dp(14))
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(title)
-            addView(sub, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = context.dp(2)
-            })
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(avatar, LinearLayout.LayoutParams(context.dp(AVATAR_DP), context.dp(AVATAR_DP)))
+        addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(14) })
         addView(buttons, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = context.dp(20)
+            marginStart = context.dp(12)
         })
-        // Şeride dokunuş alttaki ekrana geçmez.
+        // Gövdeye dokunuş arama sayfasını açar; alttaki ekrana geçmez.
         isClickable = true
+        setOnClickListener { if (mode != PhoneUiLogic.BannerMode.HIDDEN) onOpen?.invoke() }
     }
 
-    /** Genişlik en çok [MAX_W_DP], ekranda her yandan 24dp pay; üst-orta hizası ebeveynin (FrameLayout) yerleşim kuralından. */
+    /** Genişlik en çok [MAX_W_DP] (kompaktta [COMPACT_MAX_W_DP]), ekranda her yandan 24dp pay. */
     private val frame = object : FrameLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val parentW = MeasureSpec.getSize(widthMeasureSpec)
@@ -101,16 +130,42 @@ internal class CallBanner(
 
     /** Tema değişti: cam ve düğmeler yeni jetonlarla yeniden kurulur. */
     fun applyTheme() {
-        card.background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, control = true)
+        applyGlass()
+        title.setTextColor(Sahne.INK)
+        status.setTextColor(Sahne.INK_2)
+        sub.setTextColor(Sahne.INK_3)
+        mutedMark.imageTintList = ColorStateList.valueOf(Sahne.AMBER)
+        avatar.background = GlassDrawable(context, AVATAR_DP / 2f, shadow = 0f)
+        shownPhotoKey = "\u0000"
+        builtFor = null
+        if (mode != PhoneUiLogic.BannerMode.HIDDEN) bindCall()
+    }
+
+    /** Hap (PILL yarıçap) ya da gelen arama kartı (panel yarıçapı); cam, ince kenar. */
+    private fun applyGlass() {
+        val radius = if (compact) Sahne.PILL_RADIUS_DP else Sahne.PANEL_RADIUS_DP
+        card.background = GlassDrawable(context, radius, control = true)
         card.elevation = context.dpF(ELEVATION_DP)
         card.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(v: View, outline: Outline) =
-                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(Sahne.PANEL_RADIUS_DP))
+                outline.setRoundRect(0, 0, v.width, v.height, minOf(context.dpF(radius), v.height / 2f))
         }
-        title.setTextColor(Sahne.INK)
-        sub.setTextColor(Sahne.INK_3)
-        builtFor = null
-        if (mode != PhoneUiLogic.BannerMode.HIDDEN) bindCall()
+    }
+
+    /** Tam ekran arama sayfası açılınca şerit gizlenir ve süresi durur; kapanınca geri gelir. */
+    fun setCovered(on: Boolean) {
+        if (covered == on) return
+        covered = on
+        if (on) {
+            main.removeCallbacks(timer)
+            frame.animate().cancel()
+            frame.visibility = View.GONE
+        } else if (visible && mode != PhoneUiLogic.BannerMode.HIDDEN) {
+            frame.visibility = View.VISIBLE
+            frame.alpha = 1f
+            frame.translationY = 0f
+            if (mode == PhoneUiLogic.BannerMode.ACTIVE) tickTimer()
+        }
     }
 
     // --- Yaşam döngüsü ---
@@ -144,15 +199,13 @@ internal class CallBanner(
     override fun onPhoneChanged(snapshot: PhoneSnapshot) {
         if (!visible) return
         val next = snapshot.call
-        val muteChanged = snapshot.canMute != canMute
-        if (next == call && !muteChanged) return
+        if (next == call) return
         call = next
-        canMute = snapshot.canMute
         bindCall()
     }
 
     override fun onPhoneError(error: PhoneError) {
-        if (!visible || mode == PhoneUiLogic.BannerMode.HIDDEN || !frame.isAttachedToWindow) return
+        if (!visible || covered || mode == PhoneUiLogic.BannerMode.HIDDEN || !frame.isAttachedToWindow) return
         PhoneToast.show(context, PhoneUiLogic.errorRes(error))
     }
 
@@ -167,79 +220,84 @@ internal class CallBanner(
             if (was != PhoneUiLogic.BannerMode.HIDDEN) hide()
             return
         }
-        val name = call.name?.trim()?.takeIf { it.isNotEmpty() }
-        val number = call.number?.trim()?.takeIf { it.isNotEmpty() }
-        setTextIfChanged(title, name ?: number.orEmpty())
-        val key = next to (next == PhoneUiLogic.BannerMode.ACTIVE && canMute)
-        if (key != builtFor) {
-            builtFor = key
-            applyCompact(next == PhoneUiLogic.BannerMode.ACTIVE || next == PhoneUiLogic.BannerMode.DIALING)
+        val label = PhoneUiLogic.callLabel(call)
+        setTextIfChanged(title, label.title)
+        if (call.photoKey != shownPhotoKey) {
+            shownPhotoKey = call.photoKey
+            avatar.bind(call.photoKey, PhoneText.initials(call.name))
+        }
+        if (next != builtFor) {
+            builtFor = next
+            applyCompact(next != PhoneUiLogic.BannerMode.INCOMING)
             buildButtons(next)
         }
         when (next) {
             PhoneUiLogic.BannerMode.INCOMING -> setTextIfChanged(sub,
-                listOfNotNull(context.getString(R.string.launcher_call_incoming), if (name != null) number else null).joinToString(" · "))
-            PhoneUiLogic.BannerMode.DIALING -> setTextIfChanged(sub, context.getString(R.string.launcher_call_dialing))
+                listOfNotNull(context.getString(R.string.launcher_call_incoming), label.number).joinToString(" · "))
+            PhoneUiLogic.BannerMode.DIALING -> setStatus(context.getString(R.string.launcher_call_dialing))
             PhoneUiLogic.BannerMode.ACTIVE -> tickTimer()
-            PhoneUiLogic.BannerMode.ENDED -> setTextIfChanged(sub, context.getString(R.string.launcher_call_ended))
+            PhoneUiLogic.BannerMode.ENDED -> setStatus(context.getString(R.string.launcher_call_ended))
             PhoneUiLogic.BannerMode.HIDDEN -> Unit
         }
         if (next != PhoneUiLogic.BannerMode.ACTIVE) main.removeCallbacks(timer)
-        muteButton?.let { bindMute(it) }
-        card.contentDescription = listOf(title.text, sub.text).filter { it.isNotEmpty() }.joinToString(", ")
+        // Sessiz: yalnızca işaret yanar (rozet/halka yok); gelen aramada gösterilmez.
+        mutedMark.visibility = if (call.muted && compact && call.inCall) View.VISIBLE else View.GONE
+        card.contentDescription = listOf(title.text, if (compact) status.text else sub.text, context.getString(R.string.call_screen_open_cd))
+            .filter { it.isNotEmpty() }.joinToString(", ")
         if (was == PhoneUiLogic.BannerMode.HIDDEN) show()
         if (next == PhoneUiLogic.BannerMode.INCOMING && was != PhoneUiLogic.BannerMode.INCOMING) onIncoming?.invoke()
     }
 
-    /** Kompakt hap (aranıyor/konuşma) ya da büyük gelen arama düzeni. */
+    /** Kompakt hapta durum başlığın yanında " · " ile. */
+    private fun setStatus(text: String) = setTextIfChanged(status, "$SEP$text")
+
+    /** Kompakt hap (aranıyor/konuşma/bitti) ya da büyük gelen arama düzeni. */
     private fun applyCompact(on: Boolean) {
-        if (on == compact) return
+        if (on == compact && layoutApplied) return
+        layoutApplied = true
         compact = on
-        val v = context.dp(if (on) COMPACT_PAD_DP else 14)
-        card.setPadding(context.dp(if (on) 24 else 28), v, v, v)
-        title.textSize = if (on) COMPACT_TITLE_SP else TITLE_SP
-        sub.textSize = if (on) COMPACT_SUB_SP else SUB_SP
+        if (on) {
+            // 76dp: avatar 44 + 2×16 pay; Kapat düğmesi 76×76 hapın sağ ucunu doldurur (dokunma alanı tam 76dp).
+            card.setPadding(context.dp(16), 0, 0, 0)
+            card.minimumHeight = context.dp(STRIP_DP)
+            title.textSize = COMPACT_TITLE_SP
+            status.visibility = View.VISIBLE
+            sub.visibility = View.GONE
+        } else {
+            card.setPadding(context.dp(24), context.dp(14), context.dp(14), context.dp(14))
+            card.minimumHeight = 0
+            title.textSize = TITLE_SP
+            status.visibility = View.GONE
+            sub.visibility = View.VISIBLE
+        }
+        val a = context.dp(if (on) AVATAR_DP else BIG_AVATAR_DP)
+        avatar.layoutParams = (avatar.layoutParams as LinearLayout.LayoutParams).apply { width = a; height = a }
+        applyGlass()
         frame.requestLayout()
     }
 
     private fun buildButtons(m: PhoneUiLogic.BannerMode) {
         buttons.removeAllViews()
         actionButtons.clear()
-        muteButton = null
         main.removeCallbacks(unlock)
-        val big = m == PhoneUiLogic.BannerMode.INCOMING
-        val w = context.dp(if (big) BIG_DP else COMPACT_W_DP)
-        val h = context.dp(if (big) BIG_DP else COMPACT_H_DP)
-        fun add(v: View, first: Boolean) =
-            buttons.addView(v, LinearLayout.LayoutParams(w, h).apply { if (!first) marginStart = context.dp(if (big) 14 else 8) })
         when (m) {
             PhoneUiLogic.BannerMode.INCOMING -> {
                 // Reddet solda (kırmızı), Cevapla sağda (yeşil): telefonlardaki alışılmış yerleşim.
-                add(callButton(R.drawable.ic_sahne_call_end, R.string.launcher_call_decline, Sahne.CALL_REJECT) { act { PhoneSource.reject() } }, true)
-                add(callButton(R.drawable.ic_sahne_call, R.string.launcher_call_answer, Sahne.CALL_ACCEPT) { act { PhoneSource.answer() } }, false)
+                val s = context.dp(BIG_DP)
+                buttons.addView(bigButton(R.drawable.ic_sahne_call_end, R.string.launcher_call_decline, Sahne.CALL_REJECT) { act { PhoneSource.reject() } },
+                    LinearLayout.LayoutParams(s, s))
+                buttons.addView(bigButton(R.drawable.ic_sahne_call, R.string.launcher_call_answer, Sahne.CALL_ACCEPT) { act { PhoneSource.answer() } },
+                    LinearLayout.LayoutParams(s, s).apply { marginStart = context.dp(14) })
             }
-            PhoneUiLogic.BannerMode.DIALING ->
-                add(callButton(R.drawable.ic_sahne_call_end, R.string.launcher_call_hangup, Sahne.CALL_REJECT) { act { PhoneSource.hangUp() } }, true)
-            PhoneUiLogic.BannerMode.ACTIVE -> {
-                if (canMute) add(callButton(R.drawable.ic_sahne_mic_off, R.string.launcher_call_mute, Sahne.SOFT_FILL, Sahne.INK) {
-                    PhoneSource.toggleMute()
-                }.also { muteButton = it }, true)
-                add(callButton(R.drawable.ic_sahne_call_end, R.string.launcher_call_hangup, Sahne.CALL_REJECT) { act { PhoneSource.hangUp() } }, !canMute)
+            PhoneUiLogic.BannerMode.DIALING, PhoneUiLogic.BannerMode.ACTIVE -> {
+                val s = context.dp(STRIP_DP)
+                buttons.addView(endButton { act { PhoneSource.hangUp() } }, LinearLayout.LayoutParams(s, s))
             }
             PhoneUiLogic.BannerMode.ENDED, PhoneUiLogic.BannerMode.HIDDEN -> Unit
         }
         buttons.visibility = if (buttons.childCount == 0) View.GONE else View.VISIBLE
-    }
-
-    /** Sessiz düğmesi: kapalıyken yumuşak dolgu + mürekkep ikon; açıkken mürekkep dolgu + zemin renginde ikon (net "açık" hâli). */
-    private fun bindMute(b: LinearLayout) {
-        val on = call.muted
-        val fill = if (on) Sahne.INK else Sahne.SOFT_FILL
-        val ink = if (on) Sahne.GLASS_BOTTOM else Sahne.INK
-        b.background = rounded(context, fill, BUTTON_RADIUS_DP, if (on) 0 else Sahne.HAIR_2)
-        (b.getChildAt(0) as ImageView).imageTintList = ColorStateList.valueOf(ink)
-        (b.getChildAt(1) as android.widget.TextView).setTextColor(ink)
-        b.isSelected = on
+        // Bitti: sağda düğme yok, metin hapın içinde nefes alsın.
+        (texts.layoutParams as LinearLayout.LayoutParams).marginEnd = context.dp(if (buttons.childCount == 0 && compact) 24 else 0)
     }
 
     /** Cevapla/Reddet/Kapat: istek gönderilince düğmeler [LOCK_MS] kilitlenir (çift dokunuş iki istek olmasın). */
@@ -257,43 +315,65 @@ internal class CallBanner(
         it.alpha = if (locked) LOCKED_ALPHA else 1f
     }
 
-    private fun callButton(@DrawableRes icon: Int, @StringRes label: Int, fill: Int, ink: Int = Sahne.CALL_ON_INK, onClick: () -> Unit): LinearLayout =
+    /** Gelen arama düğmesi: dolgulu yuvarlak kare, ikon + etiket. */
+    private fun bigButton(@DrawableRes icon: Int, @StringRes label: Int, fill: Int, onClick: () -> Unit): LinearLayout =
         LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = rounded(context, fill, BUTTON_RADIUS_DP, if (fill == Sahne.SOFT_FILL) Sahne.HAIR_2 else 0)
+            background = rounded(context, fill, BUTTON_RADIUS_DP)
             addView(ImageView(context).apply {
                 setImageResource(icon)
-                imageTintList = ColorStateList.valueOf(ink)
+                imageTintList = ColorStateList.valueOf(Sahne.CALL_ON_INK)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP)))
-            addView(sahneText(context, LABEL_SP, ink, 600).apply {
+            addView(sahneText(context, LABEL_SP, Sahne.CALL_ON_INK, 600).apply {
                 setText(label)
                 maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = context.dp(4)
             })
-            val who = title.text?.toString().orEmpty()
-            contentDescription = if (who.isEmpty()) context.getString(label) else context.getString(label) + ", " + who
+            describe(this, label)
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
             pressFeedback()
-            if (icon != R.drawable.ic_sahne_mic_off) actionButtons += this
+            actionButtons += this
         }
+
+    /** Hapın sağ ucundaki Kapat: 76×76 dokunma alanı, içinde 6dp içeride kırmızı daire ve ikon. */
+    private fun endButton(onClick: () -> Unit): FrameLayout = FrameLayout(context).apply {
+        val inset = context.dp(END_INSET_DP)
+        background = InsetDrawable(oval(Sahne.CALL_REJECT), inset)
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.ic_sahne_call_end)
+            imageTintList = ColorStateList.valueOf(Sahne.CALL_ON_INK)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, FrameLayout.LayoutParams(context.dp(ICON_DP), context.dp(ICON_DP), Gravity.CENTER))
+        describe(this, R.string.call_hangup)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+        pressFeedback()
+        actionButtons += this
+    }
+
+    private fun describe(v: View, @StringRes label: Int) {
+        val who = title.text?.toString().orEmpty()
+        v.contentDescription = if (who.isEmpty()) context.getString(label) else context.getString(label) + ", " + who
+    }
 
     // --- Süre ---
 
     private val timer = Runnable { tickTimer() }
 
-    /** Süreyi yazar ve bir sonraki saniye sınırına kurar (yalnız konuşma sürerken ve şerit görünürken). */
+    /** Süreyi yazar ve bir sonraki saniye sınırına kurar (konuşma sürerken, şerit görünür ve örtülü değilken). */
     private fun tickTimer() {
         main.removeCallbacks(timer)
-        if (!visible || mode != PhoneUiLogic.BannerMode.ACTIVE) return
+        if (!visible || covered || mode != PhoneUiLogic.BannerMode.ACTIVE) return
         val started = call.startedAtMs
         val elapsed = if (started > 0L) SystemClock.elapsedRealtime() - started else 0L
-        setTextIfChanged(sub, PhoneUiLogic.formatDuration(elapsed))
+        setStatus(PhoneUiLogic.formatDuration(elapsed))
         main.postDelayed(timer, 1_000L - (elapsed.coerceAtLeast(0L) % 1_000L))
     }
 
@@ -301,6 +381,7 @@ internal class CallBanner(
 
     private fun show() {
         frame.animate().cancel()
+        if (covered) return
         frame.visibility = View.VISIBLE
         frame.alpha = 0f
         frame.translationY = -context.dpF(SLIDE_DP)
@@ -319,23 +400,26 @@ internal class CallBanner(
     }
 
     private companion object {
-        const val MAX_W_DP = 900
+        const val SEP = "  ·  "
+        const val MAX_W_DP = 760
         const val SIDE_DP = 24
         const val ELEVATION_DP = 12f
         const val TITLE_SP = 24f
         const val SUB_SP = 18f
         const val LABEL_SP = 15f
-        const val ICON_DP = 32
-        /** Gelen aramada Reddet/Cevapla kare düğmeleri (≥ 96dp). */
-        const val BIG_DP = 104
-        /** Aranıyor/konuşma hapındaki düğmeler (≥ 76dp dokunma alanı). */
-        const val COMPACT_W_DP = 104
-        const val COMPACT_H_DP = 76
-        /** Kompakt hap: 4 + 76 + 4 = 84dp (başlık bandı 72dp + üst pay 12dp). */
-        const val COMPACT_PAD_DP = 4
+        const val ICON_DP = 30
+        /** Kompakt hap yüksekliği (başlık bandı) ve Kapat düğmesinin dokunma alanı. */
+        const val STRIP_DP = 76
+        const val END_INSET_DP = 6
         const val COMPACT_MAX_W_DP = 640
         const val COMPACT_TITLE_SP = 20f
-        const val COMPACT_SUB_SP = 16f
+        const val COMPACT_STATUS_SP = 20f
+        const val AVATAR_DP = 44
+        const val BIG_AVATAR_DP = 64
+        const val AVATAR_SP = 17f
+        const val MUTED_DP = 22
+        /** Gelen aramada Reddet/Cevapla kare düğmeleri (96dp). */
+        const val BIG_DP = 96
         const val BUTTON_RADIUS_DP = 28f
         const val LOCK_MS = 1_500L
         const val LOCKED_ALPHA = 0.6f

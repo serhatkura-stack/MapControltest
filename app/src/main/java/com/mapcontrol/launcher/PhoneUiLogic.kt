@@ -114,6 +114,105 @@ internal object PhoneUiLogic {
     /** Sabitlemeyi aç/kapat: listede varsa çıkar, yoksa sona ekle. */
     fun togglePin(pinned: List<String>, id: String): List<String> = if (id in pinned) pinned - id else pinned + id
 
+    // --- Telefon paneli (4×4, 378dp): satır ölçüleri tek yerde; [PhoneUiLogicTest] toplamın sığdığını denetler. ---
+
+    /** Panelin doğal yüksekliği (SahneScreen.NATURAL_PANEL_H_DP). */
+    const val PANEL_H_DP = 378
+    const val PANEL_PAD_TOP_DP = 18
+    const val PANEL_PAD_BOTTOM_DP = 16
+    const val PANEL_HEADER_DP = 28
+    const val PANEL_LAST_CALL_DP = 96
+    const val PANEL_FAVORITES_DP = 112
+    const val PANEL_ASSIST_DP = 76
+    const val PANEL_GAP_DP = 10
+    /** Favori hücresi sayısı (yalnız isimli kişiler); dördüncü hücre "Tümü". */
+    const val PANEL_FAVORITES = 3
+
+    /** Paneldeki satırların toplamı (dp): üst/alt pay + başlık + son arama + favoriler + asistan + 3 boşluk. */
+    fun panelContentDp(): Int = PANEL_PAD_TOP_DP + PANEL_HEADER_DP + PANEL_GAP_DP + PANEL_LAST_CALL_DP + PANEL_GAP_DP +
+        PANEL_FAVORITES_DP + PANEL_GAP_DP + PANEL_ASSIST_DP + PANEL_PAD_BOTTOM_DP
+
+    /** Gösterilebilir bir isim: boş değil ve en az bir harf içerir (yalın numara isim sayılmaz). */
+    fun hasName(name: String?): Boolean = name?.trim()?.any { it.isLetter() } == true
+
+    /** "Son arama" kartı: ismi olan ilk (en yeni) kayıt; isimsizler atlanır. Yoksa null (kart gizlenir). */
+    fun lastNamedRecent(recents: List<PhoneRecent>): PhoneRecent? = recents.firstOrNull { hasName(it.name) }
+
+    /** Paneldeki favori hücreleri: yalnızca isimli kişiler, en çok [max]; çıplak numara asla. */
+    fun favoriteCells(favorites: List<PhoneContact>, max: Int = PANEL_FAVORITES): List<PhoneContact> =
+        favorites.filter { hasName(it.name) }.take(max)
+
+    /**
+     * "Son arama" kartının fotoğraf anahtarı: kaydın kendi anahtarı, yoksa eşleşen kişinin (kimlikle, sonra numaranın
+     * son 9 hanesiyle). Görüntü yine [PhonePhotos]'tan okunur; önbellekte yoksa UI baş harfe düşer.
+     */
+    fun recentPhotoKey(r: PhoneRecent, contacts: List<PhoneContact>): String? {
+        r.photoKey?.let { return it }
+        r.contactId?.let { id -> contacts.firstOrNull { it.id == id }?.photoKey }?.let { return it }
+        val tail = digitsOf(r.number).takeLast(9)
+        if (tail.length < 6) return null
+        return contacts.firstOrNull { it.photoKey != null && digitsOf(it.number).endsWith(tail) }?.photoKey
+    }
+
+    private fun digitsOf(s: String): String = s.filter { it.isDigit() }
+
+    // --- Arama ekranı ve şeridi ---
+
+    /** Büyük satır isim (yoksa numara); numara satırı yalnız isim varken. */
+    data class CallLabel(val title: String, val number: String?) {
+        override fun toString(): String = "CallLabel(number=${number != null})"
+    }
+
+    fun callLabel(call: CallState): CallLabel {
+        val name = call.name?.trim()?.takeIf { it.isNotEmpty() }
+        val number = call.number?.trim()?.takeIf { it.isNotEmpty() }
+        return CallLabel(name ?: number.orEmpty(), if (name != null) number else null)
+    }
+
+    /** Arama ekranının alt sıra denetimleri. */
+    enum class CallControl { MUTE, AUDIO, KEYPAD, MINIMIZE, HANGUP, REJECT, ANSWER }
+
+    /**
+     * Arama ekranında görünen denetimler (soldan sağa). Gelen arama: Reddet + Cevapla. Aranıyor/konuşma: yolu olan
+     * Sessiz, Telefona aktar, Tuş takımı; her zaman Küçült ve Kapat. Bitti ya da arama yok: yalnız Küçült.
+     */
+    fun callControls(kind: CallKind, canMute: Boolean, canAudio: Boolean, canDtmf: Boolean): List<CallControl> = when (kind) {
+        CallKind.INCOMING -> listOf(CallControl.REJECT, CallControl.ANSWER)
+        CallKind.DIALING, CallKind.ACTIVE -> ArrayList<CallControl>().apply {
+            if (canMute) add(CallControl.MUTE)
+            if (canAudio) add(CallControl.AUDIO)
+            if (canDtmf) add(CallControl.KEYPAD)
+            add(CallControl.MINIMIZE)
+            add(CallControl.HANGUP)
+        }
+        CallKind.ENDED, CallKind.NONE -> listOf(CallControl.MINIMIZE)
+    }
+
+    /** Tuş takımı yalnızca konuşma sürerken çalışır (aranıyorken soluk). */
+    fun keypadEnabled(kind: CallKind): Boolean = kind == CallKind.ACTIVE
+
+    const val KEYPAD_MAX = 24
+
+    /** Tuş takımı satırı (yalnız bellekte ve ekranda): en çok [max] karakter, taşınca baştan kırpılır; geçersiz tuş eklenmez. */
+    fun keypadAppend(current: String, c: Char, max: Int = KEYPAD_MAX): String {
+        if (c !in '0'..'9' && c != '*' && c != '#') return current
+        val next = current + c
+        return if (next.length > max) next.takeLast(max) else next
+    }
+
+    /** Arama ekranı durum NONE olunca kendiliğinden kapanır (ENDED sırasında "Arama bitti" görünür). */
+    fun callScreenShouldClose(kind: CallKind): Boolean = kind == CallKind.NONE
+
+    /**
+     * Launcher öne getirilsin mi (karar §15): yalnızca varsayılan ana ekran bizsek, gelen arama / aranıyor / konuşmaya
+     * GEÇİŞTE ve bu aramada bu geçiş için henüz yapılmadıysa ([alreadyForThisCall] false). Kullanıcı sonra OEM
+     * uygulamasında kalırsa tekrar yapılmaz.
+     */
+    fun shouldBringToFront(prevKind: CallKind, nextKind: CallKind, isDefaultHome: Boolean, alreadyForThisCall: Boolean): Boolean {
+        if (!isDefaultHome || alreadyForThisCall || prevKind == nextKind) return false
+        return nextKind == CallKind.INCOMING || nextKind == CallKind.DIALING || nextKind == CallKind.ACTIVE
+    }
+
     /** Hata metni. */
     @StringRes
     fun errorRes(error: PhoneError): Int = when (error) {
