@@ -141,6 +141,25 @@ class MiniDashLogicTest {
         }
     }
 
+    @Test fun tiggo8TopHalfUsesWideRow() {
+        // 2560 x ~700 px @240 dpi = 1707 x ~467 dp
+        val m = MiniLayout.forSize(1707, 467)
+        assertTrue(m.wide)
+        assertTrue(m.showArtwork)
+        assertTrue(m.showLabels)
+        assertTrue(m.skipDp >= MiniLayout.MIN_TOUCH_DP)
+        assertTrue(MiniLayout.forSize(1707, 480).wide)
+    }
+
+    @Test fun narrowerHalvesStayColumn() {
+        assertFalse(MiniLayout.forSize(960, 610).wide)
+        assertFalse(MiniLayout.forSize(960, 520).wide)
+        assertFalse(MiniLayout.forSize(640, 610).wide)
+        assertFalse(MiniLayout.forSize(1280, 720).wide)
+        assertFalse(MiniLayout.forSize(1707, 960).wide)
+        assertFalse(MiniLayout.isWide(1707, 0))
+    }
+
     @Test fun thirdScreenIsCompact() {
         val m = MiniLayout.forSize(640, 610)
         assertEquals(MiniLayout.MIN_TOUCH_DP, m.skipDp)

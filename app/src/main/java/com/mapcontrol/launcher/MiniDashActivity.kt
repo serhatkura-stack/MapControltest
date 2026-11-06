@@ -79,6 +79,11 @@ class MiniDashActivity : Activity() {
     // --- Görünümler ---
     private lateinit var root: FrameLayout
     private lateinit var column: LinearLayout
+    private lateinit var top: LinearLayout
+    private lateinit var infoBlock: LinearLayout
+    private lateinit var valuesRow: LinearLayout
+    private lateinit var midBlock: LinearLayout
+    private var arrangedWide: Boolean? = null
     private lateinit var clock: TextView
     private lateinit var rangeValue: TextView
     private lateinit var rangeLabel: TextView
@@ -243,6 +248,7 @@ class MiniDashActivity : Activity() {
         if (all == lastAlerts) return
         lastAlerts = all
         alertRow.bind(all) { stripText(this, it) }
+        updateMid()
     }
 
     /** Şerit dokunuşu: yakıt azda en yakın istasyon; diğerlerinde araç detayı (lastik basınçları, bakım, hava). */
@@ -262,6 +268,7 @@ class MiniDashActivity : Activity() {
         val h = navHint
         if (!MiniNav.shown(h) || h == null) {
             navRow.visibility = View.GONE
+            updateMid()
             return
         }
         navManeuver.text = h.maneuver.orEmpty()
@@ -272,6 +279,7 @@ class MiniDashActivity : Activity() {
         navEta.text = eta?.let { getString(R.string.launcher_mini_nav_eta, it) }.orEmpty()
         navEta.visibility = if (eta == null) View.GONE else View.VISIBLE
         navRow.visibility = View.VISIBLE
+        updateMid()
     }
 
     private data class MediaUi(val mode: Int, val title: String, val artist: String, val playing: Boolean, val art: Bitmap?)
@@ -352,17 +360,13 @@ class MiniDashActivity : Activity() {
             setOnClickListener { goFullScreen() }
             pressFeedback()
         }
-        val top = LinearLayout(this).apply {
+        top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(clock, LinearLayout.LayoutParams(0, WRAP, 1f))
-            addView(valueBlock(rangeValue, rangeLabel))
-            addView(View(context), LinearLayout.LayoutParams(dp(28), 1))
-            addView(valueBlock(fuelValue, fuelLabel))
-            addView(View(context), LinearLayout.LayoutParams(dp(24), 1))
-            addView(fullButton, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)))
         }
-        column.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
+        infoBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+        valuesRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        midBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
 
         // Medya paneli.
         artwork = ImageView(this).apply {
@@ -405,7 +409,6 @@ class MiniDashActivity : Activity() {
             addView(play, (play.layoutParams as LinearLayout.LayoutParams).apply { marginStart = dp(16); marginEnd = dp(16) })
             addView(next)
         }
-        column.addView(mediaPanel, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(16) })
 
         // Navigasyon satırı (kaynak yokken gizli).
         navManeuver = sahneText(this, 24f, Sahne.INK, 500).apply { ellipsize = TextUtils.TruncateAt.END }
@@ -426,14 +429,9 @@ class MiniDashActivity : Activity() {
             addView(navEta, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(14) })
             visibility = View.GONE
         }
-        column.addView(navRow, LinearLayout.LayoutParams(MATCH, dp(68)).apply { topMargin = dp(12) })
 
         // Uyarı şeridi (yalnızca bir şey varken; Sahne'deki şeritle aynı).
         alertRow = StageStrip(this) { onAlertTap(it) }
-        column.addView(alertRow, LinearLayout.LayoutParams(WRAP, dp(StageStrip.HEIGHT_DP)).apply {
-            topMargin = dp(12)
-            gravity = Gravity.CENTER_HORIZONTAL
-        })
 
         // Hızlı tuşlar.
         heatTile = SeatToggle(this, getString(R.string.launcher_mini_seat_heat_driver), Sahne.AMBER, vent = false) { seatHeat.cycle(driver = true) }
@@ -443,7 +441,7 @@ class MiniDashActivity : Activity() {
             addView(heatTile, LinearLayout.LayoutParams(0, MATCH, 1f))
             addView(ventTile, LinearLayout.LayoutParams(0, MATCH, 1f).apply { marginStart = dp(16) })
         }
-        column.addView(toggles, LinearLayout.LayoutParams(MATCH, dp(120)).apply { topMargin = dp(12) })
+        arrange(MiniLayout.forSize(resources.configuration.screenWidthDp, resources.configuration.screenHeightDp).wide)
 
         root.addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
             val d = resources.displayMetrics.density
@@ -457,7 +455,72 @@ class MiniDashActivity : Activity() {
         return root
     }
 
+    /**
+     * Çocukları dikey sütun (960 genişlikli yarı) ya da tek satır (geniş ve kısa pencere, [MiniLayout.wide]) olarak dizer.
+     * Görünümler aynıdır; yalnızca ebeveyn ve yerleşim parametreleri değişir.
+     */
+    private fun arrange(wide: Boolean) {
+        if (arrangedWide == wide) return
+        arrangedWide = wide
+        for (g in listOf(column, top, infoBlock, valuesRow, midBlock, toggles)) g.removeAllViews()
+        val rangeBlock = valueBlock(rangeValue, rangeLabel)
+        val fuelBlock = valueBlock(fuelValue, fuelLabel)
+        if (!wide) {
+            column.orientation = LinearLayout.VERTICAL
+            top.addView(clock, LinearLayout.LayoutParams(0, WRAP, 1f))
+            top.addView(rangeBlock)
+            top.addView(View(this), LinearLayout.LayoutParams(dp(28), 1))
+            top.addView(fuelBlock)
+            top.addView(View(this), LinearLayout.LayoutParams(dp(24), 1))
+            top.addView(fullButton, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)))
+            column.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
+            column.addView(mediaPanel, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(16) })
+            column.addView(navRow, LinearLayout.LayoutParams(MATCH, dp(68)).apply { topMargin = dp(12) })
+            column.addView(alertRow, LinearLayout.LayoutParams(WRAP, dp(StageStrip.HEIGHT_DP)).apply {
+                topMargin = dp(12)
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+            toggles.orientation = LinearLayout.HORIZONTAL
+            toggles.addView(heatTile, LinearLayout.LayoutParams(0, MATCH, 1f))
+            toggles.addView(ventTile, LinearLayout.LayoutParams(0, MATCH, 1f).apply { marginStart = dp(16) })
+            column.addView(toggles, LinearLayout.LayoutParams(MATCH, dp(120)).apply { topMargin = dp(12) })
+        } else {
+            // Tek satır: saat + menzil/yakıt + tam ekran | medya | rota + uyarı | koltuk tuşları (üst üste).
+            column.orientation = LinearLayout.HORIZONTAL
+            valuesRow.addView(rangeBlock)
+            valuesRow.addView(View(this), LinearLayout.LayoutParams(dp(28), 1))
+            valuesRow.addView(fuelBlock)
+            infoBlock.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
+            infoBlock.addView(valuesRow, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(8) })
+            infoBlock.addView(fullButton, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)).apply { topMargin = dp(20) })
+            column.addView(infoBlock, LinearLayout.LayoutParams(dp(WIDE_INFO_DP), MATCH))
+            column.addView(mediaPanel, LinearLayout.LayoutParams(0, MATCH, 1f).apply { marginStart = dp(16) })
+            midBlock.addView(navRow, LinearLayout.LayoutParams(MATCH, dp(68)))
+            midBlock.addView(alertRow, LinearLayout.LayoutParams(WRAP, dp(StageStrip.HEIGHT_DP)).apply {
+                topMargin = dp(12)
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+            column.addView(midBlock, LinearLayout.LayoutParams(dp(WIDE_MID_DP), MATCH).apply { marginStart = dp(16) })
+            toggles.orientation = LinearLayout.VERTICAL
+            toggles.addView(heatTile, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            toggles.addView(ventTile, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(16) })
+            column.addView(toggles, LinearLayout.LayoutParams(dp(WIDE_TOGGLES_DP), MATCH).apply { marginStart = dp(16) })
+        }
+        updateMid()
+    }
+
+    /** Geniş yerleşimde rota ve uyarı sütunu yalnızca gösterecek bir şey varken yer tutar. */
+    private fun updateMid() {
+        if (arrangedWide != true) return
+        midBlock.post {
+            val any = navRow.visibility == View.VISIBLE || alertRow.visibility == View.VISIBLE
+            val v = if (any) View.VISIBLE else View.GONE
+            if (midBlock.visibility != v) midBlock.visibility = v
+        }
+    }
+
     private fun applyLayout(m: MiniLayout) {
+        arrange(m.wide)
         val p = dp(m.paddingDp)
         column.setPadding(p, p, p, p)
         clock.textSize = m.clockSp
@@ -470,7 +533,7 @@ class MiniDashActivity : Activity() {
         resize(prev, m.skipDp)
         resize(next, m.skipDp)
         resize(play, m.playDp)
-        (toggles.layoutParams as LinearLayout.LayoutParams).height = dp(m.toggleHeightDp)
+        if (!m.wide) (toggles.layoutParams as LinearLayout.LayoutParams).height = dp(m.toggleHeightDp)
         toggles.requestLayout()
     }
 
@@ -602,6 +665,10 @@ class MiniDashActivity : Activity() {
         private const val MODE_SESSION = 2
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+        /** Geniş yerleşimde sütun genişlikleri (dp): saat + menzil, rota/uyarı, koltuk tuşları. */
+        private const val WIDE_INFO_DP = 340
+        private const val WIDE_MID_DP = 400
+        private const val WIDE_TOGGLES_DP = 360
 
         /** Demo navigasyon satırı: `--ez launcher_mini_demo_nav true` (yalnızca demo açıkken). */
         const val EXTRA_DEMO_NAV = "launcher_mini_demo_nav"

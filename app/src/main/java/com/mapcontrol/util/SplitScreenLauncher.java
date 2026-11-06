@@ -386,11 +386,33 @@ public final class SplitScreenLauncher {
         }
     }
 
-    /** Yatay ekranda sol/sağ, dikeyde üst/alt. */
+    /** Tiggo 8 sınıfı ekran: uzun kenar bu pikselden uzun. */
+    static final int TOP_BOTTOM_LONG_SIDE_PX = 2400;
+    /** Tiggo 8 sınıfı ekran: en-boy oranı bundan küçük (Tiggo 7 1920x720 = 2,67). */
+    static final float TOP_BOTTOM_MAX_ASPECT = 2.2f;
+
+    /**
+     * Saf kural (birim testlenir): yatay ve Tiggo 8 sınıfı (uzun kenar &gt;= 2400 px, oran &lt; 2,2) ekran üst/alt,
+     * diğer yatay ekran sol/sağ, dikey ekran üst/alt bölünür. Böylece 2560x1440 ekranda her yarı 2560x~720 olur
+     * (Tiggo 7 ekranıyla aynı oran).
+     */
+    static boolean sideBySideFor(int width, int height) {
+        if (width < height) {
+            return false;
+        }
+        if (height <= 0) {
+            return true;
+        }
+        boolean tiggo8Class = width >= TOP_BOTTOM_LONG_SIDE_PX
+                && (float) width / height < TOP_BOTTOM_MAX_ASPECT;
+        return !tiggo8Class;
+    }
+
+    /** Sol/sağ ya da üst/alt; bölme ekseni {@link #sideBySideFor}. Oran bu eksene uygulanır. */
     @NonNull
     static Rect[] split(@NonNull Rect usable, @NonNull Ratio ratio) {
         float share = ratio.firstShare;
-        if (usable.width() >= usable.height()) {
+        if (sideBySideFor(usable.width(), usable.height())) {
             int edge = usable.left + (int) (usable.width() * share);
             return new Rect[]{
                     new Rect(usable.left, usable.top, edge, usable.bottom),
@@ -402,10 +424,10 @@ public final class SplitScreenLauncher {
                 new Rect(usable.left, edge, usable.right, usable.bottom)};
     }
 
-    /** Ekranın yatay mı bölüneceği; önizleme ile gerçek bölme aynı kuralı kullanır. */
+    /** Ekranın yan yana mı bölüneceği; önizleme ile gerçek bölme aynı kuralı kullanır. */
     public static boolean splitsSideBySide(@NonNull Context context) {
         android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();
-        return dm.widthPixels >= dm.heightPixels;
+        return sideBySideFor(dm.widthPixels, dm.heightPixels);
     }
 
     /** MyCar {@code r()}: pencere modu, sınırlar ve ekran 0. Anahtarlar birebir korunur. */

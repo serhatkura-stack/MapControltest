@@ -151,11 +151,25 @@ internal data class MiniLayout(
     val showArtwork: Boolean,
     /** Üst satırda "Menzil" / "Yakıt" etiketleri (yer yetiyorsa). */
     val showLabels: Boolean,
+    /**
+     * Geniş ve kısa pencere (Tiggo 8 üst yarısı, 2560 × ~700 px ≈ 1707 × ~470 dp): tek satır yatay yerleşim (saat + menzil |
+     * medya | rota / uyarı | koltuk tuşları), Tiggo 7 ana ekranının oranına benzer. 960 genişlikli yarılarda hep false.
+     */
+    val wide: Boolean = false,
 ) {
     companion object {
         const val MIN_TOUCH_DP = 64
 
+        /** Geniş satır yerleşimi: pencere en az bu kadar geniş ve en-boy oranı en az bu kadar yatay. */
+        const val WIDE_MIN_WIDTH_DP = 1200
+        const val WIDE_MIN_ASPECT = 2.4f
+
+        /** Saf kural (birim testlenir): 960 genişlikli yarılar (≈ 1,6) ve dar pencereler false. */
+        fun isWide(widthDp: Int, heightDp: Int): Boolean =
+            heightDp > 0 && widthDp >= WIDE_MIN_WIDTH_DP && widthDp.toFloat() / heightDp >= WIDE_MIN_ASPECT
+
         fun forSize(widthDp: Int, heightDp: Int): MiniLayout {
+            val wide = isWide(widthDp, heightDp)
             val compact = widthDp < 760 || heightDp < 520
             val tight = heightDp < 440
             return MiniLayout(
@@ -165,8 +179,9 @@ internal data class MiniLayout(
                 playDp = if (tight) 72 else if (compact) 76 else 88,
                 skipDp = if (tight || compact) MIN_TOUCH_DP else 72,
                 toggleHeightDp = if (tight) 88 else if (compact) 104 else 120,
-                showArtwork = heightDp >= 520 && widthDp >= 700,
+                showArtwork = if (wide) heightDp >= 360 else heightDp >= 520 && widthDp >= 700,
                 showLabels = widthDp >= 640,
+                wide = wide,
             )
         }
     }
