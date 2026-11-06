@@ -62,7 +62,7 @@ internal object LauncherDemo {
     /**
      * Spor modu önizlemesi: `--ez launcher_demo_sport true` aracın sürüş modunu beklemeden spor ekranını açar (1 sn bekleme
      * yine uygulanır), `false` kapatır; verilmezse demo sürüş modu (`launcher_demo_drive_mode 2`) belirler. Açıkken kadranlar
-     * sabit demo değerleri gösterir (3400 dev/dk, D4, 9,8 L/100, 0–100 9,6 sn, en yüksek 142 km/sa).
+     * sabit demo değerleri gösterir (96 km/sa, 3400 dev/dk, D4, 9,8 L/100, 0–100 9,6 sn, en yüksek 142 km/sa; `launcher_demo_noise` ile P, 0 km/sa, rölanti).
      * `--ez launcher_demo_no_g true` ivme sensörü yokmuş gibi G kadranını gizler (sensörsüz yerleşimi görmek için).
      */
     const val EXTRA_SPORT = "launcher_demo_sport"
@@ -89,6 +89,14 @@ internal object LauncherDemo {
 
     @Volatile
     var sportSummary = false
+
+    /** Spor önizleme ekstralarını varsayılana döndürür (yalnız bellekte; demo hiçbir şeyi kalıcı yazmaz). */
+    internal fun resetSportPreview() {
+        sportForced = null
+        sportNoG = false
+        sportDials = null
+        sportSummary = false
+    }
 
     /** Demo şarkı adı (`--es launcher_demo_title "..."`): uzun başlığın kartta sığmasını denemek için. */
     const val EXTRA_TITLE = "launcher_demo_title"
@@ -239,8 +247,14 @@ internal object LauncherDemo {
     @Volatile
     var onBodyChanged: Runnable? = null
 
-    fun applyPreview(intent: Intent?) {
+    /**
+     * [restored]: etkinlik kayıtlı durumdan yeniden kuruldu (tema yenilemesi ya da süreç ölümünden dönüş). O zaman spor
+     * önizleme ekstraları yeniden uygulanmaz: tema yenilemesinde bellekteki durum zaten sürer, süreç yeniden başladıysa
+     * eski başlatma isteğindeki `launcher_demo_sport` spor ekranını kendiliğinden geri getirmez (geçici önizleme).
+     */
+    fun applyPreview(intent: Intent?, restored: Boolean = false) {
         if (!enabled || intent == null) return
+        if (!restored) applySportPreview(intent)
         if (intent.hasExtra(EXTRA_OPEN)) {
             openParts = parseOpen(intent.getStringExtra(EXTRA_OPEN))
             alertAdded = emptySet()
@@ -265,10 +279,6 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
         if (intent.hasExtra(EXTRA_SIDE)) sidePreview = intent.getBooleanExtra(EXTRA_SIDE, false)
         if (intent.hasExtra(EXTRA_HEALTH)) healthProblem = intent.getStringExtra(EXTRA_HEALTH)
-        if (intent.hasExtra(EXTRA_SPORT)) sportForced = intent.getBooleanExtra(EXTRA_SPORT, false)
-        if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
-        if (intent.hasExtra(EXTRA_SPORT_DIALS)) sportDials = intent.getStringExtra(EXTRA_SPORT_DIALS)
-        if (intent.hasExtra(EXTRA_SPORT_SUMMARY)) sportSummary = intent.getBooleanExtra(EXTRA_SPORT_SUMMARY, false)
         if (intent.hasExtra(EXTRA_NOISE)) noise = intent.getBooleanExtra(EXTRA_NOISE, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
         if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
@@ -278,6 +288,19 @@ internal object LauncherDemo {
             PhoneDemo.apply(intent)
             PhoneSource.demoChanged()
         }
+    }
+
+    /**
+     * Spor önizleme ekstraları. Yeni bir demo başlatması (`launcher_demo` ekstrası) önceki spor önizlemesini sıfırlar:
+     * ekstrası olmayan sonraki başlatma spor ekranını zorlamaz. Yalnız `launcher_demo_sport*` içeren istek (demo açıkken)
+     * mevcut durumu değiştirir.
+     */
+    private fun applySportPreview(intent: Intent) {
+        if (intent.hasExtra(EXTRA)) resetSportPreview()
+        if (intent.hasExtra(EXTRA_SPORT)) sportForced = intent.getBooleanExtra(EXTRA_SPORT, false)
+        if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
+        if (intent.hasExtra(EXTRA_SPORT_DIALS)) sportDials = intent.getStringExtra(EXTRA_SPORT_DIALS)
+        if (intent.hasExtra(EXTRA_SPORT_SUMMARY)) sportSummary = intent.getBooleanExtra(EXTRA_SPORT_SUMMARY, false)
     }
 
     /**

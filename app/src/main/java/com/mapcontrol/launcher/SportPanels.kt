@@ -23,7 +23,7 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 /**
  * Spor küçük kadran seçiminin kaydı (tek seçim, Park ve Sürüş'te aynı). Demo'da `launcher_demo_sport_dials` verildiyse
- * kayıt yerine o kullanılır ve seçicideki değişiklik oraya yazılır. Değişince dinleyiciler (başlıktaki dijital saat)
+ * kayıt yerine o kullanılır; demo açıkken seçicideki değişiklik yalnız bellekte tutulur (kayda yazılmaz). Değişince dinleyiciler (başlıktaki dijital saat)
  * ana iş parçacığında çağrılır.
  */
 internal object SportDialPrefs {
@@ -50,7 +50,8 @@ internal object SportDialPrefs {
 
     fun save(context: Context, dials: List<SportDial>) {
         val s = SportDials.encode(dials)
-        if (LauncherDemo.enabled && LauncherDemo.sportDials != null) LauncherDemo.sportDials = s
+        // Demo seçimi yalnız bellekte (geçici önizleme): kullanıcının kayıtlı seçimine sızmaz.
+        if (LauncherDemo.enabled) LauncherDemo.sportDials = s
         else prefs(context).edit().putString(KEY, s).apply()
         listeners.forEach { it() }
     }

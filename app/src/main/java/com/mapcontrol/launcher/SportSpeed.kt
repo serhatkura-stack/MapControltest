@@ -23,8 +23,9 @@ import kotlin.math.abs
  * gönderilir (dururken gelen 0 olayları ana iş parçacığını uyandırmaz).
  *
  * Kaynak yoksa (izin verilmedi, android.car kitaplığı yok, kayıt reddedildi ya da [FRESH_MS] olay gelmedi) [live] false;
- * kadran normal veri katmanındaki gösterge hızına (ReadOnly 119, [com.mapcontrol.vehicle.VehicleMetricsRepository]
- * aboneliği, değişince) döner. 10 Hz VDBus devir/hız yoklaması yok (eski SportFastReader kaldırıldı).
+ * kadran önce VDBus VEHICLE_HAL 519 ([VhalSportReader], izin gerektirmez), o da yoksa
+ * normal veri katmanındaki gösterge hızına (ReadOnly 119, [com.mapcontrol.vehicle.VehicleMetricsRepository]
+ * aboneliği, değişince) döner. Yoklama yok: 519/773 VDBus aboneliğiyle gelir (eski SportFastReader kaldırıldı).
  *
  * android.car sınıfları yalnız [CarLink] içinde: kitaplık araçta yoksa sınıf yüklenemez, hata yakalanır, yedek sürer.
  */
@@ -110,8 +111,8 @@ internal class CarSpeedReader(context: Context, private val onChange: Runnable) 
         state = s
         Log.i(SportSpeedLog.TAG, when (s) {
             State.LIVE -> "kaynak=car (PERF_VEHICLE_SPEED ${RATE_HZ.toInt()} Hz)"
-            State.NO_PERMISSION -> "kaynak=vdbus (CAR_SPEED izni yok; ReadOnly 119 yedek)"
-            State.UNAVAILABLE -> "kaynak=vdbus (android.car hız yok; ReadOnly 119 yedek)"
+            State.NO_PERMISSION -> "kaynak=vdbus (CAR_SPEED izni yok; VDBus 519, sonra ReadOnly 119 yedek)"
+            State.UNAVAILABLE -> "kaynak=vdbus (android.car hız yok; VDBus 519, sonra ReadOnly 119 yedek)"
             State.IDLE -> "bekliyor"
         })
     }

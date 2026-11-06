@@ -139,7 +139,7 @@ class HomeLauncherActivity : Activity() {
         SportSpeedLog.applyFrom(this, intent)
         // Orta alan kurulmadan önce: düzen deposu ve alt çubuk biçimi etkin araç profiline göre.
         VehicleProfile.resolve(this)
-        LauncherDemo.applyPreview(intent)
+        LauncherDemo.applyPreview(intent, restored = savedInstanceState != null)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
         PhoneDataProbe.applyFrom(this, intent)

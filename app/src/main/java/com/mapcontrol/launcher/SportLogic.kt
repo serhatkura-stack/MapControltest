@@ -562,10 +562,15 @@ class RpmReadout(private val staleMs: Long = STALE_MS) {
     private var last: Int? = null
     private var changedAt = 0L
 
-    /** [now] anında okunan [rpm] (null: bilinmiyor) için gösterilecek yuvarlanmış devir; eski ya da bilinmiyorsa null. */
-    fun next(now: Long, rpm: Int?): Int? {
+    /**
+     * [now] anında okunan [rpm] (null: bilinmiyor) için gösterilecek yuvarlanmış devir; eski ya da bilinmiyorsa null.
+     * [arrivedAt] verilirse (akan kaynak, VDBus 773) tazelik değişime değil son varışa göre ölçülür: sabit seyirde aynı
+     * değer akarken okuma gizlenmez.
+     */
+    fun next(now: Long, rpm: Int?, arrivedAt: Long? = null): Int? {
         if (rpm == null || rpm < 0) { last = null; return null }
         if (rpm != last) { last = rpm; changedAt = now }
+        if (arrivedAt != null && arrivedAt > changedAt) changedAt = arrivedAt
         if (now - changedAt > staleMs) return null
         return (rpm + 50) / 100 * 100
     }

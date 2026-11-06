@@ -85,6 +85,11 @@ internal object SportSessionStore {
 /** Demo spor değerleri (`--ez launcher_demo_sport true`): ekran görüntüleri için sabit ve gerçekçi. */
 internal object SportDemo {
     const val RPM = 3_400
+    /**
+     * Demo hızı: D4'te 3400 dev/dk'ya uyan sabit seyir hızı (7 ileri DCT 4. vites ~28 km/sa / 1000 dev/dk). Kadran, dijital
+     * hız, devir ve vites aynı anı göstersin diye trip döngüsünden (0–58 km/sa, duruşlar) alınmaz.
+     */
+    const val KMH = 96
     const val PEAK_RPM = 5_200
     const val GEAR_STATE = 5
     const val GEAR_NUMBER = 4
@@ -92,6 +97,13 @@ internal object SportDemo {
     const val ZERO100_MS = 9_600L
     const val PASS80_MS = 6_400L
     const val MAX_KMH = 142
+
+    /** Rölanti taklidinde (`launcher_demo_noise`) araç P'de duruyor: hız 0, devir rölanti ([LauncherDemo.rpm]). */
+    fun kmh(idle: Boolean): Int = if (idle) 0 else KMH
+
+    fun gearText(idle: Boolean): String = if (idle) SportMath.gearText(PARK_STATE) else SportMath.gearText(GEAR_STATE, GEAR_NUMBER)
+
+    private const val PARK_STATE = 1
 }
 
 /**
@@ -157,6 +169,13 @@ internal class SportStageView(
     private var rpmShown = false
     /** Spor görünürken hızlı hız (android.car, 10 Hz; demoda çalışmaz). */
     private val carSpeed = CarSpeedReader(activity) { onCarSpeed() }
+    /** VDBus VEHICLE_HAL 519 (hız yedeği, izinsiz) ve 773 (devir adayı); görünürken abone. */
+    private val vhal = VhalSportReader(activity) { onVhalSpeed() }
+    /** ReadOnly 62 değişim aralıkları (tikte okunur, 500 ms çözünürlük). */
+    private val rpm62Arrivals = ArrivalLog()
+    /** 773 bir kez 62 ile uyuştu mu (birim doğrulaması); uyuşmadan gösterime girmez. */
+    private var vhalRpmTrusted = false
+    private var rpmSource = SportVhalMath.RpmSource.NONE
     private val calibration = SpeedCalibration()
     private var speedText: String = SpeedReadout.DASH
     private val slots = ArrayList<Slot>()
@@ -295,6 +314,7 @@ internal class SportStageView(
         rpmReadout.reset()
         if (!LauncherDemo.enabled) {
             carSpeed.start()
+            vhal.start()
             askSpeedPermission()
         }
         logStart()
@@ -314,6 +334,7 @@ internal class SportStageView(
         if (!visibleNow) return
         visibleNow = false
         carSpeed.stop()
+        vhal.stop()
         media.onHidden()
         car.setActive(false)
         TripSource.remove(tripListener)
@@ -428,9 +449,12 @@ internal class SportStageView(
         /** -1: bilinmiyor. */
         val kmh: Int
         val s = SportSessionStore.session
+        var rpmAt: Long? = null
         if (demo) {
+            // Demo tek bir anı gösterir: hız, devir ve vites birbirine uyar (rölanti taklidinde P, 0 km/sa).
+            val idle = LauncherDemo.noise
             rpm = LauncherDemo.rpm()
-            gearText = SportMath.gearText(SportDemo.GEAR_STATE, SportDemo.GEAR_NUMBER)
+            gearText = SportDemo.gearText(idle)
             instant = SportDemo.INSTANT_L100
             best = SportDemo.ZERO100_MS
             maxKmh = SportDemo.MAX_KMH
@@ -439,15 +463,29 @@ internal class SportStageView(
             lastAt = 0L
             lastBest = false
             results = 0
-            ready = trip.speedKmh == 0
+            kmh = SportDemo.kmh(idle)
+            ready = kmh == 0
             range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
-            kmh = trip.speedKmh ?: -1
-            gaugeKmh = trip.speedKmh
+            gaugeKmh = kmh
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
-            // Devir normal veri katmanından (değişince gelir); 10 Hz devir yoklaması yok.
-            rpm = if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
+            // Devir: 773 (VDBus VHAL) taze ve 62 ile doğrulanmışsa o; yoksa ReadOnly 62 (normal veri katmanı, değişince).
+            val ro = if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
+            rpm62Arrivals.markIfChanged(now, ro)
+            val vr = vhal.rpm
+            val vAt = vhal.rpmAt
+            if (!vhalRpmTrusted && vr != null && ro != null && now - vAt < SportVhalMath.FRESH_MS && SportVhalMath.agrees(vr, ro)) {
+                vhalRpmTrusted = true
+                android.util.Log.i(VhalSportReader.TAG, "773 doğrulandı: 773=$vr 62=$ro")
+            }
+            val pick = SportVhalMath.chooseRpm(now, vr, vAt, vhalRpmTrusted, ro)
+            rpm = pick.rpm
+            rpmAt = pick.arrivedAt
+            if (pick.source != rpmSource) {
+                rpmSource = pick.source
+                android.util.Log.i(VhalSportReader.TAG, "devir kaynağı=${pick.source.key}")
+            }
             val gs = snap.gearSignal.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) }
             gearText = SportMath.gearText(gs)
             watchPark(gs)
@@ -473,15 +511,16 @@ internal class SportStageView(
                 VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed) -> snap.preferredSpeed()
                 else -> trip.speedKmh
             }
-            // Hızlı hız canlıysa gösterge oranı öğrenilir (kadranımız aracın kadranıyla aynı okusun).
-            val fastKmh = if (carSpeed.live) carSpeed.actualKmh else -1f
+            // Hızlı hız canlıysa gösterge oranı öğrenilir (kadranımız aracın kadranıyla aynı okusun). Sıra: CAR_SPEED
+            // (android.car), VDBus 519 (izin gerektirmez), sonra gösterge hızı 119.
+            val fastKmh = fastActualKmh()
             if (fastKmh >= 0f) calibration.learn(fastKmh, gaugeKmh)
             kmh = if (fastKmh >= 0f) Math.round(calibration.display(fastKmh)) else gaugeKmh ?: -1
         }
         // Hızlı kaynak canlıyken ibre ve dijital hız onu izler ([onCarSpeed]); tik yalnız yedek kaynakta sürer.
-        val fastLive = !demo && carSpeed.live
+        val fastLive = !demo && (carSpeed.live || vhal.speedLive)
         if (!fastLive) showSpeed(now, kmh)
-        bindRpm(now, rpm)
+        bindRpm(now, rpm, rpmAt)
         if (SportSpeedLog.enabled) logSummary(now, kmh)
         setText(gear, gearText)
         for (i in slots.indices) {
@@ -537,14 +576,31 @@ internal class SportStageView(
     /** Hızlı hız değişti ("sport-io"dan, yalnız 0,5 km/sa üstü değişimde): ibre ve dijital hız tiki beklemez. */
     private fun onCarSpeed() {
         if (!visibleNow || LauncherDemo.enabled || !carSpeed.live) return
-        val kmh = calibration.display(carSpeed.actualKmh)
+        followFast(carSpeed.actualKmh)
+    }
+
+    /** VDBus 519 değişti: yalnız CAR_SPEED yolu canlı değilken ibreyi sürer (iki kaynak ibreyi çekiştirmesin). */
+    private fun onVhalSpeed() {
+        if (!visibleNow || LauncherDemo.enabled || carSpeed.live || !vhal.speedLive) return
+        followFast(vhal.speedKmh)
+    }
+
+    private fun followFast(actualKmh: Float) {
+        val kmh = calibration.display(actualKmh)
         if (!sweeping) moveNeedle(kmh, NEEDLE_MS)
         showSpeed(SystemClock.elapsedRealtime(), Math.round(kmh))
     }
 
+    /** Gerçek hız (km/sa): CAR_SPEED canlıysa o, değilse VDBus 519; ikisi de yoksa -1. */
+    private fun fastActualKmh(): Float = when {
+        carSpeed.live -> carSpeed.actualKmh
+        vhal.speedLive -> vhal.speedKmh
+        else -> -1f
+    }
+
     /** Küçük devir okuması: yalnız taze değerde görünür; metin yalnız 100 dev/dk adımında değişir. */
-    private fun bindRpm(now: Long, rpm: Int?) {
-        val v = if (LauncherDemo.enabled) rpm else rpmReadout.next(now, rpm)
+    private fun bindRpm(now: Long, rpm: Int?, arrivedAt: Long? = null) {
+        val v = if (LauncherDemo.enabled) rpm else rpmReadout.next(now, rpm, arrivedAt)
         val show = v != null && !sweeping
         if (v != null) setText(rpmText, activity.getString(R.string.launcher_sport_rpm, v))
         if (show == rpmShown) return
@@ -576,6 +632,8 @@ internal class SportStageView(
         needleMoves = 0
         carSpeed.events.set(0)
         carSpeed.posts.set(0)
+        vhal.speedEvents.set(0)
+        rpm62Arrivals.reset()
     }
 
     private fun logSummary(now: Long, kmh: Int) {
@@ -584,10 +642,17 @@ internal class SportStageView(
         val src = when {
             LauncherDemo.enabled -> "demo"
             carSpeed.live -> "car"
+            vhal.speedLive -> "vhal519/${carSpeed.state.key}"
             else -> "vdbus/${carSpeed.state.key}"
         }
         android.util.Log.i(SportSpeedLog.TAG, SportSpeedLog.summaryLine(now - logAt, src, carSpeed.events.getAndSet(0),
             carSpeed.posts.getAndSet(0), needleMoves, kmh, rpmShown, cpu - logCpuMs))
+        if (!LauncherDemo.enabled) {
+            // Devir kaynaklarının varış aralıkları (yalnız sayı): 773 akıyor mu, 62'den hızlı mı?
+            android.util.Log.i(VhalSportReader.TAG, "özet ${now - logAt}ms 773 ${vhal.rpmArrivals.takeLine()} son=${vhal.rpm ?: "-"} | " +
+                "62 değişim ${rpm62Arrivals.takeLine()} | 519 ${vhal.speedArrivals.takeLine()} olay=${vhal.speedEvents.getAndSet(0)} | " +
+                "kaynak=${rpmSource.key} doğrulandı=$vhalRpmTrusted")
+        }
         logAt = now
         logCpuMs = cpu
         needleMoves = 0
@@ -825,8 +890,9 @@ internal class SportStageView(
 
     /** İbrenin ineceği gerçek hız (hızlı kaynak, yoksa gösterge hızı). */
     private fun targetKmh(): Float {
-        if (LauncherDemo.enabled) return (trip.speedKmh ?: 0).toFloat()
-        if (carSpeed.live) return calibration.display(carSpeed.actualKmh)
+        if (LauncherDemo.enabled) return SportDemo.kmh(LauncherDemo.noise).toFloat()
+        val fast = fastActualKmh()
+        if (fast >= 0f) return calibration.display(fast)
         val snap = metrics.currentSnapshot()
         if (!snap.connected) return 0f
         return if (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))
