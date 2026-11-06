@@ -529,15 +529,20 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val key = listOf(w, h, rTop, rangeRight, rangeBlock.measuredHeight, chipLeft, cTop + lockChip.measuredHeight, maxBottom)
         if (key == fitKey) return
         fitKey = key
+        // Uzun sahne (Tiggo 8): araç büyür, omuzlar ile şerit arasında ortalanır, bagaj kayması sahne kenarına göre.
+        val tall = StageFit.isTall(w, h)
+        val trunkFrac = -CarAnimSpec.part(CarPart.TRUNK).overlay.x / CarAnimSpec.BASE_W
+        val maxW = if (tall) StageFit.tallMaxWidth(w.toFloat(), CAR_W_MAX * k, context.dpF(FIT_GAP_DP), trunkFrac) else CAR_W_MAX * k
         carBox = StageFit.centered(
             centerX = w / 2f, minTop = context.dpF(6f), maxBottom = maxBottom.toFloat(),
-            maxW = CAR_W_MAX * k, minW = CAR_W_MIN * k, aspect = CAR_ASPECT, gap = context.dpF(FIT_GAP_DP),
+            maxW = maxW, minW = CAR_W_MIN * k, aspect = CAR_ASPECT, gap = context.dpF(FIT_GAP_DP),
             above = listOf(
                 StageFit.Box(side.toFloat(), rTop.toFloat(), rangeRight.toFloat(), (rTop + rangeBlock.measuredHeight).toFloat()),
                 StageFit.Box(chipLeft.toFloat(), cTop.toFloat(), (w - side).toFloat(), (cTop + lockChip.measuredHeight).toFloat()),
             ),
             cornerInset = CORNER_INSET,
         ).let { box ->
+            if (tall) return@let box
             // Araç kalan boşluğun ortası yerine şerit payına oturur (biraz aşağıda): omuzlarla dikey pay büyür.
             val drop = (maxBottom - box.bottom).coerceAtLeast(0f)
             box.copy(top = box.top + drop, bottom = box.bottom + drop)
@@ -545,7 +550,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         // Açık bagaj kapağı gövdenin solundan taşar (base'de -79 px; bkz. CarAnimSpec TRUNK overlay); menzil bloğuyla en az
         // [FIT_GAP_DP] kalacak kadar sağa kayılır.
         val trunkLeft = carBox.left + carBox.width * CarAnimSpec.part(CarPart.TRUNK).overlay.x / CarAnimSpec.BASE_W
-        trunkShiftNeed = (rangeRight + context.dpF(FIT_GAP_DP) - trunkLeft).coerceIn(0f, context.dpF(TRUNK_SHIFT_MAX_DP))
+        trunkShiftNeed = if (tall) StageFit.tallTrunkShift(w.toFloat(), carBox, context.dpF(FIT_GAP_DP), trunkFrac)
+        else (rangeRight + context.dpF(FIT_GAP_DP) - trunkLeft).coerceIn(0f, context.dpF(TRUNK_SHIFT_MAX_DP))
         if (shiftAnim == null) applyShift(if (trunkOpen) trunkShiftNeed else 0f)
     }
 

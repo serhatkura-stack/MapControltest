@@ -2,6 +2,7 @@ package com.mapcontrol.launcher
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /** Sahne aracının yerleşimi (§10/§11): tam ortada, omuzlarla çakışmaz (köşe payı dışında), şerit payını aşmaz. */
@@ -60,5 +61,38 @@ class StageFitTest {
         val c = StageFit.centered(480f, 0f, 100f, 612f, 510f, aspect, gap, emptyList())
         assertEquals(510f, c.width, 0.01f)
         assertEquals(480f, (c.left + c.right) / 2f, 0.01f)
+    }
+
+    // --- Uzun sahne (Tiggo 8) ---
+
+    @Test
+    fun onlyTheTallStageCountsAsTall() {
+        assertFalse(StageFit.isTall(960, 394)) // Tiggo 7 bandı
+        assertTrue(StageFit.isTall(879, 658)) // Tiggo 8 bandı
+        assertFalse(StageFit.isTall(0, 500))
+    }
+
+    @Test
+    fun tallCarGrowsButKeepsTheOpenTrunkInsideTheStage() {
+        val frac = 79f / 766f
+        val w = StageFit.tallMaxWidth(879f, 586f, 16f, frac)
+        assertTrue(w > 586f * 1.3f)
+        assertTrue(w <= 586f * StageFit.TALL_GROWTH)
+        assertTrue(w * (1 + frac) <= 879f - 32f + 0.01f)
+        // Geniş sahnede büyüme sınırı 1,4 kat.
+        assertEquals(586f * StageFit.TALL_GROWTH, StageFit.tallMaxWidth(3000f, 586f, 16f, frac), 0.01f)
+    }
+
+    @Test
+    fun tallTrunkShiftMovesJustEnoughAndNeverPastTheRightEdge() {
+        val frac = 79f / 766f
+        val carW = StageFit.tallMaxWidth(879f, 586f, 16f, frac)
+        val left = (879f - carW) / 2f
+        val car = StageFit.Box(left, 100f, left + carW, 100f + carW * 0.46f)
+        val shift = StageFit.tallTrunkShift(879f, car, 16f, frac)
+        assertEquals(16f, car.left + shift - carW * frac, 0.5f) // kapak ucu sol payda
+        assertTrue(car.right + shift <= 879f - 16f + 0.5f)
+        // Kapak zaten içerdeyse kayma yok.
+        assertEquals(0f, StageFit.tallTrunkShift(879f, StageFit.Box(300f, 0f, 500f, 90f), 16f, frac), 0f)
     }
 }

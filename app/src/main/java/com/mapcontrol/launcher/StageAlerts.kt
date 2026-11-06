@@ -58,6 +58,32 @@ internal object StageFit {
         val x = centerX - minW / 2f
         return Box(x, minTop, x + minW, minTop + minW * aspect)
     }
+
+    /**
+     * Uzun sahne (Tiggo 8, 6 Kasım §13): sahne yüksekliği genişliğinin [TALL_RATIO] katından büyükse araç yatayda büyür ve
+     * omuz satırı ile şerit arasında dikeyde ortalanır. Tiggo 7'nin bandı (~0,41) bunun çok altındadır, orada hiçbir şey değişmez.
+     */
+    const val TALL_RATIO = 0.6f
+
+    fun isTall(stageW: Int, stageH: Int): Boolean = stageW > 0 && stageH > stageW * TALL_RATIO
+
+    /**
+     * Uzun sahnede aracın en büyük genişliği: normal üst sınırın [TALL_GROWTH] katı, ama açık bagaj kapağı dahil
+     * (gövdenin solundan [trunkFrac] oranında taşar) aracın tamamı sahnenin iki yanında [margin] pay bırakarak sığmalı;
+     * kapak açılınca araç bu kadar sağa kayabilir ([tallTrunkShift]).
+     */
+    const val TALL_GROWTH = 1.4f
+
+    fun tallMaxWidth(stageW: Float, normalMaxW: Float, margin: Float, trunkFrac: Float): Float =
+        minOf(normalMaxW * TALL_GROWTH, (stageW - 2 * margin) / (1f + trunkFrac)).coerceAtLeast(0f)
+
+    /** Uzun sahnede bagaj açıkken kayma: kapağın sol ucu sahnenin solunda en az [margin] kalacak kadar (sağa taşmadan). */
+    fun tallTrunkShift(stageW: Float, car: Box, margin: Float, trunkFrac: Float): Float {
+        val trunkLeft = car.left - car.width * trunkFrac
+        val need = margin - trunkLeft
+        val room = stageW - margin - car.right
+        return need.coerceAtMost(room).coerceAtLeast(0f)
+    }
 }
 
 /**
