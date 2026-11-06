@@ -180,22 +180,31 @@ internal object PanelFit {
  * Sahne yolculuk paneli (taslak): başlık, büyük "sıfırlamadan beri" mesafe, iki sütunlu ortalama tüketim / ortalama
  * hız ve altında "Toplam" bölümü (toplam yol, toplam yakıt, sürüş süresi). Veri [TripSource]'tan, yolculuk
  * kutucuğuyla ([TripComputerTile]) aynı çevrimlerle; eksik satırlar düşer.
+ *
+ * Araç sürüşteyken ([DriveMotion]: düzen geçişiyle aynı gecikmeler, kırmızı ışıkta titremez) öncü sayı canlı anlık
+ * tüketim olur ([ConsumptionSmoother], tüketim paneliyle aynı birim ve "Düşük hız"/duruş/veri yok durumları); dururken
+ * bugünkü yolculuk içeriği değişmez. İkisi arasında öncü satır ~200 ms çapraz geçişle değişir, yerleşim kaymaz
+ * (karar: [TripHero]).
  */
 internal class SahneTripPanel(private val context: Context) : SizedWidget, StripSource {
 
     private var data = TripData()
+    private val smoother = ConsumptionSmoother()
+    private var display = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
     private val listener = TripSource.Listener {
-        if (it == data) return@Listener
+        // Her okuma yumuşatıcıya girer (kart yolculuk gösterirken de): sürüşe geçince ortalama hazır olsun.
+        display = smoother.update(it.instantL100, it.speedKmh, it.moving)
         data = it
         bind()
     }
+    private val motionListener: (Boolean) -> Unit = { bind() }
 
     private val headIcon = ImageView(context).apply {
         setImageResource(R.drawable.ic_sahne_route)
         imageTintList = ColorStateList.valueOf(Sahne.INK_2)
     }
     private val head = sahneText(context, SahneType.HEAD, Sahne.INK_2, 500).apply { setText(R.string.launcher_widget_trip) }
-    private val big = sahneText(context, TRIP_HERO_SP, Sahne.NUMERAL, 300, -0.03f)
+    private val big = sahneText(context, TRIP_HERO_SP, Sahne.NUMERAL, 300, -0.03f).apply { maxLines = 1 }
     private val bigUnit = sahneText(context, SahneType.HERO_UNIT.toFloat(), Sahne.INK_2, 400)
     private val sub = sahneText(context, SahneType.SUB, Sahne.INK_3, 400)
     private val stat1 = Stat()
@@ -209,6 +218,19 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     private val totals = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val totalsDivider = View(context).apply { setBackgroundColor(Sahne.HAIR_2) }
 
+    /** Öncü sayı ve alt satırı: yolculuk ile canlı tüketim arasında birlikte solar. */
+    private val heroBox = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        // Taslakta satır yüksekliği 1: doğal satırdan ~10dp kısa, üst ve alttan kırpılır.
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = true
+            addView(big, LinearLayout.LayoutParams(WRAP, WRAP))
+            addView(bigUnit, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = context.dp(8 - 10); bottomMargin = -context.dp(10) })
+        addView(sub, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = context.dp(6) })
+    }
+
     private val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(context.dp(30), context.dp(24), context.dp(30), context.dp(20))
@@ -218,14 +240,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             addView(headIcon, LinearLayout.LayoutParams(context.dp(24), context.dp(24)))
             addView(head, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
         })
-        // Taslakta satır yüksekliği 1: doğal satırdan ~10dp kısa, üst ve alttan kırpılır.
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            isBaselineAligned = true
-            addView(big, LinearLayout.LayoutParams(WRAP, WRAP))
-            addView(bigUnit, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
-        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = context.dp(8 - 10); bottomMargin = -context.dp(10) })
-        addView(sub, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = context.dp(6) })
+        addView(heroBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP))
         addView(statsRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP).apply { topMargin = context.dp(14) })
         addView(totalsDivider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)).apply { topMargin = context.dp(12) })
         addView(totals, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP).apply { topMargin = context.dp(10) })
@@ -235,11 +250,21 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     override fun applySpan(span: Span) = Unit
 
-    override fun onVisible() = TripSource.add(context, listener)
+    override fun onVisible() {
+        TripSource.add(context, listener)
+        DriveMotion.add(motionListener)
+        bind() // görünmezken sürüş durumu değişmiş olabilir
+    }
 
-    override fun onHidden() = TripSource.remove(listener)
+    override fun onHidden() = stop()
 
-    override fun release() = TripSource.remove(listener)
+    override fun release() = stop()
+
+    private fun stop() {
+        TripSource.remove(listener)
+        DriveMotion.remove(motionListener)
+        stopFade()
+    }
 
     // --- Şerit ---
     override var onStripChanged: (() -> Unit)? = null
@@ -249,25 +274,37 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     private fun one(v: Double) = String.format(java.util.Locale.getDefault(), "%,.1f", v)
 
-    /** Son çizilen içerik: yalnızca ekranda görünen metinler değişince yeniden bağlanır (hız, anlık tüketim, ışık vb. değişimi çizdirmez). */
+    /** Son çizilen içerik: yalnızca ekranda görünen metinler değişince yeniden bağlanır (hız, ışık vb. değişimi çizdirmez). */
     private var shown: Any? = null
+    private var shownContent: TripHero.Content? = null
     /** "Toplam" satırları yerinde güncellenir; yalnızca satır sayısı değişince yeniden kurulur (her turda yerleşim zinciri olmasın). */
     private val totalRows = ArrayList<Pair<TextView, TextView>>()
+
+    /** Öncü satır: büyük değer, varsa birimi, alt satır ve rengi. */
+    private data class Hero(val value: String, val unit: String?, val sub: String, val color: Int)
+
+    /** Çapraz geçişin sönme yarısı sürüyor: gelen öncü satır [pendingHero]'da bekler, sönme bitince yazılır. */
+    private var fadingOut = false
+    private var pendingHero: Hero? = null
 
     /** İlk çizim veri beklemeden: boş kart çizgisiz, sakin cümleyle. */
     init { bind() }
 
     private fun bind() {
         val km = data.tripKm
-        if (!data.connected || km == null) {
+        val content = TripHero.content(DriveMotion.driving, data.connected, km)
+        if (content == TripHero.Content.NO_DATA) {
             if (shown == NO_DATA) return
             shown = NO_DATA
+            shownContent = content
+            stopFade()
             // Veri yok: tire ve eksen çizgileri yerine tek sakin cümle (sahnedeki "Araç verisi bekleniyor" tekrarlanmaz).
             big.text = ""
             big.visibility = View.GONE
             bigUnit.visibility = View.GONE
             sub.setText(R.string.launcher_trip_no_data)
             sub.textSize = 22f
+            sub.setTextColor(Sahne.INK_3)
             statsRow.visibility = View.GONE
             totals.visibility = View.GONE
             totalsDivider.visibility = View.GONE
@@ -282,31 +319,86 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             data.avgSpeedKmh?.let { context.getString(R.string.launcher_trip_avg_speed_label) to context.getString(R.string.launcher_kmh_value, it) },
         )
         val rows = totalsRows()
-        val key = Triple(one(km), stats, rows)
+        val hero = if (content == TripHero.Content.LIVE) liveHero() else
+            Hero(one(km!!), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_trip_since_reset), Sahne.NUMERAL)
+        val key = Triple(hero, stats, rows)
         if (key == shown) return
-        val first = shown !is Triple<*, *, *>
+        val from = shownContent
         shown = key
-        if (first) {
+        shownContent = content
+        if (from == null || from == TripHero.Content.NO_DATA) {
             big.visibility = View.VISIBLE
             sub.textSize = SahneType.SUB
-            big.setTextColor(Sahne.NUMERAL)
-            bigUnit.text = context.getString(R.string.launcher_sahne_km)
-            bigUnit.visibility = View.VISIBLE
-            sub.setText(R.string.launcher_trip_since_reset)
         }
-        big.setTextSmooth(one(km), animate = false)
+        when {
+            TripHero.crossfade(from, content) && root.isAttachedToWindow -> fadeTo(hero)
+            fadingOut -> pendingHero = hero
+            else -> applyHero(hero)
+        }
         stat1.bind(stats.getOrNull(0))
         stat2.bind(stats.getOrNull(1))
         statsRow.visibility = if (stats.isEmpty()) View.GONE else View.VISIBLE
         bindTotals(rows)
         totals.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
         totalsDivider.visibility = totals.visibility
-        val distance = context.getString(R.string.launcher_km_value, one(km))
-        root.contentDescription = (listOf(context.getString(R.string.launcher_trip_since_reset), distance) +
-            stats.map { "${it.first} ${it.second}" } + rows.map { "${it.first} ${it.second}" }).joinToString(", ")
-        stripNow = StripState(context.getString(R.string.launcher_widget_trip), distance, R.drawable.ic_sahne_route,
+        val distance = km?.let { context.getString(R.string.launcher_km_value, one(it)) }
+        val heroSpoken = if (content == TripHero.Content.LIVE) listOf(hero.sub, listOfNotNull(hero.value, hero.unit).joinToString(" "))
+        else listOf(context.getString(R.string.launcher_trip_since_reset), distance!!)
+        root.contentDescription = (heroSpoken + stats.map { "${it.first} ${it.second}" } + rows.map { "${it.first} ${it.second}" }).joinToString(", ")
+        // Şerit her durumda yolculuk özetini gösterir (canlı tüketimin kendi kutucuğu/paneli var).
+        stripNow = if (distance != null) StripState(context.getString(R.string.launcher_widget_trip), distance, R.drawable.ic_sahne_route,
             detail = context.getString(R.string.launcher_trip_since_reset))
+        else StripState(context.getString(R.string.launcher_widget_trip), context.getString(R.string.launcher_unavailable),
+            R.drawable.ic_sahne_route, StripTone.MUTED)
         onStripChanged?.invoke()
+    }
+
+    /** Canlı anlık tüketim: tüketim kutucuğuyla aynı metinler ve durumlar. */
+    private fun liveHero(): Hero {
+        val label = context.getString(R.string.launcher_widget_consumption)
+        val unit = context.getString(R.string.launcher_l100_unit)
+        return when (TripHero.live(display)) {
+            TripHero.Live.VALUE -> Hero(one(display.l100!!), unit, label, Sahne.NUMERAL)
+            TripHero.Live.CAP -> Hero(context.getString(R.string.launcher_consumption_over_cap), unit, label, Sahne.NUMERAL)
+            TripHero.Live.LOW_SPEED -> Hero(context.getString(R.string.launcher_consumption_takeoff), null,
+                context.getString(R.string.launcher_consumption_low_speed), Sahne.INK)
+            TripHero.Live.IDLE -> Hero(context.getString(R.string.launcher_consumption_idle), null, label, Sahne.INK_2)
+            TripHero.Live.WAITING -> Hero(context.getString(R.string.launcher_unavailable), null,
+                context.getString(R.string.launcher_waiting_data), Sahne.INK_3)
+        }
+    }
+
+    private fun applyHero(h: Hero) {
+        big.setTextColor(h.color)
+        big.setTextSmooth(h.value, animate = false)
+        if (h.unit != null) bigUnit.text = h.unit
+        bigUnit.visibility = if (h.unit == null) View.GONE else View.VISIBLE
+        sub.setTextColor(Sahne.INK_3)
+        sub.setTextSmooth(h.sub, animate = false)
+    }
+
+    /** Öncü satır yarı sürede söner, yeni içerik yazılır, yarı sürede geri gelir; yükseklik değişmez. */
+    private fun fadeTo(h: Hero) {
+        pendingHero = h
+        if (fadingOut) return
+        fadingOut = true
+        heroBox.animate().cancel()
+        heroBox.animate().alpha(0f).setDuration(FADE_HALF_MS).withEndAction {
+            fadingOut = false
+            pendingHero?.let { applyHero(it) }
+            pendingHero = null
+            heroBox.animate().alpha(1f).setDuration(FADE_HALF_MS).start()
+        }.start()
+    }
+
+    private fun stopFade() {
+        heroBox.animate().cancel()
+        heroBox.alpha = 1f
+        if (fadingOut) {
+            fadingOut = false
+            pendingHero?.let { applyHero(it) }
+        }
+        pendingHero = null
     }
 
     private fun bindTotals(rows: List<Pair<String, String>>) {
@@ -380,6 +472,8 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         const val TRIP_HERO_SP = 40f
         const val TOTALS_SP = 20f
         const val TOTALS_ROW_DP = 28
+        /** Yolculuk ↔ canlı tüketim çapraz geçişinin her yarısı (toplam ~200 ms). */
+        const val FADE_HALF_MS = 100L
         val NO_DATA = Any()
     }
 }

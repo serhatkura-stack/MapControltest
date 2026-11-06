@@ -162,7 +162,8 @@
     <string name="launcher_body_hood">Kaput</string>
     <string name="launcher_body_fuel_cap">Yakıt kapağı</string>
     <string name="launcher_drive_theme">Sürüş moduna göre renk</string>
-    <string name="launcher_auto_drive_layout">Otomatik sürüş düzeni</string>
+    <string name="launcher_auto_drive_layout">Sürüşte ayrı düzen</string>
+    <string name="launcher_auto_drive_layout_hint">Araç giderken ayrı bir sürüş düzeni gösterir.</string>
     <string name="launcher_sport_mode">Spor modu (deneysel)</string>
     <string name="launcher_sport_close_oem_dialog">Sürüş modu penceresini kapat</string>
     <string name="launcher_sport_ambient">Spor modunda ambiyans rengi</string>

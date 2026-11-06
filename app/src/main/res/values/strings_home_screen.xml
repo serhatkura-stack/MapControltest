@@ -14,8 +14,8 @@
     <string name="home_screen_sport_mode_help_on">In Sport, a chronograph screen opens (Stage layout only).</string>
     <string name="home_screen_sport_mode_help_off">Sport keeps the original theme.</string>
     <string name="home_screen_drive_theme_help_off">Always the theme\'s own accent color.</string>
-    <string name="home_screen_auto_layout_help_on">Park and Drive layouts switch automatically by speed and gear.</string>
-    <string name="home_screen_auto_layout_help_off">Always the Park layout.</string>
+    <string name="home_screen_auto_layout_help_on">A separate Drive layout appears while moving; the Park layout when stopped.</string>
+    <string name="home_screen_auto_layout_help_off">One layout, moving or parked.</string>
     <string name="home_screen_layout_title">Layout</string>
     <string name="home_screen_edit_desc">Move, resize, add or remove widgets directly on the home screen.</string>
     <string name="home_screen_reset_park">Reset Park layout to default</string>

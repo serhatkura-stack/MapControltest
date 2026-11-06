@@ -123,6 +123,10 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
 
         addView(gap(activity, 12, vertical = true))
         addView(autoDriveLayoutToggle(d), fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_auto_drive_layout_hint)
+        }, fullWidth())
 
         // Araç rengi (Sahne'nin ortasındaki araç): seçim hemen uygulanır, ekran yeniden kurulmaz.
         addView(gap(activity, 12, vertical = true))
@@ -416,7 +420,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
     }
 
-    /** "Otomatik sürüş düzeni": etiket + Açık | Kapalı; değişince ekran yeni seçimle kurulur. */
+    /** "Sürüşte ayrı düzen" (varsayılan kapalı): etiket + Açık | Kapalı; değişince ekran yeni seçimle kurulur. */
     private fun autoDriveLayoutToggle(d: Dialog): View {
         val on = DriveLayoutPrefs.get(activity)
         return onOffControl(R.string.launcher_auto_drive_layout, on) { value ->

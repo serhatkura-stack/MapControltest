@@ -76,18 +76,43 @@ class DriveLayoutPolicy(
 fun layoutNoticeFor(from: LayoutMode, to: LayoutMode, automatic: Boolean, started: Boolean): LayoutMode? =
     if (automatic && started && from != to) to else null
 
-/** "Otomatik sürüş düzeni" seçeneği (profil başına, varsayılan açık). Ayarlar satırı için: [get] / [set]. */
+/**
+ * "Sürüşte ayrı düzen" seçeneği (profil başına, varsayılan kapalı: herkes tek düzenle, Park düzeniyle başlar). Açıkken
+ * araç giderken ayrı Sürüş düzeni gösterilir. Daha önce elle yazılmış değer korunur; hiç yazılmadıysa varsayılan geçerlidir.
+ */
 object DriveLayoutPrefs {
     private const val PREFS = "launcher_drive_layout"
     private const val KEY = "auto_drive_layout"
 
+    const val DEFAULT_ON = false
+
     fun key(profile: Int): String = Profiles.key(KEY, profile)
     fun get(context: Context): Boolean =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(Profiles.key(context, KEY), true)
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(Profiles.key(context, KEY), DEFAULT_ON)
 
     fun set(context: Context, on: Boolean) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(Profiles.key(context, KEY), on).apply()
     }
+}
+
+/**
+ * Aracın "sürüşte" durumu, düzen seçeneğinden ve düzenleme modundan bağımsız: [DriveLayoutPolicy] ile aynı gecikmeler
+ * (5 sn hareketle girilir; vites P/el freni 2 sn ya da 3 dk duruşla çıkılır, kırmızı ışıkta titremez). Ana ekran her
+ * turda [set] eder; yolculuk kartı ([SahneTripPanel]) dinler. Yalnızca ana iş parçacığında.
+ */
+internal object DriveMotion {
+    var driving = false
+        private set
+    private val listeners = LinkedHashSet<(Boolean) -> Unit>()
+
+    fun set(on: Boolean) {
+        if (on == driving) return
+        driving = on
+        listeners.toList().forEach { it(on) }
+    }
+
+    fun add(l: (Boolean) -> Unit) { listeners += l }
+    fun remove(l: (Boolean) -> Unit) { listeners -= l }
 }
 
 /**

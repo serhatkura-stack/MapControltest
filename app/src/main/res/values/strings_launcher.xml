@@ -162,7 +162,8 @@
     <string name="launcher_body_hood">Hood</string>
     <string name="launcher_body_fuel_cap">Fuel cap</string>
     <string name="launcher_drive_theme">Drive mode colors</string>
-    <string name="launcher_auto_drive_layout">Auto drive layout</string>
+    <string name="launcher_auto_drive_layout">Separate drive layout</string>
+    <string name="launcher_auto_drive_layout_hint">Shows a separate layout while the car is moving.</string>
     <string name="launcher_sport_mode">Sport mode (experimental)</string>
     <string name="launcher_sport_close_oem_dialog">Close drive mode popup</string>
     <string name="launcher_sport_ambient">Sport ambient color</string>

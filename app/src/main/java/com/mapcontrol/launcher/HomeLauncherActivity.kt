@@ -55,6 +55,8 @@ class HomeLauncherActivity : Activity() {
     private var wifiPanel: WifiPanel? = null
     private var bluetoothPanel: BluetoothPanel? = null
     private val layoutPolicy = DriveLayoutPolicy()
+    /** Kartların "sürüşte" durumu ([DriveMotion]): düzen seçeneği kapalıyken de ve düzenlerken de işler. */
+    private val motionPolicy = DriveLayoutPolicy()
     /** Tercihler her turda SharedPreferences'tan okunmasın diye alanlarda tutulur; onCreate/onStart/ayar değişiminde tazelenir. */
     private var driveAccentOn = true
     /** "Spor modu (deneysel)" seçeneği; kapalıyken Spor orijinal temada kalır. */
@@ -62,7 +64,7 @@ class HomeLauncherActivity : Activity() {
     /** Spor geçişinde aracın sürüş modu penceresini kapat (varsayılan açık; [OemDriveDialogCloser]). */
     private var closeOemDialogOn = true
     private val oemDialogCloser = OemDriveDialogCloser()
-    private var autoLayoutOn = true
+    private var autoLayoutOn = DriveLayoutPrefs.DEFAULT_ON
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
     /** Spor modu: sürüş modu Spor ~1 sn kararlı kalınca orta alan ve çubuklar kronograf diline geçer. */
@@ -167,6 +169,8 @@ class HomeLauncherActivity : Activity() {
         activeMode = if (autoLayoutOn) rememberedMode else LayoutMode.PARK
         LauncherMotion.driveLayout = activeMode == LayoutMode.DRIVE
         layoutPolicy.reset(activeMode)
+        // Yeniden kurulumda (tema) sürüş durumu korunur: kart 5 sn yolculuğa dönüp geri gelmesin.
+        motionPolicy.reset(if (DriveMotion.driving) LayoutMode.DRIVE else LayoutMode.PARK)
         LauncherInfo.mode = activeMode
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) { consumeAppearanceExtra(intent); consumeEditExtra(intent) }
@@ -540,20 +544,24 @@ class HomeLauncherActivity : Activity() {
     /**
      * Park/Sürüş geçişi: hız ve vites sinyallerinden [DriveLayoutPolicy] karar verir; düzenleme ya da sayfa açıkken ertelenir.
      * Seçenek kapalıysa sürüş düzeni gösteriliyorsa Park'a dönülür. Demo `launcher_demo_moving false` beklemeden Park'a döner.
+     * Kartların sürüş durumu ([DriveMotion]) aynı kurallarla ama seçenekten ve düzenlemeden bağımsız ayrı bir politikayla işler.
      */
     private fun layoutTick() {
         val idle = !editing && sheet == null
+        val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
+        // Vites/el freni yalnızca Sürüş'te durulduğunda okunur (salt okuma); Park'ta ve giderken IPC yapılmaz.
+        val wantsPark = motionPolicy.wantsParkSignal(moving) || (autoLayoutOn && layoutPolicy.wantsParkSignal(moving))
+        val parked = if (wantsPark) DriveSignals.parked() else { DriveSignals.invalidate(); false }
+        val now = System.currentTimeMillis()
+        val immediatePark = LauncherDemo.enabled && moving == false
+        // Kartların sürüş durumu her zaman işler (seçenek kapalıyken de; düzenleme beklemez).
+        motionPolicy.update(now, moving, parked, canSwitch = true, immediatePark = immediatePark)
+        DriveMotion.set(motionPolicy.mode == LayoutMode.DRIVE)
         if (!autoLayoutOn) {
             if (activeMode == LayoutMode.DRIVE && idle) { layoutPolicy.reset(LayoutMode.PARK); switchMode(LayoutMode.PARK, true, automatic = true) }
             return
         }
-        val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
-        // Vites/el freni yalnızca Sürüş'te durulduğunda okunur; Park'ta ve giderken IPC yapılmaz.
-        val parked = if (layoutPolicy.wantsParkSignal(moving)) DriveSignals.parked() else { DriveSignals.invalidate(); false }
-        val to = layoutPolicy.update(
-            System.currentTimeMillis(), moving, parked, idle,
-            immediatePark = LauncherDemo.enabled && moving == false,
-        )
+        val to = layoutPolicy.update(now, moving, parked, idle, immediatePark = immediatePark)
         if (to != null) switchMode(to, true, automatic = true)
     }
 
@@ -585,7 +593,7 @@ class HomeLauncherActivity : Activity() {
 
     /** Düzenleme çubuğundaki Park | Sürüş seçici: düzenlenen/etkin düzeni elle değiştirir. */
     private fun selectEditLayout(to: LayoutMode) {
-        if (!editing || to == activeMode) return
+        if (!editing || !autoLayoutOn || to == activeMode) return
         val m = sahne
         m.animate().cancel()
         m.animate().alpha(0f).setDuration(EDIT_SWAP_OUT_MS).withEndAction {
@@ -602,6 +610,8 @@ class HomeLauncherActivity : Activity() {
             activeMode == LayoutMode.DRIVE -> R.string.launcher_sahne_helper_drive
             else -> R.string.launcher_sahne_helper_park
         })
+        // Tek düzen ("Sürüşte ayrı düzen" kapalı): Park | Sürüş seçici gizlenir, yalnızca tek düzen düzenlenir.
+        editLayoutTabs?.visibility = if (autoLayoutOn) View.VISIBLE else View.GONE
         editSegments.forEach { (mode, seg) ->
             val on = mode == activeMode
             seg.view.background = if (on) rounded(this, DriveAccent.buttonFill(LauncherTheme.ACCENT), 999f) else null
@@ -615,6 +625,7 @@ class HomeLauncherActivity : Activity() {
     private class EditSegment(val view: View, val label: android.widget.TextView, val icon: android.widget.ImageView)
 
     private val editSegments = LinkedHashMap<LayoutMode, EditSegment>()
+    private var editLayoutTabs: View? = null
 
     private fun layoutSegmented(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -818,8 +829,11 @@ class HomeLauncherActivity : Activity() {
         gravity = Gravity.CENTER_VERTICAL
         visibility = View.GONE
 
-        addView(layoutSegmented())
-        addView(gap(context, 20))
+        // Boşluk seçicinin kenar payı: seçici gizlenince yardım metni sola yaslanır.
+        addView(layoutSegmented().also { tabs ->
+            editLayoutTabs = tabs
+            (tabs.layoutParams as LinearLayout.LayoutParams).marginEnd = dp(20)
+        })
         addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
             editHelper = this
             gravity = Gravity.CENTER_VERTICAL

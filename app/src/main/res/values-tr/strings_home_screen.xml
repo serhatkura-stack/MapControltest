@@ -14,8 +14,8 @@
     <string name="home_screen_sport_mode_help_on">Spor\'da kronograf ekranı açılır (yalnız Sahne düzeni).</string>
     <string name="home_screen_sport_mode_help_off">Spor\'da da orijinal tema kalır.</string>
     <string name="home_screen_drive_theme_help_off">Hep temanın kendi vurgu rengi.</string>
-    <string name="home_screen_auto_layout_help_on">Park ve Sürüş düzeni hıza ve vitese göre otomatik değişir.</string>
-    <string name="home_screen_auto_layout_help_off">Hep Park düzeni.</string>
+    <string name="home_screen_auto_layout_help_on">Araç giderken ayrı Sürüş düzeni, dururken Park düzeni gösterilir.</string>
+    <string name="home_screen_auto_layout_help_off">Giderken de dururken de tek düzen.</string>
     <string name="home_screen_layout_title">Düzen</string>
     <string name="home_screen_edit_desc">Widget\'ları doğrudan ana ekranda taşı, boyutlandır, ekle ya da kaldır.</string>
     <string name="home_screen_reset_park">Park düzenini varsayılana döndür</string>
