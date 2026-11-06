@@ -187,6 +187,13 @@ object PhoneSource {
     /** VDBus isteği ateşle-unut: bu süre içinde arama durumu beklenen yöne gitmezse sıradaki yol bir kez denenir. */
     private const val CONFIRM_MS = 1_500L
     private const val CONFIRM_DIAL_MS = 2_500L
+    /** Panel açılışında bu süreden yeni okuma tekrarlanmaz. */
+    private const val FRESH_MS = 10_000L
+    /** PHONE_BOOK_SYNC "bitti" yayınlarından sonra önbellek isteği (rehber ve geçmiş ayrı ayrı biter; tek istek). */
+    private const val SYNC_READ_DELAY_MS = 800L
+    /** VDValueBT.SyncStatus.FINISHED (r.java:416-452). */
+    private const val VDSYNC_FINISHED = 1
+    private const val DEMO_VERSION_OFFSET = 1_000_000
 
     private val io = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
@@ -221,22 +228,69 @@ object PhoneSource {
     private var stateSource: CallBackend? = null
     private var lastDataBackend: String? = null
     private var lastReadAt = 0L
-    /** Son okunan veri (yalnızca bellekte; sabitleme değişince yeniden sıralamak için). Diske yazılmaz. */
-    private var lastData: PhoneData? = null
     private var mutedByMic = false
-    /** Bellekte: numara → isim (HFP durumunda isim yok; ekranda göstermek için). Diske yazılmaz. */
-    private var nameByNumber: Map<String, String> = emptyMap()
+    /**
+     * Bellekteki tam rehber/geçmiş (süreç ömrü, bağlı cihaz başına; [DirectoryStore]). Diske, tercihlere, günlüğe asla
+     * yazılmaz. Demo ayrı depoda tutulur (demodan çıkınca gerçek veri karışmasın).
+     */
+    private val store = DirectoryStore()
+    private val demoStore = DirectoryStore()
+    /** Bellekte: normalize numara → kişi (arayan ismi/fotoğrafı için). Diske yazılmaz. */
+    private var byNumber: Map<String, PhoneContact> = emptyMap()
+    /** Bu HFP bağlantısında indirme istendi (bağlantı başına en çok bir kez). */
+    private var downloadRequested = false
+    private var lastHfpConnected = false
+    /** Eşitleme bitti ama görünür değildik: sonraki başlangıçta önbellek okunur. */
+    private var pendingSyncRead = false
+    private var witnessOpen = false
+
+    private fun activeStore(): DirectoryStore = if (caps.demo) demoStore else store
 
     private val endedTask = Runnable {
         io.execute {
             if (snap.call.kind != CallKind.ENDED) return@execute
             update { it.copy(call = CallState.IDLE) }
-            // Arama geçmişi değişti.
-            if (started) readData()
+            // Arama geçmişi değişti (VDBus'ta OEM kendisi indirir; parçalar edilgen gelir).
+            refreshInternal(RefreshReason.CALL_ENDED)
         }
     }
     private val rereadTask = Runnable { io.execute { if (started) readData() } }
-    private val reprobeTask = Runnable { io.execute { if (started) { reprobe(); readData() } } }
+    private val reprobeTask = Runnable { io.execute { if (started) { reprobe(); refreshInternal(RefreshReason.HFP_CONNECTED) } } }
+    private val syncReadTask = Runnable {
+        io.execute {
+            if (started && wantData) readVdbusCache() else pendingSyncRead = true
+        }
+    }
+
+    /**
+     * Arama durumu yoklama yedeği ([CallPoll]): YALNIZCA arama sürerken 2 sn'de bir taze okuma (VDBus getOnce
+     * DIAL_INFO_LIST / HFP getCurrentCalls). Arama yokken hiç çalışmaz.
+     */
+    private val pollTask = object : Runnable {
+        override fun run() {
+            if (!CallPoll.shouldPoll(snap.call.kind, started || lingering)) return
+            io.execute {
+                if (!CallPoll.shouldPoll(snap.call.kind, started || lingering)) return@execute
+                try {
+                    stateSource?.refreshState()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "yoklama: ${t.javaClass.simpleName}")
+                }
+            }
+            main.postDelayed(this, CallPoll.INTERVAL_MS)
+        }
+    }
+
+    private fun startPoll() {
+        main.post {
+            main.removeCallbacks(pollTask)
+            main.postDelayed(pollTask, CallPoll.INTERVAL_MS)
+        }
+    }
+
+    private fun stopPoll() {
+        main.post { main.removeCallbacks(pollTask) }
+    }
     private val vdbusCheck = Runnable {
         io.execute {
             if (!started) return@execute
@@ -331,7 +385,11 @@ object PhoneSource {
             io.execute {
                 if (!started || !wantData) return@execute
                 val stale = lastReadAt == 0L || SystemClock.elapsedRealtime() - lastReadAt > DATA_STALE_MS
-                if (stale || PhoneBackendChooser.dataBackend(caps) != lastDataBackend) readData()
+                if (pendingSyncRead) {
+                    pendingSyncRead = false
+                    readVdbusCache()
+                }
+                if (stale || PhoneBackendChooser.dataBackend(caps) != lastDataBackend) refreshInternal(RefreshReason.APP_START)
             }
         }
     }
@@ -355,6 +413,7 @@ object PhoneSource {
         main.removeCallbacks(rereadTask)
         main.removeCallbacks(reprobeTask)
         main.removeCallbacks(endedTask)
+        main.removeCallbacks(syncReadTask)
         if (app != null) unregisterReceiver(app)
         HfpLink.onProxyChanged = null
         io.execute {
@@ -362,6 +421,8 @@ object PhoneSource {
             if (mutedByMic && snap.call.inCall && stateSource != null) {
                 lingering = true
                 Log.i(TAG, "durdu; sessiz görüşme bitene kadar durum izleniyor")
+                // Yoklama yedeği sahipsiz izlemede de sürer (arama bitince kendiliğinden durur).
+                startPoll()
                 return@execute
             }
             teardown()
@@ -371,6 +432,11 @@ object PhoneSource {
     /** io: durum kaynağını ve VDBus aboneliğini bırakır. Son veri bellekte kalır (diske yazılmaz). */
     private fun teardown() {
         lingering = false
+        stopPoll()
+        if (witnessOpen) {
+            hfp?.closeWitness()
+            witnessOpen = false
+        }
         stateSource?.close()
         stateSource = null
         vdbus?.disconnect()
@@ -411,7 +477,7 @@ object PhoneSource {
     fun answer(): Boolean = act(PhoneAction.ANSWER, { it.kind != CallKind.INCOMING }) { it.answer() }
 
     /** Gelen aramayı reddeder. */
-    fun reject(): Boolean = act(PhoneAction.REJECT, { !it.inCall }) { it.reject() }
+    fun reject(): Boolean = actLive(PhoneAction.REJECT, { !it.inCall }) { it.reject() }
 
     /**
      * Aktif/çıkan aramayı kapatır.
@@ -420,7 +486,54 @@ object PhoneSource {
      * OEM tarafında arama YOKSA (false) bizim durum doğrudan ENDED→IDLE yapılır, hata gösterilmez, true döner. Arama
      * varsa mevcut yol (uuid'li DIAL ctrl 3 → HFP → Telecom); onay süresi dolunca bir taze okuma daha, yine yoksa temizle.
      */
-    fun hangUp(): Boolean = act(PhoneAction.HANG_UP, { !it.inCall }) { it.hangUp() }
+    fun hangUp(): Boolean = actLive(PhoneAction.HANG_UP, { !it.inCall }) { it.hangUp() }
+
+    /**
+     * Kapat/Reddet: önce OEM'de canlı arama var mı ([HangUpPlan]). Yoksa yalnızca bizim durum temizlenir (hata yok).
+     * Telefon bağlı değilken ekranda kalmış bir arama da temizlenir.
+     */
+    private fun actLive(action: PhoneAction, done: (CallState) -> Boolean, op: (CallBackend) -> Boolean): Boolean {
+        val label = endLabel(action)
+        val order = PhoneBackendChooser.fallbackOrder(caps, action)
+        if (!snap.connected || order.isEmpty()) {
+            if (snap.call.inCall) {
+                io.execute { clearLocal(label) }
+                return true
+            }
+            fail(if (!snap.connected) PhoneError.NO_PHONE else PhoneError.NOT_SUPPORTED)
+            return false
+        }
+        io.execute {
+            when (HangUpPlan.decide(liveOnSource(), snap.call.inCall)) {
+                HangUpPlan.Decision.CLEAR_LOCAL -> clearLocal(label)
+                HangUpPlan.Decision.SEND -> runFrom(order, 0, label, action, done, op, verifyLive = true)
+                HangUpPlan.Decision.FAIL -> {
+                    Log.i(TAG, "$label: başarısız")
+                    fail(PhoneError.FAILED)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun endLabel(action: PhoneAction): String = if (action == PhoneAction.REJECT) "reddet" else "kapat"
+
+    /** io: durum kaynağında canlı arama var mı (taze okuma). Demo ya da hata: null (bilinmiyor). */
+    private fun liveOnSource(): Boolean? {
+        if (caps.demo) return null
+        return try {
+            stateSource?.hasLiveCall()
+        } catch (t: Throwable) {
+            Log.w(TAG, "canlı arama okuması: ${t.javaClass.simpleName}")
+            null
+        }
+    }
+
+    /** io: OEM'de arama yok; bizim durum ENDED → (2 sn) IDLE. Hata gösterilmez. */
+    private fun clearLocal(label: String) {
+        Log.i(TAG, "$label: OEM'de arama yok, durum temizlendi")
+        applyState(RawCall.NONE)
+    }
 
     /**
      * Ortak eylem yolu: bağlı telefon yoksa NO_PHONE, yol yoksa NOT_SUPPORTED (false). Varsa io'da sırayla denenir;
@@ -447,6 +560,7 @@ object PhoneSource {
     private fun runFrom(
         order: List<String>, from: Int, label: String, action: PhoneAction,
         done: (CallState) -> Boolean, op: (CallBackend) -> Boolean,
+        verifyLive: Boolean = false,
     ) {
         for (i in from until order.size) {
             val name = order[i]
@@ -459,13 +573,23 @@ object PhoneSource {
             if (ok) {
                 Log.i(TAG, "$label: $name")
                 val next = i + 1
-                if (name == PhoneBackendName.VDBUS && next < order.size && stateSource != null) {
+                if (name == PhoneBackendName.VDBUS && (next < order.size || verifyLive) && stateSource != null) {
                     val wait = if (action == PhoneAction.DIAL) CONFIRM_DIAL_MS else CONFIRM_MS
                     main.postDelayed({
                         io.execute {
                             if (!started || done(snap.call)) return@execute
+                            if (verifyLive) {
+                                // Durum değişmedi: belki arama zaten bitmişti (yayın kaçtı). Taze okumayla karar ver.
+                                val live = liveOnSource()
+                                if (HangUpPlan.onTimeout(live) == HangUpPlan.Decision.CLEAR_LOCAL) return@execute clearLocal(label)
+                                if (next >= order.size) {
+                                    Log.i(TAG, "$label: başarısız")
+                                    if (HangUpPlan.onExhausted(live) == HangUpPlan.Decision.FAIL) fail(PhoneError.FAILED)
+                                    return@execute
+                                }
+                            }
                             Log.i(TAG, "$label: $name yanıt vermedi, ${order[next]} deneniyor")
-                            runFrom(order, next, label, action, done, op)
+                            runFrom(order, next, label, action, done, op, verifyLive)
                         }
                     }, wait)
                 }
@@ -473,6 +597,7 @@ object PhoneSource {
             }
             order.getOrNull(i + 1)?.let { Log.i(TAG, "$label: $name başarısız, $it deneniyor") }
         }
+        if (verifyLive && HangUpPlan.onExhausted(liveOnSource()) == HangUpPlan.Decision.CLEAR_LOCAL) return clearLocal(label)
         Log.i(TAG, "$label: başarısız")
         fail(PhoneError.FAILED)
     }
@@ -556,11 +681,80 @@ object PhoneSource {
      * [RefreshReason.USER_OPENED] ile) bağlantı başına bir kez PBAP indirmesi.
      */
     fun refreshData(reason: RefreshReason) {
-        io.execute {
-            if (!started || !wantData) return@execute
-            Log.i(TAG, "veri yenile: ${reason.name.lowercase()}")
-            readData()
+        io.execute { refreshInternal(reason) }
+    }
+
+    /**
+     * io: yenileme politikası. HFP bağlandı / açılış / panel → yalnızca önbellek (okuma). Kullanıcı rehber sayfasını
+     * açtı → okuma + gerekirse bağlantı başına bir kez indirme ([maybeDownload]). Arama bitti → VDBus'ta istek yok
+     * (OEM telefon uygulaması her aramadan sonra geçmiş indirmesini kendisi başlatır, BasePhoneCallService.java:54;
+     * parçalar ve "bitti" durumu edilgen gelir); rehber sağlayıcısında yerel okuma.
+     */
+    private fun refreshInternal(reason: RefreshReason) {
+        if (!started || !wantData) return
+        val name = PhoneBackendChooser.dataBackend(caps)
+        val fresh = lastReadAt != 0L && SystemClock.elapsedRealtime() - lastReadAt < FRESH_MS
+        Log.i(TAG, "veri yenile: ${reason.name.lowercase()}${if (fresh) " (yeni okundu)" else ""}")
+        when (reason) {
+            RefreshReason.CALL_ENDED -> if (name == PhoneBackendName.CONTACTS_PROVIDER) readData()
+            RefreshReason.PANEL_OPENED -> if (!fresh) readData()
+            RefreshReason.APP_START, RefreshReason.HFP_CONNECTED -> readData()
+            RefreshReason.USER_OPENED -> {
+                if (!fresh || !activeStore().hasData) readData()
+                maybeDownload()
+            }
         }
+    }
+
+    /**
+     * io: depo ve OEM önbelleği boşsa (yeniden kurulumdan sonra: önbellek yalnızca bir PBAP indirmesiyle dolar) bu
+     * HFP bağlantısında BİR KEZ indirme ister. Yalnızca [RefreshReason.USER_OPENED] ile (kullanıcının açık eylemi).
+     */
+    private fun maybeDownload() {
+        if (caps.demo || !caps.vdbusData) return
+        val vd = vdbusData ?: return
+        if (store.hasData) return
+        var step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, null, downloadRequested)
+        if (step == PhonebookRefresh.Step.CACHE) {
+            readVdbusCache()
+            if (vd.cacheTotal == null) {
+                Log.i(TAG, "rehber: OEM önbelleği yanıt vermedi, indirme istenmedi")
+                return
+            }
+            step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, null, downloadRequested)
+        }
+        if (step != PhonebookRefresh.Step.DOWNLOAD) {
+            Log.i(TAG, "rehber: indirme gerekmiyor (önbellek=${vd.cacheTotal} istendi=$downloadRequested)")
+            return
+        }
+        val status = vd.syncStatus()
+        step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, status, downloadRequested)
+        if (step != PhonebookRefresh.Step.DOWNLOAD) {
+            Log.i(TAG, "rehber: indirme sürüyor ya da gerekmiyor (durum=$status)")
+            return
+        }
+        if (vd.requestDownload()) {
+            downloadRequested = true
+            Log.i(TAG, "rehber: indirme istendi (durum=$status)")
+        } else {
+            Log.i(TAG, "rehber: indirme isteği gönderilemedi")
+        }
+    }
+
+    /** io: VDBus önbelleğini (rehber + geçmiş) okur ve depoya katar (boş yanıt depoyu silmez). */
+    private fun readVdbusCache() {
+        if (caps.demo) return
+        val app = appContext ?: return
+        val vd = vdbusData ?: return
+        if (!vd.available()) return
+        val data = try {
+            vd.read(PhonePrefs.pinnedIds(app))
+        } catch (t: Throwable) {
+            Log.w(TAG, "veri (vdbus): ${t.javaClass.simpleName}")
+            null
+        }
+        Log.i(TAG, "rehber önbelleği: kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1}")
+        if (data != null && store.merge(data.contacts, data.recents)) publishStore()
     }
 
     @Volatile private var directorySnap = PhoneDirectory.EMPTY
@@ -684,10 +878,8 @@ object PhoneSource {
     fun reloadFavorites() {
         io.execute {
             if (!started || !wantData) return@execute
-            val app = appContext ?: return@execute
-            val data = lastData ?: return@execute readData()
-            val favorites = FavoritesRanker.rank(data.contacts, data.recents, PhonePrefs.pinnedIds(app), MAX_FAVORITES, System.currentTimeMillis())
-            update { it.copy(favorites = favorites) }
+            if (!activeStore().hasData) return@execute readData()
+            publishStore()
         }
     }
 
@@ -780,10 +972,52 @@ object PhoneSource {
             stateSource = callBackendFor(wantState)
             if (leavingDemo || stateSource == null) update { it.copy(call = CallState.IDLE) }
             // Bağlantı PhoneSource'un kendi yayın alıcısından izlenir.
+            stateSource?.setAudioListener(::onAudioMode)
             stateSource?.open(::onRawState) { _, _ -> }
+            if (leavingDemo || c.demo) publishStore()
         }
+        // HFP tanığı: durum VDBus'tan gelirken HFP "arama bitti" yayını hemen yeniden okumayı tetikler.
+        val wantWitness = stateSource?.name == PhoneBackendName.VDBUS && c.hfpClientProxy
+        if (wantWitness != witnessOpen) {
+            if (wantWitness) {
+                hfp?.openWitness {
+                    io.execute {
+                        if ((started || lingering) && snap.call.inCall) {
+                            Log.i(TAG, "arama: HFP bitti dedi, durum yeniden okunuyor")
+                            stateSource?.refreshState()
+                        }
+                    }
+                }
+            } else {
+                hfp?.closeWitness()
+            }
+            witnessOpen = wantWitness
+        }
+        // Edilgen rehber/geçmiş yakalama (yalnızca itme; süreç boyunca bir kez kurulur).
+        if (vdOk && !c.demo) vdbusData?.watch(io, ::onPassiveContacts, ::onPassiveRecords, ::onSyncStatus)
 
         val connected = c.demo || HfpLink.isConnected()
+        if (!c.demo) {
+            if (connected && !lastHfpConnected) {
+                // Yeni HFP bağlantısı: indirme hakkı ve önbellek bilgisi sıfırlanır.
+                downloadRequested = false
+                vdbusData?.resetCacheTotal()
+            }
+            lastHfpConnected = connected
+            // Farklı telefon: bellekteki rehber/geçmiş ve fotoğraflar silinir (adres yalnızca özet olarak, günlüğe yazılmaz).
+            val key = try {
+                HfpLink.connectedDevice()?.address?.uppercase()?.hashCode()
+            } catch (t: Throwable) {
+                null
+            }
+            if (store.onDevice(key)) {
+                PhonePhotos.clear()
+                downloadRequested = false
+                vdbusData?.resetCacheTotal()
+                Log.i(TAG, "rehber: farklı telefon bağlandı, bellek sıfırlandı")
+                publishStore()
+            }
+        }
         val deviceName = when {
             c.demo -> PhoneDemo.DEVICE_NAME
             connected -> HfpLink.deviceName()
@@ -818,9 +1052,8 @@ object PhoneSource {
         lastReadAt = SystemClock.elapsedRealtime()
         val backend = dataBackendFor(name)
         if (backend == null) {
-            nameByNumber = emptyMap()
-            lastData = null
-            update { it.copy(loaded = false, favorites = emptyList(), recents = emptyList()) }
+            // Yol yok (izin/BT servisi yok): bellekteki depo korunur (yalnızca farklı telefon bağlanınca silinir).
+            if (activeStore().hasData) publishStore() else update { it.copy(loaded = false, favorites = emptyList(), recents = emptyList()) }
             return
         }
         val pinned = PhonePrefs.pinnedIds(app)
@@ -840,19 +1073,29 @@ object PhoneSource {
                 data = alt
             }
         }
-        if (data == null) {
-            update { it.copy(loaded = true) }
-            return
+        val target = activeStore()
+        val changed = data != null && target.merge(data.contacts, data.recents)
+        Log.d(TAG, "veri: $name kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1} " +
+            "depo=${target.contacts.size}/${target.recents.size}${if (changed) " (yeni)" else ""}")
+        // Boş ya da yanıtsız okuma dolu depoyu silmez; her durumda "okundu" sayılır.
+        publishStore()
+    }
+
+    /**
+     * io: depodan (bellek) anlık görüntüyü üretir: favoriler, panelin son aramaları, sayılar ve "Tümü" dizini.
+     * Yalnızca sayılar günlüğe yazılır.
+     */
+    private fun publishStore() {
+        val s = activeStore()
+        byNumber = s.byNumber()
+        // Demo ayrı sürüm aralığında: demo ↔ gerçek geçişinde "Tümü" sayfası mutlaka yeniden kurulur.
+        val version = s.version + if (caps.demo) DEMO_VERSION_OFFSET else 0
+        if (directorySnap.version != version || directorySnap.contacts !== s.contacts || directorySnap.recents !== s.recents) {
+            directorySnap = PhoneDirectory(s.contacts, s.recents, version)
         }
-        val names = HashMap<String, String>()
-        for (c in data.contacts) names.putIfAbsent(FavoritesRanker.normalizeNumber(c.number), c.name)
-        for (r in data.recents) r.name?.let { names.putIfAbsent(FavoritesRanker.normalizeNumber(r.number), it) }
-        nameByNumber = names
-        lastData = data
-        directorySnap = PhoneDirectory(data.contacts, data.recents, directorySnap.version + 1)
-        val favorites = FavoritesRanker.rank(data.contacts, data.recents, pinned, MAX_FAVORITES, System.currentTimeMillis())
-        val recents = RecentsShaper.shape(data.recents, 5)
-        Log.d(TAG, "veri: $name kişi=${data.contacts.size} geçmiş=${data.recents.size} favori=${favorites.size}")
+        val pinned = appContext?.let { PhonePrefs.pinnedIds(it) } ?: emptyList()
+        val favorites = FavoritesRanker.rank(s.contacts, s.recents, pinned, MAX_FAVORITES, System.currentTimeMillis())
+        val recents = RecentsShaper.shape(s.recents, 5)
         val dir = directorySnap
         update {
             it.copy(
@@ -862,18 +1105,60 @@ object PhoneSource {
         }
     }
 
-    /** Arka uçtan ham durum (herhangi bir iş parçacığı) → io. */
-    private fun onRawState(kind: CallKind, name: String?, number: String?) {
-        io.execute { applyState(kind, name, number) }
+    // ---- Edilgen rehber/geçmiş (io; VdbusDataBackend.watch) ----
+
+    private fun onPassiveContacts(raw: List<com.desaysv.ivi.vdb.event.id.bt.bean.VDBTContacts>) {
+        val app = appContext ?: return
+        val vd = vdbusData ?: return
+        val wanted = store.recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
+        val contacts = vd.convertContacts(raw, wanted, PhonePrefs.pinnedIds(app).toHashSet())
+        Log.i(TAG, "rehber: indirmeden ${contacts.size} kişi")
+        if (store.merge(contacts, null) && !caps.demo) publishStore()
     }
 
-    private fun applyState(raw: CallKind, name: String?, number: String?) {
+    private fun onPassiveRecords(raw: List<com.desaysv.ivi.vdb.event.id.bt.bean.VDBTRecord>) {
+        val vd = vdbusData ?: return
+        val recents = vd.convertRecords(raw)
+        Log.i(TAG, "geçmiş: indirmeden ${recents.size} kayıt")
+        if (store.merge(null, recents) && !caps.demo) publishStore()
+    }
+
+    /** PHONE_BOOK_SYNC durumu (VDValueBT.SyncStatus). FINISHED → önbellek artık dolu: bir kez okunur. */
+    private fun onSyncStatus(status: Int, type: Int) {
+        Log.i(TAG, "rehber eşitleme: durum=$status tür=$type")
+        if (status != VDSYNC_FINISHED) return
+        main.removeCallbacks(syncReadTask)
+        main.postDelayed(syncReadTask, SYNC_READ_DELAY_MS)
+    }
+
+    /** Arka uçtan ham durum (herhangi bir iş parçacığı) → io. */
+    private fun onRawState(raw: RawCall) {
+        io.execute { applyState(raw) }
+    }
+
+    /** io: OEM ses yönü yayını (DIAL_AUDIO_MODE). Yalnızca arama sürerken uygulanır. */
+    private fun onAudioMode(onPhone: Boolean) {
+        if (!snap.call.inCall || snap.call.audioOnPhone == onPhone) return
+        Log.i(TAG, "ses yönü (OEM): ${if (onPhone) "telefon" else "araç"}")
+        update { it.copy(call = it.call.copy(audioOnPhone = onPhone)) }
+    }
+
+    private fun applyState(raw: RawCall) {
         if (!started && !lingering) return
         val prev = snap.call
-        val kind = PhoneStateMap.effectiveKind(prev.kind, raw)
-        val shownName = name ?: number?.let { nameByNumber[FavoritesRanker.normalizeNumber(it)] }
-        val next = PhoneStateMap.nextCall(prev, kind, shownName, number, SystemClock.elapsedRealtime())
+        val kind = PhoneStateMap.effectiveKind(prev.kind, raw.kind)
+        val matched = raw.number?.let { byNumber[FavoritesRanker.normalizeNumber(it)] }
+        val shownName = raw.name ?: matched?.name
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val oemStart = if (kind == CallKind.ACTIVE && raw.startWallMs > 0L) {
+            CallClock.startElapsed(raw.startWallMs, System.currentTimeMillis(), nowElapsed)
+        } else {
+            null
+        }
+        val photoKey = resolvePhoto(raw, prev, kind, matched)
+        val next = PhoneStateMap.nextCall(prev, kind, shownName, raw.number, nowElapsed, oemStart, photoKey)
         if (!next.inCall) unmuteIfNeeded()
+        if (prev.inCall && !next.inCall) stopPoll()
         if (!started) {
             // Sahipsiz izleme: sessizdeki görüşme bitti → mikrofon açıldı, kaynak kapanır.
             if (!next.inCall) teardown() else update { it.copy(call = next) }
@@ -881,9 +1166,52 @@ object PhoneSource {
         }
         if (next.kind != prev.kind) Log.i(TAG, "arama: ${prev.kind} → ${next.kind}")
         update { it.copy(call = next) }
+        if (next.inCall && !prev.inCall) startPoll()
+        if (next.kind == CallKind.ACTIVE && prev.kind != CallKind.ACTIVE) seedAudioAndMic()
         if (kind == CallKind.ENDED && prev.kind != CallKind.ENDED) {
             main.removeCallbacks(endedTask)
             main.postDelayed(endedTask, ENDED_MS)
+        }
+    }
+
+    /**
+     * io: arayan fotoğrafı anahtarı (yalnızca bellek). Sıra: OEM arama kaydındaki portre ("call:<uuid>") → eşleşen
+     * kişinin fotoğrafı → aramanın ilk görülüşünde bir kez PHONE_BOOK_CONTACT_INFO. Anahtar yalnızca görüntü önbelleğe
+     * girdikten sonra döner; yoksa null (nextCall aynı görüşmede öncekini korur).
+     */
+    private fun resolvePhoto(raw: RawCall, prev: CallState, kind: CallKind, matched: PhoneContact?): String? {
+        if (kind != CallKind.INCOMING && kind != CallKind.DIALING && kind != CallKind.ACTIVE) return null
+        val uuid = raw.uuid
+        val portrait = raw.portrait
+        if (uuid != null && portrait != null && portrait.isNotEmpty()) {
+            val key = "call:$uuid"
+            if (PhonePhotos.contains(key) || PhonePhotos.putEncoded(key, portrait)) return key
+        }
+        matched?.photoKey?.takeIf { PhonePhotos.contains(it) }?.let { return it }
+        // Arama sürüyor: OEM sorgusu yalnızca ilk görülüşte (aynı görüşmede önceki anahtar nextCall'da korunur).
+        if (prev.inCall || caps.demo) return null
+        val number = raw.number ?: return null
+        val key = matched?.id ?: uuid?.let { "call:$it" } ?: return null
+        val bytes = try {
+            stateSource?.contactPortrait(number)
+        } catch (t: Throwable) {
+            null
+        } ?: return null
+        return if (PhonePhotos.putEncoded(key, bytes)) key else null
+    }
+
+    /** io: konuşmaya girişte OEM'den ses yönü ve mikrofon durumu bir kez okunur (OEM ekranında değiştirilmiş olabilir). */
+    private fun seedAudioAndMic() {
+        val src = stateSource ?: return
+        if (src.name == PhoneBackendName.DEMO) return
+        val onPhone = try { src.readAudioOnPhone() } catch (t: Throwable) { null }
+        val muted = try { src.readMicMuted() } catch (t: Throwable) { null }
+        if (onPhone == null && muted == null) return
+        Log.i(TAG, "konuşma başı: ses=${onPhone?.let { if (it) "telefon" else "araç" } ?: "?"} sessiz=${muted ?: "?"}")
+        update {
+            if (it.call.kind != CallKind.ACTIVE) it else it.copy(
+                call = it.call.copy(audioOnPhone = onPhone ?: it.call.audioOnPhone, muted = muted ?: it.call.muted),
+            )
         }
     }
 

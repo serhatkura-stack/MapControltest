@@ -23,7 +23,6 @@ import android.provider.ContactsContract
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
-import com.desaysv.ivi.vdb.IVDBusNotify
 import com.desaysv.ivi.vdb.client.VDBus
 import com.desaysv.ivi.vdb.client.bind.VDServiceDef
 import com.desaysv.ivi.vdb.client.bind.VDThreadType
@@ -93,8 +92,19 @@ internal interface CallBackend {
      * durum temizlenir (6 Kasım araç: kapatma 'callList.size=0' aldı, şerit ACTIVE kaldı).
      */
     fun hasLiveCall(): Boolean? = null
+    /** io: ses telefonda mı (taze okuma; VDBus getOnce DIAL_AUDIO_MODE). null = bilinmiyor. */
+    fun readAudioOnPhone(): Boolean? = null
+    /** io: mikrofon kapalı mı (taze okuma; VDBus getOnce DIAL_MIC_MODE status 2). null = bilinmiyor. */
+    fun readMicMuted(): Boolean? = null
+    /** Ses yönü yayını (VDBus DIAL_AUDIO_MODE 262548) dinleyicisi; io kuyruğunda çağrılır. null bırakır. */
+    fun setAudioListener(l: ((Boolean) -> Unit)?) {}
+    /**
+     * io: arayanın fotoğrafı (VDBus PHONE_BOOK_CONTACT_INFO 262383 getOnce {number} → portrait, q/r.java:279-298).
+     * Bulunamazsa null. Numara günlüğe yazılmaz.
+     */
+    fun contactPortrait(number: String): ByteArray? = null
     /** Arama durumu dinlemesini başlatır. Geri çağrılar herhangi bir iş parçacığında gelebilir. */
-    fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit)
+    fun open(onState: (RawCall) -> Unit, onConnected: (Boolean, String?) -> Unit)
     fun close()
 }
 
@@ -409,8 +419,58 @@ internal object HfpClientApi {
  */
 internal class HfpClientCallBackend(private val ctx: Context, private val io: Executor) : CallBackend {
     override val name: String = PhoneBackendName.HFP_CLIENT
-    private var onState: ((CallKind, String?, String?) -> Unit)? = null
+    private var onState: ((RawCall) -> Unit)? = null
     private var registered = false
+
+    // ---- Tanık modu: durum kaynağı VDBus iken HFP AG_CALL_CHANGED yalnızca "bitti" ipucu verir ----
+    @Volatile private var witness: (() -> Unit)? = null
+    private var witnessRegistered = false
+
+    private val witnessReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, intent: Intent?) {
+            if (intent?.action != HfpLink.ACTION_CALL || witness == null) return
+            val call: Parcelable? = try {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(HfpLink.EXTRA_CALL)
+            } catch (t: Throwable) {
+                null
+            }
+            if (call != null) io.execute { onWitnessCall(call) }
+        }
+    }
+
+    /**
+     * Tanık: VDBus yayını kaçarsa (6 Kasım araç) HFP'nin "arama bitti" yayını hemen yeniden okumayı tetikler. Tanık
+     * durumu kendisi DEĞİŞTİRMEZ ([onTerminal] yalnızca taze okuma ister): iki kaynak birbirini ezmez.
+     */
+    fun openWitness(onTerminal: () -> Unit) {
+        witness = onTerminal
+        if (witnessRegistered) return
+        witnessRegistered = try {
+            ctx.registerReceiver(witnessReceiver, IntentFilter(HfpLink.ACTION_CALL))
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "hfp tanık: ${t.javaClass.simpleName}")
+            false
+        }
+    }
+
+    fun closeWitness() {
+        witness = null
+        if (witnessRegistered) runCatching { ctx.unregisterReceiver(witnessReceiver) }
+        witnessRegistered = false
+    }
+
+    /** io: biten arama yayını geldi; liste boş ya da hepsi bitmişse tanık tetiklenir. */
+    private fun onWitnessCall(call: Any) {
+        val cb = witness ?: return
+        val info = HfpClientApi.callInfo(call) ?: return
+        if (info.state != PhoneStateMap.TERMINATED) return
+        val p = HfpLink.proxy
+        val d = HfpLink.connectedDevice()
+        val rest = if (p != null && d != null) HfpClientApi.currentCalls(p, d)?.mapNotNull { HfpClientApi.callInfo(it) } else null
+        if (rest == null || rest.all { it.state == PhoneStateMap.TERMINATED }) cb()
+    }
     /** io kuyruğunda: kimlik → arama. */
     private val calls = LinkedHashMap<Int, HfpClientApi.CallInfo>()
 
@@ -453,7 +513,16 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
 
     override fun setMute(on: Boolean): Boolean = MicMute.set(ctx, on)
 
-    override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
+    override fun refreshState(): Boolean = readCurrent()
+
+    override fun hasLiveCall(): Boolean? {
+        val p = HfpLink.proxy ?: return null
+        val d = HfpLink.connectedDevice() ?: return null
+        val list = HfpClientApi.currentCalls(p, d) ?: return null
+        return list.mapNotNull { HfpClientApi.callInfo(it) }.any { it.state != PhoneStateMap.TERMINATED }
+    }
+
+    override fun open(onState: (RawCall) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
         if (!registered) {
             registered = try {
@@ -472,15 +541,16 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         }
     }
 
-    /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. */
-    private fun readCurrent() {
-        val cb = onState ?: return
-        val p = HfpLink.proxy ?: return
-        val d = HfpLink.connectedDevice() ?: return
-        val list = HfpClientApi.currentCalls(p, d) ?: return
+    /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. Okuyamazsa false. */
+    private fun readCurrent(): Boolean {
+        val cb = onState ?: return false
+        val p = HfpLink.proxy ?: return false
+        val d = HfpLink.connectedDevice() ?: return false
+        val list = HfpClientApi.currentCalls(p, d) ?: return false
         calls.clear()
         for (c in list) HfpClientApi.callInfo(c)?.let { calls[it.id] = it }
-        if (calls.isEmpty()) cb(CallKind.NONE, null, null) else emit()
+        if (calls.isEmpty()) cb(RawCall.NONE) else emit()
+        return true
     }
 
     override fun close() {
@@ -504,7 +574,7 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         val src = list.getOrNull(PhoneStateMap.relevantIndex(lite))
         // Biten aramalar listeden çıkar (durum bir kez bildirildikten sonra).
         calls.entries.removeAll { it.value.state == PhoneStateMap.TERMINATED }
-        onState?.invoke(kind, null, src?.number?.takeIf { it.isNotBlank() })
+        onState?.invoke(RawCall(kind, null, src?.number?.takeIf { it.isNotBlank() }))
     }
 
     private companion object {
@@ -572,7 +642,7 @@ internal class TelecomCallBackend(private val ctx: Context) : CallBackend {
     override fun hangUp(): Boolean = control("endCall") { it.endCall() }
 
     override fun setMute(on: Boolean): Boolean = false
-    override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {}
+    override fun open(onState: (RawCall) -> Unit, onConnected: (Boolean, String?) -> Unit) {}
     override fun close() {}
 }
 
@@ -585,16 +655,25 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     @Volatile var bus: VDBus? = null
         private set
     private var bindRegistered = false
-    private var event: VDEvent? = null
-    @Volatile private var onState: ((CallKind, String?, String?) -> Unit)? = null
+    @Volatile private var onState: ((RawCall) -> Unit)? = null
+    @Volatile private var onAudio: ((Boolean) -> Unit)? = null
+    /** Yayın işleyicileri [VdbusBtNotify]'a eklendi (yalnızca io'da değişir). */
+    private var handlersAdded = false
     /** Son arama listesi (durum + OEM uuid; isim/numara yok): kapatma/reddetme hangi uuid'yi göndereceğini buradan seçer. */
     @Volatile private var lastCalls: List<DialInfoLite> = emptyList()
 
-    private val notify = object : IVDBusNotify.Stub() {
-        override fun onVDBusNotify(e: VDEvent?) {
-            if (e == null || e.id != VDEventBT.DIAL_INFO_LIST) return
-            handle(e)
+    /** VDBus_DISPATCH: yalnızca çözümler ve io'ya aktarır ([handle]). */
+    private val infoHandler: (VDEvent) -> Unit = { e -> handle(e) }
+
+    /** VDBus_DISPATCH: DIAL_AUDIO_MODE {"value": MAC, "status": 1 araç / 2 telefon / 3 bağlanıyor} (m/n.java:93-96). */
+    private val audioHandler: (VDEvent) -> Unit = { e ->
+        val status = try {
+            e.payload?.getInt(VDKey.STATUS, -1) ?: -1
+        } catch (t: Throwable) {
+            -1
         }
+        val on = AudioModeMap.onPhone(status)
+        if (on != null) io.execute { onAudio?.invoke(on) }
     }
 
     private val bindListener = object : VDBindListener {
@@ -608,10 +687,8 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 
         override fun onVDDisconnected(serviceType: VDServiceDef.ServiceType) {
             if (serviceType != VDServiceDef.ServiceType.BT) return
-            io.execute {
-                event = null
-                onAvailability()
-            }
+            // Standart abonelik listesi yeniden bağlanınca VDConnector tarafından yeniden gönderilir.
+            io.execute { onAvailability() }
         }
     }
 
@@ -733,59 +810,145 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         return send(VDValueBT.DialCtrl.DTMF, code)
     }
 
-    override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
+    override fun open(onState: (RawCall) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
         subscribe()
         // Şu anki durum (abonelik yalnızca değişiklikleri getirir).
-        val b = bus ?: return
-        if (!available()) return
-        val now = try {
-            b.getOnce(VDEventBT.DIAL_INFO_LIST)
-        } catch (t: Throwable) {
-            Log.w(TAG, "vdbus DIAL_INFO_LIST: ${t.javaClass.simpleName}")
-            null
-        }
-        if (now != null) handle(now)
+        refreshState()
+    }
+
+    override fun setAudioListener(l: ((Boolean) -> Unit)?) {
+        onAudio = l
     }
 
     override fun close() {
         onState = null
+        onAudio = null
         lastCalls = emptyList()
-        val e = event
-        if (e != null) runCatching { bus?.unsubscribe(e, notify) }
-        event = null
-    }
-
-    private fun subscribe() {
-        val b = bus ?: return
-        if (event != null || !available()) return
-        try {
-            val e = VDEvent(VDEventBT.DIAL_INFO_LIST, Bundle())
-            b.subscribe(e, notify)
-            event = e
-        } catch (t: Throwable) {
-            Log.w(TAG, "vdbus subscribe: ${t.javaClass.simpleName}")
+        if (handlersAdded) {
+            VdbusBtNotify.remove(VDEventBT.DIAL_INFO_LIST, infoHandler)
+            VdbusBtNotify.remove(VDEventBT.DIAL_AUDIO_MODE, audioHandler)
+            handlersAdded = false
         }
     }
 
     /**
-     * Binder ya da io iş parçacığında: listeyi çözüp durumu io'ya aktarır. Yayın yükünde "data" listesinin yanında
-     * "status" = VDBTListProgress da vardır (m/m.java:310-318); o sınıf olmadan Bundle hiç açılamıyordu.
+     * io: OEM'in kendi kullandığı STANDART abonelik ([VdbusBtNotify]; SVVRService c/a.java:55-70,106 her 2 sn'de
+     * DIAL_INFO_LIST alıyor). Eski `VDBus.subscribe(VDEvent, stub)` özel olay yoluydu ve BT servisi o yola hiç
+     * yayımlamıyor: 6 Kasım araçta arama bitince şerit ACTIVE kalmasının nedeni buydu. Abonelik süreç boyunca açık
+     * kalır; [close] yalnızca işleyicileri çıkarır.
+     */
+    private fun subscribe() {
+        val b = bus ?: return
+        if (!available()) return
+        if (!VdbusBtNotify.ensure(b, CALL_IDS)) return
+        if (handlersAdded) return
+        VdbusBtNotify.add(VDEventBT.DIAL_INFO_LIST, infoHandler)
+        VdbusBtNotify.add(VDEventBT.DIAL_AUDIO_MODE, audioHandler)
+        handlersAdded = true
+    }
+
+    /** io: getOnce(DIAL_INFO_LIST) → [handle] (yoklama yedeği ve açılış okuması). */
+    override fun refreshState(): Boolean {
+        val e = getOnce(VDEventBT.DIAL_INFO_LIST) ?: return false
+        if (e.payload == null) return false
+        handle(e)
+        return true
+    }
+
+    /** io: OEM listesinde durumu 7 (bitti) ya da 8 (cevapsız) olmayan arama var mı. Uuid listesini de tazeler. */
+    override fun hasLiveCall(): Boolean? {
+        val e = getOnce(VDEventBT.DIAL_INFO_LIST) ?: return null
+        if (e.payload == null) return null
+        val list = try {
+            VDBTDialInfo.getList(e)?.filterNotNull() ?: emptyList()
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus DialInfo: ${t.javaClass.simpleName}")
+            return null
+        }
+        lastCalls = list.map { DialInfoLite(it.state, it.isOutGoing, it.uuid) }
+        return list.any { it.state != PhoneStateMap.TERMINATED && it.state != PhoneStateMap.MISSED }
+    }
+
+    /** io: getOnce DIAL_AUDIO_MODE (boş "value" = bağlı cihaz; m/m.java:102-118). */
+    override fun readAudioOnPhone(): Boolean? {
+        val e = getOnce(VDEventBT.DIAL_AUDIO_MODE) ?: return null
+        val status = e.payload?.getInt(VDKey.STATUS, -1) ?: return null
+        return AudioModeMap.onPhone(status)
+    }
+
+    /** io: getOnce DIAL_MIC_MODE {"status": 2 sessiz / 1 açık} (m/m.java:204-209). */
+    override fun readMicMuted(): Boolean? {
+        val e = getOnce(VDEventBT.DIAL_MIC_MODE) ?: return null
+        return when (e.payload?.getInt(VDKey.STATUS, -1)) {
+            VDValueBT.MicMode.MUTE -> true
+            VDValueBT.MicMode.UNMUTE -> false
+            else -> null
+        }
+    }
+
+    override fun contactPortrait(number: String): ByteArray? {
+        val b = bus ?: return null
+        if (!available() || number.isBlank()) return null
+        return try {
+            val r = b.getOnce(VDBTContacts.createEvent(VDEventBT.PHONE_BOOK_CONTACT_INFO, VDBTContacts().apply { putNumber(number) }))
+            VDBTContacts.getValue(r)?.portrait?.takeIf { it.isNotEmpty() }
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus CONTACT_INFO: ${t.javaClass.simpleName}")
+            null
+        }
+    }
+
+    private fun getOnce(id: Int): VDEvent? {
+        val b = bus ?: return null
+        if (!available()) return null
+        return try {
+            b.getOnce(id)
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus getOnce($id): ${t.javaClass.simpleName}")
+            null
+        }
+    }
+
+    /**
+     * VDBus_DISPATCH ya da io: listeyi çözüp durumu io'ya aktarır. Yayın yükünde "data" listesinin yanında "status" =
+     * VDBTListProgress(index=size-1, total=size) vardır (m/n.java:97-100); boş liste total 0 ile yayımlanır → NONE.
+     * getOnce yanıtında progress yoktur (m/m.java:120-122). Fotoğraf baytları çözülmeden io'ya geçer.
      */
     private fun handle(e: VDEvent) {
+        val progress = try {
+            VDBTListProgress.getValue(e)
+        } catch (t: Throwable) {
+            null
+        }
         val list: List<VDBTDialInfo> = try {
             VDBTDialInfo.getList(e)?.filterNotNull() ?: emptyList()
         } catch (t: Throwable) {
             Log.w(TAG, "vdbus DialInfo: ${t.javaClass.simpleName}")
             return
         }
+        if (progress?.total == 0 || list.isEmpty()) {
+            lastCalls = emptyList()
+            io.execute { onState?.invoke(RawCall.NONE) }
+            return
+        }
         val lite = list.map { DialInfoLite(it.state, it.isOutGoing, it.uuid) }
         lastCalls = lite
         val kind = PhoneStateMap.fromVdDialInfos(lite)
         val src = list.getOrNull(PhoneStateMap.relevantIndex(lite))
-        val name = src?.name?.takeIf { it.isNotBlank() }
-        val number = src?.number?.takeIf { it.isNotBlank() }
-        io.execute { onState?.invoke(kind, name, number) }
+        val raw = RawCall(
+            kind = kind,
+            name = src?.name?.takeIf { it.isNotBlank() },
+            number = src?.number?.takeIf { it.isNotBlank() },
+            uuid = src?.uuid?.takeIf { it.isNotBlank() },
+            startWallMs = src?.time ?: 0L,
+            portrait = src?.portrait?.takeIf { it.isNotEmpty() },
+        )
+        io.execute { onState?.invoke(raw) }
+    }
+
+    private companion object {
+        val CALL_IDS = intArrayOf(VDEventBT.DIAL_INFO_LIST, VDEventBT.DIAL_AUDIO_MODE)
     }
 }
 
@@ -861,13 +1024,33 @@ internal object VdbusBtNotify {
  *    10'arlık parçalarla yayar: {"data": liste, "status": VDBTListProgress(adres, index, total, key)} (q/r.java:538-560,
  *    v/o.java:52-110). Get yok: bu olayların onGet'i null (q/v.java:197-215).
  * 3. Önbellek boşsa set PHONE_BOOK_SYNC_DB (262378): servis kaydedilmiş listeyi yükler (q/q.java:393-440), bitince
- *    ..._LIST_DB key=null yayımlanır (q/v.java:56-96).
+ *    ..._LIST_DB key=null yayımlanır (q/v.java:56-96). Dikkat: DB yüklemesi de AYNI önbellek haritasını yayımlar
+ *    (v.java:43-60); önbellek yalnızca bir PBAP indirmesi bitince dolar (v.java:23-40) ve PBAP kopunca silinir.
  *
- * PHONE_BOOK_SYNC (262346) KULLANILMAZ: telefondan baştan PBAP indirmesi başlatır. Hiç yanıt gelmezse null döner
- * (boş rehber gibi görünmesin). Sonda ([PhoneDataProbe]) açıksa her adım yalnızca sayılarla günlüğe yazılır.
+ * Bu yüzden ayrıca ([watch]): indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348, key null;
+ * v.java:85-87, 101-103) ve eşitleme durumu PHONE_BOOK_SYNC (262346, VDBTPhoneBookSync{status, type}; r.java:562-568)
+ * edilgen dinlenir (yalnızca itme, yoklama yok). İndirme isteği ([requestDownload]: PHONE_BOOK_SYNC ctrl 1 tür 50)
+ * yalnızca kullanıcı rehber sayfasını açınca, bağlantı başına bir kez, PhoneSource'tan gelir.
+ *
+ * Kişiler: tam liste (isimli olanlar; "Tümü" sayfası için yalnızca bellekte). Fotoğraf yalnızca gereken alt küme için
+ * çözülür (geçmişte geçen numaralar ve sabitlenenler): [PhonePhotos.putEncoded] başarılıysa [PhoneContact.photoKey].
+ * Hiç yanıt gelmezse null döner (boş rehber gibi görünmesin). Sonda ([PhoneDataProbe]) açıksa her adım yalnızca
+ * sayılarla günlüğe yazılır.
  */
 internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBackend {
     override val name: String = PhoneBackendName.VDBUS
+
+    /**
+     * Son okumada önbellek isteklerine gelen kayıt sayısı (rehber + geçmiş); hiç yanıt yoksa null. [PhonebookRefresh]
+     * kararı için. Bağlantı değişince [resetCacheTotal].
+     */
+    @Volatile var cacheTotal: Int? = null
+        private set
+    private var cacheSeen: Int? = null
+
+    fun resetCacheTotal() {
+        cacheTotal = null
+    }
 
     override fun available(): Boolean = call.available()
 
@@ -926,6 +1109,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         val key = "ml-" + UUID.randomUUID().toString().take(8)
         val cache = collect(cacheId, key, { request(it, VDEventBT.PHONE_BOOK_SYNC_CACHE, syncType, key) }, parse, cls)
             ?: return null
+        cacheSeen = (cacheSeen ?: 0) + cache.size
         if (cache.isNotEmpty()) return cache
         return collect(dbId, null, { request(it, VDEventBT.PHONE_BOOK_SYNC_DB, syncType, null) }, parse, cls) ?: cache
     }
@@ -936,43 +1120,26 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             return null
         }
         return try {
+            cacheSeen = null
             val records = load(
                 VDValueBT.PhoneBookSyncType.CALLLOG_SYNC, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
                 { VDBTRecord.getList(it) }, VDBTRecord::class.java,
             )
-            val recents = records.orEmpty().mapNotNull { r ->
-                val type = PhoneStateMap.recentTypeFromVd(r.recordType) ?: return@mapNotNull null
-                val number = r.number?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                // dateTime: ham vCard X-IRMC-CALL-DATETIME (yyyyMMdd'T'HHmmss). Çözülemezse 0: favori sıklığına girmez,
-                // panel zaman yazısı göstermez. duration OEM'de hiç doldurulmuyor.
-                PhoneRecent(type, r.name?.takeIf { it.isNotBlank() }, number, PhoneStateMap.parseVdDateTime(r.dateTime) ?: 0L)
-            }
+            val recents = convertRecords(records.orEmpty())
             val raw = load(
                 VDValueBT.PhoneBookSyncType.CONTACT_SYNC, VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB,
                 { VDBTContacts.getList(it) }, VDBTContacts::class.java,
             )
+            cacheTotal = cacheSeen
             if (records == null && raw == null) {
                 Log.i(TAG, "vdbus veri: yanıt yok")
                 return null
             }
             val wanted = recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
-            val pinned = pinnedIds.toHashSet()
-            val contacts = ArrayList<PhoneContact>()
-            for (c in raw.orEmpty()) {
-                val name = c.name?.takeIf { it.isNotBlank() } ?: continue
-                val id = "v:" + (c.id ?: continue)
-                val numbers = buildList {
-                    c.number?.let { add(it) }
-                    c.cardList?.forEach { card -> card?.number?.let { add(it) } }
-                }.filter { it.isNotBlank() }
-                val keep = numbers.firstOrNull { FavoritesRanker.normalizeNumber(it) in wanted }
-                    ?: numbers.firstOrNull()?.takeIf { id in pinned }
-                    ?: continue
-                contacts.add(PhoneContact(id, name, keep))
-            }
+            val contacts = convertContacts(raw.orEmpty(), wanted, pinnedIds.toHashSet())
             PhoneDataProbe.log(
                 "sonuç geçmiş ham=${records?.size ?: -1} geçerli=${recents.size} rehber ham=${raw?.size ?: -1} " +
-                    "eşleşen=${contacts.size}",
+                    "kişi=${contacts.size} foto=${contacts.count { it.photoKey != null }}",
             )
             PhoneData(contacts, joinNames(recents, contacts))
         } catch (e: RuntimeException) {
@@ -981,10 +1148,166 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         }
     }
 
+    /** VDBTRecord → geçmiş satırı (türü ya da numarası olmayanlar atlanır). */
+    fun convertRecords(records: List<VDBTRecord>): List<PhoneRecent> = records.mapNotNull { r ->
+        val type = PhoneStateMap.recentTypeFromVd(r.recordType) ?: return@mapNotNull null
+        val number = r.number?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        // dateTime: ham vCard X-IRMC-CALL-DATETIME (yyyyMMdd'T'HHmmss). Çözülemezse 0: favori sıklığına girmez,
+        // panel zaman yazısı göstermez. duration OEM'de hiç doldurulmuyor.
+        PhoneRecent(type, r.name?.takeIf { it.isNotBlank() }, number, PhoneStateMap.parseVdDateTime(r.dateTime) ?: 0L)
+    }
+
+    /**
+     * VDBTContacts → kişi (isimli olanlar, tam liste). Numara: geçmişte geçen ([wanted]) varsa o, yoksa ilki. Fotoğraf
+     * yalnızca gereken alt kümede (geçmişte geçen ya da sabitlenen) çözülür; başarılıysa photoKey = kimlik.
+     */
+    fun convertContacts(raw: List<VDBTContacts>, wanted: Set<String>, pinned: Set<String>): List<PhoneContact> {
+        val contacts = ArrayList<PhoneContact>(raw.size)
+        var photos = 0
+        for (c in raw) {
+            val name = c.name?.takeIf { it.isNotBlank() } ?: continue
+            val id = "v:" + (c.id ?: continue)
+            val numbers = buildList {
+                c.number?.let { add(it) }
+                c.cardList?.forEach { card -> card?.number?.let { add(it) } }
+            }.filter { it.isNotBlank() }
+            val match = numbers.firstOrNull { FavoritesRanker.normalizeNumber(it) in wanted }
+            val number = match ?: numbers.firstOrNull() ?: continue
+            val keep = match != null || id in pinned
+            val photoKey = if (keep && photos < MAX_PHOTOS && (PhonePhotos.contains(id) || PhonePhotos.putEncoded(id, c.portrait))) {
+                photos++
+                id
+            } else {
+                null
+            }
+            contacts.add(PhoneContact(id, name, number, photoKey = photoKey))
+        }
+        return contacts
+    }
+
+    /** io: PHONE_BOOK_SYNC getOnce {tür 7} → indirme durumu (VDValueBT.SyncStatus; r.java:300-325). null = bilinmiyor. */
+    fun syncStatus(): Int? {
+        val b = call.bus ?: return null
+        if (!available()) return null
+        return try {
+            val r = b.getOnce(VDBTPhoneBookSync.createEvent(VDEventBT.PHONE_BOOK_SYNC, VDBTPhoneBookSync().apply {
+                putSyncType(VDValueBT.PhoneBookSyncType.CONTACT_SYNC)
+            }))
+            VDBTPhoneBookSync.getValue(r)?.syncStatus
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus PHONE_BOOK_SYNC durum: ${t.javaClass.simpleName}")
+            null
+        }
+    }
+
+    /**
+     * io: telefondan rehber + geçmiş indirmesi (PHONE_BOOK_SYNC 262346 ctrl 1 tür 50 = downloadCurrentContactCallLog,
+     * adres null = bağlı cihaz; r.java:95-110). YALNIZCA kullanıcı rehber sayfasını açınca ve bağlantı başına bir kez
+     * (PhoneSource karar verir). Sonuç [watch] ile edilgen gelir.
+     */
+    fun requestDownload(): Boolean {
+        val b = call.bus ?: return false
+        if (!available()) return false
+        return try {
+            request(b, VDEventBT.PHONE_BOOK_SYNC, VDValueBT.PhoneBookSyncType.CONTACT_CALLLOG_SYNC, null)
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus PHONE_BOOK_SYNC: ${t.javaClass.simpleName}")
+            false
+        }
+    }
+
+    // ---- Edilgen yakalama (yalnızca itme) ----
+
+    private var watchIo: Executor? = null
+    @Volatile private var onContacts: ((List<VDBTContacts>) -> Unit)? = null
+    @Volatile private var onRecords: ((List<VDBTRecord>) -> Unit)? = null
+    @Volatile private var onSync: ((Int, Int) -> Unit)? = null
+    private var watching = false
+    // Yalnızca io'da.
+    private var passiveContacts = VdListCollector<VDBTContacts>(null)
+    private var passiveRecords = VdListCollector<VDBTRecord>(null)
+    private val main = Handler(Looper.getMainLooper())
+    private val contactsIdle = Runnable { watchIo?.execute { flushContacts() } }
+    private val recordsIdle = Runnable { watchIo?.execute { flushRecords() } }
+
+    /**
+     * io: indirme parçalarını ve eşitleme durumunu edilgen dinler (süreç boyunca; işleyiciler bir kez eklenir).
+     * Geri çağrılar [io]'da gelir. Parçalar key=null [VdListCollector] ile toplanır; bitince ya da
+     * [VdListWait.IDLE_MS] sessizlikten sonra liste teslim edilir.
+     */
+    fun watch(
+        io: Executor,
+        contacts: (List<VDBTContacts>) -> Unit,
+        records: (List<VDBTRecord>) -> Unit,
+        sync: (status: Int, type: Int) -> Unit,
+    ) {
+        watchIo = io
+        onContacts = contacts
+        onRecords = records
+        onSync = sync
+        val b = call.bus ?: return
+        if (!available() || !VdbusBtNotify.ensure(b, PASSIVE_IDS)) return
+        if (watching) return
+        watching = true
+        VdbusBtNotify.add(VDEventBT.PHONE_BOOK_CONTACTS_LIST) { e ->
+            val p = VDBTListProgress.getValue(e)
+            val items = VDBTContacts.getList(e)?.filterNotNull().orEmpty()
+            io.execute { offerContacts(p?.key, p?.index ?: 0, p?.total ?: 0, items) }
+        }
+        VdbusBtNotify.add(VDEventBT.PHONE_BOOK_RECORD_LIST) { e ->
+            val p = VDBTListProgress.getValue(e)
+            val items = VDBTRecord.getList(e)?.filterNotNull().orEmpty()
+            io.execute { offerRecords(p?.key, p?.index ?: 0, p?.total ?: 0, items) }
+        }
+        VdbusBtNotify.add(VDEventBT.PHONE_BOOK_SYNC) { e ->
+            val s = VDBTPhoneBookSync.getValue(e) ?: return@add
+            val status = s.syncStatus
+            val type = s.syncType
+            io.execute { onSync?.invoke(status, type) }
+        }
+        Log.i(TAG, "rehber: edilgen dinleme açık")
+    }
+
+    private fun offerContacts(key: String?, index: Int, total: Int, items: List<VDBTContacts>) {
+        if (passiveContacts.offer(key, index, total, items) != VdListCollector.Offer.ACCEPTED) return
+        main.removeCallbacks(contactsIdle)
+        if (passiveContacts.finished || passiveContacts.failed) flushContacts() else main.postDelayed(contactsIdle, VdListWait.IDLE_MS)
+    }
+
+    private fun offerRecords(key: String?, index: Int, total: Int, items: List<VDBTRecord>) {
+        if (passiveRecords.offer(key, index, total, items) != VdListCollector.Offer.ACCEPTED) return
+        main.removeCallbacks(recordsIdle)
+        if (passiveRecords.finished || passiveRecords.failed) flushRecords() else main.postDelayed(recordsIdle, VdListWait.IDLE_MS)
+    }
+
+    private fun flushContacts() {
+        main.removeCallbacks(contactsIdle)
+        val acc = passiveContacts
+        passiveContacts = VdListCollector(null)
+        val list = acc.result() ?: return
+        Log.i(TAG, "rehber: indirme parçaları ${acc.summary()}")
+        if (list.isNotEmpty()) onContacts?.invoke(list)
+    }
+
+    private fun flushRecords() {
+        main.removeCallbacks(recordsIdle)
+        val acc = passiveRecords
+        passiveRecords = VdListCollector(null)
+        val list = acc.result() ?: return
+        Log.i(TAG, "geçmiş: indirme parçaları ${acc.summary()}")
+        if (list.isNotEmpty()) onRecords?.invoke(list)
+    }
+
     private companion object {
+        /** Foto çözme üst sınırı (bir okumada). */
+        const val MAX_PHOTOS = 64
         val LIST_IDS = intArrayOf(
             VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE,
             VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
+        )
+        val PASSIVE_IDS = intArrayOf(
+            VDEventBT.PHONE_BOOK_CONTACTS_LIST, VDEventBT.PHONE_BOOK_RECORD_LIST, VDEventBT.PHONE_BOOK_SYNC,
         )
     }
 }
@@ -1041,10 +1364,15 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
             ContactsContract.CommonDataKinds.Phone.STARRED,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI,
         )
-        /** Süzülmüş kişiler ve süzmeden önce görülen satır sayısı; sorgu çalışmazsa null. */
-        fun query(selection: String?, args: Array<String>?): Pair<List<PhoneContact>, Int>? = try {
-            val out = ArrayList<PhoneContact>()
+        /**
+         * Tam kişi listesi (kimliğe göre tekil: geçmişte geçen numara öne alınır) ve görülen satır sayısı; sorgu
+         * çalışmazsa null. Gereken alt kümenin (yıldızlı, sabitlenen, geçmişte geçen) küçük resim adresleri ayrıca.
+         */
+        fun query(selection: String?, args: Array<String>?): Triple<List<PhoneContact>, Int, Map<String, String>>? = try {
+            val byId = LinkedHashMap<String, PhoneContact>()
+            val thumbs = HashMap<String, String>()
             var rows = 0
             ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, selection, args, null)?.use { c ->
                 while (c.moveToNext()) {
@@ -1052,26 +1380,53 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
                     val id = "c:" + c.getLong(0)
                     val starred = c.getInt(3) != 0
                     val number = c.getString(2)?.takeIf { it.isNotBlank() } ?: continue
-                    // Akış halinde okunur; yalnızca gerekenler bellekte kalır.
-                    if (!starred && id !in pinned && FavoritesRanker.normalizeNumber(number) !in wanted) continue
                     val name = c.getString(1)?.takeIf { it.isNotBlank() } ?: number
-                    out.add(PhoneContact(id, name, number, starred))
+                    val matched = FavoritesRanker.normalizeNumber(number) in wanted
+                    val old = byId[id]
+                    if (old == null || (matched && FavoritesRanker.normalizeNumber(old.number) !in wanted)) {
+                        byId[id] = PhoneContact(id, name, number, starred)
+                    }
+                    if ((starred || matched || id in pinned) && id !in thumbs) {
+                        c.getString(4)?.takeIf { it.isNotBlank() }?.let { thumbs[id] = it }
+                    }
                 }
             }
-            out to rows
+            Triple(ArrayList(byId.values), rows, thumbs)
         } catch (t: Throwable) {
             Log.w(TAG, "rehber: ${t.javaClass.simpleName}")
             null
         }
         val pbap = query(ContactsContract.RawContacts.ACCOUNT_TYPE_AND_DATA_SET + " LIKE ?", arrayOf("$PBAP_ACCOUNT%"))
-        // Seçimsiz tarama yalnızca PBAP sorgusu çalışmadıysa ya da hiç satır görmediyse (hesap türü farklı): süzme sonrası
-        // boş liste geçerli bir yanıttır, tüm tablo yeniden taranmaz.
-        if (pbap != null && pbap.second > 0) return pbap.first
-        return query(null, null)?.first ?: pbap?.first
+        // Seçimsiz tarama yalnızca PBAP sorgusu çalışmadıysa ya da hiç satır görmediyse (hesap türü farklı): boş liste
+        // geçerli bir yanıttır, tüm tablo yeniden taranmaz.
+        val r = if (pbap != null && pbap.second > 0) pbap else (query(null, null) ?: pbap) ?: return null
+        return withThumbnails(r.first, r.third)
+    }
+
+    /** io: gereken alt kümenin küçük resimleri [PhonePhotos]'a (yalnızca bellek); başarılıysa photoKey = kimlik. */
+    private fun withThumbnails(contacts: List<PhoneContact>, thumbs: Map<String, String>): List<PhoneContact> {
+        if (thumbs.isEmpty()) return contacts
+        var n = 0
+        return contacts.map { c ->
+            val uri = thumbs[c.id] ?: return@map c
+            if (n >= MAX_PHOTOS) return@map c
+            val ok = PhonePhotos.contains(c.id) || try {
+                ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { PhonePhotos.putEncoded(c.id, it.readBytes()) } == true
+            } catch (t: Throwable) {
+                false
+            }
+            if (ok) {
+                n++
+                c.copy(photoKey = c.id)
+            } else {
+                c
+            }
+        }
     }
 
     private companion object {
         const val LIMIT = 100
+        const val MAX_PHOTOS = 64
         const val PBAP_ACCOUNT = "com.android.bluetooth.pbapsink"
     }
 }

@@ -138,9 +138,13 @@ internal object PhoneStateMap {
      * İsim/numara yalnızca AYNI görüşmede eksik gelirse öncekinden alınır: önceki durum gelen/aranıyor/konuşma ve
      * görüşme ileri gidiyor (gelen/aranıyor → konuşma, herhangi biri → bitti, aynı durum) ve yeni numara yok ya da
      * öncekiyle aynı. "Bitti" sonrası gelen yeni arama ve konuşma sırasında bekleyen arama yeni görüşmedir: gizli
-     * numaralı arayan önceki kişinin adıyla gösterilmez.
+     * numaralı arayan önceki kişinin adıyla gösterilmez. [oemStartElapsed]: OEM başlangıcının elapsedRealtime karşılığı
+     * (yoksa null). [photoKey]: bu durumda bilinen fotoğraf anahtarı; null ise aynı görüşmede öncekinden alınır.
      */
-    fun nextCall(prev: CallState, kind: CallKind, name: String?, number: String?, nowElapsed: Long): CallState {
+    fun nextCall(
+        prev: CallState, kind: CallKind, name: String?, number: String?, nowElapsed: Long,
+        oemStartElapsed: Long? = null, photoKey: String? = null,
+    ): CallState {
         val forward = when (prev.kind) {
             CallKind.INCOMING -> kind == CallKind.INCOMING || kind == CallKind.ACTIVE || kind == CallKind.ENDED
             CallKind.DIALING -> kind == CallKind.DIALING || kind == CallKind.ACTIVE || kind == CallKind.ENDED
@@ -152,7 +156,9 @@ internal object PhoneStateMap {
         val sameCall = forward && sameNumber
         val started = when {
             kind == CallKind.ACTIVE && (prev.kind == CallKind.ACTIVE || prev.kind == CallKind.INCOMING) && prev.startedAtMs != 0L -> prev.startedAtMs
-            kind == CallKind.ACTIVE -> nowElapsed
+            // İlk ACTIVE: OEM'in arama başlangıcı (VDBTDialInfo.time → [CallClock]) varsa o; biz konuşmanın ortasında
+            // açılsak da OEM ekranıyla aynı süre görünür.
+            kind == CallKind.ACTIVE -> oemStartElapsed ?: nowElapsed
             kind == CallKind.INCOMING && prev.kind == CallKind.ACTIVE -> prev.startedAtMs
             kind == CallKind.INCOMING && prev.kind == CallKind.INCOMING -> prev.startedAtMs
             else -> 0L
@@ -164,6 +170,9 @@ internal object PhoneStateMap {
             number = number ?: if (sameCall) prev.number else null,
             startedAtMs = started,
             muted = inCall && prev.muted,
+            // Ses yönü de yalnızca görüşme sürerken korunur (sonraki aramaya taşınmaz).
+            audioOnPhone = inCall && prev.audioOnPhone,
+            photoKey = photoKey ?: if (sameCall) prev.photoKey else null,
         )
     }
 
@@ -461,5 +470,145 @@ internal object PhonebookRefresh {
         storeHasData -> Step.NONE
         downloadRequested || downloading(syncStatus) -> Step.NONE
         else -> Step.DOWNLOAD
+    }
+}
+
+/**
+ * Arka uçtan gelen ham arama durumu (herhangi bir iş parçacığı → io). [uuid]: OEM arama kimliği; [startWallMs]: OEM
+ * arama başlangıcı (VDBTDialInfo.time, duvar saati; yoksa 0); [portrait]: arayanın fotoğrafı (VDBTDialInfo.portrait;
+ * yalnızca bellekte, [PhonePhotos]'a çözülür). toString isim/numara/fotoğraf içermez.
+ */
+internal class RawCall(
+    val kind: CallKind,
+    val name: String? = null,
+    val number: String? = null,
+    val uuid: String? = null,
+    val startWallMs: Long = 0L,
+    val portrait: ByteArray? = null,
+) {
+    override fun toString(): String = "RawCall(kind=$kind, start=${startWallMs != 0L}, photo=${portrait?.isNotEmpty() == true})"
+
+    companion object {
+        val NONE = RawCall(CallKind.NONE)
+    }
+}
+
+/**
+ * Sağlam kapatma/ret kararı (saf). 6 Kasım araç: arama bittikten sonra şerit ACTIVE kaldı, Kapat 'callList.size=0' aldı.
+ * OEM'de canlı arama yoksa yalnızca bizim durum temizlenir (hata yok); varsa istek gönderilir; son yol da başarısız
+ * olduğunda hata yalnızca arama hâlâ canlıysa gösterilir.
+ */
+internal object HangUpPlan {
+    enum class Decision { CLEAR_LOCAL, SEND, FAIL }
+
+    /** İstekten önce. [liveOnOem]: taze okuma (null = bilinmiyor). [ourInCall]: ekranda arama var. */
+    fun decide(liveOnOem: Boolean?, ourInCall: Boolean): Decision = when {
+        liveOnOem == false -> Decision.CLEAR_LOCAL
+        liveOnOem == true -> Decision.SEND
+        // Bilinmiyor: ekranda arama varsa yine de denenir; yoksa kapatılacak bir şey yok.
+        ourInCall -> Decision.SEND
+        else -> Decision.FAIL
+    }
+
+    /** Onay süresi doldu (arama durumu değişmedi): canlı değilse temizle, değilse sıradaki yol (SEND). */
+    fun onTimeout(liveOnOem: Boolean?): Decision = if (liveOnOem == false) Decision.CLEAR_LOCAL else Decision.SEND
+
+    /** Bütün yollar denendi: canlı değilse temizle, değilse (ya da bilinmiyorsa) hata. */
+    fun onExhausted(liveOnOem: Boolean?): Decision = if (liveOnOem == false) Decision.CLEAR_LOCAL else Decision.FAIL
+}
+
+/**
+ * Bellekteki rehber/geçmiş deposu (saf; süreç ömrü, cihaz başına). Diske ya da günlüğe asla yazılmaz.
+ *
+ * Kurallar: boş ya da null bir okuma dolu listeyi SİLMEZ (OEM önbelleği PBAP kopunca boşalır, yeniden kurulumdan
+ * sonra total=0 döner); yalnızca dolu ve farklı bir liste yerine geçer. Farklı bir cihaz bağlanınca ([onDevice]) depo
+ * sıfırlanır. Kişiler Türkçe alfabe sırasında (kimliğe göre tekil), geçmiş en yeni önce ve en çok [MAX_RECENTS].
+ * Geçmiş satırlarına numara eşleşmesiyle isim, [PhoneRecent.contactId] ve [PhoneRecent.photoKey] eklenir. Her
+ * değişiklikte [version] artar.
+ */
+internal class DirectoryStore {
+    var deviceKey: Int? = null
+        private set
+    var contacts: List<PhoneContact> = emptyList()
+        private set
+    var recents: List<PhoneRecent> = emptyList()
+        private set
+    var version: Int = 0
+        private set
+    /** Eşleştirilmemiş geçmiş: kişiler sonradan gelince yeniden eşleştirmek için. */
+    private var rawRecents: List<PhoneRecent> = emptyList()
+
+    val hasData: Boolean get() = contacts.isNotEmpty() || recents.isNotEmpty()
+
+    /**
+     * Bağlı cihaz anahtarı (adres özeti; günlüğe yazılmaz). Önceki bilinen cihazdan farklıysa depo sıfırlanır ve true
+     * döner (çağıran fotoğrafları da siler). İlk bilinen cihazda (öncesinde okunan veri o cihazındır) false. null = bilinmiyor.
+     */
+    fun onDevice(key: Int?): Boolean {
+        if (key == null || key == deviceKey) return false
+        val first = deviceKey == null
+        deviceKey = key
+        if (first) return false
+        val wasData = hasData
+        contacts = emptyList()
+        recents = emptyList()
+        rawRecents = emptyList()
+        if (wasData) version++
+        return true
+    }
+
+    /** Yeni okuma; değiştiyse true. null/boş liste mevcut listeyi korur. */
+    fun merge(newContacts: List<PhoneContact>?, newRecents: List<PhoneRecent>?): Boolean {
+        var changed = false
+        if (!newContacts.isNullOrEmpty()) {
+            val sorted = sortContacts(newContacts)
+            if (sorted != contacts) {
+                contacts = sorted
+                changed = true
+            }
+        }
+        if (!newRecents.isNullOrEmpty()) {
+            val sorted = newRecents.sortedByDescending { it.timeMs }.take(MAX_RECENTS)
+            if (sorted != rawRecents) {
+                rawRecents = sorted
+                changed = true
+            }
+        }
+        if (changed) {
+            recents = annotate(rawRecents, contacts)
+            version++
+        }
+        return changed
+    }
+
+    /** Normalize numara → kişi (arayan eşleşmesi için). */
+    fun byNumber(): Map<String, PhoneContact> = numberMap(contacts)
+
+    companion object {
+        const val MAX_RECENTS = 100
+
+        fun sortContacts(list: List<PhoneContact>): List<PhoneContact> {
+            val collator = Collator.getInstance(Locale("tr", "TR"))
+            val seen = HashSet<String>()
+            return list.filter { seen.add(it.id) }.sortedWith { a, b -> collator.compare(a.name, b.name) }
+        }
+
+        fun numberMap(contacts: List<PhoneContact>): Map<String, PhoneContact> {
+            val m = HashMap<String, PhoneContact>()
+            for (c in contacts) {
+                val k = FavoritesRanker.normalizeNumber(c.number)
+                if (k.isNotEmpty()) m.putIfAbsent(k, c)
+            }
+            return m
+        }
+
+        fun annotate(recents: List<PhoneRecent>, contacts: List<PhoneContact>): List<PhoneRecent> {
+            if (contacts.isEmpty()) return recents
+            val m = numberMap(contacts)
+            return recents.map { r ->
+                val c = m[FavoritesRanker.normalizeNumber(r.number)] ?: return@map r
+                r.copy(name = r.name ?: c.name, contactId = c.id, photoKey = c.photoKey)
+            }
+        }
     }
 }

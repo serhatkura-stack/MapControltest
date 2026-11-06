@@ -70,7 +70,7 @@ internal object PhoneDemo {
 internal class DemoBackend : CallBackend, DataBackend, AssistantBackend {
     override val name: String = PhoneBackendName.DEMO
     private val main = Handler(Looper.getMainLooper())
-    @Volatile private var onState: ((CallKind, String?, String?) -> Unit)? = null
+    @Volatile private var onState: ((RawCall) -> Unit)? = null
     private var pending: Runnable? = null
 
     override fun available(): Boolean = LauncherDemo.enabled && PhoneDemo.active
@@ -111,7 +111,7 @@ internal class DemoBackend : CallBackend, DataBackend, AssistantBackend {
 
     override fun sendDtmf(c: Char): Boolean = DtmfCode.vdNumber(c) != null
 
-    override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
+    override fun open(onState: (RawCall) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
         onConnected(true, PhoneDemo.DEVICE_NAME)
     }
@@ -135,6 +135,6 @@ internal class DemoBackend : CallBackend, DataBackend, AssistantBackend {
     }
 
     private fun state(kind: CallKind, name: String?, number: String?) {
-        onState?.invoke(kind, name, number)
+        onState?.invoke(RawCall(kind, name, number))
     }
 }
