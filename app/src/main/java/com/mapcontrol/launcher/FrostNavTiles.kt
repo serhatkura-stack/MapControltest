@@ -169,7 +169,16 @@ internal abstract class FrostNavTile<S : Any>(
         android.widget.Toast.makeText(activity, R.string.launcher_fn_unavailable_toast, android.widget.Toast.LENGTH_SHORT).show()
     }
 
-    protected fun openSettings() = features.openTab(activity, settingsTab)
+    protected fun openSettings() = openTab(settingsTab)
+
+    /**
+     * FrostNav'ın [tab] sekmesini açar. Açık sayfa önce kapanır: FrostNav'dan geri dönülünce ana ekranda eski sayfa
+     * (ör. Otomasyon'da "Yüz tanıma" satırından gidilince) açık kalmasın.
+     */
+    protected fun openTab(tab: FrostNavTab) {
+        sheet?.dismiss()
+        features.openTab(activity, tab)
+    }
 
     /** Kutucuğun ayrıntı sayfası: başlık + [buildSheet] içeriği; durum değiştikçe yenilenir. */
     protected fun openSheet(widthDp: Int = SHEET_DP) {
@@ -310,7 +319,10 @@ internal abstract class FrostNavTile<S : Any>(
         else if (selected) addView(icon(activity, R.drawable.ic_mdi_check, 30, fg), LinearLayout.LayoutParams(activity.dp(40), activity.dp(30)).apply { marginEnd = activity.dp(8) })
         else if (opens) addView(icon(activity, R.drawable.ic_mdi_chevron_right, 30, LauncherTheme.TEXT_SECONDARY), LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply { marginEnd = activity.dp(8) })
         alpha = if (enabled) 1f else DISABLED_ALPHA
-        contentDescription = listOfNotNull(label, trailingText).joinToString(", ")
+        // Anahtar satırında durum da okunur (TalkBack ve otomatik test anahtarın açık mı kapalı mı olduğunu görsün).
+        val switchText = switchOn?.let { activity.getString(if (it) R.string.launcher_toggle_on else R.string.launcher_toggle_off) }
+        contentDescription = listOfNotNull(label, trailingText, switchText).joinToString(", ")
+        isSelected = selected
         if (onClick != null && enabled) {
             isClickable = true
             isFocusable = true
@@ -607,7 +619,11 @@ internal class WebPanelTile(activity: Activity) :
     }
 
     private companion object {
-        const val SHEET_QR_DP = 320
+        /**
+         * Sayfadaki QR kenarı. 320'de 720 px yüksek ekranda (Tiggo 7, 160 dpi) sayfa ekrana sığmıyor, "FrostNav'da yönet"
+         * düğmesi alttan kesiliyordu; 240 başlık + QR + adres + not + düğmeyi sığdırır, telefon kamerası yine rahat okur.
+         */
+        const val SHEET_QR_DP = 240
     }
 }
 
@@ -749,7 +765,7 @@ internal class AutomationTile(activity: Activity) :
 
     private fun toggle(item: AutomationItem) {
         if (!item.toggleable) {
-            features.openTab(activity, tabOf(item.id))
+            openTab(tabOf(item.id))
             return
         }
         val want = !item.on
