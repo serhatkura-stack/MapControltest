@@ -13,8 +13,10 @@ import java.io.InputStreamReader;
 import java.io.FileOutputStream;
 import java.io.File;
 import java.io.BufferedInputStream;
+import com.mapcontrol.trip.AppBackupEnv;
 import com.mapcontrol.trip.AutomationBackup;
 import com.mapcontrol.trip.PhoneAccess;
+import com.mapcontrol.trip.PhoneApiJson;
 import com.mapcontrol.trip.PhonePrefs;
 import com.mapcontrol.trip.TripRecorder;
 import com.mapcontrol.vehicle.SunroofAutomationEngine;
@@ -52,11 +54,18 @@ public class WebServerManager {
     /** open-maps JSON içindeki url alanı: POST üst sınırına yakın; Yandex sctx gibi çok uzun paylaşım linklerine izin */
     private static final int MAX_OPEN_URL_CHARS = MAX_JSON_POST_BYTES - 200;
     private static final int MAX_KEYBOARD_TEXT_CHARS = 8000;
-    private ServerSocket serverSocket;
-    private Thread serverThread;
+    private volatile ServerSocket serverSocket;
+    private final NsdAdvertiser nsdAdvertiser;
+    private volatile Thread serverThread;
     private AtomicBoolean isRunning = new AtomicBoolean(false);
     /** Her başlatmada artar; kabul iş parçacığı yalnızca kendi kuşağı güncelken durum yazar. */
     private final AtomicInteger generation = new AtomicInteger();
+    /**
+     * Sunucunun açık olması istenir mi: {@link #startServer()} true, {@link #stopServer()} false yapar. Beklenmedik
+     * düşüşte ({@link #isHealthy()} false iken) bu true kalır; {@link WebServerHost} bekçisi o zaman yeniden açar.
+     * Elle kapatılan sunucu false olduğu için kendiliğinden açılmaz.
+     */
+    private volatile boolean desired;
     private int serverPort;
     private Context context;
     private WebServerListener listener;
@@ -80,6 +89,7 @@ public class WebServerManager {
 
     public WebServerManager(Context context) {
         this.context = context;
+        this.nsdAdvertiser = new NsdAdvertiser(context);
     }
 
     public void setListener(WebServerListener listener) {
@@ -89,7 +99,8 @@ public class WebServerManager {
     /**
      * HTTP server'ı başlat (7462 portunda)
      */
-    public void startServer() {
+    public synchronized void startServer() {
+        desired = true;
         if (isRunning.get()) {
             if (listener != null) listener.onLog("Server zaten çalışıyor");
             return;
@@ -98,8 +109,8 @@ public class WebServerManager {
         try {
             // Sabit port kullan (7462)
             serverPort = 7462;
-            
-            // Yeniden başlatmada eski bağlantılar TIME_WAIT'te kalsa da port hemen bağlanabilsin.
+
+            // Hızlı yeniden başlatmada eski bağlantılar (TIME_WAIT) portu tutuyorsa "Address already in use" olmasın.
             ServerSocket socket = new ServerSocket();
             socket.setReuseAddress(true);
             try {
@@ -115,6 +126,7 @@ public class WebServerManager {
             // Bu iş parçacığı yalnızca kendi kuşağını kapatır: durdurma geç biterse yeni sunucunun durumunu ezmez.
             final int gen = generation.incrementAndGet();
             isRunning.set(true);
+            nsdAdvertiser.register(serverPort);
             
             serverThread = new Thread(() -> {
                 try {
@@ -163,13 +175,44 @@ public class WebServerManager {
     /**
      * HTTP server'ı durdur
      */
-    public void stopServer() {
-        if (!isRunning.get()) {
-            return;
-        }
+    public synchronized void stopServer() {
+        desired = false;
+        stopInternal();
+    }
 
-        isRunning.set(false);
-        
+    /** Durdurup yeniden açar; {@link #isDesired()} değişmez (bekçi kurtarması). */
+    public synchronized void restart() {
+        stopInternal();
+        startServer();
+    }
+
+    /** Açık olması istenen sunucu şu an gerçekten çalışıyor mu: soket açık ve kabul döngüsü canlı. */
+    public boolean isHealthy() {
+        ServerSocket socket = serverSocket;
+        Thread thread = serverThread;
+        return isRunning.get() && socket != null && !socket.isClosed() && thread != null && thread.isAlive();
+    }
+
+    public boolean isDesired() {
+        return desired;
+    }
+
+    /**
+     * mDNS kaydını yeniden yapar (ağ değişti: Wi-Fi sonradan bağlandı, hotspot açıldı, adres değişti). Sunucu
+     * kapalıysa bir şey yapmaz.
+     */
+    public void refreshAdvertisement() {
+        if (isRunning.get()) {
+            nsdAdvertiser.register(serverPort);
+        }
+    }
+
+    private void stopInternal() {
+        // Kabul döngüsü beklenmedik biçimde ölmüşse isRunning zaten false'tur ama soket hâlâ açık olabilir (port tutulur);
+        // yeniden açmadan önce her durumda kapatılır.
+        boolean wasRunning = isRunning.getAndSet(false);
+        nsdAdvertiser.unregister();
+
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
@@ -186,7 +229,7 @@ public class WebServerManager {
             }
         }
 
-        if (listener != null) listener.onLog("HTTP Server durduruldu");
+        if (wasRunning && listener != null) listener.onLog("HTTP Server durduruldu");
     }
 
     /**
@@ -301,6 +344,10 @@ public class WebServerManager {
                     handleInstallApk(output, queryString);
                 } else if ("GET".equals(method) && "/trips".equals(path)) {
                     handlePhoneTrips(output, requestHeader, queryString);
+                } else if ("GET".equals(method) && "/parking".equals(path)) {
+                    handlePhoneParking(output, requestHeader);
+                } else if ("GET".equals(method) && "/parking/photo".equals(path)) {
+                    handlePhoneParkingPhoto(output, requestHeader);
                 } else if ("GET".equals(method) && "/prefs".equals(path)) {
                     handlePhonePrefsGet(output, requestHeader);
                 } else if ("PUT".equals(method) && "/prefs".equals(path)) {
@@ -309,6 +356,8 @@ public class WebServerManager {
                     handleAutomationGet(output, requestHeader);
                 } else if ("PUT".equals(method) && "/automation".equals(path)) {
                     handleAutomationPut(input, output, requestHeader);
+                } else if ("GET".equals(method) && "/ping".equals(path)) {
+                    handlePing(output);
                 } else if ("GET".equals(method) && "/vehicle/now".equals(path)) {
                     handlePhoneVehicleNow(output, requestHeader);
                 } else if ("GET".equals(method) && "/apps".equals(path)) {
@@ -367,10 +416,10 @@ public class WebServerManager {
             String localIp = getLocalIpAddress();
             String bg = String.format("#%06X", 0xFFFFFF & UiStyles.color(context, R.color.backgroundPage));
             String fg = String.format("#%06X", 0xFFFFFF & UiStyles.color(context, R.color.textPrimary));
-            return "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Map Control</title></head>" +
+            return "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>MapControl</title></head>" +
                    "<body style=\"font-family: sans-serif; background: " + bg + "; color: " + fg + "; padding: 40px; text-align: center;\">" +
                    "<h1>Hoş Geldiniz!</h1>" +
-                   "<p>Map Control Web Yönetimi</p>" +
+                   "<p>MapControl Web Yönetimi</p>" +
                    "<p><code>http://" + localIp + ":" + serverPort + "</code></p>" +
                    "</body></html>";
         }
@@ -935,6 +984,45 @@ public class WebServerManager {
         }
     }
 
+    /** {@code GET /parking}: son park fotoğrafının zamanı ve yolculuğu; fotoğraf yoksa {@code {"photo":null}}. */
+    private void handlePhoneParking(OutputStream output, String requestHeader) {
+        if (!requirePairedPhone(output, requestHeader)) {
+            return;
+        }
+        try {
+            sendJson200(output, TripRecorder.get(context).parkingJson());
+        } catch (Exception e) {
+            if (listener != null) listener.onLog("[ERROR] /parking: " + e.getMessage());
+            sendErrorResponse(output, 500, "Park bilgisi hatası: " + e.getMessage());
+        }
+    }
+
+    /** {@code GET /parking/photo}: son park fotoğrafı (JPEG); yoksa 404. */
+    private void handlePhoneParkingPhoto(OutputStream output, String requestHeader) {
+        if (!requirePairedPhone(output, requestHeader)) {
+            return;
+        }
+        try {
+            File photo = com.mapcontrol.dvr.ParkPhoto.photoFile(context);
+            if (com.mapcontrol.dvr.ParkPhoto.meta(context) == null) {
+                sendErrorResponse(output, 404, "Park fotoğrafı yok");
+                return;
+            }
+            byte[] bytes = java.nio.file.Files.readAllBytes(photo.toPath());
+            String head = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: image/jpeg\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Content-Length: " + bytes.length + "\r\n" +
+                    "Connection: close\r\n\r\n";
+            output.write(head.getBytes(StandardCharsets.UTF_8));
+            output.write(bytes);
+            output.flush();
+        } catch (Exception e) {
+            if (listener != null) listener.onLog("[ERROR] /parking/photo: " + e.getMessage());
+            sendErrorResponse(output, 500, "Park fotoğrafı hatası: " + e.getMessage());
+        }
+    }
+
     /** {@code GET /prefs}: telefonun gördüğü boolean MapControl ayarları (aracın şu anki değerleri). */
     private void handlePhonePrefsGet(OutputStream output, String requestHeader) {
         if (!requirePairedPhone(output, requestHeader)) {
@@ -991,15 +1079,23 @@ public class WebServerManager {
         }
     }
 
-    /** Cam tavan ve klima kurallarının yedek belgesi; bkz. {@link AutomationBackup}. */
+    /**
+     * Cam tavan, klima, hafıza modu ve MapControl tercihlerinin yedek belgesi; bkz. {@link AutomationBackup}.
+     * Yanıta belge dışı bir bilgi eklenir: {@code pristine} (araçta yedeğe girecek hiçbir ayar yazılı değil).
+     * Telefon bunu belgeden ayırır; hesaba gitmez.
+     */
     private void handleAutomationGet(OutputStream output, String requestHeader) {
         if (!requirePairedPhone(output, requestHeader)) {
             return;
         }
         try {
-            sendJson200(output, AutomationBackup.export(
-                    context.getSharedPreferences("MapControlPrefs", Context.MODE_PRIVATE),
-                    context.getSharedPreferences(SunroofAutomationEngine.PREFS_NAME, Context.MODE_PRIVATE)).toString());
+            android.content.SharedPreferences main = context.getSharedPreferences("MapControlPrefs", Context.MODE_PRIVATE);
+            android.content.SharedPreferences sunroof =
+                    context.getSharedPreferences(SunroofAutomationEngine.PREFS_NAME, Context.MODE_PRIVATE);
+            AppBackupEnv env = new AppBackupEnv(context);
+            JSONObject doc = AutomationBackup.export(main, sunroof, env);
+            doc.put("pristine", AutomationBackup.isPristine(main, sunroof, env));
+            sendJson200(output, doc.toString());
         } catch (Exception e) {
             sendErrorResponse(output, 500, "Otomasyon okunamadı: " + e.getMessage());
         }
@@ -1027,13 +1123,17 @@ public class WebServerManager {
             android.content.SharedPreferences main = context.getSharedPreferences("MapControlPrefs", Context.MODE_PRIVATE);
             android.content.SharedPreferences sunroof =
                     context.getSharedPreferences(SunroofAutomationEngine.PREFS_NAME, Context.MODE_PRIVATE);
-            AutomationBackup.Result result = AutomationBackup.apply(doc, main, sunroof);
+            AppBackupEnv env = new AppBackupEnv(context);
+            AutomationBackup.Result result = AutomationBackup.apply(doc, main, sunroof, env);
             if (!result.ok()) {
                 sendErrorResponse(output, 422, "automation_invalid: " + android.text.TextUtils.join(",", result.errors));
                 return;
             }
-            if (listener != null) listener.onLog("Telefondan otomasyon kuralları geri yüklendi");
-            sendJson200(output, AutomationBackup.export(main, sunroof).toString());
+            if (listener != null) listener.onLog("Telefondan ayarlar geri yüklendi");
+            // Yanıt güncel belgedir; bu araçta uygulanmayan alanlar belge dışı "skipped" olarak eklenir.
+            JSONObject fresh = AutomationBackup.export(main, sunroof, env);
+            fresh.put("skipped", new org.json.JSONArray(result.skipped));
+            sendJson200(output, fresh.toString());
         } catch (JSONException e) {
             sendErrorResponse(output, 400, "automation: " + e.getMessage());
         } catch (Exception e) {
@@ -1048,6 +1148,19 @@ public class WebServerManager {
             out.put(e.getKey(), sp.getBoolean(e.getKey(), e.getValue()));
         }
         return out;
+    }
+
+    /**
+     * {@code GET /ping}: araç kimliği, protokol sürümü ve GPS Link portu. Telefon, adresi değişen aracı bununla
+     * tanır ve bağlantının canlı olduğunu hafif bir istekle ölçer. Eşleşme anahtarı istemez; kişisel veri vermez.
+     */
+    private void handlePing(OutputStream output) {
+        try {
+            sendJson200(output, PhoneApiJson.ping(PhoneAccess.carId(context), com.mapcontrol.gps.Wire.PORT));
+        } catch (Exception e) {
+            if (listener != null) listener.onLog("[ERROR] /ping: " + e.getMessage());
+            sendErrorResponse(output, 500, "ping hatası: " + e.getMessage());
+        }
     }
 
     /** {@code GET /vehicle/now}: son sayaçlar ve parça açılış saatleri. */

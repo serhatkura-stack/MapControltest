@@ -1,5 +1,6 @@
-package com.mapcontrol.manager;
+package com.mapcontrol.util;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -9,132 +10,59 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
-import com.mapcontrol.R;
-import com.mapcontrol.service.GlobalBackService;
-import com.mapcontrol.ui.activity.MainActivity;
-import com.mapcontrol.util.AppLaunchHelper;
-import com.mapcontrol.util.MapsLink;
-
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Web sunucusu isteklerinin uygulama bağlamıyla yapılan işleri ({@link WebServerHub}): bağlantı açma, odaklı alana yazma ve
- * FrostNav ekranı yokken uygulama silme/açma. APK kurulumu PackageInstaller oturumu için etkinlik ister; FrostNav
- * {@link MainActivity#EXTRA_INSTALL_APK} ile öne getirilip kurulum orada yapılır. Tüm yöntemler ana iş parçacığında çağrılır.
+ * Telefondan gelen bağlantıyı açar: Google Haritalar, Yandex ve YouTube bağlantıları doğrudan uygulamasına verilir,
+ * gerisi sistemin seçtiği uygulamaya. Yalnızca bir {@link Context} ister; FrostNav ekranı açık olmasa da (launcher
+ * modunda) çalışır, ekranı öne getirmez. Ana iş parçacığında çağrılır.
  */
-final class WebServerActions implements WebServerHub.ActionHost {
+public final class LinkOpener {
+
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private final Context context;
     private final Consumer<String> log;
-    private final Consumer<String> pendingInstall;
-    private final Handler handler = new Handler(Looper.getMainLooper());
 
-    WebServerActions(Context appContext, Consumer<String> log, Consumer<String> pendingInstall) {
-        this.context = appContext;
-        this.log = log;
-        this.pendingInstall = pendingInstall;
+    private LinkOpener(Context context, Consumer<String> log) {
+        this.context = context;
+        this.log = log != null ? log : msg -> { };
     }
 
-    // --- Uygulamalar (FrostNav ekranı yokken) ---
-
-    @Override
-    public void installApk(String fileName) {
-        try {
-            // Dosya adı intent'te değil hub'da bekler; extra yalnızca işarettir.
-            pendingInstall.accept(fileName);
-            context.startActivity(new Intent(context, MainActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra(MainActivity.EXTRA_INSTALL_APK, true));
-            log.accept("APK kurulumu için FrostNav açılıyor: " + fileName);
-        } catch (Exception e) {
-            log.accept("[ERROR] APK kurulumu için FrostNav açılamadı: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void deleteApp(String packageName) {
-        if (context.getPackageName().equals(packageName)) {
-            log.accept("Bu uygulama silinemez: " + packageName);
-            return;
-        }
-        try {
-            Intent intent = new Intent(Intent.ACTION_DELETE);
-            intent.setData(Uri.parse("package:" + packageName));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
-            log.accept("Uygulama silme başlatıldı: " + packageName);
-        } catch (Exception e) {
-            log.accept("Uygulama silme hatası: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void launchApp(String packageName) {
-        try {
-            Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);
-            if (launchIntent == null) {
-                log.accept("Uygulama açılamadı (launch intent bulunamadı): " + packageName);
-                return;
-            }
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            context.startActivity(launchIntent);
-            log.accept("Uygulama açıldı: " + packageName);
-        } catch (Exception e) {
-            log.accept("Uygulama açma hatası: " + e.getMessage());
-        }
-    }
-
-    // --- Klavye ---
-
-    void typeText(String text, boolean showDeviceFeedback) {
-        if (!GlobalBackService.isRegisteredInSystemAccessibilitySettings(context)) {
-            if (showDeviceFeedback) {
-                Toast.makeText(context,
-                        "Ayarlar > Erişilebilirlik: Global Back servisini açın; diğer uygulamada girdi alanının odaklı olması gerekir.",
-                        Toast.LENGTH_LONG).show();
-            }
-            return;
-        }
-        if (GlobalBackService.typeIntoFocusedField(context, text)) {
-            if (showDeviceFeedback) {
-                Toast.makeText(context, R.string.web_text_sent, Toast.LENGTH_SHORT).show();
-            }
-        } else {
-            if (showDeviceFeedback) {
-                Toast.makeText(context,
-                        "Metin eklenemedi. Hedef uygulamada arama/Metin alanına bir kez dokunup odağın açık olduğundan emin olun (bazı uygulamalar ağaçta desteklemez).",
-                        Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
-    // --- Bağlantılar ---
-
-    void openUrl(String url) {
+    /** [log] Günlük sekmesine ya da logcat'e yazar; null olabilir. */
+    public static void open(Context context, String url, Consumer<String> log) {
+        LinkOpener opener = new LinkOpener(context, log);
         try {
             String u = url != null ? url.trim() : "";
             if (u.isEmpty()) {
                 return;
             }
             // Google Haritalar bağlantısı: tarayıcı seçicisine düşmeden doğrudan Google Haritalar'a ver.
-            if (MapsLink.isGoogleMaps(u) && openGoogleMapsLink(u)) {
+            if (MapsLink.isGoogleMaps(u) && opener.openGoogleMapsLink(u)) {
                 return;
             }
-            openLinkViaSystem(u);
+            if (MapsLink.isYandex(u) && opener.openYandexLink(u)) {
+                return;
+            }
+            if (YouTubeLink.isYouTube(u) && opener.openYouTubeLink(u)) {
+                return;
+            }
+            opener.openLinkViaSystem(u);
         } catch (Exception e) {
-            Toast.makeText(context, "Link açılamadı: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            log.accept("Link açma hatası: " + e.getMessage());
+            opener.fail(e);
         }
     }
 
+    private void fail(Exception e) {
+        Toast.makeText(context, "Link açılamadı: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        log.accept("Link açma hatası: " + e.getMessage());
+    }
+
     /**
-     * Aynı host’ta /q açılırken /maps gibi yollarda Yandex Haritalar (veya App Link) intent’i alıp
-     * ekran göstermeyebiliyor; doğrudan tarayıcı hiç seçilmiyor. Bu URL’lerde önce seçici gösterilir.
+     * Bağlantıyı sistemin seçtiği uygulamayla açar. Aynı host'ta /q açılırken /maps gibi yollarda Yandex Haritalar
+     * (veya App Link) intent'i alıp ekran göstermeyebiliyor; bu URL'lerde önce seçici gösterilir.
      */
-    /** Bağlantıyı sistemin seçtiği uygulamayla açar; bazı harita bağlantılarında önce seçici gösterir. */
     private void openLinkViaSystem(String u) {
         try {
             Uri uri = Uri.parse(u);
@@ -154,15 +82,14 @@ final class WebServerActions implements WebServerHub.ActionHost {
             } else {
                 try {
                     context.startActivity(i);
-                } catch (android.content.ActivityNotFoundException noHandler) {
+                } catch (ActivityNotFoundException noHandler) {
                     Intent chooser = Intent.createChooser(i, "Bağlantıyı aç");
                     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(chooser);
                 }
             }
         } catch (Exception e) {
-            Toast.makeText(context, "Link açılamadı: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            log.accept("Link açma hatası: " + e.getMessage());
+            fail(e);
         }
     }
 
@@ -188,7 +115,7 @@ final class WebServerActions implements WebServerHub.ActionHost {
             log.accept("Kısa bağlantı çözülüyor: " + u);
             new Thread(() -> {
                 String resolved = MapsLink.resolve(u);
-                handler.post(() -> {
+                MAIN.post(() -> {
                     log.accept("Kısa bağlantı çözüldü: " + resolved);
                     if (!resolved.equals(u) && (startGoogleMaps(Uri.parse(resolved), "çözülen bağlantı")
                             || openGoogleMapsTarget(resolved))) {
@@ -198,6 +125,42 @@ final class WebServerActions implements WebServerHub.ActionHost {
                 });
             }, "MapsLinkResolve").start();
             return true;
+        }
+        return false;
+    }
+
+    /**
+     * Yandex bağlantısı (Navi/Haritalar ayrımı yok): kurulu Yandex uygulaması açar; hiçbiri yoksa hedef
+     * koordinatı varsa Google Haritalar rotasına düşer.
+     *
+     * @return açıldıysa true; false ise çağıran sistemin yoluna döner
+     */
+    private boolean openYandexLink(String u) {
+        for (String pkg : AppLaunchHelper.YANDEX_PACKAGES) {
+            if (!isPackageInstalled(pkg)) {
+                continue;
+            }
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(u));
+            i.setPackage(pkg);
+            i.addCategory(Intent.CATEGORY_BROWSABLE);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (context.getPackageManager().queryIntentActivities(i, 0).isEmpty()) {
+                log.accept("Yandex (" + pkg + ") bu bağlantıyı açmıyor");
+                continue;
+            }
+            try {
+                context.startActivity(i);
+                log.accept("Yandex'e verildi (" + pkg + "): " + u);
+                return true;
+            } catch (Exception e) {
+                log.accept("Yandex açılamadı (" + pkg + "): " + e.getMessage());
+            }
+        }
+        log.accept("Yandex yok; Google Haritalar deneniyor");
+        double[] dest = MapsLink.yandexDestination(u);
+        if (dest != null && isPackageInstalled(AppLaunchHelper.GOOGLE_MAPS_PACKAGE)) {
+            return startGoogleMaps(Uri.parse(MapsLink.navigationUri(dest[0], dest[1])), "Yandex rotası")
+                    || startGoogleMaps(Uri.parse(MapsLink.geoUri(dest[0], dest[1])), "Yandex konumu");
         }
         return false;
     }
@@ -237,6 +200,40 @@ final class WebServerActions implements WebServerHub.ActionHost {
         }
     }
 
+    /**
+     * YouTube bağlantısını doğrudan YouTube uygulamasına verir (açık paket adıyla, seçici ve tarayıcı yok).
+     * {@link YouTubeLink#PACKAGES} sırasıyla denenir: resmî YouTube, sonra ReVanced. Paket kurulu ama bağlantıyı
+     * kabul etmiyorsa (ReVanced'da bağlantı açma izni verilmemiş olabilir) sıradakine geçilir; her deneme Günlük
+     * sekmesine yazılır.
+     *
+     * @return Hiçbiri açmadıysa false; çağıran sistemin yoluna (tarayıcı) döner
+     */
+    private boolean openYouTubeLink(String u) {
+        Uri uri = Uri.parse(u);
+        for (String pkg : YouTubeLink.PACKAGES) {
+            if (!isPackageInstalled(pkg)) {
+                continue;
+            }
+            Intent i = new Intent(Intent.ACTION_VIEW, uri);
+            i.setPackage(pkg);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.addCategory(Intent.CATEGORY_BROWSABLE);
+            if (context.getPackageManager().queryIntentActivities(i, 0).isEmpty()) {
+                log.accept("YouTube bağlantısı bu uygulamada açılmıyor: " + pkg);
+                continue;
+            }
+            try {
+                context.startActivity(i);
+                log.accept("YouTube'a verildi (" + pkg + "): " + uri);
+                return true;
+            } catch (Exception e) {
+                log.accept("YouTube açılamadı (" + pkg + "): " + e.getMessage());
+            }
+        }
+        log.accept("YouTube uygulaması bağlantıyı açmadı; sistem yoluyla açılıyor");
+        return false;
+    }
+
     private boolean isPackageInstalled(String packageName) {
         try {
             context.getPackageManager().getApplicationInfo(packageName, 0);
@@ -255,9 +252,6 @@ final class WebServerActions implements WebServerHub.ActionHost {
         if (h.contains("yandex") && p.contains("maps")) {
             return true;
         }
-        if (h.equals("maps.app.goo.gl")) {
-            return true;
-        }
-        return false;
+        return h.equals("maps.app.goo.gl");
     }
 }

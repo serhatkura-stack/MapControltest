@@ -36,3 +36,5 @@ __pycache__/
 
 # Yedek dosyalar (APK'ya girmesin)
 *.bak
+# Silent installer dex asset (uygulama içinde gerekli)
+!app/src/main/assets/*.dex

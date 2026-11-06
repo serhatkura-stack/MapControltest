@@ -71,7 +71,9 @@ import com.mapcontrol.manager.ClusterDisplayManager;
 import com.mapcontrol.manager.MapControlVDBusKeyBridge;
 import com.mapcontrol.util.AlertSoundHelper;
 import com.mapcontrol.util.ApkSessionInstaller;
-import com.mapcontrol.manager.WebServerHub;
+import com.mapcontrol.manager.WebServerHost;
+import com.mapcontrol.manager.WebServerManager;
+import com.mapcontrol.service.GlobalBackService;
 import com.mapcontrol.service.ServiceInitializer;
 import com.mapcontrol.ui.builder.AppsTabBuilder;
 import com.mapcontrol.ui.builder.AssistTabBuilder;
@@ -107,10 +109,10 @@ import com.mapcontrol.util.GestureConflicts;
 import com.mapcontrol.util.SplitScreenGesture;
 import com.mapcontrol.util.TargetPackageStore;
 import com.mapcontrol.vehicle.VehicleMetricsRepository;
-import com.mapcontrol.vehicle.VehicleMetricsSnapshot;
 import com.mapcontrol.vehicle.VehicleQuickControls;
 import com.mapcontrol.vehicle.SunroofGestureOverlayManager;
 import com.mapcontrol.vehicle.SunroofGestureStore;
+import com.mapcontrol.util.LinkOpener;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.ui.HeaderStatusMonitor;
 
@@ -120,8 +122,6 @@ public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_OPEN_PROJECTION_TARGET_PICKER = "com.mapcontrol.extra.OPEN_PROJECTION_TARGET_PICKER";
     /** Açılışta seçilecek sekme indeksi (int extra); yoksa Wi-Fi sekmesi. Yeni launcher "Ayarlar" için kullanır. */
     public static final String EXTRA_OPEN_TAB = "com.mapcontrol.extra.OPEN_TAB";
-    /** İşaret (boolean extra): web panelinden yüklenen APK bekliyor; dosya adı {@link WebServerHub#takePendingInstall()}'dan alınır. */
-    public static final String EXTRA_INSTALL_APK = "com.mapcontrol.extra.INSTALL_APK";
     public static final int TAB_WIFI = 0;
     public static final int TAB_SETTINGS = 7;
     public static final int TAB_HOME_SCREEN = 17;
@@ -193,16 +193,13 @@ public class MainActivity extends AppCompatActivity {
     private SplitScreenTabBuilder splitScreenTabBuilder;
     /** Bu görev, Android'in Ana Ekran (HOME) isteğiyle mi başlatıldı? */
     private int currentTab = 0; // 0=Wi-Fi, 1=Web, 2=Profil, 3=Yansıtma, 4=LOG, 5=Uygulamalar, 6=Hafıza, 7=Ayarlar, 8=Açılış Sesi, 9=Araç Bilgi, 11=Ekolayzer
-    /** Süreç genelindeki web sunucusu; bu ekran durumunu dinler ve etkinlik gerektiren işleri üstlenir. */
-    private WebServerHub webServerHub;
-    private WebServerHub.StateListener webServerStateListener;
-    private WebServerHub.ActionHost webServerActionHost;
-    /** Kullanıcı seçtiyse kontak açılınca (güç modu 1/2) sunucuyu açar. */
-    private VehicleMetricsRepository.Listener webServerPowerListener;
-    private boolean webServerPowerOn;
+    private WebServerManager webServerManager; // HTTP Server Manager (sahibi WebServerHost; activity kapanınca kapanmaz)
+    private WebServerHost webServerHost;
+    private WebServerManager.WebServerListener webServerListener;
     private Button btnWebServerToggle; // Web Server aç/kapat butonu
     private TextView webServerStatusText; // Web Server durum metni
     private android.widget.ImageView qrCodeImageView;
+    private String currentServerUrl; // QR kod görseli
     private ServiceInitializer serviceInitializer;
     private SideRailBuilder sideRailBuilder;
     /** {@link ClusterVDBusTestActivity} bench — yalnızca görünürken; {@link #onResume()} atanır. */
@@ -531,39 +528,122 @@ public class MainActivity extends AppCompatActivity {
         mainContent.addView(tabContentArea, tabContentParams);
         mountShell(isPortraitConfiguration());
         
-        // Web sunucusu süreç genelinde tek örnektir (WebServerHub); bu ekran yalnızca durumunu gösterir ve
-        // etkinlik gerektiren işleri (APK kurma, uygulama silme/açma) üstlenir. Ekran kapanınca sunucu durmaz.
-        webServerHub = WebServerHub.get(this);
-        webServerStateListener = new WebServerHub.StateListener() {
+        // Sunucu activity'ye bağlı değildir: WebServerHost uygulama genelinde tek örnektir (MapControlService de kullanır).
+        webServerHost = WebServerHost.get(this);
+        webServerManager = webServerHost.manager();
+        webServerListener = new WebServerManager.WebServerListener() {
             @Override
-            public void onStateChanged(WebServerHub.State state) {
-                renderWebServerState(state);
+            public void onServerStarted(int port, String localIp) {
+                handler.post(() -> {
+                    String serverUrl = "http://" + localIp + ":" + port;
+                    currentServerUrl = serverUrl;
+                    if (webServerStatusText != null) {
+                        webServerStatusText.setText(serverUrl);
+                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.accentHighlight));
+                    }
+                    if (btnWebServerToggle != null) {
+                        btnWebServerToggle.setText(R.string.web_server_stop);
+                    }
+                    // QR kod oluştur
+                    if (fileUploadTabBuilder != null) fileUploadTabBuilder.generateQRCode(serverUrl);
+                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
+                    log("Web Server başlatıldı: " + serverUrl);
+                });
+            }
+
+            @Override
+            public void onServerStopped() {
+                handler.post(() -> {
+                    if (webServerStatusText != null) {
+                        webServerStatusText.setText(R.string.web_server_stopped);
+                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.textDialogButtonSecondary));
+                    }
+                    if (qrCodeImageView != null) {
+                        qrCodeImageView.setVisibility(android.view.View.GONE);
+                    }
+                    if (fileUploadTabBuilder != null) fileUploadTabBuilder.hidePairQr();
+                    if (btnWebServerToggle != null) {
+                        btnWebServerToggle.setText(R.string.web_server_start);
+                    }
+                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
+                    currentServerUrl = null;
+                    log("Web Server durduruldu");
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                handler.post(() -> {
+                    if (webServerStatusText != null) {
+                        webServerStatusText.setText(getString(R.string.common_error_prefix, error));
+                        webServerStatusText.setTextColor(UiStyles.color(MainActivity.this, R.color.statusErrorBright));
+                    }
+                    if (headerStatusMonitor != null) headerStatusMonitor.refresh();
+                    log("Web Server hatası: " + error);
+                });
+            }
+
+            @Override
+            public void onInstallApk(String fileName) {
+                handler.post(() -> {
+                    if (appsTabBuilder != null) appsTabBuilder.installApkFile(fileName);
+                });
+            }
+
+            @Override
+            public void onDeleteApp(String packageName) {
+                handler.post(() -> {
+                    if (appsTabBuilder != null) appsTabBuilder.deleteApp(packageName);
+                });
+            }
+
+            @Override
+            public void onLaunchApp(String packageName) {
+                handler.post(() -> {
+                    if (appsTabBuilder != null) appsTabBuilder.launchApp(packageName);
+                });
             }
 
             @Override
             public void onLog(String message) {
-                log(message);
-            }
-        };
-        webServerActionHost = new WebServerHub.ActionHost() {
-            @Override
-            public void installApk(String fileName) {
-                if (appsTabBuilder != null) appsTabBuilder.installApkFile(fileName);
+                handler.post(() -> {
+                    log(message);
+                });
             }
 
             @Override
-            public void deleteApp(String packageName) {
-                if (appsTabBuilder != null) appsTabBuilder.deleteApp(packageName);
+            public void onOpenMapUrl(String url) {
+                handler.post(() -> LinkOpener.open(MainActivity.this, url, MainActivity.this::log));
             }
 
             @Override
-            public void launchApp(String packageName) {
-                if (appsTabBuilder != null) appsTabBuilder.launchApp(packageName);
+            public void onTypeKeyboardText(String text, boolean showDeviceFeedback) {
+                handler.post(() -> {
+                    if (!GlobalBackService.isRegisteredInSystemAccessibilitySettings(MainActivity.this)) {
+                        if (showDeviceFeedback) {
+                            Toast.makeText(MainActivity.this,
+                                    "Ayarlar > Erişilebilirlik: Global Back servisini açın; diğer uygulamada girdi alanının odaklı olması gerekir.",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                        return;
+                    }
+                    if (GlobalBackService.typeIntoFocusedField(MainActivity.this, text)) {
+                        if (showDeviceFeedback) {
+                            Toast.makeText(MainActivity.this, R.string.web_text_sent, Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        if (showDeviceFeedback) {
+                            Toast.makeText(MainActivity.this,
+                                    "Metin eklenemedi. Hedef uygulamada arama/Metin alanına bir kez dokunup odağın açık olduğundan emin olun (bazı uygulamalar ağaçta desteklemez).",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
             }
         };
 
         // Web Yönetimi tab içeriği
-        fileUploadTabBuilder = new FileUploadTabBuilder(this, webServerHub);
+        fileUploadTabBuilder = new FileUploadTabBuilder(this, webServerHost);
         fileUploadScrollView = fileUploadTabBuilder.getScrollView();
         btnWebServerToggle = fileUploadTabBuilder.getToggleButton();
         webServerStatusText = fileUploadTabBuilder.getStatusText();
@@ -801,24 +881,14 @@ public class MainActivity extends AppCompatActivity {
 
         vehicleMetricsRepository = new VehicleMetricsRepository(getApplicationContext());
         headerStatusMonitor = new HeaderStatusMonitor(this, topBarBuilder,
-                () -> webServerHub != null && webServerHub.isRunning());
+                () -> webServerManager != null && webServerManager.isRunning());
         if (activityStarted) headerStatusMonitor.start();
         // Onbellek yalnizca dinleyici varken doluyordu; hiz overlay'i (ve launcher)
         // icin izlemeyi bastan acik tut (VDBus olay gudumlu, hafif).
         vehicleMetricsRepository.startMonitoring();
-        // Elle kapatılan sunucu aynı kontakta tekrar açılmasın: yalnızca kapalıdan açığa geçişte başlar.
-        webServerPowerListener = snapshot -> {
-            boolean on = VehicleMetricsSnapshot.isValid(snapshot.powerMode)
-                    && (snapshot.powerMode == 1 || snapshot.powerMode == 2);
-            if (on && !webServerPowerOn) {
-                startWebServerIfPreferred();
-            }
-            if (VehicleMetricsSnapshot.isValid(snapshot.powerMode)) {
-                webServerPowerOn = on;
-            }
-        };
-        vehicleMetricsRepository.addListener(webServerPowerListener);
-        startWebServerIfPreferred();
+        // Kontak, ağ ve bekçi tetikleyicileri WebServerHost'ta (servis de başlatır); burada yalnızca arayüz bağlanır.
+        // Sunucunun şu anki durumu ve activity yokken kuyruğa alınan komutlar bağlanınca iletilir.
+        webServerHost.attachUi(webServerListener);
 
         vehicleInfoTabBuilder = new VehicleInfoTabBuilder(this, vehicleMetricsRepository,
                 msg -> MainActivity.this.log(msg));
@@ -843,9 +913,6 @@ public class MainActivity extends AppCompatActivity {
         appsTabContent = MainActivity.this.appsTabBuilder.getTabContent();
         apkSessionListener = (status, message) -> handler.post(() -> onApkSessionStatus(status, message));
         ApkSessionInstaller.setListener(apkSessionListener);
-        webServerHub.addStateListener(webServerStateListener);
-        webServerHub.setActionHost(webServerActionHost);
-        consumeInstallApkExtra(getIntent());
 
         // Ayarlar tab içeriği (Builder) — initializeApp içinde bir kez oluşturulur
         settingsTabBuilder = new SettingsTabBuilder(this, prefs,
@@ -1571,66 +1638,6 @@ public class MainActivity extends AppCompatActivity {
         return new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
     }
 
-    /** Kullanıcı Web Yönetimi'nde otomatik başlatmayı seçtiyse sunucuyu açar; varsayılan kapalı. */
-    private void startWebServerIfPreferred() {
-        if (webServerHub != null) {
-            webServerHub.startIfPreferred();
-        }
-    }
-
-    /** Web sunucusu durumunu Aktar sekmesine ve başlığa yansıtır (ana iş parçacığında). */
-    private void renderWebServerState(WebServerHub.State state) {
-        if (state.error != null) {
-            if (webServerStatusText != null) {
-                webServerStatusText.setText(getString(R.string.common_error_prefix, state.error));
-                webServerStatusText.setTextColor(UiStyles.color(this, R.color.statusErrorBright));
-            }
-        } else if (state.running) {
-            if (webServerStatusText != null) {
-                webServerStatusText.setText(state.url);
-                webServerStatusText.setTextColor(UiStyles.color(this, R.color.accentHighlight));
-            }
-            if (btnWebServerToggle != null) {
-                btnWebServerToggle.setText(R.string.web_server_stop);
-            }
-            // QR kod oluştur
-            if (fileUploadTabBuilder != null && state.url != null) fileUploadTabBuilder.generateQRCode(state.url);
-        } else {
-            if (webServerStatusText != null) {
-                webServerStatusText.setText(R.string.web_server_stopped);
-                webServerStatusText.setTextColor(UiStyles.color(this, R.color.textDialogButtonSecondary));
-            }
-            if (qrCodeImageView != null) {
-                qrCodeImageView.setVisibility(android.view.View.GONE);
-            }
-            if (fileUploadTabBuilder != null) fileUploadTabBuilder.hidePairQr();
-            if (btnWebServerToggle != null) {
-                btnWebServerToggle.setText(R.string.web_server_start);
-            }
-        }
-        if (headerStatusMonitor != null) headerStatusMonitor.refresh();
-    }
-
-    /**
-     * Web panelinden yüklenen APK, FrostNav ekranı yokken buraya yönlendirilir ({@link #EXTRA_INSTALL_APK}); kurulum
-     * ekran hazır olunca yapılır (yasal uyarı onaylanmadıysa extra bekler).
-     */
-    private void consumeInstallApkExtra(Intent intent) {
-        if (intent == null || appsTabBuilder == null) {
-            return;
-        }
-        if (!intent.hasExtra(EXTRA_INSTALL_APK)) {
-            return;
-        }
-        intent.removeExtra(EXTRA_INSTALL_APK);
-        // Extra'nın değeri yok sayılır: dışarıdan gelen sahte intent hiçbir şey kuramaz.
-        String fileName = webServerHub != null ? webServerHub.takePendingInstall() : null;
-        if (fileName == null || fileName.isEmpty() || fileName.contains("/") || fileName.contains("..")) {
-            return;
-        }
-        appsTabBuilder.installApkFile(fileName);
-    }
-
     // QR üretimi `FileUploadTabBuilder.generateQRCode()` içine taşındı.
 
     @Override
@@ -1649,7 +1656,6 @@ public class MainActivity extends AppCompatActivity {
             openHomeLauncher();
             return;
         }
-        consumeInstallApkExtra(intent);
         applyOpenTabExtra(intent);
     }
 
@@ -1898,7 +1904,16 @@ public class MainActivity extends AppCompatActivity {
                     btnWebServerToggle = fileUploadTabBuilder.getToggleButton();
                     webServerStatusText = fileUploadTabBuilder.getStatusText();
                     qrCodeImageView = fileUploadTabBuilder.getQrImageView();
-                    if (webServerHub != null) renderWebServerState(webServerHub.state());
+                    if (webServerManager != null && webServerManager.isRunning()) {
+                        if (btnWebServerToggle != null) {
+                            btnWebServerToggle.setText(R.string.web_server_stop);
+                        }
+                        if (webServerStatusText != null) {
+                            webServerStatusText.setTextColor(UiStyles.color(this, R.color.accentHighlight));
+                            if (currentServerUrl != null) webServerStatusText.setText(currentServerUrl);
+                        }
+                        if (currentServerUrl != null) fileUploadTabBuilder.generateQRCode(currentServerUrl);
+                    }
                 }
                 break;
             case 2:
@@ -2392,6 +2407,8 @@ public class MainActivity extends AppCompatActivity {
         String detail = message != null && !message.isEmpty() ? message : ("status " + status);
         Toast.makeText(this, getString(R.string.apps_install_error, detail), Toast.LENGTH_LONG).show();
         log("[ERROR] APK kurulum sonucu: " + detail);
+        // Kendi kurulumu icin kapatilan kameralar varsa geri acilir; yoksa etkisizdir.
+        com.mapcontrol.dvr.DvrController.get(this).cancelSelfInstallPrepare();
         if (appsTabBuilder != null) {
             appsTabBuilder.clearInstallingProgress();
         }
@@ -2426,17 +2443,9 @@ public class MainActivity extends AppCompatActivity {
         // Kilit dinleyicileri launcher'a ait; burada yalnızca dinleyen kalmadıysa takip durdurulur.
         VehicleQuickControls.getInstance(getApplicationContext()).release();
         super.onDestroy();
-        // Launcher kullanılıyorsa web sunucusu durdurulmaz (süreç genelinde, launcher'dan da yönetilir); yalnızca bu ekranın bağları kopar.
-        if (vehicleMetricsRepository != null && webServerPowerListener != null) {
-            vehicleMetricsRepository.removeListener(webServerPowerListener);
-        }
-        if (webServerHub != null) {
-            webServerHub.removeStateListener(webServerStateListener);
-            webServerHub.clearActionHost(webServerActionHost);
-            // Launcher kullanılmıyorsa eski davranış: FrostNav kapanınca sunucu da durur.
-            if (!isChangingConfigurations() && !LauncherModeManager.isActive(this)) {
-                webServerHub.stop();
-            }
+        // Sunucu kapanmaz (WebServerHost'ta yaşar); yalnızca bu activity'nin arayüz bağlantısı bırakılır.
+        if (webServerHost != null) {
+            webServerHost.detachUi(webServerListener);
         }
         // KeyEvent logcat thread'ini temizle
         keyEventLogcatRunning = false;

@@ -12,7 +12,7 @@ import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.mapcontrol.audio.AudioEqualizerController
-import com.mapcontrol.manager.WebServerHub
+import com.mapcontrol.manager.WebServerHost
 import com.mapcontrol.service.DmsFaceRecognitionManager
 import com.mapcontrol.service.MapControlService
 import com.mapcontrol.ui.activity.MainActivity
@@ -29,8 +29,8 @@ import com.mapcontrol.vehicle.SunroofAutomationEngine
  * [FrostNavFeatures]'ın gerçek sürümü: her çağrı FrostNav'ın kendi ayar sekmesinin kullandığı yoldan geçer. Yalnızca :app'te
  * derlenir (`launchertest` bu dosyayı almaz, [FrostNavFeatures.NONE] kullanır).
  *
- * Web sunucusu: süreç genelindeki tek sahibi [WebServerHub]'dır; FrostNav'ın Aktar sekmesi de aynı örneği kullanır. Durum
- * ondan okunur ve dinlenir, adres FrostNav'ın kendi adres seçiminden ([WebServerHub.currentHost]) gelir; başlat/durdur
+ * Web sunucusu: süreç genelindeki tek sahibi [WebServerHost]'tur; FrostNav'ın Aktar sekmesi de aynı örneği kullanır. Durum
+ * ondan okunur ve dinlenir, adres FrostNav'ın kendi adres seçiminden ([WebServerHost.currentHost]) gelir; başlat/durdur
  * doğrudan yapılır. Yasal uyarı onaylanmadan (FrostNav hiç kurulmamışken) sunucu açılmaz, FrostNav'a yönlendirilir.
  */
 internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
@@ -42,7 +42,7 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
 
     // --- Web paneli ---
 
-    private val web: WebServerHub get() = WebServerHub.get(app)
+    private val web: WebServerHost get() = WebServerHost.get(app)
 
     override fun readWebPanel(): WebPanelState {
         if (!web.isRunning) return WebPanelState(running = false, url = null, reachable = false)
@@ -53,7 +53,7 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
 
     override fun setWebPanel(on: Boolean, done: (String?) -> Unit) {
         if (!on) {
-            web.stop()
+            web.stopServer()
             main.post { done(null) }
             return
         }
@@ -61,17 +61,17 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
             main.post { done(app.getString(com.mapcontrol.R.string.launcher_fn_web_needs_frostnav)) }
             return
         }
-        web.start { error ->
+        web.startServer { error ->
             if (error != null) Log.w(TAG, "web start: $error")
             done(if (error == null) null else app.getString(com.mapcontrol.R.string.launcher_fn_web_start_failed))
         }
     }
 
     override fun watchWebPanel(onChange: () -> Unit): () -> Unit {
-        val hub = web
-        val listener = WebServerHub.StateListener { onChange() }
-        hub.addStateListener(listener)
-        return { hub.removeStateListener(listener) }
+        val host = web
+        val listener = WebServerHost.StateListener { onChange() }
+        host.addStateListener(listener)
+        return { host.removeStateListener(listener) }
     }
 
     override fun qr(text: String): QrMatrix? = try {
