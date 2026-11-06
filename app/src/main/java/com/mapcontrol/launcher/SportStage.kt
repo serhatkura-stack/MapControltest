@@ -1157,8 +1157,14 @@ internal class SportMediaDial(private val activity: Activity) : ViewGroup(activi
         showSource()
     }
 
+    /** Son gösterilen kaynak (paket, ikon): aynıysa metin yeniden kurulmaz (yeniden ölçüm/çizim olmasın). */
+    private var shownSourceKey: Pair<String?, Any?>? = null
+
     private fun showSource() {
         val pkg = sourcePkg
+        val key = pkg to sourceIcon
+        if (key == shownSourceKey) return
+        shownSourceKey = key
         if (pkg == null) { source.text = ""; return }
         val label = appLabel(pkg)
         val icon = sourceIcon
