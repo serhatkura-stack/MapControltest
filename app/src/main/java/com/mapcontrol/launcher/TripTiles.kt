@@ -519,6 +519,11 @@ internal abstract class TripCard(
  * - Üstünde son [WINDOW] geçerli örneğin ortalaması 0,1'e yuvarlanır; yeni değer gösterilenden en fazla
  *   [DEADBAND] farklıysa metin değişmez. 30,0 üstü "30+".
  * - Araç durunca (hareket yok ya da hız 0 ve sinyal geçersiz) ortalama sıfırlanır.
+ * - Aynı okuma iki kez sayılmaz: sinyal ~2,2 sn'de bir değişir, canlı yoklama 1 sn'de bir; örnek yalnızca değer
+ *   değiştiyse ya da son örnekten bu yana [SAMPLE_GAP_MS] geçtiyse eklenir.
+ * Kanıt: gerçek sürüş kaydı 2026-10-30 (7-10 km/sa 26-39, 20-25 km/sa 17-18, boşta 2,7-5 L/100 km): /10 ölçeği
+ * makul; gösterge paneliyle karşılaştırma bekliyor (Tur 6 Ek 4).
+ * Tüketim kutucuğu ve Spor "Anlık" kadranı aynı kuralları bu sınıfla kullanır (her tüketici kendi örneğiyle).
  */
 internal class ConsumptionSmoother {
     enum class Mode { NONE, IDLE, TAKEOFF, VALUE, CAP }
@@ -529,7 +534,10 @@ internal class ConsumptionSmoother {
     private var shown: Double? = null
     private var takeoff = false
 
-    fun update(instantL100: Double?, speedKmh: Int?, moving: Boolean?): Display {
+    private var lastValue: Double? = null
+    private var lastAddAt = 0L
+
+    fun update(instantL100: Double?, speedKmh: Int?, moving: Boolean?, nowMs: Long = System.currentTimeMillis()): Display {
         val stopped = moving == false || (speedKmh == 0 && instantL100 == null)
         if (stopped) {
             reset()
@@ -543,7 +551,11 @@ internal class ConsumptionSmoother {
         }
         takeoff = false
         if (instantL100 != null) {
-            samples.addLast(instantL100)
+            if (samples.isEmpty() || instantL100 != lastValue || nowMs - lastAddAt >= SAMPLE_GAP_MS) {
+                samples.addLast(instantL100)
+                lastValue = instantL100
+                lastAddAt = nowMs
+            }
             while (samples.size > WINDOW) samples.removeFirst()
             val candidate = Math.round(samples.average() * 10) / 10.0
             val cur = shown
@@ -557,10 +569,12 @@ internal class ConsumptionSmoother {
         samples.clear()
         shown = null
         takeoff = false
+        lastValue = null
     }
 
     companion object {
         const val WINDOW = 5
+        const val SAMPLE_GAP_MS = 2000L
         const val DEADBAND = 0.3
         const val CAP = 30.0
         const val ENTER_KMH = 20

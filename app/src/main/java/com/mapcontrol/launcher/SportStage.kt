@@ -346,6 +346,9 @@ internal class SportStageView(
     // --- Veri ---
 
     private var trip = TripData()
+    private val consumption = ConsumptionSmoother()
+    private var fedTrip: TripData? = null
+    private var instantDisplay = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
     private val tripListener = TripSource.Listener { trip = it }
     private val metrics by lazy { VehicleMetricsRepository.getInstance(activity.applicationContext) }
 
@@ -396,7 +399,13 @@ internal class SportStageView(
             gearText = SportMath.gearText(gs)
             watchPark(gs)
             // Anlık tüketim yalnızca hareket halinde geçerli gelir (dururken 0xFFFF).
-            instant = trip.instantL100
+            val t = trip
+            if (t !== fedTrip) {
+                fedTrip = t
+                instantDisplay = if (t.connected) consumption.update(t.instantL100, t.speedKmh, t.moving)
+                else ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
+            }
+            instant = instantDisplay.l100
             best = s.best0to100Ms
             maxKmh = s.maxSpeedKmh
             peakRpm = s.peakRpm
@@ -430,7 +439,18 @@ internal class SportStageView(
                         shownResults = results
                     }
                 }
-                SportDial.INSTANT -> setText(v, SportFormat.l100(instant) ?: DASH)
+                SportDial.INSTANT -> {
+                    val m = instantDisplay.mode
+                    val inDemo = LauncherDemo.enabled
+                    setText(v, when {
+                        inDemo -> SportFormat.l100(instant) ?: DASH
+                        m == ConsumptionSmoother.Mode.CAP -> "30+"
+                        else -> SportFormat.l100(instant) ?: DASH
+                    })
+                    slot.unit?.let { u ->
+                        setText(u, if (!inDemo && m == ConsumptionSmoother.Mode.TAKEOFF) "kalkış" else SportGeometry.unit(SportDial.INSTANT))
+                    }
+                }
                 SportDial.MAX -> setText(v, maxKmh?.toString() ?: DASH)
                 SportDial.COOLANT -> setText(v, trip.coolantC?.toString() ?: DASH)
                 SportDial.AVG_SPEED -> setText(v, trip.avgSpeedKmh?.toString() ?: DASH)
