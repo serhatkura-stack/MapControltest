@@ -269,9 +269,15 @@ class GlassDrawable(
  * değişince kurulur; zemin statiktir, hiçbir kare yeniden hesaplanmaz.
  */
 class SahneGround : Drawable() {
-    private val base = Paint()
-    private val center = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val top = Paint(Paint.ANTI_ALIAS_FLAG)
+    /*
+     * Titreştirme (dither) şart: gradyanlar önbellek bitmap'ine yazılımla çizilir ve Skia orada yalnız dither açıksa
+     * titreştirir. Kapalıyken 8 bit basamaklar ortadaki elipsin (cy 380) etrafında eş merkezli halkalar bırakıyordu;
+     * yarı çözünürlükten 2× büyütülünce halkaların yan uçları dikey çizgilere dönüp isim satırının iki yanında soluk
+     * "hayalet yazı" gibi görünüyordu (6 Kasım öykünücü, 11-telefon-sayfa.png y≈380).
+     */
+    private val base = Paint(Paint.DITHER_FLAG)
+    private val center = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
+    private val top = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
     /** Ortam ışıkları saydamsa (gece) tam ekran radyal çizim atlanır. */
     private var drawCenter = false
     private var drawTop = false

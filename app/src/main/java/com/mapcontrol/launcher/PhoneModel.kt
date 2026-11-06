@@ -23,9 +23,10 @@ import java.util.Locale
  * Telefon özelliğinin ortak sözleşmesi (UI ve arka uç paketleri buna göre derlenir).
  *
  * GİZLİLİK: Bu dosyadaki isim ve numaralar yalnızca ekranda gösterilir. Hiçbir zaman günlüğe (Log), dosyaya,
- * SharedPreferences'a (sabitlenmiş favori KİMLİKLERİ hariç), çökme metnine yazılmaz; diske önbelleğe alınmaz.
- * Rehber/geçmiş yalnızca bellek içi depoda (süreç ömrü, bağlı cihaz başına) tutulur: kalıcı değildir, uygulama
- * yeniden başlayınca OEM önbelleğinden yeniden okunur. Bu yüzden veri sınıflarının toString'i isim/numara içermez.
+ * SharedPreferences'a (sabitlenmiş favori KİMLİKLERİ hariç), çökme metnine yazılmaz. Tek istisna [PhoneCache]: son
+ * rehber/geçmiş, bağlı telefonun adres ÖZETİYLE anahtarlanmış tek bir uygulamaya özel dosyada (noBackupFilesDir,
+ * yedeğe girmez, fotoğrafsız) tutulur; uygulama yeniden başlayınca aynı telefon bağlıysa anında gösterilir, OEM
+ * önbelleği gelince güncellenir, farklı telefon bağlanınca silinir. Veri sınıflarının toString'i isim/numara içermez.
  *
  * Arama, cevaplama, kapatma ve sesli asistan YALNIZCA kullanıcının açık bir eylemiyle (dokunuş ya da direksiyon tuşu)
  * çağrılır. Araç yapılandırmasına hiçbir yazma yoktur.
@@ -196,6 +197,8 @@ object PhoneSource {
     /** VDValueBT.SyncStatus.FINISHED (r.java:416-452). */
     private const val VDSYNC_FINISHED = 1
     private const val DEMO_VERSION_OFFSET = 1_000_000
+    /** Depo değişince disk önbelleği bu gecikmeyle yazılır (parça parça gelen indirme tek yazım olsun). */
+    private const val SAVE_DELAY_MS = 3_000L
 
     private val io = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
@@ -232,8 +235,8 @@ object PhoneSource {
     private var lastReadAt = 0L
     private var mutedByMic = false
     /**
-     * Bellekteki tam rehber/geçmiş (süreç ömrü, bağlı cihaz başına; [DirectoryStore]). Diske, tercihlere, günlüğe asla
-     * yazılmaz. Demo ayrı depoda tutulur (demodan çıkınca gerçek veri karışmasın).
+     * Bellekteki tam rehber/geçmiş (bağlı cihaz başına; [DirectoryStore]). Tercihlere, günlüğe asla yazılmaz; yalnız
+     * [PhoneCache] dosyasına (uygulamaya özel, cihaz özetli) kopyalanır. Demo ayrı depoda tutulur ve diske yazılmaz.
      */
     private val store = DirectoryStore()
     private val demoStore = DirectoryStore()
@@ -245,6 +248,15 @@ object PhoneSource {
     /** Eşitleme bitti ama görünür değildik: sonraki başlangıçta önbellek okunur. */
     private var pendingSyncRead = false
     private var witnessOpen = false
+    /** Bağlı telefonun adres özeti ([PhoneCache.deviceHash]; ham adres tutulmaz). Bilinmiyorsa null: diske yazılmaz. */
+    private var deviceHash: String? = null
+    /** Diske son yazılan depo sürümü ([DirectoryStore.version]); aynıysa yeniden yazılmaz. */
+    private var savedVersion = -1
+    /**
+     * Depodaki veri bu süreçte canlı bir kaynaktan (OEM önbelleği, indirme parçası, sağlayıcı) geldi. Yalnız diskten
+     * geri yüklenmiş veri indirme kararında "dolu" sayılmaz ([maybeDownload]).
+     */
+    private var liveData = false
 
     private fun activeStore(): DirectoryStore = if (caps.demo) demoStore else store
 
@@ -258,6 +270,7 @@ object PhoneSource {
     }
     private val rereadTask = Runnable { io.execute { if (started) readData() } }
     private val reprobeTask = Runnable { io.execute { if (started) { reprobe(); refreshInternal(RefreshReason.HFP_CONNECTED) } } }
+    private val saveTask = Runnable { io.execute { saveCache() } }
     private val syncReadTask = Runnable {
         io.execute {
             if (started && wantData) readVdbusCache() else pendingSyncRead = true
@@ -715,15 +728,17 @@ object PhoneSource {
     private fun maybeDownload() {
         if (caps.demo || !caps.vdbusData) return
         val vd = vdbusData ?: return
-        if (store.hasData) return
-        var step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, null, downloadRequested)
+        // Diskten geri yüklenen veri eski olabilir: indirme kararında yalnız bu süreçte canlı gelen veri sayılır.
+        val has = store.hasData && liveData
+        if (has) return
+        var step = PhonebookRefresh.next(has, vd.cacheTotal, null, downloadRequested)
         if (step == PhonebookRefresh.Step.CACHE) {
             readVdbusCache()
             if (vd.cacheTotal == null) {
                 Log.i(TAG, "rehber: OEM önbelleği yanıt vermedi, indirme istenmedi")
                 return
             }
-            step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, null, downloadRequested)
+            step = PhonebookRefresh.next(store.hasData && liveData, vd.cacheTotal, null, downloadRequested)
         }
         if (step != PhonebookRefresh.Step.DOWNLOAD) {
             Log.i(TAG, "rehber: indirme gerekmiyor (önbellek=${vd.cacheTotal} istendi=$downloadRequested)")
@@ -734,7 +749,7 @@ object PhoneSource {
             vd.syncStatus(VDValueBT.PhoneBookSyncType.CONTACT_SYNC),
             vd.syncStatus(VDValueBT.PhoneBookSyncType.CALLLOG_SYNC),
         )
-        step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, status, downloadRequested)
+        step = PhonebookRefresh.next(store.hasData && liveData, vd.cacheTotal, status, downloadRequested)
         if (step != PhonebookRefresh.Step.DOWNLOAD) {
             Log.i(TAG, "rehber: indirme sürüyor ya da gerekmiyor (durum=$status)")
             return
@@ -760,6 +775,7 @@ object PhoneSource {
             null
         }
         Log.i(TAG, "rehber önbelleği: kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1}")
+        if (data != null) noteLive(data.contacts, data.recents)
         if (data != null && store.merge(data.contacts, data.recents)) publishStore()
     }
 
@@ -1010,18 +1026,31 @@ object PhoneSource {
                 vdbusData?.resetCacheTotal()
             }
             lastHfpConnected = connected
-            // Farklı telefon: bellekteki rehber/geçmiş ve fotoğraflar silinir (adres yalnızca özet olarak, günlüğe yazılmaz).
-            val key = try {
-                HfpLink.connectedDevice()?.address?.uppercase()?.hashCode()
+            // Farklı telefon: bellekteki rehber/geçmiş, fotoğraflar ve disk önbelleği silinir (adres yalnızca özet
+            // olarak tutulur, günlüğe yazılmaz).
+            val address = try {
+                HfpLink.connectedDevice()?.address
             } catch (t: Throwable) {
                 null
             }
+            val key = address?.uppercase()?.hashCode()
             if (store.onDevice(key)) {
                 PhonePhotos.clear()
                 downloadRequested = false
+                liveData = false
+                savedVersion = -1
+                main.removeCallbacks(saveTask)
                 vdbusData?.resetCacheTotal()
-                Log.i(TAG, "rehber: farklı telefon bağlandı, bellek sıfırlandı")
+                PhoneCache.clear(app)
+                Log.i(TAG, "rehber: farklı telefon bağlandı, bellek ve disk önbelleği sıfırlandı")
                 publishStore()
+            }
+            if (address != null) {
+                val h = PhoneCache.deviceHash(address)
+                if (h != deviceHash) {
+                    deviceHash = h
+                    restoreCache(app, h)
+                }
             }
         }
         val deviceName = when {
@@ -1080,6 +1109,7 @@ object PhoneSource {
             }
         }
         val target = activeStore()
+        if (data != null && target === store) noteLive(data.contacts, data.recents)
         val changed = data != null && target.merge(data.contacts, data.recents)
         Log.d(TAG, "veri: $name kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1} " +
             "depo=${target.contacts.size}/${target.recents.size}${if (changed) " (yeni)" else ""}")
@@ -1109,6 +1139,45 @@ object PhoneSource {
                 contactCount = dir.contacts.size, recentCount = dir.recents.size, directoryVersion = dir.version,
             )
         }
+        if (!caps.demo) scheduleSave()
+    }
+
+    // ---- Disk önbelleği (io; [PhoneCache]) ----
+
+    private fun noteLive(contacts: List<PhoneContact>?, recents: List<PhoneRecent>?) {
+        if (!contacts.isNullOrEmpty() || !recents.isNullOrEmpty()) liveData = true
+    }
+
+    /**
+     * io: bağlı telefonun ([hash]) önbelleğini depo boşsa yükler ve hemen gösterir. Başka telefonun ya da bozuk dosya
+     * [PhoneCache.load] içinde silinir. Demo açıkken gösterilmez (gerçek depoya yine yüklenir).
+     */
+    private fun restoreCache(app: Context, hash: String) {
+        if (store.hasData) {
+            // Cihaz anahtarı öğrenilmeden okunan canlı veri: artık yazılabilir.
+            scheduleSave()
+            return
+        }
+        val d = PhoneCache.load(app, hash) ?: return
+        if (!store.merge(d.contacts, d.recents)) return
+        savedVersion = store.version
+        Log.i(TAG, "rehber: disk önbelleğinden kişi=${store.contacts.size} geçmiş=${store.recents.size}")
+        if (!caps.demo) publishStore()
+    }
+
+    /** io: gerçek depo değiştiyse kısa gecikmeyle diske yazılır (indirme parçaları tek yazıma toplanır). */
+    private fun scheduleSave() {
+        if (deviceHash == null || !store.hasData || store.version == savedVersion) return
+        main.removeCallbacks(saveTask)
+        main.postDelayed(saveTask, SAVE_DELAY_MS)
+    }
+
+    private fun saveCache() {
+        val app = appContext ?: return
+        val h = deviceHash ?: return
+        if (!store.hasData || store.version == savedVersion) return
+        val v = store.version
+        if (PhoneCache.save(app, h, store.contacts, store.recents)) savedVersion = v
     }
 
     // ---- Edilgen rehber/geçmiş (io; VdbusDataBackend.watch) ----
@@ -1119,6 +1188,7 @@ object PhoneSource {
         val wanted = store.recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
         val contacts = vd.convertContacts(raw, wanted, PhonePrefs.pinnedIds(app).toHashSet())
         Log.i(TAG, "rehber: indirmeden ${contacts.size} kişi")
+        noteLive(contacts, null)
         if (store.merge(contacts, null) && !caps.demo) publishStore()
     }
 
@@ -1126,6 +1196,7 @@ object PhoneSource {
         val vd = vdbusData ?: return
         val recents = vd.convertRecords(raw)
         Log.i(TAG, "geçmiş: indirmeden ${recents.size} kayıt")
+        noteLive(null, recents)
         if (store.merge(null, recents) && !caps.demo) publishStore()
     }
 
