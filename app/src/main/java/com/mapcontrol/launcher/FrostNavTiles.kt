@@ -25,8 +25,7 @@ import androidx.annotation.StringRes
 import com.mapcontrol.R
 
 /**
- * FrostNav'ın var olan özelliklerini süren widget'ların ortak gövdesi. Hem Serbest ızgarada kutucuk ([SizedWidget]) hem
- * Sahne'de şerit öğesi ([StripSource]) ve panel (4 sütunlu büyük biçim; panel kutucuğun kart zeminini kaldırır) olarak
+ * FrostNav'ın var olan özelliklerini süren widget'ların ortak gövdesi. Sahne'de şerit öğesi ([StripSource]) ve panel (4 sütunlu büyük biçim; panel kutucuğun kart zeminini kaldırır) olarak
  * çalışır. Durum [FrostNavFeatures] üzerinden, görünürken [POLL_MS]'de bir arka planda okunur; yalnızca değişince çizilir.
  * Uzun basış (şerit) FrostNav'ın ilgili ayar sekmesini açar.
  */
@@ -232,7 +231,7 @@ internal abstract class FrostNavTile<S : Any>(
     protected fun header(withIcon: Boolean = true, trailing: View? = null): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        if (withIcon) addView(icon(activity, if (LauncherTheme.sahne) sahneIconFor(iconRes) else iconRes, HEADER_ICON_DP, LauncherTheme.TEXT_SECONDARY))
+        if (withIcon) addView(icon(activity, sahneIconFor(iconRes), HEADER_ICON_DP, LauncherTheme.TEXT_SECONDARY))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (withIcon) marginStart = activity.dp(10) })
         if (trailing != null) addView(trailing)

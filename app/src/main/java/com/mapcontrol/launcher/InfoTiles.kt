@@ -87,17 +87,9 @@ class AppShortcutTile(
     }
 
     // 125dp kartta 64dp ikon + etiket sığsın diye 10dp kenar: etiketin alt çıkıntıları kesilmez.
-    private var editing = false
     private var compact = false
 
-    private val root: LinearLayout = object : JoinedCard(context, paddingDp = 10, gapPx = context.dp(LauncherGrid.GRID_GAP_DP)), EditAware, BlankAware {
-        override val isBlank: Boolean get() = shown is Shown.Empty && !editing
-        override var onBlankChanged: (() -> Unit)? = null
-        override fun setEditing(editing: Boolean) {
-            this@AppShortcutTile.editing = editing
-            applyEmptyVisibility()
-        }
-    }.apply {
+    private val root = CardShell(context, paddingDp = 10).apply {
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true
@@ -121,7 +113,7 @@ class AppShortcutTile(
     override val view: View = root
 
     /**
-     * Tema değişti: yüzeyi [JoinedCard] çizimde okur (yalnızca yeniden çizilir); etiket rengi ve boş kutunun
+     * Tema değişti: yüzeyi [CardShell] çizimde okur (yalnızca yeniden çizilir); etiket rengi ve boş kutunun
      * zemini/artısı mevcut duruma göre yeniden atanır. Uygulama ikonu temadan bağımsızdır.
      */
     override fun applyTheme() {
@@ -147,11 +139,10 @@ class AppShortcutTile(
         applyEmptyVisibility()
     }
 
-    /** Boş kutuda artı ve etiket yalnızca düzenleme modunda görünür; normalde sakin, boş bir yüzey kalır. */
+    /** Boş kutu sakin, boş bir yüzey kalır (seçici yuvanın kendisinden ya da uzun basışla açılır). */
     private fun applyEmptyVisibility() {
-        val hide = shown is Shown.Empty && !editing
-        (root as JoinedCard).surfaceVisible = !hide
-        (root as BlankAware).onBlankChanged?.invoke()
+        val hide = shown is Shown.Empty
+        root.surfaceVisible = !hide
         iconView.visibility = if (hide) View.INVISIBLE else View.VISIBLE
         labelView.visibility = if (hide) View.INVISIBLE else View.VISIBLE
     }

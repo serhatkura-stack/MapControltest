@@ -7,8 +7,6 @@ import org.junit.Test
 
 class AppIdentityTest {
 
-    private fun placed(id: String, type: WidgetType) = PlacedWidget(id, type, 0, 0, type.sizes.first())
-
     @Test
     fun packageLikeLabelsFallBackToPrettyLastSegment() {
         val pkg = "com.desaysv.vehiclesetting"
@@ -32,29 +30,5 @@ class AppIdentityTest {
         assertEquals("Araç ayarları", AppIdentity.displayLabel("com.desaysv.vehiclesetting", "x", "Araç ayarları"))
         assertTrue(AppIdentity.OVERRIDES.containsKey("com.desaysv.vehiclesetting"))
         assertTrue(AppIdentity.OVERRIDES.containsKey("com.desaysv.bluetooth.phone"))
-    }
-
-    @Test
-    fun onScreenWidgetsAreNotAddableAgainButAppIs() {
-        val layout = listOf(
-            placed("a", WidgetType.MEDIA), placed("b", WidgetType.SEAT_DRIVER),
-            placed("c", WidgetType.APP), placed("d", WidgetType.APP),
-        )
-        val addable = addableWidgetTypes(layout)
-        assertFalse(WidgetType.MEDIA in addable)
-        assertFalse(WidgetType.SEAT_DRIVER in addable)
-        assertTrue(WidgetType.SEAT_PASSENGER in addable)
-        assertTrue(WidgetType.APP in addable)
-        assertFalse(isAddable(WidgetType.MEDIA, layout))
-    }
-
-    @Test
-    fun existingDuplicatesDoNotBreakLogic() {
-        val layout = listOf(placed("a", WidgetType.LOCK), placed("b", WidgetType.LOCK))
-        assertFalse(isAddable(WidgetType.LOCK, layout))
-        assertEquals(setOf(WidgetType.LOCK), onScreenTypes(layout))
-        assertTrue(LayoutStore.isValid(listOf(
-            PlacedWidget("a", WidgetType.LOCK, 0, 0, Span(1, 2)),
-            PlacedWidget("b", WidgetType.LOCK, 2, 0, Span(1, 2)))))
     }
 }

@@ -45,7 +45,7 @@ const val STRIP_SLOTS = 6
 /**
  * Hangi tür hangi yuvaya konabilir: iki seçilmiş liste (sahibin kararı). Şerit, tek dokunuşla iş gören küçük kontrollerdir;
  * panel, büyük alanı dolduran bilgi ve kontrollerdir. Listede olmayan tür Sahne seçicisinde hiç gösterilmez (araç kartı
- * sahnenin kendisidir); Serbest ızgara tüm kataloğu kullanmaya devam eder. Her listelenen tür en az birine sığar (SahneSlotsTest).
+ * sahnenin kendisidir). Her listelenen tür en az birine sığar (SahneSlotsTest).
  */
 object SahneForm {
     /**
@@ -62,7 +62,7 @@ object SahneForm {
     /**
      * Panel (büyük) için izinli türler, seçicideki sırayla: yalnız bu boyuta göre çizilmiş widget'lar (4 Kasım kararı §2;
      * Navigasyon §3'ten: Yandex bildiriminden sonraki dönüş).
-     * Diğer türler Serbest ızgarada kalır; eski Sahne kayıtlarındaki yuvalar [SahneSlots.decode]'da yedeğe döner.
+     * Diğer türlerin eski Sahne kayıtlarındaki yuvaları [SahneSlots.decode]'da yedeğe döner.
      */
     val PANEL_TYPES: List<WidgetType> = listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION)
 
@@ -345,15 +345,14 @@ object SahneSlots {
 }
 
 /**
- * Sahne düzeninin deposu: profil ve araç ekranı başına ayrı dosya, Park ve Sürüş için ayrı anahtar. Serbest ızgaranın
- * kayıtlarına ([LayoutStore]) hiç dokunmaz.
+ * Sahne düzeninin deposu: profil ve araç ekranı başına ayrı dosya, Park ve Sürüş için ayrı anahtar.
  */
 class SahneStore(
     context: Context,
     private val mode: LayoutMode,
     vehicle: VehicleProfile = VehicleProfile.compute(context),
 ) {
-    private val appPackages = AppDock.installedDefaults(context, DEFAULT_APP_SLOTS)
+    private val appPackages = DefaultApps.installedDefaults(context, DEFAULT_APP_SLOTS)
     private val prefs = context.applicationContext.getSharedPreferences(prefsName(Profiles.current(context), vehicle), Context.MODE_PRIVATE)
     private val key = key(mode)
 

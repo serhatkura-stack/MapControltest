@@ -90,9 +90,8 @@ internal class WifiPanel(
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             // Kendi yüzeyi: alttaki kartlardan ayrışan ton ve belirgin 1dp kenar (gece #1E232B / #2A3038).
-            background = if (LauncherTheme.sahne) rounded(ctx, if (LauncherTheme.night) 0xFF1E232B.toInt() else 0xFFFFFFFF.toInt(),
+            background = rounded(ctx, if (LauncherTheme.night) 0xFF1E232B.toInt() else 0xFFFFFFFF.toInt(),
                 Sahne.PANEL_RADIUS_DP, if (LauncherTheme.night) 0xFF2A3038.toInt() else 0x29181E28)
-            else rounded(ctx, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
             val p = ctx.dp(PAD_DP)
             setPadding(p, p, p, p)
         }
@@ -432,7 +431,7 @@ internal class WifiPanel(
         minimumHeight = activity.dp(LauncherTheme.TOUCH_MIN_DP)
         addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply { setText(R.string.launcher_wifi_settings) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(icon(activity, if (LauncherTheme.sahne) R.drawable.ic_sahne_chev_right else R.drawable.ic_mdi_chevron_right, 28, LauncherTheme.TEXT_SECONDARY))
+        addView(icon(activity, R.drawable.ic_sahne_chev_right, 28, LauncherTheme.TEXT_SECONDARY))
         clickable(this) { dismiss(); onSettings() }
     }
 

@@ -5,7 +5,7 @@ import android.content.Intent
 
 /**
  * FrostNav'ın "Ana ekran" sekmesi için Java'dan çağrılan ince katman: launcher ayarlarını aynı tercih
- * anahtarlarıyla (ThemeMode, DriveAccent, LauncherBottomBar, DriveLayoutPrefs, LayoutStore, VehicleProfile) okur ve yazar.
+ * anahtarlarıyla (ThemeMode, DriveAccent, LauncherBottomBar, DriveLayoutPrefs, SahneStore, VehicleProfile) okur ve yazar.
  * Launcher bu değerlerin [signature]'ı değişmişse öne gelirken kendini yeniden kurar (bkz. HomeLauncherActivity.onResume).
  */
 object HomeScreenPrefs {
@@ -50,20 +50,14 @@ object HomeScreenPrefs {
      */
     @JvmStatic fun carColorIndex(context: Context): Int = CarColorPrefs.get(context).ordinal
 
-    /** "Ana ekran düzeni": true Sahne (varsayılan), false Serbest ızgara. Launcher bir sonraki öne gelişinde yeniden kurulur. */
-    @JvmStatic fun sahneStyle(context: Context): Boolean = HomeStylePrefs.get(context) == HomeStyle.SAHNE
-
-    @JvmStatic fun setSahneStyle(context: Context, sahne: Boolean) =
-        HomeStylePrefs.set(context, if (sahne) HomeStyle.SAHNE else HomeStyle.SERBEST)
-
     @JvmStatic fun autoDriveLayout(context: Context): Boolean = DriveLayoutPrefs.get(context)
 
     @JvmStatic fun setAutoDriveLayout(context: Context, on: Boolean) = DriveLayoutPrefs.set(context, on)
 
-    /** Etkin düzen türünün (Sahne ya da Serbest) Park ya da Sürüş düzenini varsayılana döndürür (düzenleme modundaki "Varsayılan" ile aynı depo). */
+    /** Sahne'nin Park ya da Sürüş düzenini varsayılana döndürür (düzenleme modundaki "Varsayılan" ile aynı depo). */
     @JvmStatic fun resetLayout(context: Context, drive: Boolean) {
         val mode = if (drive) LayoutMode.DRIVE else LayoutMode.PARK
-        if (sahneStyle(context)) SahneStore(context, mode).reset() else LayoutStore(context, mode).reset()
+        SahneStore(context, mode).reset()
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putInt(KEY_LAYOUT_RESET_GEN, prefs.getInt(KEY_LAYOUT_RESET_GEN, 0) + 1).apply()
     }
@@ -71,7 +65,7 @@ object HomeScreenPrefs {
     /** Launcher'ın kurulumda okuduğu tercihlerin özeti; farklıysa açık launcher yeniden kurulmalıdır. */
     @JvmStatic fun signature(context: Context): String {
         val gen = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_LAYOUT_RESET_GEN, 0)
-        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen|${VehicleProfile.compute(context).key}|${HomeStylePrefs.get(context).key}"
+        return "${themeIndex(context)}|${driveAccent(context)}|${bottomBarIndex(context)}|${autoDriveLayout(context)}|$gen|${VehicleProfile.compute(context).key}"
     }
 
     /** Ana ekranı doğrudan düzenleme modunda açar. */

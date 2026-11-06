@@ -5,50 +5,18 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
 
-/**
- * Düzenlenebilir ana ekran ızgarasının modeli.
- *
- * Orta alan [GRID_COLS] × [GRID_ROWS] hücrelik bir ızgaradır (satır sayısı araç profiline göre). Üst şerit (saat, Ayarlar) ve
- * alt çubuk (klima, uygulamalar) ızgaranın dışındadır ve sabittir.
- */
-const val GRID_COLS = 12
-
-/** Izgaranın satır sayısı: etkin [VehicleProfile]'a göre (Tiggo 7: 6, Tiggo 8: 8). */
-val GRID_ROWS: Int get() = VehicleProfile.active.gridRows
-
-/** Kayıtlı düzenin ızgara sürümü: 1 = eski 6×3, 2 = 12×6 (her değer tam iki katı). */
-const val GRID_VERSION = 2
-
-/** Bir kutucuk bu genişlikten (hücre) itibaren "geniş" yerleşime geçer (eski 2 sütun = 4 hücre). */
+/** Bir kutucuk bu genişlikten (hücre) itibaren "geniş" yerleşime geçer. */
 const val WIDE_MIN_COLS = 4
 
-/** Bir widget'ın ızgaradaki boyutu (sütun × satır). */
+/** Bir widget'ın kurulduğu boyut (sütun × satır hücre); Sahne panelde en büyük, şeritte ilk boyutu kullanır. */
 data class Span(val w: Int, val h: Int) {
     override fun toString() = "${w}×$h"
 }
 
-/** "Widget ekle" listesinde gösterilecek türler (hazır olmayanlar elenir). */
-fun addableWidgetTypes(): List<WidgetType> = WidgetType.values().toList()
-
-/** Düzende şu an bulunan widget türleri. */
-fun onScreenTypes(layout: List<PlacedWidget>): Set<WidgetType> = layout.map { it.type }.toSet()
-
 /**
- * Bu türden bir widget daha eklenebilir mi: APP kutucuğundan istenildiği kadar, diğerlerinden yalnızca bir tane.
- * Kayıtlı düzende zaten çift olanlar silinmez ve yüklenir; bu yalnızca yeni eklemeyi engeller.
- */
-fun isAddable(type: WidgetType, layout: List<PlacedWidget>): Boolean =
-    type == WidgetType.APP || type !in onScreenTypes(layout)
-
-/** [layout] verilince "Widget ekle" listesinde seçilebilir türler: ekranda olanlar elenir (APP hariç). */
-fun addableWidgetTypes(layout: List<PlacedWidget>): List<WidgetType> =
-    addableWidgetTypes().filter { isAddable(it, layout) }
-
-/**
- * Eklenebilir widget türleri ve her birinin desteklediği boyutlar.
- * İlk boyut, "Widget ekle" ile eklendiğinde kullanılan boyuttur.
- * Kural: bir boyut yalnızca anlamlı ölçüde daha fazla bilgi gösteriyorsa vardır. Kayıtlı düzendeki artık
- * geçersiz boyutlar [LayoutStore.snapSpans] ile en yakın izinli boyuta çekilir.
+ * Widget türleri ve her birinin desteklediği boyutlar. İlk boyut Sahne şeridinde ([SahneForm.stripSpan]), en büyük alanlı
+ * boyut Sahne panelinde ([SahneForm.panelSpan]) kullanılır. Sahne'de gösterilmeyen türler (ör. sağlık, hava, fotoğraf)
+ * eski Sahne kayıtlarının çözülüp yedeğe dönmesi için listede kalır ([SahneSlots.decode]).
  */
 enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes val icon: Int, val sizes: List<Span>) {
     MEDIA("media", R.string.launcher_widget_media, R.drawable.ic_mdi_music_note, listOf(Span(4, 2), Span(6, 4), Span(6, 6))),
@@ -85,7 +53,7 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
         /**
          * Eski anahtarların yeni karşılıkları: "battery"/"service" -> HEALTH, "trip_totals" -> TRIP ([HealthMath.REMOVED_KEYS]);
          * ayrı ısıtma/soğutma koltukları -> o tarafın birleşik koltuğu. Kaldırılan türler ("sunshade", "defrost") ve bilinmeyen
-         * anahtar null: kayıtlı düzende o yuva boşalır (Sahne) ya da hücre serbest kalır (Serbest).
+         * anahtar null: kayıtlı düzende o yuva boşalır.
          */
         val MERGED_KEYS: Map<String, String> = HealthMath.REMOVED_KEYS + mapOf(
             "seat_heat_driver" to "seat_driver",
@@ -98,86 +66,21 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     }
 }
 
-/**
- * Izgaraya yerleştirilmiş bir widget. [extra] türe özel ayardır (APP için paket adı).
- * Konum ve boyut her zaman ızgara sınırları içindedir ve diğer widget'larla çakışmaz.
- */
+/** Kurulacak bir widget: kimlik, tür ve boyut. [extra] türe özel ayardır (APP için paket adı). */
 data class PlacedWidget(
     val id: String,
     val type: WidgetType,
-    val col: Int,
-    val row: Int,
     val span: Span,
     val extra: String? = null,
-) {
-    fun overlaps(other: PlacedWidget): Boolean =
-        col < other.col + other.span.w && other.col < col + span.w &&
-            row < other.row + other.span.h && other.row < row + span.h
+)
 
-    fun fits(rows: Int = GRID_ROWS): Boolean = col >= 0 && row >= 0 && col + span.w <= GRID_COLS && row + span.h <= rows
-}
-
-/** Düzenleme moduna göre görünümünü değiştiren widget (ör. boş uygulama kutusunun artısı yalnız düzenlemede görünür). */
-interface EditAware {
-    fun setEditing(editing: Boolean)
-}
-
-/** Boyutu değişebilen widget: ızgara yerleşimi değişince kendini yeni boyuta göre düzenler. */
+/** Boyutu değişebilen widget: kurulduğu boyuta ([Span]) göre kendini düzenler. */
 interface SizedWidget : LauncherWidget {
     fun applySpan(span: Span)
 }
 
-/**
- * Park varsayılanı (12×6): duran araçta sahibini karşılayan, zengin ama sakin ekran. İki bant:
- *  - Üst bant (bilgi, 4 satır): sürücü tarafında araç kartı 4×4 (menzil, şema, kilit, uyarılar); ortada medya 4×2,
- *    altında araç sağlığı ve hava kalitesi 2×2; sağda "Toplam" bölümlü yolculuk 4×4.
- *  - Alt bant (kontroller, 2 satır), sol direksiyonlu kabine göre: sürücü koltuğu · bagaj · arka hoparlör · ince kapı kilidi ve
- *    ekranı karart · iki ince uygulama kutucuğu (tek şerit) · yolcu koltuğu (Sahne Park şeridiyle aynı seçki).
- * Izgara boşluksuz dolar. [oemBar] iki durumda da aynı düzeni verir (her iki alt çubukta da uygulamalar düğmesi var);
- * imza [LayoutStore] ile uyum içindir. Uygulama kutucukları [appPackages] ile dolar.
- */
-fun defaultLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList(), profile: VehicleProfile = VehicleProfile.TIGGO7): List<PlacedWidget> = listOf(
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
-    PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(4, 2)),
-    PlacedWidget("health", WidgetType.HEALTH, 4, 2, Span(2, 2)),
-    PlacedWidget("air", WidgetType.AIR, 6, 2, Span(2, 2)),
-    PlacedWidget("trip", WidgetType.TRIP, 8, 0, Span(4, 4)),
-    PlacedWidget("seat_driver", WidgetType.SEAT_DRIVER, 0, 4, Span(2, 2)),
-    PlacedWidget("trunk", WidgetType.TRUNK, 2, 4, Span(2, 2)),
-    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 4, 4, Span(2, 2)),
-    PlacedWidget("lock", WidgetType.LOCK, 6, 4, Span(1, 2)),
-    PlacedWidget("screen_off", WidgetType.SCREEN_OFF, 7, 4, Span(1, 2)),
-) + (0 until DEFAULT_PARK_APP_TILES).map { i ->
-    PlacedWidget("app_dock_$i", WidgetType.APP, 8 + i, 4, Span(1, 2), appPackages.getOrNull(i))
-} + PlacedWidget("seat_passenger", WidgetType.SEAT_PASSENGER, 10, 4, Span(2, 2)) +
-    if (profile == VehicleProfile.TIGGO8) parkExtraBandT8() else emptyList()
-
-/**
- * Tiggo 8 (12×8) Park'ın ek bandı: Tiggo 7 düzeninin altına 2 satırlık bir 2×2 kutucuk bandı. Üstteki iki bant
- * (kahraman kartlar dahil) Tiggo 7 ile aynı kalır; kahramanlar 4×4'te zaten orantılıdır. Yer tutucudur.
- */
-private fun parkExtraBandT8(): List<PlacedWidget> = listOf(
-    PlacedWidget("consumption", WidgetType.CONSUMPTION, 0, 6, Span(2, 2)),
-    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 2, 6, Span(2, 2)),
-    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 4, 6, Span(2, 2)),
-    PlacedWidget("phone_reminder", WidgetType.PHONE_REMINDER, 6, 6, Span(2, 2)),
-    PlacedWidget("awd", WidgetType.AWD, 8, 6, Span(2, 2)),
-    PlacedWidget("clock", WidgetType.CLOCK, 10, 6, Span(2, 2)),
-)
-
-/** Park varsayılanındaki ince uygulama kutucuğu sayısı (her biri 1×2, yan yana tek şerit). */
-const val DEFAULT_PARK_APP_TILES = 2
-
-/** Varsayılan düzen için okunan kurulu uygulama sayısı üst sınırı ([AppDock.installedDefaults]). */
+/** Varsayılan düzen için okunan kurulu uygulama sayısı üst sınırı ([DefaultApps.installedDefaults]). */
 const val DEFAULT_APP_SLOTS = 8
-
-/**
- * Eski 6×3 düzeni (sürüm 1) 12×6'ya taşır: konum ve boyut tam iki katı olur. Görünüm aynı kalır;
- * iki katı boyutlar yeni ızgarada her tür için geçerlidir.
- */
-fun migrateGridV1(layout: List<PlacedWidget>): List<PlacedWidget> = layout.map {
-    it.copy(col = it.col * 2, row = it.row * 2, span = Span(it.span.w * 2, it.span.h * 2))
-}
 
 /** Widget örneğini türüne göre üretir. Activity gerekir: bazı widget'lar diyalog açar. */
 object WidgetFactory {
@@ -206,6 +109,6 @@ object WidgetFactory {
         WidgetType.AUTOMATION -> AutomationTile(activity)
         WidgetType.SPLIT_SCREEN -> SplitScreenTile(activity)
         WidgetType.CLUSTER_MIRROR -> ClusterMirrorTile(activity)
-        WidgetType.NAVIGATION -> NavigationPanel(activity, sahne = false)
+        WidgetType.NAVIGATION -> NavigationPanel(activity)
     }
 }

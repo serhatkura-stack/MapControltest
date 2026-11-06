@@ -6,23 +6,15 @@ import android.util.Log
 
 /**
  * Salt okunur cihaz/derleme bilgisi: başka araçlardaki (ör. Tiggo 8) test raporlarında hangi sürümün, hangi
- * ekranda ve hangi ızgarayla çalıştığı görünsün diye. Açılışta bir kez günlüğe yazılır, Veri kontrolü
+ * ekranda ve hangi araç profiliyle çalıştığı görünsün diye. Açılışta bir kez günlüğe yazılır, Veri kontrolü
  * panelinde "Cihaz" bölümü ve kaydedilen dosyanın başlığı olarak gösterilir. Araca hiçbir şey yazmaz.
  */
 object LauncherInfo {
     const val TAG = "LauncherInfo"
 
-    /** Izgaranın son ölçülen hücre boyutu (px); [LauncherGrid] yerleşimde bildirir. 0 = henüz ölçülmedi. */
-    @Volatile private var cellWidthPx = 0f
-    @Volatile private var cellHeightPx = 0f
     /** Etkin düzen modu; [HomeLauncherActivity] günceller. */
     @Volatile var mode: LayoutMode = LayoutMode.PARK
     @Volatile private var logged = false
-
-    fun noteGrid(cellWidth: Float, cellHeight: Float) {
-        cellWidthPx = cellWidth
-        cellHeightPx = cellHeight
-    }
 
     /** Derleme işlemesi (GIT_SHA); BuildConfig'te yoksa (ör. launchertest) "?" döner. */
     private fun buildCommit(): String = try {
@@ -51,8 +43,6 @@ object LauncherInfo {
             }
         }
         val density = dm.density.takeIf { it > 0f } ?: 1f
-        val cw = cellWidthPx
-        val ch = cellHeightPx
         return listOf(
             "paket" to pkg,
             "sürüm" to "$versionName ($versionCode)",
@@ -65,7 +55,6 @@ object LauncherInfo {
             "ekran dp" to "${(dm.widthPixels / density).toInt()}×${(dm.heightPixels / density).toInt()}",
             "yoğunluk" to "${dm.densityDpi} dpi",
             "en küçük genişlik" to "${context.resources.configuration.smallestScreenWidthDp} dp",
-            "ızgara" to if (cw > 0f && ch > 0f) "$GRID_COLS×$GRID_ROWS, hücre ${cw.toInt()}×${ch.toInt()} px" else "$GRID_COLS×$GRID_ROWS, hücre henüz ölçülmedi",
             "araç profili" to VehicleProfile.active.name,
             "düzen modu" to mode.name,
         )

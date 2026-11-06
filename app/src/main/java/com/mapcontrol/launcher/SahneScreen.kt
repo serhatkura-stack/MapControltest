@@ -22,7 +22,7 @@ import com.mapcontrol.R
  *
  * Düzenleme modunda her yuvanın üstünde "Değiştir" örtüsü vardır; dokununca o yuvaya uyan türleri gösteren seçici açılır
  * (panel ya da şerit seçkisi [SahneForm]; ekranda olanlar soluk). "Kaldır" yuvayı boşaltır (sessiz "+").
- * Değişiklikler hemen etkin moda ait [SahneStore]'a yazılır; Serbest ızgaranın kayıtlarına dokunulmaz.
+ * Değişiklikler hemen etkin moda ait [SahneStore]'a yazılır.
  */
 @SuppressLint("ViewConstructor")
 class SahneScreen(
@@ -260,7 +260,7 @@ class SahneScreen(
             return AppPairStripView(activity, tiles) to tiles
         }
         val span = SahneForm.stripSpan(slot.type)
-        val widget = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, span, slot.extra)).also { it.applySpan(span) }
+        val widget = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, span, slot.extra)).also { it.applySpan(span) }
         val source = widget as? StripSource
         val fallback = StripState(activity.getString(slot.type.label), "", slot.type.icon)
         var anchor: View? = null
@@ -297,7 +297,7 @@ class SahneScreen(
 
     private fun place(ref: SahneSlotRef, type: WidgetType) {
         val slot = SahneSlot(SahneSlots.newId(stored, type), type,
-            if (type == WidgetType.APP) SahneSlots.appExtra(AppDock.installedDefaults(activity, DEFAULT_APP_SLOTS)) else null)
+            if (type == WidgetType.APP) SahneSlots.appExtra(DefaultApps.installedDefaults(activity, DEFAULT_APP_SLOTS)) else null)
         apply(ref, slot)
     }
 

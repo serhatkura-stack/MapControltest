@@ -28,11 +28,11 @@ internal object SahnePanelFactory {
         WidgetType.TRIP -> SahneTripPanel(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
         in VALUE_PANEL_TYPES -> {
-            val tile = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, SahneForm.panelSpan(slot.type), slot.extra))
+            val tile = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, SahneForm.panelSpan(slot.type), slot.extra))
             tile.applySpan(SahneForm.panelSpan(slot.type))
             SahneValuePanel(activity, slot.type, tile, calm)
         }
-        else -> WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, 0, 0, SahneForm.panelSpan(slot.type), slot.extra)).also {
+        else -> WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, SahneForm.panelSpan(slot.type), slot.extra)).also {
             it.applySpan(SahneForm.panelSpan(slot.type))
         }
     }

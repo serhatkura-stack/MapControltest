@@ -37,7 +37,7 @@ import kotlin.math.sin
  *  - Bildirim erişimi yok: kısa Türkçe ileti ve sistem bildirim erişimi ayarını açan düğme (izin kodla verilmez).
  * Veri [NavigationSource]'tan, olay güdümlü (yoklama yok).
  */
-internal class NavigationPanel(private val context: Context, sahne: Boolean = true) : SizedWidget {
+internal class NavigationPanel(private val context: Context) : SizedWidget {
 
     private enum class Mode { ROUTE, IDLE, NO_ACCESS }
 
@@ -133,8 +133,6 @@ internal class NavigationPanel(private val context: Context, sahne: Boolean = tr
         setPadding(context.dp(30), context.dp(24), context.dp(30), context.dp(22))
         addView(head)
         addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = context.dp(12) })
-        // Serbest ızgarada kendi camı olsun (Sahne'de panel camı zaten var ve kart zemini kaldırılır).
-        if (!sahne) background = GlassDrawable(context)
     }
 
     init { bind() }

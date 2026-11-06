@@ -58,7 +58,7 @@ object LauncherSafeArea {
     /** Alt güvenli alan = max(sistem gezinme çubuğu inset'i, debug OEM simülasyonu). */
     fun bottomInsetPx(context: Context, insets: WindowInsets?): Int {
         val system = when {
-            // Bizimki/Gizli: gezinme çubuğu gizli; geçici gösterim içeriği itmesin, ızgara 720 px'in tamamını alır.
+            // Bizimki/Gizli: gezinme çubuğu gizli; geçici gösterim içeriği itmesin, ana ekran 720 px'in tamamını alır.
             LauncherBottomBar.hidesOemBar(context) -> 0
             insets == null -> 0
             Build.VERSION.SDK_INT >= 30 -> insets.getInsets(WindowInsets.Type.navigationBars()).bottom

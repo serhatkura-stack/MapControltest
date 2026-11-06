@@ -9,17 +9,16 @@ import android.view.Display
 enum class BarStyle { CLASSIC, FLAT }
 
 /**
- * Araç ekranı profili: ızgara satır sayısı, alt çubuk biçimi ve yüksekliği ekrana göre değişir. Sütun sayısı
- * ([GRID_COLS]) her profilde aynıdır.
- *  - [TIGGO7]: 1920×720 @160 dpi, 12×6 ızgara, mevcut alt çubuk (sabit [TIGGO7_BAR_DP] yükseklik).
- *  - [TIGGO8]: 15,6" 2560×1440 (16:9), 12×8 ızgara, düz ince şerit; yükseklik aracın kendi dock'una oranlı
+ * Araç ekranı profili: Sahne biçimi (Tiggo 8'de dört panel), alt çubuk biçimi ve yüksekliği ekrana göre değişir.
+ *  - [TIGGO7]: 1920×720 @160 dpi, iki panelli Sahne, mevcut alt çubuk (sabit [TIGGO7_BAR_DP] yükseklik).
+ *  - [TIGGO8]: 15,6" 2560×1440 (16:9), dört panelli Sahne, düz ince şerit; yükseklik aracın kendi dock'una oranlı
  *    (1440 px içinde 128 px).
- * Etkin profil [active] ile okunur; [resolve] başlatmada bir kez (ve her yeniden kurulumda) çağrılır, böylece açık bir
- * ızgara çalışırken satır sayısı değişmez. Düzenler profil başına ayrı saklanır ([LayoutKeys.prefsName]).
+ * Etkin profil [active] ile okunur; [resolve] başlatmada bir kez (ve her yeniden kurulumda) çağrılır, böylece açık
+ * ekran çalışırken profil değişmez. Düzenler araç ekranı başına ayrı saklanır ([SahneStore.prefsName]).
  */
-enum class VehicleProfile(val key: String, val gridRows: Int, val barStyle: BarStyle) {
-    TIGGO7("tiggo7", 6, BarStyle.CLASSIC),
-    TIGGO8("tiggo8", 8, BarStyle.FLAT);
+enum class VehicleProfile(val key: String, val barStyle: BarStyle) {
+    TIGGO7("tiggo7", BarStyle.CLASSIC),
+    TIGGO8("tiggo8", BarStyle.FLAT);
 
     /** Alt çubuk yüksekliği (dp). [screenHeightDp] uygulamanın gördüğü ekran yüksekliğidir (dp). */
     fun barHeightDp(screenHeightDp: Float): Int = when (this) {

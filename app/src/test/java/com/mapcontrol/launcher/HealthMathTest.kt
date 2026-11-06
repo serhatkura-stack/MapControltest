@@ -84,16 +84,6 @@ class HealthMathTest {
         assertTrue(WidgetType.values().none { it.key in HealthMath.REMOVED_KEYS })
     }
 
-    @Test fun savedLayoutWithRemovedKeysResolvesWithoutDuplicates() {
-        val raws = listOf(
-            RawWidget("health", "health", 0, 0, 2, 2, null),
-            RawWidget("battery", "battery", 2, 0, 2, 2, null),
-            RawWidget("totals", "trip_totals", 4, 0, 2, 2, null),
-        )
-        val out = LayoutStore.dedupeSingleInstance(LayoutStore.resolveRaw(raws))
-        assertEquals(listOf(WidgetType.HEALTH, WidgetType.TRIP), out.map { it.type })
-    }
-
     @Test fun totalsRowsDropMissingSignals() {
         assertTrue(TripTotals.rows(null, null, null).isEmpty())
         assertEquals(listOf(TripTotals.Kind.ODOMETER, TripTotals.Kind.TIME), TripTotals.rows(100, null, 5).map { it.first })

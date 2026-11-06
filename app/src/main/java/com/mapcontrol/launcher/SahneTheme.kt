@@ -16,30 +16,6 @@ import android.graphics.drawable.Drawable
 import android.widget.TextView
 import com.mapcontrol.R
 
-/** Ana ekran düzeni: [SAHNE] sabit sahne (iki panel, ortada araç, altta şerit), [SERBEST] 12 sütunlu serbest ızgara. */
-enum class HomeStyle(val key: String) {
-    SAHNE("sahne"),
-    SERBEST("serbest");
-
-    companion object {
-        /** Kayıtlı anahtar; bilinmeyen ya da boşsa varsayılan [SAHNE]. */
-        fun parse(value: String?): HomeStyle = values().firstOrNull { it.key == value?.trim()?.lowercase() } ?: SAHNE
-    }
-}
-
-/** "Ana ekran düzeni" tercihi (Sahne / Serbest); FrostNav "Ana ekran" sekmesinden yazılır, launcher kurulumda okur. */
-object HomeStylePrefs {
-    private const val PREFS_NAME = "launcher_settings"
-    private const val KEY = "home_style"
-
-    @JvmStatic fun get(context: Context): HomeStyle =
-        HomeStyle.parse(context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY, null))
-
-    @JvmStatic fun set(context: Context, style: HomeStyle) {
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY, style.key).apply()
-    }
-}
-
 /**
  * Sahne görünümünün renk jetonları: gece grafit cam, gündüz buzlu inci. Değerler onaylı tasarım taslağından
  * (premium-b) alındı; yarı saydam cam renkleri koyu/açık zemin üstünde önceden harmanlanmış opak tonlardır, böylece

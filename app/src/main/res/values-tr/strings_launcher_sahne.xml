@@ -11,11 +11,6 @@
     <string name="launcher_sahne_add_here">Widget ekle</string>
     <string name="launcher_sahne_helper_park">Değiştirmek için bir alana dokun</string>
     <string name="launcher_sahne_helper_drive">Değiştirmek için bir alana dokun</string>
-    <string name="home_screen_style">Ana ekran düzeni</string>
-    <string name="home_screen_style_sahne">Sahne</string>
-    <string name="home_screen_style_serbest">Serbest</string>
-    <string name="home_screen_style_help_sahne">Araç ortada, iki panel ve altta kontrol şeridi.</string>
-    <string name="home_screen_style_help_serbest">12 sütunlu serbest ızgara; widget\'ları kendiniz yerleştirip boyutlandırın.</string>
     <string name="launcher_car_color">Araç rengi</string>
     <string name="launcher_car_color_help">Sahne ana ekranının ortasındaki aracın rengi.</string>
     <string name="car_color_grafit">Grafit</string>

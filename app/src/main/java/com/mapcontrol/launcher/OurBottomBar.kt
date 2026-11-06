@@ -57,7 +57,7 @@ internal data class ClimateReadout(
  * Okuma 3 sn'de bir, yalnızca ekran görünürken.
 
  */
-class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
+class OurBottomBar(private val activity: Activity) : LauncherWidget {
 
     private val context: Context = activity
     private val io = LauncherIo.serial()
@@ -65,62 +65,17 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
     private var startup: LauncherStartup.Deferred? = null
     private var readout = ClimateReadout()
 
-    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
-    private val theme = ThemeBindings()
-    /** Çubuk biçimi araç profilinden gelir: Tiggo 7 mevcut çubuk, Tiggo 8 ince düz şerit. */
-    private val style = VehicleProfile.active.barStyle
-    private val flat = style == BarStyle.FLAT
-    private val barHeightDp = heightDp(context)
-    private val radiusDp = if (flat) FLAT_RADIUS_DP else LauncherTheme.CARD_RADIUS_DP
-    private val navIconDp = if (flat) FLAT_NAV_ICON_DP else NAV_ICON_DP
-    private val surface = DockSurface(context, radiusDp)
-    private val dividerInsetDp = if (flat) FLAT_DIVIDER_INSET_DP else DIVIDER_INSET_DP
-
     // --- Klima ---
     private val climateControl = ClimateControl(context, io, main)
 
-    /** Sahne çubuğunun düğmeleri ve ayraçları (spor görünümü bunların yüzeyini değiştirir); [view]'dan önce kurulmalı. */
+    /** Çubuğun düğmeleri ve ayraçları (spor görünümü bunların yüzeyini değiştirir); [view]'dan önce kurulmalı. */
     private val barButtons = ArrayList<BarButton>()
     private val barSeps = ArrayList<View>()
 
-    /**
-     * Tek parça dock: koyu cam yüzeyli tek yuvarlak şerit (köşeler yalnızca iki uçta, kart yarıçapında), bölümler
-     * arası boşluksuz; ayrım 1dp ince ayraçlarla (üstten/alttan içeride). Genişlik ağırlıkla dolar.
-     */
-    override val view: View = if (LauncherTheme.sahne) sahneBar() else SwipeUpBar(context) { openClimatePanel() }.apply {
-        orientation = LinearLayout.HORIZONTAL
-        background = surface
-        clipToOutline = true
-        outlineProvider = object : ViewOutlineProvider() {
-            override fun getOutline(v: View, outline: Outline) {
-                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(radiusDp))
-                outline.alpha = 1f
-            }
-        }
-        theme.bind { elevation = if (flat) 0f else context.dpF(LauncherTheme.DOCK_ELEVATION_DP) }
-        var first = true
-        fun add(v: View, lp: LinearLayout.LayoutParams) {
-            if (!first) addView(divider(), LinearLayout.LayoutParams(context.dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
-                topMargin = context.dp(dividerInsetDp)
-                bottomMargin = context.dp(dividerInsetDp)
-            })
-            first = false
-            addView(v, lp)
-        }
-        fun square() = LinearLayout.LayoutParams(context.dp(barHeightDp), LinearLayout.LayoutParams.MATCH_PARENT)
-        // Ana ekran: sistemin ana ekranına çıkar (launcher varsayılan değilken OEM ana ekranı); varsayılan bizsek bir şey yapmaz.
-        add(navButton(R.drawable.ic_mdi_home, R.string.launcher_bar_home, active = true) { leaveToSystemHome() }, square())
-        add(navButton(R.drawable.ic_mdi_view_grid, R.string.launcher_bar_apps) { showApps() }, square())
-        add(navButton(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) { openPackage(VEHICLE_SETTINGS_PACKAGE) }, square())
-        add(climateControl.driverView, weightLp(W_TEMP))
-        add(climateControl.fanView, weightLp(W_FAN))
-        add(climateControl.passengerView, weightLp(W_TEMP))
-        add(navButton(R.drawable.ic_mdi_cog, R.string.launcher_bar_settings) { openAndroidSettings() }, square())
-        add(navButton(R.drawable.ic_mdi_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, square())
-    }
+    override val view: View = sahneBar()
 
     /**
-     * Sahne çubuğu (taslak): cam şerit, solda ana ekran · uygulamalar · araç (88 × 80 düğmeler, etkin ana ekran gece beyaz,
+     * Çubuk (Sahne taslağı): cam şerit, solda ana ekran · uygulamalar · araç (88 × 80 düğmeler, etkin ana ekran gece beyaz,
      * gündüz grafit), ince çizgilerle ayrılmış sürücü sıcaklığı · fan · yolcu sıcaklığı, sağda ayarlar · telefon.
      * Dokunma davranışları aynı.
      */
@@ -172,7 +127,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             setOnClickListener { onClick() }
         }
 
-    // --- Spor modu (yalnız Sahne çubuğu) ---
+    // --- Spor modu ---
 
     private class BarButton(val frame: FrameLayout, val active: Boolean) {
         val icon: ImageView get() = frame.getChildAt(0) as ImageView
@@ -190,7 +145,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
      * alanları ve davranış aynı; geri dönüşte kurulumdaki çizimler aynen geri konur.
      */
     fun setSport(on: Boolean) {
-        if (!LauncherTheme.sahne || on == sport) return
+        if (on == sport) return
         sport = on
         if (on) {
             normalBackground = view.background
@@ -216,16 +171,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
             barSeps.forEach { it.setBackgroundColor(Sahne.CONTROL_BORDER) }
         }
         climateControl.setSport(on)
-    }
-
-    /** Tema değişti: yüzey, ayraçlar, düğmeler ve klima bölümleri yeni renklerle yenilenir; görünümler korunur. */
-    override fun applyTheme() {
-        appsDialog?.dismiss()
-        appsDialog = null
-        theme.reapply()
-        surface.applyTheme()
-        climateControl.applyTheme()
-        view.invalidate()
     }
 
     override fun onVisible() {
@@ -260,35 +205,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
     }
 
     // --- Yerleşim ---
-
-    private fun divider(): View = View(context).apply { theme.bind { setBackgroundColor(LauncherTheme.DOCK_DIVIDER) } }
-
-    /**
-     * Kare düğme (çubuk yüksekliği). Zemini yok, dock'un parçası; basınca beyaz örtü. Etkin olan, bölümün
-     * içinde vurgu renginde yuvarlak bir hap ve beyaz ikon.
-     */
-    private fun navButton(iconRes: Int, labelRes: Int, active: Boolean = false, onClick: () -> Unit): View =
-        FrameLayout(context).apply {
-            theme.bind { foreground = dockPressOverlay(context) }
-            contentDescription = context.getString(labelRes)
-            isClickable = true
-            isFocusable = true
-            if (active) {
-                val inset = context.dp(if (flat) FLAT_PILL_INSET_DP else PILL_INSET_DP)
-                addView(View(context).apply {
-                    theme.bind { background = rounded(context, DriveAccent.buttonFill(LauncherTheme.ACCENT), if (flat) FLAT_PILL_RADIUS_DP else PILL_RADIUS_DP) }
-                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
-                    setMargins(inset, inset, inset, inset)
-                })
-            }
-            addView(
-                icon(context, iconRes, navIconDp).also { ic ->
-                    theme.bind { ic.setTint(if (active) LauncherTheme.ON_ACCENT else LauncherTheme.DOCK_TEXT) }
-                },
-                FrameLayout.LayoutParams(context.dp(navIconDp), context.dp(navIconDp), Gravity.CENTER),
-            )
-            setOnClickListener { onClick() }
-        }
 
     // --- Bağlama ---
 
@@ -440,23 +356,6 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         private const val POLL_MS = 3_000L
         private const val DASH = "—"
 
-        private const val NAV_ICON_DP = 36
-        /** Ayraçların alt/üstten içeri payı; Home hapının içeri payı ve yarıçapı. */
-        private const val DIVIDER_INSET_DP = 22
-        private const val PILL_INSET_DP = 12
-        private const val PILL_RADIUS_DP = 18f
-
-        /** Düz (Tiggo 8) şerit: daha ince, küçük köşe yarıçapı, küçük ikon ve içeri paylar. */
-        private const val FLAT_RADIUS_DP = 14f
-        private const val FLAT_NAV_ICON_DP = 30
-        private const val FLAT_DIVIDER_INSET_DP = 16
-        private const val FLAT_PILL_INSET_DP = 8
-        private const val FLAT_PILL_RADIUS_DP = 14f
-
-        /** Bölüm ağırlıkları (kare düğmeler sabit): sıcaklıklar geniş, fan biraz dar. */
-        private const val W_TEMP = 1.4f
-        private const val W_FAN = 1.2f
-
         private const val APPS_SHEET_WIDTH_DP = 1280
         private const val APPS_HEIGHT_DP = 440
         private const val APPS_COLUMNS = 7
@@ -480,53 +379,6 @@ internal fun dockPressOverlay(context: Context): Drawable = StateListDrawable().
     addState(intArrayOf(), ColorDrawable(0))
     setEnterFadeDuration(0)
     setExitFadeDuration(150)
-}
-
-/**
- * Dock yüzeyi: üstü hafif açık düşey gradyan, kart yarıçapında köşeler. Gündüz 1dp koyu ince kenar çizgisi; gecede üst kenarda 1dp parıltı çizgisi
- * (köşelerden aşağı doğru solar). Gölgeler bir kez [onBoundsChange]'de kurulur; çizimde ayırma yok.
- */
-private class DockSurface(private val context: Context, radiusDp: Float) : Drawable() {
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = context.dpF(1f)
-    }
-    private val rect = RectF()
-    private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = context.dpF(1f)
-        color = LauncherTheme.DOCK_BORDER
-    }
-    private val radius = context.dpF(radiusDp)
-
-    /** Tema değişti: kenar rengi ve gradyanlar yeni renklerle kurulur (sınırlar aynı kalır). */
-    fun applyTheme() {
-        border.color = LauncherTheme.DOCK_BORDER
-        if (!bounds.isEmpty) onBoundsChange(bounds)
-        invalidateSelf()
-    }
-
-    override fun onBoundsChange(b: android.graphics.Rect) {
-        fill.shader = LinearGradient(0f, b.top.toFloat(), 0f, b.bottom.toFloat(), LauncherTheme.DOCK_TOP, LauncherTheme.DOCK_BOTTOM, Shader.TileMode.CLAMP)
-        val hl = LauncherTheme.DOCK_HIGHLIGHT
-        edge.shader = if (hl == 0) null else
-            LinearGradient(0f, b.top.toFloat(), 0f, b.top + radius * 1.2f, hl, hl and 0x00FFFFFF, Shader.TileMode.CLAMP)
-        val h = edge.strokeWidth / 2
-        rect.set(b.left + h, b.top + h, b.right - h, b.bottom - h)
-    }
-
-    override fun draw(canvas: Canvas) {
-        val b = bounds
-        canvas.drawRoundRect(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(), radius, radius, fill)
-        if (edge.shader != null) canvas.drawRoundRect(rect, radius, radius, edge)
-        if (border.color != 0) canvas.drawRoundRect(rect, radius, radius, border)
-    }
-
-    override fun setAlpha(alpha: Int) {}
-    override fun setColorFilter(colorFilter: ColorFilter?) {}
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }
 
 /**

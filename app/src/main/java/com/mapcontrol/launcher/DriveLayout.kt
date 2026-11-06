@@ -76,18 +76,6 @@ class DriveLayoutPolicy(
 fun layoutNoticeFor(from: LayoutMode, to: LayoutMode, automatic: Boolean, started: Boolean): LayoutMode? =
     if (automatic && started && from != to) to else null
 
-/** Kayıt anahtarları: Park mevcut anahtarı aynen korur (hiçbir şey kaybolmaz). Profil son eki dosya adındadır ([Profiles.key]). */
-object LayoutKeys {
-    const val PREFS = "launcher_layout"
-    const val PARK = "widgets_v1"
-    const val DRIVE = "widgets_drive_v1"
-
-    fun key(mode: LayoutMode): String = if (mode == LayoutMode.DRIVE) DRIVE else PARK
-    /** Tiggo 8 düzenleri ayrı dosyada tutulur (12×6 bir düzen 12×8'e ya da tersine asla yüklenmez); Tiggo 7 adı değişmez. */
-    fun prefsName(profile: Int, vehicle: VehicleProfile = VehicleProfile.TIGGO7): String =
-        Profiles.key(PREFS, profile) + if (vehicle == VehicleProfile.TIGGO8) "_t8" else ""
-}
-
 /** "Otomatik sürüş düzeni" seçeneği (profil başına, varsayılan açık). Ayarlar satırı için: [get] / [set]. */
 object DriveLayoutPrefs {
     private const val PREFS = "launcher_drive_layout"
@@ -146,44 +134,3 @@ internal object DriveSignals {
         cached = false
     }
 }
-
-/**
- * Sürüş varsayılanı: az, büyük, tek bakışlık (7 kart, kaydırma yok, uzun metin yok).
- *  - Sol (sürücü tarafı): araç kartı 4×4 (menzil), altında sürücü koltuğu (sol alt köşe, kolay erişim) ve arka hoparlör.
- *  - Orta: tam yükseklikte medya 6×6 (en çok kullanılan; büyük kapak, büyük tuşlar).
- *  - Sağ sütun (yolcu tarafı): anlık tüketim, mola hatırlatıcı, en altta yolcu koltuğu (sağ alt köşe).
- * Uygulama kutucuğu yoktur ([oemBar] ve [appPackages] yalnızca imza uyumu içindir); ızgara boşluksuz dolar.
- */
-@Suppress("UNUSED_PARAMETER")
-fun defaultDriveLayout(oemBar: Boolean = false, appPackages: List<String> = emptyList(), profile: VehicleProfile = VehicleProfile.TIGGO7): List<PlacedWidget> =
-    if (profile == VehicleProfile.TIGGO8) defaultDriveLayoutT8() else listOf(
-        PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
-        PlacedWidget("seat_driver", WidgetType.SEAT_DRIVER, 0, 4, Span(2, 2)),
-        PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 4, Span(2, 2)),
-        PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 6)),
-        PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
-        PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 10, 2, Span(2, 2)),
-        PlacedWidget("seat_passenger", WidgetType.SEAT_PASSENGER, 10, 4, Span(2, 2)),
-    )
-
-/**
- * Tiggo 8 (12×8) Sürüş varsayılanı (yer tutucu): Tiggo 7 ile aynı iskelet, iki ek satırla. Sol sütun: araç kartı 4×4,
- * altında kilit/karart/arka hoparlör ve sürücü koltuğu/sürüş modu (sürücü koltuğu sol alt köşede). Orta: medya 6×6, altında
- * yolculuk · sağlık · hava kalitesi. Sağ sütun: tüketim, mola, telefon, yolcu koltuğu (sağ alt köşe).
- */
-private fun defaultDriveLayoutT8(): List<PlacedWidget> = listOf(
-    PlacedWidget("vehicle", WidgetType.VEHICLE, 0, 0, Span(4, 4)),
-    PlacedWidget("lock", WidgetType.LOCK, 0, 4, Span(1, 2)),
-    PlacedWidget("screen_off", WidgetType.SCREEN_OFF, 1, 4, Span(1, 2)),
-    PlacedWidget("rear_speaker", WidgetType.REAR_SPEAKER, 2, 4, Span(2, 2)),
-    PlacedWidget("seat_driver", WidgetType.SEAT_DRIVER, 0, 6, Span(2, 2)),
-    PlacedWidget("drive_mode", WidgetType.DRIVE_MODE, 2, 6, Span(2, 2)),
-    PlacedWidget("media", WidgetType.MEDIA, 4, 0, Span(6, 6)),
-    PlacedWidget("trip", WidgetType.TRIP, 4, 6, Span(2, 2)),
-    PlacedWidget("health", WidgetType.HEALTH, 6, 6, Span(2, 2)),
-    PlacedWidget("air", WidgetType.AIR, 8, 6, Span(2, 2)),
-    PlacedWidget("consumption", WidgetType.CONSUMPTION, 10, 0, Span(2, 2)),
-    PlacedWidget("break_reminder", WidgetType.BREAK_REMINDER, 10, 2, Span(2, 2)),
-    PlacedWidget("phone_reminder", WidgetType.PHONE_REMINDER, 10, 4, Span(2, 2)),
-    PlacedWidget("seat_passenger", WidgetType.SEAT_PASSENGER, 10, 6, Span(2, 2)),
-)

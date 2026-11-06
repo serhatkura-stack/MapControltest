@@ -86,7 +86,6 @@ public class HomeScreenTabBuilder {
         addSectionTitle(R.string.home_screen_appearance_title);
         FeatureGridLayout appearanceGrid = new FeatureGridLayout(context);
         content.addView(appearanceGrid);
-        createHomeStyleSection(appearanceGrid);
         createThemeSection(appearanceGrid);
         createDriveAccentSection(appearanceGrid);
         createSportModeSection(appearanceGrid);
@@ -209,20 +208,6 @@ public class HomeScreenTabBuilder {
                 index -> {
                     HomeScreenPrefs.setThemeIndex(context, index);
                     callback.log("Ana ekran teması: " + index);
-                });
-    }
-
-    /** Ana ekran düzeni: Sahne (varsayılan) / Serbest; launcher bir sonraki öne gelişinde yeniden kurulur. */
-    private void createHomeStyleSection(FeatureGridLayout grid) {
-        UiStyles.addBinarySegmentedControl(context, createCard(grid),
-                context.getString(R.string.home_screen_style),
-                context.getString(R.string.home_screen_style_sahne), context.getString(R.string.home_screen_style_serbest),
-                context.getString(R.string.home_screen_style_help_sahne),
-                context.getString(R.string.home_screen_style_help_serbest),
-                HomeScreenPrefs.sahneStyle(context),
-                on -> {
-                    HomeScreenPrefs.setSahneStyle(context, on);
-                    callback.log("Ana ekran düzeni: " + (on ? "Sahne" : "Serbest"));
                 });
     }
 

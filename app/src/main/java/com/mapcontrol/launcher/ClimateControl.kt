@@ -40,9 +40,6 @@ internal class ClimateControl(
     private val io: Executor,
     private val main: Handler,
 ) {
-    private val flatBar = VehicleProfile.active.barStyle == BarStyle.FLAT
-    /** Sahne: ince Manrope rakamlar (gece 300), buz mavisi fan noktaları, taslak ölçüleri. */
-    private val sahne = LauncherTheme.sahne
     private var readout = ClimateReadout()
     private var pendingDriver: Double? = null
     private var pendingPassenger: Double? = null
@@ -51,11 +48,11 @@ internal class ClimateControl(
     private var dragging = false
     private var toast: Toast? = null
 
-    /** Tema bağlı atamalar (kurucuda bir kez, [applyTheme]'de yeniden); bkz. [ThemeBindings]. */
+    /** Tema bağlı atamalar (kurucuda bir kez; tema değişince çubuk yeniden kurulur); bkz. [ThemeBindings]. */
     private val theme = ThemeBindings()
     private val bubble = ValueBubble()
-    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver, R.string.launcher_climate_driver_short)
-    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger, R.string.launcher_climate_passenger_short)
+    private val driver = TempCell(ClimateSide.DRIVER, R.string.launcher_climate_driver)
+    private val passenger = TempCell(ClimateSide.PASSENGER, R.string.launcher_climate_passenger)
     private val fan = FanCell()
 
     /** Dock bölümleri (zeminsiz, koyu dock üstünde); yerleşimi ([OurBottomBar]) belirler. */
@@ -76,19 +73,11 @@ internal class ClimateControl(
         render()
     }
 
-    /** Tema değişti: hücrelerin renkleri, yüzey katmanları ve değer yazıları yeniden atanır (görünümler korunur). */
-    fun applyTheme() {
-        theme.reapply()
-        driver.resetTint(); passenger.resetTint(); fan.resetTint()
-        fan.invalidateLevel()
-        render()
-    }
-
-    /** Spor modu (yalnız Sahne çubuğunda): ince kronograf rakamları, açık metal oklar, fan için küçük yay göstergesi. */
+    /** Spor modu: ince kronograf rakamları, açık metal oklar, fan için küçük yay göstergesi. */
     private var sportOn = false
 
     fun setSport(on: Boolean) {
-        if (!sahne || on == sportOn) return
+        if (on == sportOn) return
         sportOn = on
         driver.setSport(on)
         passenger.setSport(on)
@@ -154,20 +143,14 @@ internal class ClimateControl(
 
     // --- Sıcaklık hücresi ---
 
-    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int, shortRes: Int) {
-        private val label = text(context, if (sahne) SAHNE_TEMP_SP else if (flatBar) FLAT_TEMP_SP else TEMP_SP, medium = true).apply {
+    private inner class TempCell(private val side: ClimateSide, private val labelRes: Int) {
+        private val label = text(context, SAHNE_TEMP_SP, medium = true).apply {
             gravity = Gravity.CENTER
-            if (sahne) SahneFonts.apply(this, 400, -0.02f, dayBump = false)
-            theme.bind { setTextColor(if (sahne) Sahne.NUMERAL else LauncherTheme.DOCK_TEXT) }
+            SahneFonts.apply(this, 400, -0.02f, dayBump = false)
+            theme.bind { setTextColor(Sahne.NUMERAL) }
         }
         private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
-
-        /** Tema değişti: gesture ortasında kalmış bir ton varsa sönük başlar (renk jetonlardan yeniden alınır). */
-        fun resetTint() {
-            tintAnim?.cancel()
-            tint.alpha = 0
-        }
 
         val view: FrameLayout = FrameLayout(context).apply {
             background = tint
@@ -177,28 +160,17 @@ internal class ClimateControl(
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                // Sahne'de "Sürücü/Yolcu" etiketi yok: yeri sol/sağ belli, rakam tek başına durur.
-                if (!sahne) {
-                    addView(text(context, LauncherTheme.LABEL_SP).apply {
-                        text = context.getString(shortRes)
-                        gravity = Gravity.CENTER
-                        theme.bind { setTextColor(LauncherTheme.DOCK_TEXT_SECONDARY) }
-                    })
-                    addView(gap(context, 2, vertical = true))
-                }
+                // "Sürücü/Yolcu" etiketi yok: yeri sol/sağ belli, rakam tek başına durur.
                 addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
             // Dokunma bölgelerinin ipucu: sol yarı −0,5, sağ yarı +0,5.
-            val chevDp = if (sahne) SAHNE_CHEVRON_DP else CHEVRON_DP
-            val chev = context.dp(chevDp)
-            val edge = context.dp(if (sahne) SAHNE_CHEVRON_EDGE_DP else CHEVRON_EDGE_DP)
-            addView(icon(context, if (sahne) R.drawable.ic_sahne_chev_left else R.drawable.ic_mdi_chevron_left, chevDp).apply {
-                alpha = if (sahne) 1f else CHEVRON_ALPHA
-                theme.bind { setTint(if (sahne) Sahne.CONTROL_ICON else LauncherTheme.DOCK_TEXT_SECONDARY) }
+            val chev = context.dp(SAHNE_CHEVRON_DP)
+            val edge = context.dp(SAHNE_CHEVRON_EDGE_DP)
+            addView(icon(context, R.drawable.ic_sahne_chev_left, SAHNE_CHEVRON_DP).apply {
+                theme.bind { setTint(Sahne.CONTROL_ICON) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = edge })
-            addView(icon(context, if (sahne) R.drawable.ic_sahne_chev_right else R.drawable.ic_mdi_chevron_right, chevDp).apply {
-                alpha = if (sahne) 1f else CHEVRON_ALPHA
-                theme.bind { setTint(if (sahne) Sahne.CONTROL_ICON else LauncherTheme.DOCK_TEXT_SECONDARY) }
+            addView(icon(context, R.drawable.ic_sahne_chev_right, SAHNE_CHEVRON_DP).apply {
+                theme.bind { setTint(Sahne.CONTROL_ICON) }
             }, FrameLayout.LayoutParams(chev, chev, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = edge })
         }
 
@@ -340,16 +312,13 @@ internal class ClimateControl(
     // --- Fan hücresi ---
 
     private inner class FanCell {
-        private val number = text(context, if (sahne) SAHNE_FAN_SP else if (flatBar) FLAT_FAN_SP else FAN_SP, medium = true).apply {
+        private val number = text(context, SAHNE_FAN_SP, medium = true).apply {
             gravity = Gravity.CENTER
-            if (sahne) SahneFonts.apply(this, 400, dayBump = false)
-            theme.bind { setTextColor(if (sahne) Sahne.NUMERAL else LauncherTheme.DOCK_TEXT) }
+            SahneFonts.apply(this, 400, dayBump = false)
+            theme.bind { setTextColor(Sahne.NUMERAL) }
         }
-        /** Sahne: noktalar yerine tek 220 × 8dp iz ve dolgu (tek bakışta okunur). */
-        private val track = if (sahne) FanTrack(context) else null
-        private val segments = if (sahne) emptyList() else List(ClimateMath.FAN_MAX) {
-            View(context).apply { background = rounded(context, inactiveSegment(), if (sahne) SAHNE_SEGMENT_H_DP / 2f else SEGMENT_RADIUS_DP) }
-        }
+        /** Noktalar yerine tek 220 × 8dp iz ve dolgu (tek bakışta okunur). */
+        private val track = FanTrack(context)
         private val tint = GradientDrawable().apply { alpha = 0 }
         private var tintAnim: ValueAnimator? = null
         private var level = -1
@@ -363,22 +332,8 @@ internal class ClimateControl(
             SahneFonts.apply(number, if (on) 300 else 400, dayBump = false)
             number.setTextColor(if (on) SportInk.INK else Sahne.NUMERAL)
             fanIcon?.setTint(if (on) SportInk.ICON else Sahne.ICE)
-            val t = track ?: return
-            t.sport = on
-            t.layoutParams = t.layoutParams.apply { height = context.dp(if (on) SPORT_TRACK_H_DP else SAHNE_TRACK_H_DP) }
-        }
-
-        /** Tema değişti: kademe noktaları yeni renklerle yeniden boyanır (önbellekli düzey sıfırlanır). */
-        fun invalidateLevel() {
-            val l = level
-            level = -1
-            if (l >= 0) setLevel(l)
-            track?.invalidate()
-        }
-
-        fun resetTint() {
-            tintAnim?.cancel()
-            tint.alpha = 0
+            track.sport = on
+            track.layoutParams = track.layoutParams.apply { height = context.dp(if (on) SPORT_TRACK_H_DP else SAHNE_TRACK_H_DP) }
         }
 
         val view: FrameLayout = FrameLayout(context).apply {
@@ -392,22 +347,15 @@ internal class ClimateControl(
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(icon(context, if (sahne) R.drawable.ic_sahne_fan else R.drawable.ic_mdi_fan, if (sahne) SAHNE_FAN_ICON_DP else FAN_ICON_DP).also { ic ->
+                    addView(icon(context, R.drawable.ic_sahne_fan, SAHNE_FAN_ICON_DP).also { ic ->
                         fanIcon = ic
-                        theme.bind { ic.setTint(if (sahne) Sahne.ICE else LauncherTheme.DOCK_TEXT_SECONDARY) }
+                        theme.bind { ic.setTint(Sahne.ICE) }
                     })
-                    addView(gap(context, if (sahne) 14 else LauncherTheme.GAP_S_DP))
-                    addView(number, LinearLayout.LayoutParams(if (sahne) LinearLayout.LayoutParams.WRAP_CONTENT else context.dp(FAN_NUMBER_DP), LinearLayout.LayoutParams.WRAP_CONTENT))
+                    addView(gap(context, 14))
+                    addView(number, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-                addView(gap(context, if (sahne) 10 else LauncherTheme.GAP_SM_DP, vertical = true))
-                if (track != null) addView(track, LinearLayout.LayoutParams(context.dp(SAHNE_TRACK_W_DP), context.dp(SAHNE_TRACK_H_DP)))
-                else addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    segments.forEachIndexed { i, v ->
-                        if (i > 0) addView(gap(context, if (sahne) SAHNE_SEGMENT_GAP_DP else SEGMENT_GAP_DP))
-                        addView(v, LinearLayout.LayoutParams(context.dp(if (sahne) SAHNE_SEGMENT_W_DP else SEGMENT_W_DP), context.dp(if (sahne) SAHNE_SEGMENT_H_DP else SEGMENT_H_DP)))
-                    }
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+                addView(gap(context, 10, vertical = true))
+                addView(track, LinearLayout.LayoutParams(context.dp(SAHNE_TRACK_W_DP), context.dp(SAHNE_TRACK_H_DP)))
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
 
@@ -444,15 +392,12 @@ internal class ClimateControl(
             view.contentDescription = context.getString(R.string.launcher_climate_fan) + ", " + (l?.toString() ?: DASH)
         }
 
-        /** Kademe kadar nokta vurgu renginde, kalanı iz renginde; animasyonsuz, yalnızca değişince. */
+        /** Kademe kadar dolgu; animasyonsuz, yalnızca değişince. */
         private fun setLevel(l: Int) {
             val n = l.coerceIn(0, ClimateMath.FAN_MAX)
             if (n == level) return
             level = n
-            track?.set(n / ClimateMath.FAN_MAX.toFloat())
-            segments.forEachIndexed { i, v ->
-                (v.background as GradientDrawable).setColor(if (i < n) (if (sahne) Sahne.ICE else LauncherTheme.ACCENT) else inactiveSegment())
-            }
+            track.set(n / ClimateMath.FAN_MAX.toFloat())
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -544,7 +489,7 @@ internal class ClimateControl(
     private inner class ValueBubble {
         private val value = text(context, BUBBLE_SP, bold = true).apply {
             gravity = Gravity.CENTER
-            theme.bind { setTextColor(LauncherTheme.DOCK_TEXT) }
+            theme.bind { setTextColor(Sahne.INK) }
         }
         private val caption = text(context, LauncherTheme.LABEL_SP).apply {
             gravity = Gravity.CENTER
@@ -570,7 +515,7 @@ internal class ClimateControl(
             value.text = text
             caption.text = captionText
             caption.visibility = if (captionText == null) View.GONE else View.VISIBLE
-            panel.background = rounded(context, LauncherTheme.DOCK_BOTTOM, BUBBLE_RADIUS_DP, tintColor)
+            panel.background = rounded(context, Sahne.GLASS_BOTTOM, BUBBLE_RADIUS_DP, tintColor)
             panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
             val w = maxOf(panel.measuredWidth, context.dp(BUBBLE_MIN_WIDTH_DP))
             val h = panel.measuredHeight
@@ -600,16 +545,13 @@ internal class ClimateControl(
         else -> null
     }
 
-    /** Etkin olmayan kademe noktası: dock yüzeyine göre gece %25 beyaz, gündüz %20 koyu. */
-    private fun inactiveSegment(): Int = LauncherTheme.DOCK_TRACK
-
     /** Ekran değeri: derece işareti küçük ve ikincil tonda, rakamlar tam boy. */
     private fun styled(c: Double): CharSequence {
         endLabel(c)?.let { return it }
         val num = String.format(Locale.getDefault(), "%.1f", c)
         return SpannableStringBuilder(num).append('°').apply {
-            setSpan(RelativeSizeSpan(if (sahne) 0.52f else DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (sahne) setSpan(android.text.style.SuperscriptSpan(), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(RelativeSizeSpan(DEGREE_SCALE), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(android.text.style.SuperscriptSpan(), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(ForegroundColorSpan(if (sportOn) SportInk.INK_3 else LauncherTheme.DOCK_TEXT_SECONDARY), num.length, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
@@ -622,35 +564,19 @@ internal class ClimateControl(
 
     companion object {
         private const val DASH = "—"
-        /** Sahne ölçüleri (taslak): sıcaklık 46, fan 40, fan noktaları 18 × 6 / 7 aralık, ok ikonları 30 ve kenardan 21. */
+        /** Sahne ölçüleri (taslak): sıcaklık 46, fan 40, fan izi 220 × 8, ok ikonları 30 ve kenardan 21. */
         private const val SAHNE_TEMP_SP = 46f
         private const val SAHNE_FAN_SP = 40f
         private const val SAHNE_FAN_ICON_DP = 30
-        private const val SAHNE_SEGMENT_W_DP = 18
-        private const val SAHNE_SEGMENT_H_DP = 6
-        private const val SAHNE_SEGMENT_GAP_DP = 7
         private const val SAHNE_TRACK_W_DP = 220
         private const val SAHNE_TRACK_H_DP = 8
         /** Spor: fan kademesi küçük yay göstergesi (aynı genişlik, biraz daha yüksek kutu). */
         private const val SPORT_TRACK_H_DP = 16
         private const val SAHNE_CHEVRON_DP = 30
         private const val SAHNE_CHEVRON_EDGE_DP = 21
-        private const val TEMP_SP = 56f
-        /** Düz (Tiggo 8) ince şeritte küçültülmüş yazılar. */
-        private const val FLAT_TEMP_SP = 38f
-        private const val FLAT_FAN_SP = 30f
         private const val BUBBLE_SP = 56f
-        private const val DEGREE_SCALE = 0.8f
-        private const val CHEVRON_DP = 32
-        private const val CHEVRON_EDGE_DP = 8
-        private const val CHEVRON_ALPHA = 0.85f
-        private const val FAN_SP = 44f
-        private const val FAN_ICON_DP = 40
-        private const val FAN_NUMBER_DP = 48
-        private const val SEGMENT_W_DP = 17
-        private const val SEGMENT_H_DP = 10
-        private const val SEGMENT_GAP_DP = 5
-        private const val SEGMENT_RADIUS_DP = 5f
+        /** Derece işareti: küçük, üst simge. */
+        private const val DEGREE_SCALE = 0.52f
         private const val BUBBLE_RADIUS_DP = 20f
         private const val BUBBLE_MIN_WIDTH_DP = 140
         private const val BUBBLE_GAP_DP = 12

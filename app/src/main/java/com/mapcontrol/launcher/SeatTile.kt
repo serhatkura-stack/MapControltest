@@ -149,7 +149,7 @@ internal class SeatTile(
         listOf(artBox, title, value, pips).forEach { (it.parent as? ViewGroup)?.removeView(it) }
         root.removeAllViews()
         inlineChooser = null
-        root.background = if (LauncherTheme.sahne) null else cardSurface(activity)
+        root.background = null
         // Büyük biçimde dokunuş satır içi düğmelerdedir; kök dokunuş almaz.
         root.isClickable = !b
         val maxSp = if (b) BIG_VALUE_SP else VALUE_SP
@@ -222,10 +222,10 @@ internal class SeatTile(
     // --- Durum ---
 
     private fun heatColor(): Int = LauncherTheme.HEAT
-    /** Soğutma: buz mavisi (Sahne'de [Sahne.ICE]). */
-    private fun coolColor(): Int = if (LauncherTheme.sahne) Sahne.ICE else LauncherTheme.COOL
-    private fun ink(): Int = if (LauncherTheme.sahne) Sahne.INK else LauncherTheme.TEXT
-    private fun ink3(): Int = if (LauncherTheme.sahne) Sahne.INK_3 else LauncherTheme.TEXT_SECONDARY
+    /** Soğutma: buz mavisi ([Sahne.ICE]). */
+    private fun coolColor(): Int = Sahne.ICE
+    private fun ink(): Int = Sahne.INK
+    private fun ink3(): Int = Sahne.INK_3
 
     private fun valueText(s: SeatShown): String = when {
         !s.known -> activity.getString(R.string.launcher_unavailable)
@@ -272,7 +272,7 @@ internal class SeatTile(
             }
         }
         val on = when (s.mode) { SeatMode.HEAT -> heatColor(); SeatMode.COOL -> coolColor(); SeatMode.OFF -> 0 }
-        val track = if (LauncherTheme.sahne) Sahne.TRACK else LauncherTheme.TRACK
+        val track = Sahne.TRACK
         for (i in 0 until SeatChoice.MAX) {
             pips.getChildAt(i).background = rounded(activity, if (s.known && i < s.level && on != 0) on else track, PIP_H_DP / 2f)
         }
@@ -317,7 +317,7 @@ internal class SeatTile(
         chooser.bind(shown)
         val card = chooser.view.apply {
             tag = chooser
-            background = if (LauncherTheme.sahne) GlassDrawable(activity, Sahne.PANEL_RADIUS_DP, shadow = 0.6f) else rounded(activity, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
+            background = GlassDrawable(activity, Sahne.PANEL_RADIUS_DP, shadow = 0.6f)
             val p = activity.dp(CHOOSER_PAD_DP)
             setPadding(p, p, p, p)
             isClickable = true // karta dokunuş perdeye geçmesin
@@ -433,12 +433,12 @@ internal class SeatTile(
          * eylem düğmesidir: denetim dolgusu ve kenar; koltuk zaten kapalıysa ince mürekkep çerçeveyle işaretli.
          */
         fun bind(s: SeatShown) {
-            val fill = if (LauncherTheme.sahne) Sahne.SOFT_FILL else LauncherTheme.CONTROL
-            val hair = if (LauncherTheme.sahne) Sahne.HAIR_2 else 0
+            val fill = Sahne.SOFT_FILL
+            val hair = Sahne.HAIR_2
             buttons.forEach { (t, b) ->
                 val current = SeatChoice.isCurrent(s, t)
                 if (t.mode == SeatMode.OFF) {
-                    b.background = rounded(activity, if (LauncherTheme.sahne) Sahne.TRACK else LauncherTheme.CONTROL, BTN_RADIUS_DP,
+                    b.background = rounded(activity, Sahne.TRACK, BTN_RADIUS_DP,
                         if (current) ink3() else hair)
                     b.setTextColor(ink())
                 } else {
@@ -451,8 +451,7 @@ internal class SeatTile(
         }
     }
 
-    private fun sahneOrText(sp: Float, weight: Int): TextView =
-        if (LauncherTheme.sahne) sahneText(activity, sp, Sahne.INK, weight) else text(activity, sp, LauncherTheme.TEXT, medium = weight >= 500)
+    private fun sahneOrText(sp: Float, weight: Int): TextView = sahneText(activity, sp, Sahne.INK, weight)
 
     private companion object {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT

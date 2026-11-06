@@ -316,20 +316,16 @@ class SahneSlotsTest {
     }
 
     @Test
-    fun sahneStorageNeverSharesSerbestKeys() {
-        assertNotEquals(LayoutKeys.prefsName(0), SahneStore.prefsName(0))
-        assertNotEquals(LayoutKeys.prefsName(1, VehicleProfile.TIGGO8), SahneStore.prefsName(1, VehicleProfile.TIGGO8))
+    fun sahneStorageKeysPerModeAndVehicle() {
         assertNotEquals(SahneStore.key(LayoutMode.PARK), SahneStore.key(LayoutMode.DRIVE))
-        assertTrue(SahneStore.key(LayoutMode.PARK) !in setOf(LayoutKeys.PARK, LayoutKeys.DRIVE))
         assertNotEquals(SahneStore.prefsName(0), SahneStore.prefsName(0, VehicleProfile.TIGGO8))
     }
 
     @Test
-    fun homeStyleDefaultsToSahne() {
-        assertEquals(HomeStyle.SAHNE, HomeStyle.parse(null))
-        assertEquals(HomeStyle.SAHNE, HomeStyle.parse("bilinmeyen"))
-        assertEquals(HomeStyle.SERBEST, HomeStyle.parse("serbest"))
-        assertEquals(HomeStyle.SAHNE, HomeStyle.parse(" Sahne "))
+    fun removedWidgetKeysResolveToNull() {
+        // Kaldırılan kutucukların anahtarları çözülmez; eski Sahne kaydında o yuva boşalır.
+        listOf("range", "tires", "doors", "sunroof", "nope").forEach { assertNull(WidgetType.fromKey(it)) }
+        assertEquals(WidgetType.LOCK, WidgetType.fromKey("lock"))
     }
 
     // --- Dört panelli biçim (Tiggo 8, 6 Kasım) ---

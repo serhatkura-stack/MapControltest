@@ -39,12 +39,11 @@ class BottomBarModeTest {
         assertTrue(BottomBarMode.HIDDEN.hidesOemBar)
     }
 
-    @Test fun sahneNeverFallsBackToLegacyDock() {
-        assertTrue(BottomBarMode.drawsOurBar(BottomBarMode.OURS, sahne = false, oemBarPresent = true))
-        assertTrue(BottomBarMode.drawsOurBar(BottomBarMode.ORIGINAL, sahne = true, oemBarPresent = false))
-        assertFalse(BottomBarMode.drawsOurBar(BottomBarMode.ORIGINAL, sahne = true, oemBarPresent = true))
-        assertFalse(BottomBarMode.drawsOurBar(BottomBarMode.ORIGINAL, sahne = false, oemBarPresent = false))
-        assertFalse(BottomBarMode.drawsOurBar(BottomBarMode.HIDDEN, sahne = true, oemBarPresent = false))
+    @Test fun drawsOurBarUnlessOemBarOrHidden() {
+        assertTrue(BottomBarMode.drawsOurBar(BottomBarMode.OURS, oemBarPresent = true))
+        assertTrue(BottomBarMode.drawsOurBar(BottomBarMode.ORIGINAL, oemBarPresent = false))
+        assertFalse(BottomBarMode.drawsOurBar(BottomBarMode.ORIGINAL, oemBarPresent = true))
+        assertFalse(BottomBarMode.drawsOurBar(BottomBarMode.HIDDEN, oemBarPresent = false))
     }
 
     @Test fun climateDecode() {

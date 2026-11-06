@@ -90,51 +90,14 @@ class DriveLayoutTest {
         assertEquals(1, DriveSignals.HANDBRAKE_ON_VALUE)
     }
 
-    @Test fun layoutKeysPerProfileAndMode() {
-        assertEquals("widgets_v1", LayoutKeys.key(LayoutMode.PARK))   // mevcut anahtar korunur
-        assertEquals("widgets_drive_v1", LayoutKeys.key(LayoutMode.DRIVE))
-        assertEquals("launcher_layout", LayoutKeys.prefsName(1))
-        assertEquals("launcher_layout_p2", LayoutKeys.prefsName(2))
-        assertEquals("launcher_layout_p3", LayoutKeys.prefsName(3))
+    @Test fun driveLayoutPrefsKeyPerProfile() {
         assertEquals("auto_drive_layout", DriveLayoutPrefs.key(1))
         assertEquals("auto_drive_layout_p2", DriveLayoutPrefs.key(2))
     }
 
-    @Test fun defaultDriveLayoutsAreValid() {
-        for (oem in listOf(true, false)) {
-            val l = defaultDriveLayout(oem, List(8) { "pkg$it" })
-            assertTrue("oem=$oem", LayoutStore.isValid(l))
-            assertTrue(l.any { it.type == WidgetType.MEDIA && it.span == Span(6, 6) })
-        }
-    }
-
-    @Test fun defaultDriveLayoutHasExactlyTheExpectedWidgets() {
-        for (oem in listOf(true, false)) {
-            val l = defaultDriveLayout(oem, List(8) { "pkg$it" })
-            assertTrue(LayoutStore.isValid(l))
-            val got = l.map { "${it.type.key}@${it.col},${it.row}:${it.span}" }.sorted()
-            val want = listOf(
-                "vehicle@0,0:4×4",
-                "seat_driver@0,4:2×2",
-                "rear_speaker@2,4:2×2",
-                "media@4,0:6×6",
-                "consumption@10,0:2×2",
-                "break_reminder@10,2:2×2",
-                "seat_passenger@10,4:2×2",
-            ).sorted()
-            assertEquals(want, got)
-        }
-    }
 }
 
 class ParkOnlyTest {
-
-    /** Sürüş kilidi yok: her widget Park ve Sürüş seçicilerinde aynı; kayıtlı düzen her iki modda da aynen çizilir. */
-    @Test fun everyWidgetIsAddableInBothModes() {
-        val all = addableWidgetTypes()
-        assertEquals(WidgetType.values().toList(), all)
-        assertTrue(all.containsAll(listOf(WidgetType.PHOTO, WidgetType.SCREEN_OFF, WidgetType.CLOCK)))
-    }
 
     @Test fun noParkOnlyFlagOrModeFilterLeft() {
         // Eski "parkOnly" alanı ve mod filtresi kaldırıldı (yansımayla denetlenir: kod yeniden eklenirse test düşer).

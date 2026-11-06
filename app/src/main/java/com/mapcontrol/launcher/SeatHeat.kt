@@ -19,7 +19,7 @@ internal data class SeatHeatState(
 )
 
 /**
- * Koltuk ısıtma okuma/yazma mantığı; alt çubuk ([ClimateBar]) ve koltuk kutucuğu ([SeatHeatTile]) paylaşır.
+ * Koltuk ısıtma okuma/yazma mantığı; koltuk kutucuğu ([SeatTile]) ve mini gösterge paylaşır.
  *
  * Durum 3 sn'de bir okunur; dokununca seviye Kapalı → 3 → 2 → 1 → Kapalı sırasıyla değişir, ekran hemen güncellenir (iyimser),
  * komut arka planda yalnızca [LauncherEdition] üzerinden gider, kısa süre sonra gerçek durum okunur.

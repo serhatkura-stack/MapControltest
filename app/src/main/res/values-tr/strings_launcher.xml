@@ -14,8 +14,6 @@
     <string name="launcher_tires_warning">Lastik basıncı düşük</string>
     <string name="launcher_tires_low_wheel">Lastik basıncı düşük: %1$s %2$d psi</string>
     <string name="launcher_tires_warning_short">Lastik uyarısı</string>
-    <string name="launcher_seat_heat_driver">Sürücü koltuk ısıtma</string>
-    <string name="launcher_seat_heat_passenger">Yolcu koltuk ısıtma</string>
     <string name="launcher_app_empty">Uygulama ekle</string>
     <string name="launcher_app_pick_title">Uygulama seç</string>
     <string name="launcher_widget_media">Medya</string>
@@ -37,15 +35,11 @@
     <string name="launcher_widget_app">Uygulama kısayolu</string>
     <string name="launcher_edit">Düzenle</string>
     <string name="launcher_edit_title">Ana ekranı düzenle</string>
-    <string name="launcher_edit_helper_park">Park ekranı, araç dururken görünür</string>
-    <string name="launcher_edit_helper_drive">Sürüş ekranı, araç hareket edince görünür</string>
     <string name="launcher_edit_reset_confirm_park">Park ekranı varsayılana dönsün mü?</string>
     <string name="launcher_edit_reset_confirm_drive">Sürüş ekranı varsayılana dönsün mü?</string>
-    <string name="launcher_edit_add">Widget ekle</string>
     <string name="launcher_edit_reset">Varsayılan</string>
     <string name="launcher_edit_done">Bitti</string>
     <string name="launcher_edit_remove">Kaldır</string>
-    <string name="launcher_edit_no_space">Bu widget için boş yer yok</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_range_label">menzil</string>
     <string name="launcher_fuel_short" formatted="true">%%%1$d yakıt</string>
@@ -67,7 +61,6 @@
     <string name="launcher_doors_open_count" formatted="true">%1$d yer açık</string>
     <string name="launcher_windows_open_count" formatted="true">%1$d cam açık: %2$s</string>
     <string name="launcher_close">Kapat</string>
-    <string name="launcher_edit_no_room">Yer yok</string>
     <string name="launcher_widget_consumption">Anlık tüketim</string>
     <string name="launcher_widget_trip">Yolculuk</string>
     <string name="launcher_widget_health">Araç sağlığı</string>
@@ -115,8 +108,6 @@
     <string name="launcher_climate_driver">Sürücü sıcaklığı</string>
     <string name="launcher_climate_passenger">Yolcu sıcaklığı</string>
     <string name="launcher_climate_fan">Fan kademesi</string>
-    <string name="launcher_climate_driver_short">Sürücü</string>
-    <string name="launcher_climate_passenger_short">Yolcu</string>
     <string name="launcher_climate_increase">Artır</string>
     <string name="launcher_climate_decrease">Azalt</string>
     <string name="launcher_health_row_battery">Akü</string>

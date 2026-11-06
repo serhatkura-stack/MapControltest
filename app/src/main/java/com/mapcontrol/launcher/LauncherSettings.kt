@@ -105,10 +105,8 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(driveModeToggle(d), fullWidth())
 
-        if (LauncherTheme.sahne) {
-            addView(gap(activity, 12, vertical = true))
-            addView(sportModeToggle(d), fullWidth())
-        }
+        addView(gap(activity, 12, vertical = true))
+        addView(sportModeToggle(d), fullWidth())
 
         addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())

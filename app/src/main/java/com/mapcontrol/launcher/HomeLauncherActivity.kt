@@ -17,15 +17,12 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 /**
  * Yeni ana ekran (HOME). MapControl'ün geri kalanına "Ayarlar" düğmesinden girilir.
  *
- * Yerleşim (yukarıdan aşağı): üst şerit 72dp (düzenleme modunda düzenleme çubuğu) · düzenlenebilir
- * widget ızgarası · klima ve uygulama kartı 120dp (OEM alt çubuğu olan araçta kart yok, ızgara büyür). Tüm widget'lar yalnızca ekran görünürken çalışır.
+ * Yerleşim (yukarıdan aşağı): üst şerit 72dp (düzenleme modunda düzenleme çubuğu) · Sahne orta alanı ([SahneScreen]:
+ * iki panel, ortada araç, altta şerit) · launcher'ın kendi alt çubuğu ([OurBottomBar]; OEM çubuğu olan araçta "Orijinal"
+ * seçiliyken yok). Tüm widget'lar yalnızca ekran görünürken çalışır.
  */
-class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
+class HomeLauncherActivity : Activity() {
 
-    private val parkStore by lazy { LayoutStore(this, LayoutMode.PARK) }
-    private val driveStore by lazy { LayoutStore(this, LayoutMode.DRIVE) }
-    /** Etkin düzenin deposu; düzenleme ve sıfırlama etkin düzene işler. */
-    private val store get() = if (activeMode == LayoutMode.DRIVE) driveStore else parkStore
     private val metrics by lazy { VehicleMetricsRepository.getInstance(applicationContext) }
     private val settings by lazy { LauncherSettings(this, onEditHome = ::enterEditMode) }
     private val metricsListener = VehicleMetricsRepository.Listener { snap ->
@@ -47,7 +44,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     @Volatile private var observedInPark: Boolean? = null
     /** Güç modu açık mı (kontak; bilinmiyorsa null): karşılama (§7.4) bundan karar verir. */
     @Volatile private var observedPowerOn: Boolean? = null
-    /** Sahne karşılaması; Sahne yoksa null. Etkinlik başına bir kez kurulur. */
+    /** Sahne karşılaması; etkinlik başına bir kez kurulur. */
     private var welcome: SahneWelcome? = null
     /** Soğuk açılışta karşılama için ekran siyah tutuldu; bu ana kadar güç sinyali gelmezse kısa solmayla açılır. */
     private var welcomeArmUntil = 0L
@@ -64,7 +61,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private var autoLayoutOn = true
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
-    /** Spor modu (yalnız Sahne): sürüş modu Spor ~1 sn kararlı kalınca orta alan ve çubuklar kronograf diline geçer. */
+    /** Spor modu: sürüş modu Spor ~1 sn kararlı kalınca orta alan ve çubuklar kronograf diline geçer. */
     private val sportGate = SportGate()
     private var sport: SportController? = null
     private val driveHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -77,25 +74,17 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private lateinit var header: HeaderBar
     private lateinit var editBar: View
-    private lateinit var grid: LauncherGrid
-    /** Sahne düzeni ([HomeStyle.SAHNE]) seçiliyse orta alan; null ise Serbest ızgara ([grid]) kullanılır. */
-    private var sahne: SahneScreen? = null
-    /** Orta alanın görünümü (geçiş solmaları için): Sahne ya da ızgara. */
-    private val middle: View get() = sahne ?: grid
-    /** Düzenleme modu açık mı (Sahne ya da ızgara). */
-    private val editing: Boolean get() = sahne?.editMode ?: (::grid.isInitialized && grid.editMode)
-    /** Alt çubuk (klima + dock) yalnızca OEM çubuğu olmayan cihazda; OEM'li araçta yok. */
-    private var dock: AppDock? = null
+    /** Orta alan: Sahne (iki panel, ortada araç, altta şerit). */
+    private lateinit var sahne: SahneScreen
+    /** Düzenleme modu açık mı. */
+    private val editing: Boolean get() = ::sahne.isInitialized && sahne.editMode
     private val oemBar by lazy { LauncherSafeArea.hasOemBar(this) }
     private lateinit var fixedWidgets: List<LauncherWidget>
-    /** Tema değişiminde yerinde yenilenen sabit parçalar (bkz. [applyThemeInPlace]). */
-    private var climateBar: ClimateBar? = null
+    /** Tema değişiminde yeniden kurulan sabit parçalar (bkz. [applyThemeInPlace]). */
     private var ourBar: OurBottomBar? = null
     private var rootLayout: View? = null
     private var mockBar: View? = null
 
-    private var layout: List<PlacedWidget> = emptyList()
-    private val gridWidgets = LinkedHashMap<String, SizedWidget>()
     private var started = false
     private var resumed = false
     /** Kurulumda/tema uygulanırken geçerli olan tercih özeti ([HomeScreenPrefs.signature]). */
@@ -121,7 +110,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
-        // Izgara kurulmadan önce: satır sayısı ve düzen deposu etkin araç profiline göre.
+        // Orta alan kurulmadan önce: düzen deposu ve alt çubuk biçimi etkin araç profiline göre.
         VehicleProfile.resolve(this)
         LauncherDemo.applyPreview(intent)
         LauncherDemo.applyMoving(intent)
@@ -130,7 +119,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
         LauncherBottomBar.applyFrom(this, intent)
-        LauncherTheme.sahne = HomeStylePrefs.get(this) == HomeStyle.SAHNE
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
         refreshDrivePrefs()
@@ -150,52 +138,38 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         hideSystemBars()
 
         header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onWifi = ::toggleWifiPanel, onBluetooth = ::toggleBluetoothPanel)
-        // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
-        // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
-        // Sahne'de OEM çubuğu yokken "Orijinal" de bizim çubuğa düşer (eski klima + uygulama kartı Sahne'de çizilmez).
-        ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), LauncherTheme.sahne, oemBar)) OurBottomBar(this) else null
+        // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir; OEM çubuğu yokken "Orijinal" de
+        // bizim çubuğa düşer. "Gizli"de çubuk yok.
+        ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), oemBar)) OurBottomBar(this) else null
         val ourBar = this.ourBar
-        val bottomBar: Pair<AppDock, ClimateBar>? =
-            if (oemBar || ourBar != null) null else AppDock(this).let { it to ClimateBar(this, it.view) }
-        dock = bottomBar?.first
-        climateBar = bottomBar?.second
-        fixedWidgets = listOfNotNull(header, bottomBar?.first, bottomBar?.second, ourBar)
+        fixedWidgets = listOfNotNull(header, ourBar)
         editBar = buildEditBar()
-        grid = LauncherGrid(this, this)
-        sahne = if (LauncherTheme.sahne) newSahneScreen() else null
-        val sahneOn = sahne != null
+        sahne = newSahneScreen()
 
         val root = LinearLayout(this).apply {
             rootLayout = this
             orientation = LinearLayout.VERTICAL
-            // Sahne: taslak ölçüleri (başlık 12dp'den, orta alan 108dp'den başlar); cam gölgeleri taşabilsin diye kırpma yok.
-            if (sahneOn) {
-                background = SahneGround()
-                clipChildren = false
-                clipToPadding = false
-            } else setBackgroundColor(LauncherTheme.GROUND)
-            setPadding(dp(24), dp(if (sahneOn) 12 else 20), dp(24), dp(20))
+            // Taslak ölçüleri (başlık 12dp'den, orta alan 108dp'den başlar); cam gölgeleri taşabilsin diye kırpma yok.
+            background = SahneGround()
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(24), dp(12), dp(24), dp(20))
 
             addView(FrameLayout(context).apply {
-                clipChildren = !sahneOn
+                clipChildren = false
                 addView(header.view)
                 addView(editBar)
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.HEADER_HEIGHT_DP)))
             // Sahne ritmi: başlık / orta alan / şerit / alt çubuk arası hep 16dp.
             addView(gap(context, 16, vertical = true))
-            addView(middle, weightLp(1f, vertical = true))
-            if (bottomBar != null) {
-                addView(gap(context, 16, vertical = true))
-                addView(bottomBar.second.view, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.CLIMATE_HEIGHT_DP)))
-            }
+            addView(sahne, weightLp(1f, vertical = true))
             if (ourBar != null) {
                 addView(gap(context, 16, vertical = true))
                 addView(ourBar.view, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.heightDp(this@HomeLauncherActivity))))
             }
 
-            // OEM alt çubuğu üstüne çizilir; alt çubuk ve ızgara onun üstünde kalsın. Bizimki'nde en altta
+            // OEM alt çubuğu üstüne çizilir; alt çubuk ve orta alan onun üstünde kalsın. Bizimki'nde en altta
             // dar bir boşluk kalır: alttan kaydırma hareketi (OEM çubuğunu geçici çağırır) çubuğumuza takılmaz.
             val baseBottom = dp(if (ourBar != null) OurBottomBar.BOTTOM_GAP_DP else 20)
             setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom, LauncherSafeArea.oemInsetPx(context)))
@@ -271,7 +245,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     private fun openPendingEdit() {
         window.decorView.post {
-            if (isFinishing || isDestroyed || !::grid.isInitialized || recreating || !pendingEdit) return@post
+            if (isFinishing || isDestroyed || !::sahne.isInitialized || recreating || !pendingEdit) return@post
             pendingEdit = false
             enterEditMode()
         }
@@ -288,11 +262,11 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
 
     /**
      * Tema değişimini etkinliği yeniden yaratmadan uygular ([ThemeTransition.retheme] üstteki anlık görüntü örtüsünün
-     * altında çağırır). Jetonlar güncellenir; [Themeable] olanlar yerinde yenilenir, olmayan widget'lar tek tek yeniden
-     * kurulur (çalışan işleri durdurulup yenisi başlatılır). Açık sayfa kapanır, düzenleme modundan çıkılır.
+     * altında çağırır). Jetonlar güncellenir; başlık yerinde yenilenir, alt çubuk ve Sahne orta alanı yeniden kurulur
+     * (çalışan işleri durdurulup yenisi başlatılır). Açık sayfa kapanır, düzenleme modundan çıkılır.
      */
     internal fun applyThemeInPlace() {
-        if (isFinishing || isDestroyed || !::grid.isInitialized) return
+        if (isFinishing || isDestroyed || !::sahne.isInitialized) return
         // Görünüm panelinden tema değişimi düzenleme modunu bozmaz (gece/gündüz karşılaştırılabilsin); panel yeniden açılır.
         val keepEdit = keepEditOnRetheme && editing
         keepEditOnRetheme = false
@@ -312,77 +286,40 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         rootLayout?.setBackgroundColor(LauncherTheme.GROUND)
 
-        // Sabit parçalar: başlık yerinde, diğerleri tek tek yeniden kurulur.
+        // Sabit parçalar: başlık yerinde yenilenir.
         header.applyTheme()
         val newEditBar = buildEditBar().also { it.visibility = editBar.visibility }
         swapView(editBar, newEditBar)
         editBar = newEditBar
         refreshEditLayoutUi()
-        val oldFixed = ArrayList<LauncherWidget>()
-        val newFixed = ArrayList<LauncherWidget>()
-        dock?.let { oldDock ->
-            val oldClimate = climateBar
-            val newDock = AppDock(this)
-            val newClimate = ClimateBar(this, newDock.view)
-            swapView(oldDock.view, newDock.view)
-            oldClimate?.let { swapView(it.view, newClimate.view) }
-            oldFixed += oldDock; oldClimate?.let { oldFixed += it }
-            newFixed += newDock; newFixed += newClimate
-            dock = newDock; climateBar = newClimate
-        }
-        // Bizim alt çubuk (ClimateControl ve DockSurface dahil) yerinde yenilenir; yeniden kurulmaz. Sahne çubuğu
-        // cam ve düğme renklerini kurulumda aldığı için yenisiyle değiştirilir.
-        if (sahne != null) ourBar?.let { old ->
+        // Alt çubuk cam ve düğme renklerini kurulumda aldığı için yenisiyle değiştirilir.
+        ourBar?.let { old ->
             val fresh = OurBottomBar(this)
             swapView(old.view, fresh.view)
             if (started) old.onHidden()
             old.release()
             ourBar = fresh
             if (started) showWidget(fresh)
-        } else ourBar?.applyTheme()
+        }
         mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
-        fixedWidgets = listOfNotNull(header, dock, climateBar, ourBar)
-        oldFixed.forEach { if (started) it.onHidden(); it.release() }
-        newFixed.forEach { showWidget(it) }
+        fixedWidgets = listOfNotNull(header, ourBar)
 
-        // Sahne: orta alan yeni jetonlarla baştan kurulur (örtünün altında); düzen ve mod aynı kalır.
-        sahne?.let { old ->
-            rootLayout?.background = SahneGround()
-            val fresh = newSahneScreen()
-            if (started) old.onHidden()
-            old.release()
-            swapView(old, fresh)
-            sahne = fresh
-            fresh.setMode(activeMode)
-            rootLayout?.let { welcome = buildWelcome(it) }
-            sport?.onRebuilt()
-            if (keepEdit) {
-                fresh.editMode = true
-                window.decorView.post { if (!isFinishing && !isDestroyed && editing) settings.show(appearanceOnly = true) }
-            }
-            if (started) fresh.onVisible()
-            window.decorView.invalidate()
-            appliedSignature = HomeScreenPrefs.signature(this)
-            return
+        // Orta alan yeni jetonlarla baştan kurulur (örtünün altında); düzen ve mod aynı kalır.
+        rootLayout?.background = SahneGround()
+        val old = sahne
+        val fresh = newSahneScreen()
+        if (started) old.onHidden()
+        old.release()
+        swapView(old, fresh)
+        sahne = fresh
+        fresh.setMode(activeMode)
+        rootLayout?.let { welcome = buildWelcome(it) }
+        sport?.onRebuilt()
+        if (keepEdit) {
+            fresh.editMode = true
+            window.decorView.post { if (!isFinishing && !isDestroyed && editing) settings.show(appearanceOnly = true) }
         }
-
-        // Izgara: Themeable widget yerinde, diğerleri yeniden kurulur; düzen aynı kalır.
-        val fresh = LinkedHashMap<String, View>()
-        var themed = 0
-        layout.forEach { placed ->
-            val old = gridWidgets[placed.id] ?: return@forEach
-            if (old is Themeable) { old.applyTheme(); themed++; return@forEach }
-            if (started) old.onHidden()
-            old.release()
-            val created = WidgetFactory.create(this, placed)
-            created.applySpan(placed.span)
-            gridWidgets[placed.id] = created
-            showWidget(created)
-            fresh[placed.id] = created.view
-        }
-        grid.swapContents(fresh)
-        grid.applyTheme()
-        android.util.Log.i("ThemeTiming", "yerinde: ızgara $themed widget yerinde, ${fresh.size} yeniden kuruldu")
+        if (started) fresh.onVisible()
         window.decorView.invalidate()
         appliedSignature = HomeScreenPrefs.signature(this)
     }
@@ -400,7 +337,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val pending = ArrayList(deferredVisible)
         deferredVisible.clear()
         if (!started || isFinishing || isDestroyed) return
-        pending.forEach { w -> if (w in fixedWidgets || gridWidgets.values.any { it === w }) w.onVisible() }
+        pending.forEach { w -> if (w in fixedWidgets) w.onVisible() }
     }
 
     private fun showWidget(w: LauncherWidget) {
@@ -420,16 +357,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         parent.addView(new, i, lp)
     }
 
-    /** Spor denetleyicisi (yalnız Sahne); etkinlik yeniden kurulduysa ve spor açıktıysa geçişsiz geri gelir. */
+    /** Spor denetleyicisi; etkinlik yeniden kurulduysa ve spor açıktıysa geçişsiz geri gelir. */
     private fun setupSport() {
         sport?.release()
-        if (sahne == null) {
-            sport = null
-            SportController.rememberedSport = false
-            sportGate.reset(false)
-            SportSessionStore.stop()
-            return
-        }
         // En yüksek hız ve 0–100 süreç düzeyinde beslenir (ana ekran görünmezken de; yalnız okuma).
         SportSessionStore.start(this)
         sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout },
@@ -468,9 +398,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private fun driveModeTick() {
         if (!driveAccentOn) return
         val raw = if (LauncherDemo.enabled) LauncherDemo.driveMode else observedDriveMode
-        // Sahne'de Spor kendi ekranıyla gelir ([sportTick]); vurgu için yeniden kurulum (ve ikinci bir geçiş) yapılmaz.
+        // Spor kendi ekranıyla gelir ([sportTick]); vurgu için yeniden kurulum (ve ikinci bir geçiş) yapılmaz.
         // Spor ekranı kapalıysa Spor da diğer modlar gibi yalnız vurgu rengini değiştirir.
-        val observed = if (sahne != null && raw == DriveAccent.SPORT && sportAllowed()) null else raw
+        val observed = if (raw == DriveAccent.SPORT && sportAllowed()) null else raw
         val to = driveModePolicy.update(System.currentTimeMillis(), observed, !editing && sheet == null)
         if (to != null && to != LauncherTheme.driveMode) {
             LauncherTheme.driveMode = to
@@ -483,7 +413,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
      * sinyali [WELCOME_ARM_MS] içinde gelirse karşılama karanlıktan başlar, gelmezse kısa solmayla açılır.
      */
     private fun setupWelcome(root: View) {
-        val w = buildWelcome(root) ?: return
+        val w = buildWelcome(root)
         welcome = w
         val demo = LauncherDemo.enabled && LauncherDemo.welcomeRequested
         if (!WelcomeCycle.gate.played && !WelcomeCycle.armedOnce && (demo || LauncherSafeArea.isDesayUnit(this))) {
@@ -493,9 +423,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
     }
 
-    private fun buildWelcome(root: View): SahneWelcome? {
-        val (stage, parts) = sahne?.welcomeParts() ?: return null
-        val others = listOfNotNull(header.view, ourBar?.view, climateBar?.view) + parts
+    private fun buildWelcome(root: View): SahneWelcome {
+        val (stage, parts) = sahne.welcomeParts()
+        val others = listOfNotNull(header.view, ourBar?.view) + parts
         return SahneWelcome(root, stage, others)
     }
 
@@ -549,7 +479,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (to != null) switchMode(to, true, automatic = true)
     }
 
-    /** Düzeni değiştirir: ızgara kısa süre kararır, yeni düzen kurulur, geri açılır (etkinlik yeniden yaratılmaz). */
+    /** Düzeni değiştirir: orta alan kısa süre kararır, yeni düzen kurulur, geri açılır (etkinlik yeniden yaratılmaz). */
     private fun switchMode(to: LayoutMode, animate: Boolean, automatic: Boolean = false) {
         if (to == activeMode) return
         val notice = layoutNoticeFor(activeMode, to, automatic, started)
@@ -561,7 +491,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         val apply = { loadForMode() }
         // Spor ekranında orta alan aynı kalır (düzen arkada değişir): solma yok.
         if (!animate || !started || sport?.shown == true) { apply(); return }
-        val m = middle
+        val m = sahne
         m.animate().cancel()
         m.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
             apply()
@@ -578,22 +508,21 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Düzenleme çubuğundaki Park | Sürüş seçici: düzenlenen/etkin düzeni elle değiştirir. */
     private fun selectEditLayout(to: LayoutMode) {
         if (!editing || to == activeMode) return
-        val m = middle
+        val m = sahne
         m.animate().cancel()
         m.animate().alpha(0f).setDuration(EDIT_SWAP_OUT_MS).withEndAction {
             switchMode(to, animate = false)
             refreshEditLayoutUi()
             m.animate().alpha(1f).setDuration(EDIT_SWAP_IN_MS).start()
         }.start()
-        // Seçici hemen yanıt verir; ızgara kısa geçişle ardından değişir.
+        // Seçici hemen yanıt verir; orta alan kısa geçişle ardından değişir.
     }
 
     private fun refreshEditLayoutUi() {
         editHelper.setText(when {
-            sahne?.sportShown == true -> R.string.launcher_sport_helper_edit
-            sahne != null -> if (activeMode == LayoutMode.DRIVE) R.string.launcher_sahne_helper_drive else R.string.launcher_sahne_helper_park
-            activeMode == LayoutMode.DRIVE -> R.string.launcher_edit_helper_drive
-            else -> R.string.launcher_edit_helper_park
+            ::sahne.isInitialized && sahne.sportShown -> R.string.launcher_sport_helper_edit
+            activeMode == LayoutMode.DRIVE -> R.string.launcher_sahne_helper_drive
+            else -> R.string.launcher_sahne_helper_park
         })
         editSegments.forEach { (mode, seg) ->
             val on = mode == activeMode
@@ -655,8 +584,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         driveHandler.postDelayed(driveTick, DRIVE_TICK_MS)
         metrics.addListener(metricsListener)
         fixedWidgets.forEach { it.onVisible() }
-        gridWidgets.values.forEach { it.onVisible() }
-        sahne?.onVisible()
+        sahne.onVisible()
         // Ana ekrana dönüş: araç uykusunda düşmüş olabilecek favori tuşu aboneliği tazelenir.
         FavoriteKey.refresh()
     }
@@ -707,16 +635,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         exitEditMode()
         metrics.removeListener(metricsListener)
         fixedWidgets.forEach { it.onHidden() }
-        gridWidgets.values.forEach { it.onHidden() }
-        sahne?.onHidden()
+        sahne.onHidden()
         super.onStop()
     }
 
     override fun onDestroy() {
         sport?.release()
         if (::fixedWidgets.isInitialized) fixedWidgets.forEach { it.release() }
-        gridWidgets.values.forEach { it.release() }
-        sahne?.release()
+        if (::sahne.isInitialized) sahne.release()
         // Ortak örnek: release() çağrılmaz (güneş çatısı vb. dinleyicileri sönerdi), yalnızca kendi dinleyicimiz çıkar.
         metrics.removeListener(metricsListener)
         settings.release()
@@ -752,41 +678,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (hasFocus) { hideSystemBars(); sportTick() }
     }
 
-    // --- Izgara ---
-
-    override fun onLayoutChanged(layout: List<PlacedWidget>) = applyLayout(layout)
-
-    override fun onLongPressEmpty() = enterEditMode()
-
-    /**
-     * Yeni düzeni uygular: kaldırılan widget'lar durdurulup bırakılır, yenileri üretilir,
-     * hepsine yeni boyutu bildirilir. Mevcut widget'lar yeniden yaratılmaz.
-     */
-    private fun loadForMode() {
-        sahne?.let { it.setMode(activeMode); return }
-        applyLayout(store.load(), persist = false)
-    }
-
-    private fun applyLayout(newLayout: List<PlacedWidget>, persist: Boolean = true) {
-        val ids = newLayout.map { it.id }.toSet()
-        gridWidgets.keys.filter { it !in ids }.forEach { id ->
-            gridWidgets.remove(id)?.let { w ->
-                if (started) w.onHidden()
-                w.release()
-            }
-        }
-        newLayout.forEach { placed ->
-            val widget = gridWidgets[placed.id] ?: WidgetFactory.create(this, placed).also { created ->
-                gridWidgets[placed.id] = created
-                created.applySpan(placed.span)
-                if (started) created.onVisible()
-            }
-            widget.applySpan(placed.span)
-        }
-        layout = newLayout
-        grid.setLayout(newLayout, gridWidgets.mapValues { it.value.view })
-        if (persist) store.save(newLayout)
-    }
+    /** Etkin düzeni (Park/Sürüş) Sahne'ye uygular. */
+    private fun loadForMode() = sahne.setMode(activeMode)
 
     // --- Düzenleme modu ---
 
@@ -797,9 +690,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         // Spor ekranı açıksa düzenleme spor küçük kadranlarında yapılır (uzun basınca seçici); spor kalır. Geçiş sürerken
         // (karartmada) ise spor geçişsiz kapanır: orta alan Sahne yuvalarının düzenlemesine geçer, çubuklar spor kalmaz.
         if (sport?.transitioning == true) { sport?.applyInstant(false); sportGate.reset(false) }
-        sahne?.let { it.editMode = true } ?: run { grid.editMode = true }
+        sahne.editMode = true
         refreshEditLayoutUi()
-        dock?.setEditMode(true)
         header.view.visibility = View.INVISIBLE
         editBar.visibility = View.VISIBLE
     }
@@ -815,8 +707,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (!editing) return
         sheet?.dismiss()
         sheet = null
-        sahne?.let { it.editMode = false } ?: run { grid.editMode = false }
-        dock?.setEditMode(false)
+        sahne.editMode = false
         editBar.visibility = View.GONE
         header.view.visibility = View.VISIBLE
         // Önizleme/düzenleme bitince otomatik düzene dönülür (Sürüş'ü Park'tayken düzenlediyse).
@@ -834,14 +725,10 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
             editHelper = this
             gravity = Gravity.CENTER_VERTICAL
-            setText(R.string.launcher_edit_helper_park)
+            setText(R.string.launcher_sahne_helper_park)
         }, weightLp(1f))
         addView(gap(context, 16))
-        // Sahne'de yuvalar sabit: ekleme yuvanın kendi seçicisinden yapılır.
-        if (!LauncherTheme.sahne) {
-            addView(barButton(R.drawable.ic_mdi_plus, R.string.launcher_edit_add, LauncherTheme.CARD) { showAddDialog() })
-            addView(gap(context, 16))
-        }
+        // Yuvalar sabit: ekleme yuvanın kendi seçicisinden yapılır.
         addView(barButton(R.drawable.ic_mdi_theme_light_dark, R.string.launcher_appearance, LauncherTheme.CARD) { settings.show(appearanceOnly = true) })
         addView(gap(context, 16))
         addView(barButton(R.drawable.ic_mdi_restart, R.string.launcher_edit_reset, LauncherTheme.CARD) { confirmReset() })
@@ -865,82 +752,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         pressFeedback()
     }
 
-    /**
-     * "Widget ekle" paneli: beş sütunlu kutucuklar, her birinde ikon, ad ve boyutlar.
-     * Ekranda zaten olan türler (APP hariç) soluk ve "Ekranda" der; yer kalmayanlar "Yer yok" der; dokunmak hiçbir şey eklemez.
-     */
-    private fun showAddDialog() {
-        if (editLocked() || isFinishing || isDestroyed) return
-        sheet?.dismiss()
-        sheet = showLauncherSheet(this, R.string.launcher_edit_add, ADD_SHEET_WIDTH_DP) { d ->
-            // Türler tek ekrana sığmayabilir: ızgara sabit yükseklikte kaydırılır, alt satır hafifçe görünür.
-            val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            addableWidgetTypes().chunked(ADD_COLUMNS).forEachIndexed { r, rowTypes ->
-                if (r > 0) grid.addView(gap(context, 12, vertical = true))
-                grid.addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    for (c in 0 until ADD_COLUMNS) {
-                        if (c > 0) addView(gap(context, 12))
-                        val type = rowTypes.getOrNull(c)
-                        val lp = LinearLayout.LayoutParams(0, dp(ADD_TILE_HEIGHT_DP), 1f)
-                        if (type == null) addView(View(context), lp) else addView(addTile(type) { d.dismiss() }, lp)
-                    }
-                }, sheetFullWidth())
-            }
-            addView(android.widget.ScrollView(context).apply {
-                isVerticalScrollBarEnabled = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                addView(grid, sheetFullWidth())
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(ADD_LIST_HEIGHT_DP)))
-        }
-    }
-
-    private fun addTile(type: WidgetType, dismiss: () -> Unit): View {
-        val onScreen = !isAddable(type, layout)
-        val spot = if (onScreen) null else spotFor(type)
-        val fits = spot != null
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(context, LauncherTheme.CONTROL, 16f)
-            val p = dp(16)
-            setPadding(dp(20), p, dp(20), p)
-            addView(icon(context, type.icon, 32, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY))
-            addView(gap(context, 8, vertical = true))
-            addView(text(context, LauncherTheme.BODY_SP, if (fits) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY, medium = true).apply {
-                // Uzun adlar ("Soğutma · Sürücü") kesilmesin: tek satırda küçülür.
-                setAutoSizeTextTypeUniformWithConfiguration(CATALOG_MIN_SP, LauncherTheme.BODY_SP.toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-                setText(type.label)
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(gap(context, 4, vertical = true))
-            addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                text = when {
-                    fits -> type.sizes.joinToString("  ·  ")
-                    onScreen -> getString(R.string.launcher_edit_on_screen)
-                    else -> getString(R.string.launcher_edit_no_room)
-                }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            alpha = if (fits) 1f else NO_ROOM_ALPHA
-            contentDescription = getString(type.label)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                if (spot != null) {
-                    dismiss()
-                    applyLayout(layout + spot)
-                    grid.select(spot.id)
-                }
-            }
-            pressFeedback()
-        }
-    }
-
-    /** Türün ızgarada sığdığı ilk yer; önce varsayılan (ilk) boyut, sığmazsa sıradakiler. */
-    private fun spotFor(type: WidgetType): PlacedWidget? {
-        val base = PlacedWidget("${type.key}_${System.currentTimeMillis()}", type, 0, 0, type.sizes.first())
-        return type.sizes.asSequence().mapNotNull { LayoutStore.findSpot(layout, base.copy(span = it)) }.firstOrNull()
-    }
-
     private fun confirmReset() {
         if (isFinishing || isDestroyed) return
         sheet?.dismiss()
@@ -955,9 +766,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
                 addView(gap(context, 12))
                 addView(sheetButton(R.string.launcher_edit_reset, primary = true) {
                     d.dismiss()
-                    sahne?.let { it.resetToDefaults(); return@sheetButton }
-                    store.reset()
-                    applyLayout(store.defaults())
+                    sahne.resetToDefaults()
                 }, weightLp(1f))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(LauncherTheme.TOUCH_MIN_DP)))
         }
@@ -1048,12 +857,6 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         const val DRIVE_TICK_MS = 500L
         /** Soğuk açılışta karşılama için güç sinyalinin en çok beklendiği süre (ekran bu sırada siyah). */
         const val WELCOME_ARM_MS = 1_500L
-        const val ADD_COLUMNS = 5
-        const val CATALOG_MIN_SP = 16
-        const val ADD_SHEET_WIDTH_DP = 1280
-        const val ADD_TILE_HEIGHT_DP = 136
-        const val ADD_LIST_HEIGHT_DP = 400
         const val RESET_SHEET_WIDTH_DP = 640
-        const val NO_ROOM_ALPHA = 0.45f
     }
 }

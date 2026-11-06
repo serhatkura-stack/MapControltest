@@ -37,7 +37,7 @@ internal class WifiGlyph(context: Context) : View(context) {
         if (!webDot) return
         // Simgenin sağ üst köşesi: yaylardan ayrık, kapsül zemininde okunur.
         val r = width * 0.13f
-        dotPaint.color = if (LauncherTheme.sahne) Sahne.OK else LauncherTheme.ACCENT
+        dotPaint.color = Sahne.OK
         canvas.drawCircle(width - r, r, r, dotPaint)
     }
 
@@ -46,7 +46,7 @@ internal class WifiGlyph(context: Context) : View(context) {
         val h = height.toFloat()
         val stroke = w * 0.085f
         paint.strokeWidth = stroke
-        val on = sportInk ?: if (LauncherTheme.sahne) Sahne.HEADER_ICON else LauncherTheme.TEXT
+        val on = sportInk ?: Sahne.HEADER_ICON
         val connectedNow = ui.kind == WifiUi.Kind.CONNECTED
         // Bağlıyken dolmayan dilimler iz renginde; bağlı değilken tüm simge soluk ama zeminden ayırt edilir.
         val off = sportInk?.let { (it and 0x00FFFFFF) or 0x59000000 }

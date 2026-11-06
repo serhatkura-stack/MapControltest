@@ -14,8 +14,6 @@
     <string name="launcher_tires_warning">Low tire pressure</string>
     <string name="launcher_tires_low_wheel">Low tire pressure · %1$s %2$d psi</string>
     <string name="launcher_tires_warning_short">Tire alert</string>
-    <string name="launcher_seat_heat_driver">Driver seat heat</string>
-    <string name="launcher_seat_heat_passenger">Passenger seat heat</string>
     <string name="launcher_app_empty">Add app</string>
     <string name="launcher_app_pick_title">Choose an app</string>
     <string name="launcher_widget_media">Media</string>
@@ -37,15 +35,11 @@
     <string name="launcher_widget_app">App shortcut</string>
     <string name="launcher_edit">Edit</string>
     <string name="launcher_edit_title">Edit home screen</string>
-    <string name="launcher_edit_helper_park">Park screen · shown when the car is parked</string>
-    <string name="launcher_edit_helper_drive">Drive screen · shown when the car is moving</string>
     <string name="launcher_edit_reset_confirm_park">Restore the Park screen to its default?</string>
     <string name="launcher_edit_reset_confirm_drive">Restore the Drive screen to its default?</string>
-    <string name="launcher_edit_add">Add widget</string>
     <string name="launcher_edit_reset">Default</string>
     <string name="launcher_edit_done">Done</string>
     <string name="launcher_edit_remove">Remove</string>
-    <string name="launcher_edit_no_space">No free space for this widget</string>
     <string name="launcher_range_value" formatted="true">%1$d km</string>
     <string name="launcher_range_label">range</string>
     <string name="launcher_fuel_short" formatted="true">%1$d%% fuel</string>
@@ -67,7 +61,6 @@
     <string name="launcher_doors_open_count" formatted="true">%1$d open</string>
     <string name="launcher_windows_open_count" formatted="true">%1$d windows open: %2$s</string>
     <string name="launcher_close">Close</string>
-    <string name="launcher_edit_no_room">No room</string>
     <string name="launcher_widget_consumption">Consumption</string>
     <string name="launcher_widget_trip">Trip</string>
     <string name="launcher_widget_health">Car health</string>
@@ -115,8 +108,6 @@
     <string name="launcher_climate_driver">Driver temperature</string>
     <string name="launcher_climate_passenger">Passenger temperature</string>
     <string name="launcher_climate_fan">Fan speed</string>
-    <string name="launcher_climate_driver_short">Driver</string>
-    <string name="launcher_climate_passenger_short">Passenger</string>
     <string name="launcher_climate_increase">Increase</string>
     <string name="launcher_climate_decrease">Decrease</string>
     <string name="launcher_health_row_battery">Battery</string>

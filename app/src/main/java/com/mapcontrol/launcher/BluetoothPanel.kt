@@ -63,9 +63,8 @@ internal class BluetoothPanel(
         availDp = availableDp(anchor)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = if (LauncherTheme.sahne) rounded(ctx, if (LauncherTheme.night) 0xFF1E232B.toInt() else 0xFFFFFFFF.toInt(),
+            background = rounded(ctx, if (LauncherTheme.night) 0xFF1E232B.toInt() else 0xFFFFFFFF.toInt(),
                 Sahne.PANEL_RADIUS_DP, if (LauncherTheme.night) 0xFF2A3038.toInt() else 0x29181E28)
-            else rounded(ctx, LauncherTheme.CARD, LauncherTheme.CARD_RADIUS_DP, LauncherTheme.TRACK)
             val p = ctx.dp(PAD_DP)
             setPadding(p, p, p, p)
         }
@@ -257,8 +256,8 @@ internal class BluetoothPanel(
             })
             addView(LinearLayout(ctx).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                if (d.phone) profileTag(this, if (LauncherTheme.sahne) R.drawable.ic_sahne_phone else R.drawable.ic_mdi_phone, R.string.launcher_bt_profile_phone)
-                if (d.audio) profileTag(this, if (LauncherTheme.sahne) R.drawable.ic_sahne_speaker else R.drawable.ic_mdi_music_note, R.string.launcher_bt_profile_audio)
+                if (d.phone) profileTag(this, R.drawable.ic_sahne_phone, R.string.launcher_bt_profile_phone)
+                if (d.audio) profileTag(this, R.drawable.ic_sahne_speaker, R.string.launcher_bt_profile_audio)
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = ctx.dp(4) })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = ctx.dp(12) })
         addView(pill(R.string.launcher_bt_disconnect, busy = pending?.first == d.address) { request(d, connect = false) })
@@ -315,7 +314,7 @@ internal class BluetoothPanel(
         minimumHeight = activity.dp(LauncherTheme.TOUCH_MIN_DP)
         addView(text(activity, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply { setText(R.string.launcher_bt_settings) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(icon(activity, if (LauncherTheme.sahne) R.drawable.ic_sahne_chev_right else R.drawable.ic_mdi_chevron_right, 28, LauncherTheme.TEXT_SECONDARY))
+        addView(icon(activity, R.drawable.ic_sahne_chev_right, 28, LauncherTheme.TEXT_SECONDARY))
         clickable(this) { dismiss(); onSettings() }
     }
 

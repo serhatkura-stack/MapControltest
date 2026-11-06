@@ -35,18 +35,17 @@ enum class BottomBarMode(val key: String, @StringRes val label: Int) {
             parse(stored) ?: legacyFullscreen?.let(::fromLegacyFullscreen) ?: ORIGINAL
 
         /**
-         * Launcher'ın kendi çubuğu çizilir mi: Bizimki'nde her zaman; Sahne'de "Orijinal" seçiliyken OEM çubuğu yoksa da
-         * (emülatör `launcher_oem_inset` olmadan, Desay olmayan ünite). Eski ızgara görünümünün klima + uygulama kartı
-         * ([AppDock] + [ClimateBar]) Sahne için tasarlanmadı; orada hiç görünmez.
+         * Launcher'ın kendi çubuğu çizilir mi: Bizimki'nde her zaman; "Orijinal" seçiliyken OEM çubuğu yoksa da
+         * (emülatör `launcher_oem_inset` olmadan, Desay olmayan ünite). Gizli'de çubuk yok.
          */
-        fun drawsOurBar(mode: BottomBarMode, sahne: Boolean, oemBarPresent: Boolean): Boolean =
-            mode == OURS || (sahne && mode == ORIGINAL && !oemBarPresent)
+        fun drawsOurBar(mode: BottomBarMode, oemBarPresent: Boolean): Boolean =
+            mode == OURS || (mode == ORIGINAL && !oemBarPresent)
     }
 }
 
 /**
  * Alt çubuk seçeneği (profil başına): Orijinal (varsayılan; OEM çubuğu görünür, launcher onun üstünde biter) ·
- * Bizimki (OEM çubuğu gizlenir, yerine launcher'ın kendi çubuğu [OurBottomBar] gelir) · Gizli (çubuk yok, ızgara
+ * Bizimki (OEM çubuğu gizlenir, yerine launcher'ın kendi çubuğu [OurBottomBar] gelir) · Gizli (çubuk yok, ana ekran
  * 720 px'in tamamını kullanır). Gizli iken ve Bizimki'nde alttan yukarı kaydırınca OEM çubuğu geçici görünür.
  *
  * Hata ayıklama (yalnızca debug yapı): `--es launcher_bottom_bar original|ours|hidden` tercihi yazar;
