@@ -72,6 +72,35 @@ object SportMath {
     fun needleDeg(rpm: Float): Float = START_DEG + SWEEP_DEG * (rpm.coerceIn(0f, RPM_MAX.toFloat()) / RPM_MAX)
 
     /**
+     * Ana (büyük) kadran hızdır (spor-modu-brief sonu, kullanıcı kararı "önce hız"): 0–[SPEED_MAX] km/sa aynı 270° yayda.
+     * Devir ReadOnly 62 araçta ~5 sn'de bir değişiyor (tur 6), ibre için işe yaramıyor; kadranın altında küçük okumadır.
+     */
+    const val SPEED_MAX = 220
+    /** Hız rakamları ve uzun bölüntü adımı (km/sa). */
+    const val SPEED_MAJOR = 20
+
+    fun speedDeg(kmh: Float): Float = START_DEG + SWEEP_DEG * (kmh.coerceIn(0f, SPEED_MAX.toFloat()) / SPEED_MAX)
+
+    /** Sonraki tike kadar (ms): en çok [tickMs], ama bir sonraki saniye sınırını (+[SECOND_PAD_MS]) geçmeden. */
+    fun tickDelay(wallMs: Long, tickMs: Long): Long {
+        val toSecond = 1_000L - Math.floorMod(wallMs, 1_000L) + SECOND_PAD_MS
+        return minOf(tickMs, toSecond)
+    }
+
+    const val SECOND_PAD_MS = 5L
+
+    /**
+     * G noktası yeni yere gitsin mi: [band]'den (px) küçük kıpırtı yeni kare çizdirmez, merkeze dönüş tam. Yeni değer ya da
+     * null (yerinde kalır).
+     */
+    fun gStep(shown: Float, target: Float, band: Float): Float? = when {
+        target == shown -> null
+        target == 0f -> 0f
+        abs(target - shown) >= band -> target
+        else -> null
+    }
+
+    /**
      * Vites penceresi: ReadOnly GEARBOX_STATE (26) P=1, R=2, N=3; D araçta 5 ölçüldü ve sürüşte 6/7'ye de geçiyor
      * (6'nın M de olabileceği notu doğrulanmadı). Eski gösterge biçimleyicisi ([com.mapcontrol.vehicle.VehicleMetricsFormatter])
      * 4'ü D, üstünü D+kademe sayıyor; ikisiyle de uyumlu olmak için [D_MIN]..[D_MAX] hep "D" gösterilir (kademe sinyalden
@@ -127,7 +156,7 @@ class SportSession {
     /** Bu sürüşün en iyi 80–120 geçiş süresi (ms). */
     var best80to120Ms: Long? = null
         private set
-    /** Bu sürüşün en yüksek devri (devir kadranındaki tepe işareti). */
+    /** Bu sürüşün en yüksek devri (özet kartı; kadrandaki tepe işareti artık en yüksek hız). */
     var peakRpm: Int? = null
         private set
     /** Araç duruyor (son bilinen hız 0): 0–100 "Hazır". */
@@ -281,7 +310,7 @@ enum class SportDial(val key: String) {
     G("g"),
     INSTANT("inst"),
     MAX("max"),
-    /** Anlık hız (gösterge hızı; devir kadranının ortasında da yazar). */
+    /** Anlık hız (gösterge hızı; büyük hız kadranının ortasında da yazar). */
     SPEED("spd"),
     AVG_SPEED("avg"),
     TRIP_TIME("time"),
@@ -416,9 +445,10 @@ class GFilter(private val linear: Boolean) {
     companion object {
         const val G = 9.80665f
         const val GRAVITY_TAU_S = 3f
-        const val DISPLAY_TAU_S = 0.25f
-        /** Sensör en çok ~15 Hz. */
-        const val SAMPLING_US = 66_666
+        /** Ekran süzgeci (sakin nokta; ani sarsıntı kadranı titretmez). */
+        const val DISPLAY_TAU_S = 0.35f
+        /** Sensör 10 Hz (SENSOR_DELAY_UI'den seyrek); olaylar ana iş parçacığına değil sensör iş parçacığına gelir. */
+        const val SAMPLING_US = 100_000
 
         fun alpha(dt: Float, tau: Float): Float = if (dt <= 0f) 0f else (1f - exp(-dt / tau))
 
@@ -482,7 +512,7 @@ object SportFormat {
  * Spor geçişinin biçimi (saf; JVM'de sınanır, 6 Kasım kararı):
  *  - [SWEEP]: araç duruyor (hız 0, P ya da hız bilinmiyor): karartma ve ağır ibre süpürmesi (~2,2 sn).
  *  - [CALM]: araç gidiyor (hız > 0, P değil): karartma ve süpürme yok, ~500 ms sakin çapraz geçiş; ibre doğrudan gerçek
- *    devirde, medya ve uyarı şeridi hiç kaybolmaz.
+ *    hızda (hız ibresi), medya ve uyarı şeridi hiç kaybolmaz.
  *  - [INSTANT]: animasyonlar kapalı.
  */
 internal object SportTransition {
@@ -500,7 +530,7 @@ internal object SportTransition {
     /** Sakin çapraz geçiş süresi (giriş ve çıkış). */
     const val CALM_MS = 500L
 
-    // Duran araçta giriş (karartma kalktıktan sonra): ibre gecikme · çıkış · tepede bekleme · gerçek devire iniş.
+    // Duran araçta giriş (karartma kalktıktan sonra): ibre gecikme · çıkış · tepede bekleme · gerçek hıza iniş (hız ibresi).
     const val SWEEP_DELAY_MS = 150L
     const val SWEEP_UP_MS = 900L
     const val SWEEP_HOLD_MS = 150L
@@ -521,4 +551,85 @@ internal object SportTransition {
 
     /** [dials] kadranlı sahnede son parlamanın bittiği an (karartma kalktıktan sonra). */
     fun glowEndMs(dials: Int): Long = GLOW_DELAY_MS + (dials - 1).coerceAtLeast(0) * GLOW_STAGGER_MS + GLOW_UP_MS + GLOW_DOWN_MS
+}
+
+/**
+ * Hız kadranının altındaki küçük devir okuması (saf, JVM'de sınanır). ReadOnly 62 normal veri katmanından (değişince)
+ * gelir; değer [staleMs]'den uzun süredir değişmediyse eski sayılır ve gizlenir (bayat devir gösterilmez). Gösterim
+ * 100 dev/dk'ya yuvarlanır (rölanti kıpırtısı metni değiştirmez).
+ */
+class RpmReadout(private val staleMs: Long = STALE_MS) {
+    private var last: Int? = null
+    private var changedAt = 0L
+
+    /** [now] anında okunan [rpm] (null: bilinmiyor) için gösterilecek yuvarlanmış devir; eski ya da bilinmiyorsa null. */
+    fun next(now: Long, rpm: Int?): Int? {
+        if (rpm == null || rpm < 0) { last = null; return null }
+        if (rpm != last) { last = rpm; changedAt = now }
+        if (now - changedAt > staleMs) return null
+        return (rpm + 50) / 100 * 100
+    }
+
+    fun reset() { last = null }
+
+    companion object {
+        const val STALE_MS = 3_000L
+    }
+}
+
+/**
+ * Hızlı hız (android.car PERF_VEHICLE_SPEED, gerçek hız) ile gösterge hızı (ReadOnly 119, aracın kadranı; gerçek hızdan
+ * birkaç yüzde yüksek) arasındaki oran (saf, JVM'de sınanır). Kadranımız göstergeyle aynı okusun diye hızlı hız bu oranla
+ * çarpılır; Maks ve 0–100 de gösterge hızından ölçülür. Oran yalnız sabit hızda ([STEADY_KMH]) ve [MIN_KMH] üstünde
+ * öğrenilir (tam sayı gösterge hızının yuvarlama hatası küçük kalsın), [MIN_RATIO]..[MAX_RATIO] arasına kırpılır.
+ */
+class SpeedCalibration {
+    var ratio = 1f
+        private set
+    private var lastActual = Float.NaN
+
+    fun learn(actualKmh: Float, gaugeKmh: Int?) {
+        val prev = lastActual
+        lastActual = actualKmh
+        if (gaugeKmh == null || prev.isNaN()) return
+        if (actualKmh < MIN_KMH || gaugeKmh < MIN_KMH || abs(actualKmh - prev) > STEADY_KMH) return
+        val r = (gaugeKmh / actualKmh).coerceIn(MIN_RATIO, MAX_RATIO)
+        ratio += ALPHA * (r - ratio)
+    }
+
+    fun display(actualKmh: Float): Float = actualKmh * ratio
+
+    companion object {
+        const val MIN_KMH = 40
+        const val STEADY_KMH = 2f
+        const val MIN_RATIO = 0.97f
+        const val MAX_RATIO = 1.12f
+        const val ALPHA = 0.15f
+    }
+}
+
+/**
+ * Hızlı hız okuyucusunun ana iş parçacığına ne zaman haber vereceği (saf, JVM'de sınanır): olaylar ~10 Hz gelir (dururken
+ * de 0 olarak); yalnız [band] km/sa'dan büyük değişimde ya da 0'a inişte iletilir. Değişmeyen hızda ana iş parçacığında iş
+ * ve yeniden çizim yok.
+ */
+class SpeedPostGate(private val band: Float = BAND_KMH) {
+    private var last = Float.NaN
+
+    fun shouldPost(kmh: Float): Boolean {
+        val prev = last
+        if (!prev.isNaN() && kmh == prev) return false
+        if (prev.isNaN() || abs(kmh - prev) >= band || (kmh == 0f)) {
+            last = kmh
+            return true
+        }
+        return false
+    }
+
+    fun reset() { last = Float.NaN }
+
+    companion object {
+        /** Kadranda ~0,6°: gözle seçilmez, ibre hareketi akıcı kalır. */
+        const val BAND_KMH = 0.5f
+    }
 }

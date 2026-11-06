@@ -127,7 +127,7 @@ class HomeLauncherActivity : Activity() {
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
-        RpmRateLog.applyFrom(this, intent)
+        SportSpeedLog.applyFrom(this, intent)
         // Orta alan kurulmadan önce: düzen deposu ve alt çubuk biçimi etkin araç profiline göre.
         VehicleProfile.resolve(this)
         LauncherDemo.applyPreview(intent)
@@ -254,7 +254,7 @@ class HomeLauncherActivity : Activity() {
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
-        RpmRateLog.applyFrom(this, intent)
+        SportSpeedLog.applyFrom(this, intent)
         // Demo: çalışırken araç profili değişirse (satır sayısı değişir) yeniden kurulur.
         if (LauncherDemo.enabled && intent?.hasExtra(VehicleProfile.EXTRA_PROFILE) == true) {
             VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
@@ -711,6 +711,7 @@ class HomeLauncherActivity : Activity() {
         val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!granted) return
         when (requestCode) {
+            CarSpeedReader.REQ_PERMISSION -> CarSpeedReader.onPermissionResult()
             WifiPanel.REQ_LOCATION -> wifiPanel?.refresh()
             PhotoTile.REQ_STORAGE -> PhotoTile.pickerRefresh?.invoke()
         }

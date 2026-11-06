@@ -29,12 +29,18 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Gösterge haritası (deneysel): göstergeye çerçeve penceresi. Araçta: adb shell appops set com.mapcontrol.launchertest SYSTEM_ALERT_WINDOW allow -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Spor hız kadranı: android.car PERF_VEHICLE_SPEED 10 Hz (tehlikeli izin; uygulama durağanken bir kez sorar ya da
+         adb shell pm grant <paket> android.car.permission.CAR_SPEED). Yoksa ReadOnly 119 gösterge hızı kullanılır. -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
 
     <application
         android:allowBackup="false"
         android:icon="@android:drawable/sym_def_app_icon"
         android:label="Launcher Test"
         android:supportsRtl="true">
+
+        <!-- android.car isteğe bağlı kitaplık (CarPropertyManager hız okuması); araçta yoksa uygulama yine kurulur. -->
+        <uses-library android:name="android.car" android:required="false" />
 
         <!-- HOME kategorisi yok: aracın kendi ana ekranı değişmez; uygulama listesinden açılır. -->
         <activity

@@ -17,9 +17,9 @@ import android.widget.FrameLayout
  *
  * Biçim [SportTransition.choose] ile seçilir (6 Kasım kararı):
  *  - Araç duruyor: giriş (~2,2 sn) karartma (250 ms) · değişim · karartma kalkar, kadran çerçeveleri sırayla parlar, ibre
- *    ağırca sona süpürür, tepede bekler, gerçek devire iner, canlı değerler belirir. Çıkış (~1,5 sn, sakin): değerler
- *    söner, ibre iner, karartma (400 ms) · değişim · karartma yavaşça kalkar; parlama yok.
- *  - Araç gidiyor: karartma ve süpürme yok; ~500 ms çapraz geçiş (orta alan, kök zemin), ibre doğrudan gerçek devirde,
+ *    ağırca sona süpürür, tepede bekler, gerçek hıza iner (hız ibresi; spor-modu-brief sonu "önce hız"), canlı değerler
+ *    belirir. Çıkış (~1,5 sn, sakin): değerler söner, ibre iner, karartma (400 ms) · değişim · karartma yavaşça kalkar; parlama yok.
+ *  - Araç gidiyor: karartma ve süpürme yok; ~500 ms çapraz geçiş (orta alan, kök zemin), hız ibresi doğrudan gerçek hızda,
  *    medya ve uyarı şeridi geçiş boyunca ekranda. Çıkış da aynı sakin geçiş; sürüş özeti gösterilmez.
  * Yalnız görünüm alfası/dönmesi (donanım katmanı). Animasyonlar kapalıysa (ANIMATOR_DURATION_SCALE 0) anında.
  */
@@ -178,7 +178,7 @@ internal class SportController(
         fade(0f, DIM_ALPHA, IN_DIM_MS, 0L) { dimmed = true; go() }
     }
 
-    /** Giderken giriş: durağan çizim hazır olunca karartmasız ~500 ms çapraz geçiş; ibre gerçek devirde başlar. */
+    /** Giderken giriş: durağan çizim hazır olunca karartmasız ~500 ms çapraz geçiş; hız ibresi gerçek hızda başlar. */
     private fun enterCalm(s: SahneScreen) {
         busy = true
         val my = ++gen

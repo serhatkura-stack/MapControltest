@@ -26,6 +26,8 @@ def readSetting = { String name ->
 android {
     namespace 'com.mapcontrol'
     compileSdk 34
+    // android.car (platform isteğe bağlı kitaplığı): spor hız kadranı PERF_VEHICLE_SPEED okuması (CarSpeedReader).
+    useLibrary 'android.car'
 
     buildFeatures {
         buildConfig true

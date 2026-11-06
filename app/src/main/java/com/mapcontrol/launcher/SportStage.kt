@@ -42,216 +42,6 @@ import com.mapcontrol.vehicle.VehicleMetricsRepository
 import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 import java.util.concurrent.Executors
 import kotlin.math.abs
-import android.os.Bundle
-import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
-import com.desaysv.ivi.extra.project.carinfo.proxy.Constants
-import com.desaysv.ivi.vdb.client.VDBus
-import com.desaysv.ivi.vdb.event.VDEvent
-import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import com.desaysv.ivi.vdb.IVDBusNotify
-
-/**
- * Spor görünürken (yalnız o zaman) motor devrini (ReadOnly 62, ham ×4) ve gösterge hızını (119; geçersizse eski hız
- * sinyali 0) okur. Araç deposu ([VehicleMetricsRepository]) değişimi ana iş parçacığına anlık görüntüyle taşıyor,
- * TripSource canlı katmanı 1–3 sn'de bir okuyor: araçta P'de gaz verince ibre geç ve eksik kalıyordu.
- *
- * İki yol, aynı arayüz ([rpm], [speedKmh], [connected], [onChange]):
- *  - push: CarInfo servisine yalnız bu üç kimlik için kendi geri çağrımız ([CarInfoProxy.regCallBack], CMD_ID_ARRAY
- *    süzgeci). OEM CarInfoService her SV_CAN_LINK_DATA çerçevesini değişim süzgeci olmadan anında dağıtır
- *    (SVVDSCarInfo a/a.java:105-145, 225-248; süzgeç yalnız kimlik listesi b/b.java:15-25). Binder iş parçacığında gelir.
- *  - poll: [VDBus.getOnce] ~10 Hz ([CarSignals] düzeni). getOnce servisin aynı önbelleğini okur (a/a.java:270-277; önbellek
- *    yalnız çerçeve gelince yazılır, a/a.java:135), yani push'tan hızlı olamaz; abonelik canlıyken 1 Hz güvenlik ağıdır,
- *    abonelik kurulamazsa ya da 2 sn olay gelmezse yine 10 Hz.
- * Değer değişince ana iş parçacığına tek bekleyen [onChange] gönderilir (birikme yok); değişmezse iş yok.
- * Ölçüm: `--ez launcher_rpm_log true` ([RpmRateLog]).
- */
-internal class SportFastReader(private val onChange: Runnable) {
-    @Volatile private var rpmRaw = INVALID
-    @Volatile private var gaugeKmh = INVALID
-    @Volatile private var legacyKmh = INVALID
-    @Volatile private var live = false
-    @Volatile private var running = false
-    /** Yalnız [exec] iş parçacığında yazılır. */
-    @Volatile private var subscribed = false
-    @Volatile private var lastPushMs = 0L
-    private var tickCount = 0
-    private val pending = AtomicBoolean(false)
-    private val main = Handler(Looper.getMainLooper())
-    private var task: ScheduledFuture<*>? = null
-    /** Yalnız [exec] iş parçacığında; 0 = ölçüm penceresi başlamadı. */
-    private var nextSummaryMs = 0L
-    private val rpmReq = request(ReadOnlyID.ID_ENGINE_RPM)
-    private val gaugeReq = request(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY)
-    private val legacyReq = request(ReadOnlyID.ID_CAR_SPEED)
-    private val stats = RpmRateStats()
-
-    /** Okunan devir (dev/dk); bağlı değilse ya da geçersizse -1 (kutulama yok). */
-    val rpm: Int get() = if (live && rpmRaw in 0..SportMath.RAW_MAX) rpmRaw * VehicleMetricsSnapshot.RPM_FACTOR else -1
-    /** Gösterge hızı (km/sa); bilinmiyorsa -1. */
-    val speedKmh: Int get() = if (!live) -1 else pickSpeed(gaugeKmh, legacyKmh).let { if (it == INVALID) -1 else it }
-    /** Araç servisine bağlı ve en az bir değer alındı. */
-    val connected: Boolean get() = live
-
-    private val fire = Runnable {
-        pending.set(false)
-        onChange.run()
-    }
-
-    private fun post() {
-        if (pending.compareAndSet(false, true)) main.post(fire)
-    }
-
-    private val push = object : IVDBusNotify.Stub() {
-        override fun onVDBusNotify(event: VDEvent?) {
-            try {
-                if (!running || event == null || event.id != RO) return
-                val p = event.payload ?: return
-                val v = decode(p.getIntArray(Constants.VALUE))
-                val now = SystemClock.elapsedRealtime()
-                lastPushMs = now
-                when (p.getInt(Constants.CMD_ID, -1)) {
-                    ReadOnlyID.ID_ENGINE_RPM -> apply(now, v ?: INVALID, KEEP, KEEP, RpmSource.PUSH)
-                    ReadOnlyID.ID_SPEED_GAUGE_DISPLAY -> apply(now, KEEP, v.speedOrInvalid(), KEEP, RpmSource.PUSH)
-                    ReadOnlyID.ID_CAR_SPEED -> apply(now, KEEP, KEEP, v.speedOrInvalid(), RpmSource.PUSH)
-                }
-            } catch (t: Throwable) {
-                android.util.Log.w("SportFastReader", "push işlenemedi", t)
-            }
-        }
-    }
-
-    /** Push (binder) ve poll (yürütücü) iş parçacıklarından; [KEEP] = bu örnekte o alan yok. */
-    @Synchronized
-    private fun apply(now: Long, r: Int, g: Int, l: Int, src: RpmSource) {
-        if (!running) return
-        var changed = !live
-        if (r != KEEP) {
-            if (RpmRateLog.enabled) logRpm(now, r, src)
-            if (r != rpmRaw) { rpmRaw = r; changed = true }
-        }
-        if (g != KEEP && g != gaugeKmh) { gaugeKmh = g; changed = true }
-        if (l != KEEP && l != legacyKmh) { legacyKmh = l; changed = true }
-        if (changed) {
-            live = true
-            post()
-        }
-    }
-
-    private fun logRpm(now: Long, raw: Int, src: RpmSource) {
-        val gap = stats.onSample(now, raw, src) ?: return
-        val rpmValue = if (raw in 0..SportMath.RAW_MAX) raw * VehicleMetricsSnapshot.RPM_FACTOR else -1
-        android.util.Log.i(RpmRateLog.TAG, RpmRateLog.changeLine(raw, rpmValue, gap, src))
-    }
-
-    private val poll = Runnable {
-        // Yakalanmayan hata scheduleWithFixedDelay'i sessizce durdurur; döngü sürsün.
-        try {
-            if (!CarInfoProxy.getInstance().isServiceConnnected) {
-                // Servis düşerse sunucudaki kayıt da gider; yeniden bağlanınca yeniden abone olunur.
-                subscribed = false
-                if (live) { live = false; post() }
-                return@Runnable
-            }
-            if (!subscribed) subscribe()
-            val now = SystemClock.elapsedRealtime()
-            maybeSummary(now)
-            tickCount++
-            if (subscribed && now - lastPushMs < PUSH_FRESH_MS && tickCount % SAFETY_EVERY != 0) return@Runnable
-            val r = readInt(rpmReq)
-            val g = readInt(gaugeReq).speedOrInvalid()
-            val l = if (g == INVALID) readInt(legacyReq).speedOrInvalid() else KEEP
-            apply(now, r ?: INVALID, g, l, RpmSource.POLL)
-        } catch (t: Throwable) {
-            android.util.Log.w("SportFastReader", "okuma başarısız", t)
-        }
-    }
-
-    /** [exec] iş parçacığında; başarısızsa poll sürer, sonraki turda yeniden denenir. */
-    private fun subscribe() {
-        try {
-            CarInfoProxy.getInstance().regCallBack(RO, push, PUSH_IDS)
-            subscribed = true
-            lastPushMs = 0L
-            if (RpmRateLog.enabled) android.util.Log.i(RpmRateLog.TAG, "abonelik kuruldu (CarInfo READONLY 62/119/0)")
-        } catch (t: Throwable) {
-            subscribed = false
-            if (RpmRateLog.enabled) android.util.Log.w(RpmRateLog.TAG, "abonelik kurulamadı, yalnız poll", t)
-        }
-    }
-
-    private fun unsubscribe() {
-        if (!subscribed) return
-        subscribed = false
-        try { CarInfoProxy.getInstance().unRegCallBack(RO, push) } catch (_: Throwable) {}
-    }
-
-    /** Poll turunda ([exec]); ölçüm sonradan açılırsa (onNewIntent) da kendiliğinden başlar. */
-    private fun maybeSummary(now: Long) {
-        if (!RpmRateLog.enabled) { nextSummaryMs = 0L; return }
-        if (nextSummaryMs == 0L) { stats.reset(); nextSummaryMs = now + RpmRateLog.SUMMARY_MS; return }
-        if (now < nextSummaryMs) return
-        nextSummaryMs = now + RpmRateLog.SUMMARY_MS
-        val s = stats.drain(now, subscribed) ?: return
-        android.util.Log.i(RpmRateLog.TAG, RpmRateLog.summaryLine(s))
-    }
-
-    fun start() {
-        if (task != null) return
-        running = true
-        tickCount = 0
-        nextSummaryMs = 0L
-        task = exec.scheduleWithFixedDelay(poll, 0, PERIOD_MS, TimeUnit.MILLISECONDS)
-    }
-
-    fun stop() {
-        running = false
-        task?.cancel(false)
-        task = null
-        // Binder çağrısı ana iş parçacığında değil; tek iş parçacıklı yürütücüde sırayla (sonraki start'tan önce) çalışır.
-        exec.execute { if (!running) unsubscribe() }
-        live = false
-        main.removeCallbacks(fire)
-        pending.set(false)
-    }
-
-    companion object {
-        const val PERIOD_MS = 100L
-        const val MAX_KMH = 300
-        /** Abonelik canlıyken poll yalnız her 10. turda (1 Hz). */
-        private const val SAFETY_EVERY = 10
-        /** Bu kadar süre push gelmezse poll yeniden 10 Hz. */
-        private const val PUSH_FRESH_MS = 2_000L
-        private const val INVALID = Int.MIN_VALUE
-        /** [apply]: bu alan bu örnekte yok, dokunma. */
-        private const val KEEP = Int.MIN_VALUE + 1
-        private val RO = VDEventCarInfo.MODULE_READONLY_INFO
-        private val PUSH_IDS = intArrayOf(ReadOnlyID.ID_ENGINE_RPM, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY, ReadOnlyID.ID_CAR_SPEED)
-        private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sport-fast").apply { isDaemon = true } }
-
-        private fun request(id: Int): VDEvent = VDEvent(RO, Bundle().apply { putInt(Constants.CMD_ID, id) })
-
-        private fun Int?.speedOrInvalid(): Int = this?.takeIf { it in 0..MAX_KMH } ?: INVALID
-
-        /** Gösterge hızı geçerliyse o, değilse eski hız sinyali; ikisi de yoksa INVALID. */
-        private fun pickSpeed(gauge: Int, legacy: Int): Int = if (gauge != INVALID) gauge else legacy
-
-        /** [CarSignals.readInt] ile aynı çözüm (tek değer ya da büyük uçlu bayt dizisi). */
-        internal fun decode(v: IntArray?): Int? {
-            if (v == null || v.isEmpty()) return null
-            if (v.size == 1) return v[0]
-            var acc = 0
-            for (b in v) acc = (acc shl 8) or (b and 0xFF)
-            return acc
-        }
-
-        /** İstek nesnesi yeniden kullanılır. */
-        private fun readInt(req: VDEvent): Int? =
-            decode(try { VDBus.getDefault().getOnce(req)?.payload?.getIntArray(Constants.VALUE) } catch (e: RuntimeException) { null })
-    }
-}
 
 /**
  * Bu sürecin spor sürüş verisi: en yüksek hız ve en iyi 0–100 ([SportSession]); kadranlar buradan okur.
@@ -305,16 +95,19 @@ internal object SportDemo {
 }
 
 /**
- * Spor modunun orta alanı (kronograf): solda yuvarlak medya modülü, ortada 0–8 devir kadranı (tepe işaretiyle) ve vites
- * penceresi, iki yanda dört küçük ve sakin alt kadran (seçilebilir, [SportDials]; varsayılan 0–100, G, Anlık, Maks),
- * sağda burnu yukarı araç modülü (açık kapı/bagaj, stop parıltısı).
+ * Spor modunun orta alanı (kronograf): solda yuvarlak medya modülü, ortada büyük HIZ kadranı (0–220 km/sa, ibre + dijital
+ * hız, bu sürüşün en yüksek hızında tepe işareti), altında vites penceresi ve küçük devir okuması (eskiyse gizli), iki
+ * yanda dört küçük ve sakin alt kadran (seçilebilir, [SportDials]; varsayılan 0–100, G, Anlık, Maks), sağda burnu yukarı
+ * araç modülü (açık kapı/bagaj, stop parıltısı). "Önce hız" kararı: spor-modu-brief sonu (6 Kasım); devir ReadOnly 62
+ * araçta ~5 sn'de bir değiştiği için büyük ibre olamaz.
  *
  * Düzenleme modunda küçük kadrana uzun basınca seçici açılır ([SportDialPicker]); seçim kalıcıdır ([SportDialPrefs]).
  *
- * Performans: bütün durağan çizim ([SportArt.render]) boyut ve seçim başına bir kez arka planda bitmap'e çizilir; çizimde
- * yalnızca o bitmap basılır. Canlı olanlar: ibreler (ayrı görünümler, donanım katmanında döndürülür), metinler
- * (değişince), G noktası (öteleme), medya halkası (1 Hz). Değerler en çok 10 Hz güncellenir, saat ibreleri saniyede bir;
- * sensör ~15 Hz ve yalnız G kadranı seçili ve spor görünürken dinlenir.
+ * Performans (hedef: sürüşte spor ekranı CPU'su %10'un çok altında): bütün durağan çizim ([SportArt.render]) boyut ve
+ * seçim başına bir kez arka planda bitmap'e çizilir; çizimde yalnızca o bitmap basılır. Hız ibresi [CarSpeedReader]'dan
+ * (PERF_VEHICLE_SPEED 10 Hz, "sport-io" iş parçacığında) yalnız 0,5 km/sa'dan büyük değişimde sürülür; yoksa normal veri
+ * katmanının gösterge hızı (119, değişince). Devir yoklaması yok. Diğer değerler 500 ms'lik sakin tikte ve yalnız metin
+ * değişince yazılır; G sensörü 10 Hz, "sport-io" iş parçacığında süzülür ve nokta yalnız 2 dp'den çok kayınca taşınır.
  */
 @SuppressLint("ViewConstructor")
 internal class SportStageView(
@@ -343,7 +136,7 @@ internal class SportStageView(
     private val needle = NeedleView(activity)
     private val peak = PeakView(activity)
     private val gear = sahneText(activity, 40f, SportInk.INK, 600, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-    /** Devir kadranının ortasındaki dijital hız: ince, büyük, eşit genişlikli rakamlar ("tnum"); altında küçük birim. */
+    /** Hız kadranının ortasındaki dijital hız: ince, büyük, eşit genişlikli rakamlar ("tnum"); altında küçük birim. */
     private val speed = sahneText(activity, 80f, SportInk.INK, 300, -0.03f, dayBump = false).apply {
         gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
         text = SpeedReadout.DASH
@@ -355,8 +148,16 @@ internal class SportStageView(
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
     private val speedReadout = SpeedReadout()
-    /** Spor görünürken devir ve hızı ~10 Hz okur (demoda çalışmaz). */
-    private val fast = SportFastReader { onFast() }
+    /** Küçük devir okuması (vites penceresinin altında); eskiyse ([RpmReadout]) görünmez. */
+    private val rpmText = sahneText(activity, 14f, SportInk.INK_3, 500, 0.08f, dayBump = false).apply {
+        gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
+        alpha = 0f
+    }
+    private val rpmReadout = RpmReadout()
+    private var rpmShown = false
+    /** Spor görünürken hızlı hız (android.car, 10 Hz; demoda çalışmaz). */
+    private val carSpeed = CarSpeedReader(activity) { onCarSpeed() }
+    private val calibration = SpeedCalibration()
     private var speedText: String = SpeedReadout.DASH
     private val slots = ArrayList<Slot>()
     private val media = SportMediaDial(activity)
@@ -378,7 +179,8 @@ internal class SportStageView(
     private var sweeping = false
     private var editing = false
     private var picker: SportDialPicker? = null
-    private var shownRpm = 0f
+    /** İbrenin gösterdiği hız (km/sa). */
+    private var shownKmh = 0f
     // Tek ibre animatörü (10 Hz takipte her seferinde yenisi kurulmaz): başlangıç/hedef alanlardan okunur.
     private var needleFrom = 0f
     private var needleTo = 0f
@@ -386,8 +188,8 @@ internal class SportStageView(
     private var needleCancelled = false
     private val needleAnim: ValueAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
         addUpdateListener {
-            shownRpm = needleFrom + (needleTo - needleFrom) * (it.animatedValue as Float)
-            needle.rotation = SportMath.needleDeg(shownRpm)
+            shownKmh = needleFrom + (needleTo - needleFrom) * (it.animatedValue as Float)
+            needle.rotation = SportMath.speedDeg(shownKmh)
         }
         addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationCancel(animation: Animator) { needleCancelled = true }
@@ -398,6 +200,7 @@ internal class SportStageView(
             }
         })
     }
+    /** Yalnız "sport-io" iş parçacığında kullanılır (sensör olayları orada). */
     private val gFilter = GFilter(linear = linearSensor != null)
     private val lastText = HashMap<View, String>()
     private var shownPeak = -1
@@ -449,6 +252,7 @@ internal class SportStageView(
         // Sabit genişlik: hız değişince yalnız yeniden çizilir, yerleşim istenmez (TextView.checkForRelayout).
         addView(speed, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         addView(speedUnit)
+        addView(rpmText)
         addView(peak)
         addView(needle)
         buildSlots()
@@ -488,7 +292,12 @@ internal class SportStageView(
         visibleNow = true
         lastGearState = null
         speedReadout.reset()
-        if (!LauncherDemo.enabled) fast.start()
+        rpmReadout.reset()
+        if (!LauncherDemo.enabled) {
+            carSpeed.start()
+            askSpeedPermission()
+        }
+        logStart()
         media.onVisible()
         car.setActive(true)
         TripSource.add(activity, tripListener)
@@ -504,7 +313,7 @@ internal class SportStageView(
     fun onHidden() {
         if (!visibleNow) return
         visibleNow = false
-        fast.stop()
+        carSpeed.stop()
         media.onHidden()
         car.setActive(false)
         TripSource.remove(tripListener)
@@ -513,7 +322,7 @@ internal class SportStageView(
         main.removeCallbacks(gPost)
         main.removeCallbacks(unflash)
         // Bekleyen G güncellemesi iptal edildi: bayrak da sıfırlanır, yoksa geri gelince nokta donar.
-        gPending = false
+        gPending.set(false)
         picker?.dismiss()
     }
 
@@ -593,7 +402,9 @@ internal class SportStageView(
         override fun run() {
             if (!visibleNow) return
             refresh()
-            main.postDelayed(this, TICK_MS)
+            // Analog saat seçiliyse tik saniye sınırına da oturur (saniye ibresi düzenli atlar); yoksa düz 500 ms.
+            val clock = slots.any { it.kind == SportDial.CLOCK }
+            main.postDelayed(this, if (clock) SportMath.tickDelay(System.currentTimeMillis(), TICK_MS) else TICK_MS)
         }
     }
 
@@ -602,10 +413,11 @@ internal class SportStageView(
         val now = SystemClock.elapsedRealtime()
         val rpm: Int?
         val gearText: String
+        /** Gösterge hızı (119, normal veri katmanı; değişince); bilinmiyorsa null. */
+        val gaugeKmh: Int?
         val instant: Double?
         val best: Long?
         val maxKmh: Int?
-        val peakRpm: Int?
         val pass: Long?
         val last: Long?
         val lastAt: Long
@@ -622,7 +434,6 @@ internal class SportStageView(
             instant = SportDemo.INSTANT_L100
             best = SportDemo.ZERO100_MS
             maxKmh = SportDemo.MAX_KMH
-            peakRpm = SportDemo.PEAK_RPM
             pass = SportDemo.PASS80_MS
             last = null
             lastAt = 0L
@@ -631,11 +442,12 @@ internal class SportStageView(
             ready = trip.speedKmh == 0
             range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
             kmh = trip.speedKmh ?: -1
+            gaugeKmh = trip.speedKmh
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
-            rpm = if (fast.connected) fast.rpm.takeIf { it >= 0 }
-            else if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
+            // Devir normal veri katmanından (değişince gelir); 10 Hz devir yoklaması yok.
+            rpm = if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
             val gs = snap.gearSignal.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) }
             gearText = SportMath.gearText(gs)
             watchPark(gs)
@@ -649,7 +461,6 @@ internal class SportStageView(
             instant = instantDisplay.l100
             best = s.best0to100Ms
             maxKmh = s.maxSpeedKmh
-            peakRpm = s.peakRpm
             pass = s.best80to120Ms
             last = s.last0to100Ms
             lastAt = s.lastResultAt
@@ -657,15 +468,21 @@ internal class SportStageView(
             results = s.results
             ready = s.stopped && !s.timing
             range = snap.rangeKm.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) && it >= 0 }
-            // Gösterge hızı (119; aracın kadranıyla aynı) 10 Hz okunur; yoksa sürüş verisinin hızı (1 Hz).
-            kmh = when {
-                fast.connected -> fast.speedKmh
-                !snap.connected -> -1
+            gaugeKmh = when {
+                !snap.connected -> null
                 VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed) -> snap.preferredSpeed()
-                else -> trip.speedKmh ?: -1
+                else -> trip.speedKmh
             }
+            // Hızlı hız canlıysa gösterge oranı öğrenilir (kadranımız aracın kadranıyla aynı okusun).
+            val fastKmh = if (carSpeed.live) carSpeed.actualKmh else -1f
+            if (fastKmh >= 0f) calibration.learn(fastKmh, gaugeKmh)
+            kmh = if (fastKmh >= 0f) Math.round(calibration.display(fastKmh)) else gaugeKmh ?: -1
         }
-        showSpeed(now, kmh)
+        // Hızlı kaynak canlıyken ibre ve dijital hız onu izler ([onCarSpeed]); tik yalnız yedek kaynakta sürer.
+        val fastLive = !demo && carSpeed.live
+        if (!fastLive) showSpeed(now, kmh)
+        bindRpm(now, rpm)
+        if (SportSpeedLog.enabled) logSummary(now, kmh)
         setText(gear, gearText)
         for (i in slots.indices) {
             val slot = slots[i]
@@ -713,15 +530,67 @@ internal class SportStageView(
                 SportDial.G, SportDial.CLOCK -> Unit
             }
         }
-        bindPeak(peakRpm)
-        if (!sweeping) moveNeedle((rpm ?: 0).toFloat(), NEEDLE_MS)
+        bindPeak(if (demo) SportDemo.MAX_KMH else maxKmh)
+        if (!sweeping && !fastLive) moveNeedle(kmh.coerceAtLeast(0).toFloat(), NEEDLE_SLOW_MS)
     }
 
-    /** Hızlı okuyucudan yeni değer: ibre ve dijital hız beklemeden (10 Hz tick'i beklemez). */
-    private fun onFast() {
-        if (!visibleNow || LauncherDemo.enabled) return
-        if (!sweeping) moveNeedle(fast.rpm.coerceAtLeast(0).toFloat(), NEEDLE_MS)
-        if (fast.connected) showSpeed(SystemClock.elapsedRealtime(), fast.speedKmh)
+    /** Hızlı hız değişti ("sport-io"dan, yalnız 0,5 km/sa üstü değişimde): ibre ve dijital hız tiki beklemez. */
+    private fun onCarSpeed() {
+        if (!visibleNow || LauncherDemo.enabled || !carSpeed.live) return
+        val kmh = calibration.display(carSpeed.actualKmh)
+        if (!sweeping) moveNeedle(kmh, NEEDLE_MS)
+        showSpeed(SystemClock.elapsedRealtime(), Math.round(kmh))
+    }
+
+    /** Küçük devir okuması: yalnız taze değerde görünür; metin yalnız 100 dev/dk adımında değişir. */
+    private fun bindRpm(now: Long, rpm: Int?) {
+        val v = if (LauncherDemo.enabled) rpm else rpmReadout.next(now, rpm)
+        val show = v != null && !sweeping
+        if (v != null) setText(rpmText, activity.getString(R.string.launcher_sport_rpm, v))
+        if (show == rpmShown) return
+        rpmShown = show
+        rpmText.animate().cancel()
+        rpmText.animate().alpha(if (show) 1f else 0f).setStartDelay(0).setDuration(RPM_FADE_MS).start()
+    }
+
+    /** CAR_SPEED izni (tehlikeli): süreçte bir kez ve yalnız araç dururken sorulur (sürüşte pencere açılmaz). */
+    private fun askSpeedPermission() {
+        if (askedSpeedPermission || CarSpeedReader.hasPermission(activity)) return
+        // Yalnız duruş biliniyorsa (gösterge hızı 0); hız bilinmiyorsa da sorulmaz, sonraki girişte yeniden bakılır.
+        val snap = metrics.currentSnapshot()
+        val known = snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))
+        if (!known || snap.preferredSpeed() != 0) return
+        askedSpeedPermission = true
+        try { activity.requestPermissions(arrayOf(CarSpeedReader.PERMISSION), CarSpeedReader.REQ_PERMISSION) } catch (_: RuntimeException) {}
+    }
+
+    // --- Ölçüm günlüğü (SportSpeed) ---
+
+    private var logAt = 0L
+    private var logCpuMs = 0L
+    private var needleMoves = 0
+
+    private fun logStart() {
+        logAt = SystemClock.elapsedRealtime()
+        logCpuMs = android.os.Process.getElapsedCpuTime()
+        needleMoves = 0
+        carSpeed.events.set(0)
+        carSpeed.posts.set(0)
+    }
+
+    private fun logSummary(now: Long, kmh: Int) {
+        if (now - logAt < SportSpeedLog.SUMMARY_MS) return
+        val cpu = android.os.Process.getElapsedCpuTime()
+        val src = when {
+            LauncherDemo.enabled -> "demo"
+            carSpeed.live -> "car"
+            else -> "vdbus/${carSpeed.state.key}"
+        }
+        android.util.Log.i(SportSpeedLog.TAG, SportSpeedLog.summaryLine(now - logAt, src, carSpeed.events.getAndSet(0),
+            carSpeed.posts.getAndSet(0), needleMoves, kmh, rpmShown, cpu - logCpuMs))
+        logAt = now
+        logCpuMs = cpu
+        needleMoves = 0
     }
 
     /** Dijital hız: yalnız tam sayı değişince ve en çok ~4 Hz ([SpeedReadout]). */
@@ -759,12 +628,13 @@ internal class SportStageView(
         slot.second?.rotation = s * 6f
     }
 
-    private fun bindPeak(rpm: Int?) {
-        val q = ((rpm ?: 0) / PEAK_STEP) * PEAK_STEP
+    /** Tepe işareti: bu sürüşün en yüksek (gösterge) hızı. */
+    private fun bindPeak(kmh: Int?) {
+        val q = kmh ?: 0
         if (q == shownPeak) return
         shownPeak = q
         peak.visibility = if (q > 0) VISIBLE else INVISIBLE
-        peak.rotation = SportMath.needleDeg(q.toFloat())
+        peak.rotation = SportMath.speedDeg(q.toFloat())
     }
 
     /** Yeni 0–100 sonucu: değer kısa süre kırmızı-turuncu parlar ve hafifçe büyüyüp yerine oturur. */
@@ -791,17 +661,17 @@ internal class SportStageView(
         v.text = s
     }
 
-    private fun moveNeedle(rpm: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DECEL, end: (() -> Unit)? = null) {
-        // Rölantide devir her turda birkaç on dev/dk oynar: [NEEDLE_DEADBAND_RPM]'den küçük fark ibreyi oynatmaz (yoksa 10 Hz
-        // takipte 110 ms'lik hareketler birbirine eklenip ekran durmadan çizilir).
-        // Ölü bant yalnız ibre dururken: hareket sürerken yeni hedefe hemen döner (hızlı gaz/bırakma kaçmaz).
-        if (end == null && !SportMath.needleShouldMove(needleAnim.isStarted, needleTo, shownRpm, rpm, NEEDLE_DEADBAND_RPM)) return
+    private fun moveNeedle(kmh: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DECEL, end: (() -> Unit)? = null) {
+        // [NEEDLE_DEADBAND_KMH]'den küçük fark ibreyi oynatmaz (yoksa 10 Hz takipte kısa hareketler birbirine eklenip ekran
+        // durmadan çizilir). Hareket sürerken fark hedefe göre ölçülür (hızlı değişim kaçmaz).
+        if (end == null && !SportMath.needleShouldMove(needleAnim.isStarted, needleTo, shownKmh, kmh, NEEDLE_DEADBAND_KMH)) return
+        needleMoves++
         // Süren hareketin bitiş işi düşer (yerine yenisi geldi).
         needleEnd = null
         needleAnim.cancel()
         needleCancelled = false
-        needleFrom = shownRpm
-        needleTo = rpm
+        needleFrom = shownKmh
+        needleTo = kmh
         needleEnd = end
         needleAnim.duration = ms
         needleAnim.startDelay = delay
@@ -809,52 +679,78 @@ internal class SportStageView(
         needleAnim.start()
     }
 
-    private fun snapNeedle(rpm: Float) {
+    private fun snapNeedle(kmh: Float) {
         needleEnd = null
         needleAnim.cancel()
-        shownRpm = rpm
-        needle.rotation = SportMath.needleDeg(rpm)
+        shownKmh = kmh
+        needle.rotation = SportMath.speedDeg(kmh)
     }
 
     // --- G sensörü ---
 
+    /**
+     * Sensör olayları "sport-io" iş parçacığında süzülür ([GFilter], 10 Hz); nokta yeri tam piksele yuvarlanır ve yalnız
+     * [G_DEADBAND_DP]'den çok kayınca ya da büyüklük metni (0,1 g) değişince ana iş parçacığına tek bekleyen haber gider.
+     * Sabit duruşta (rölanti titreşimi) ana iş parçacığında iş ve yeniden çizim yok.
+     */
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
             gFilter.add(e.timestamp, e.values[0], e.values[1], e.values[2])
-            if (!gPending) {
-                gPending = true
-                main.postDelayed(gPost, G_UI_MS)
-            }
+            val range = gRangePx
+            if (range <= 0f) return
+            val tx = Math.round(GFilter.clampUnit(gFilter.lateral) * range).toFloat()
+            val ty = Math.round(-GFilter.clampUnit(gFilter.longitudinal) * range).toFloat()
+            val band = gBandPx
+            val nx = SportMath.gStep(gSentX, tx, band)
+            val ny = SportMath.gStep(gSentY, ty, band)
+            val text = SportFormat.g(gFilter.magnitude)
+            if (nx == null && ny == null && text == gSentText) return
+            if (nx != null) gSentX = nx
+            if (ny != null) gSentY = ny
+            gSentText = text
+            gOutX = gSentX
+            gOutY = gSentY
+            gOutText = text
+            if (gPending.compareAndSet(false, true)) main.post(gPost)
         }
 
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
-    private var gPending = false
+    private val gPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    // Yalnız "sport-io": son gönderilen nokta ve metin.
+    private var gSentX = 0f
+    private var gSentY = 0f
+    private var gSentText = ""
+    // "sport-io" yazar, ana iş parçacığı okur.
+    @Volatile private var gOutX = 0f
+    @Volatile private var gOutY = 0f
+    @Volatile private var gOutText = ""
+    /** G kadranında 1 g'nin piksel karşılığı ve ölü bant (yerleşimde ana iş parçacığı yazar). */
+    @Volatile private var gRangePx = 0f
+    @Volatile private var gBandPx = 0f
     private val gPost = Runnable {
-        gPending = false
-        bindG()
+        gPending.set(false)
+        if (visibleNow) bindG()
     }
 
     private fun registerSensor() {
         if (!hasG || SportDial.G !in dials) return
         val s = linearSensor ?: accelSensor ?: return
-        gFilter.reset()
-        sensors?.registerListener(sensorListener, s, GFilter.SAMPLING_US, main)
+        gBandPx = activity.dp(G_DEADBAND_DP).toFloat()
+        val io = CarSpeedReader.io
+        io.post {
+            gFilter.reset()
+            gSentX = 0f; gSentY = 0f; gSentText = ""
+        }
+        sensors?.registerListener(sensorListener, s, GFilter.SAMPLING_US, io)
     }
 
     private fun bindG() {
         val slot = slots.firstOrNull { it.kind == SportDial.G } ?: return
-        val d = slot.dial ?: return
         val dot = slot.gDot ?: return
-        val range = d.r * SportGeometry.G_RANGE
-        // Tam piksele yuvarlanır: sabit duruşta süzgecin küçük kıpırtısı yeni kare çizdirmez.
-        val tx = Math.round(GFilter.clampUnit(gFilter.lateral) * range).toFloat()
-        val ty = Math.round(-GFilter.clampUnit(gFilter.longitudinal) * range).toFloat()
-        // Motor titreşimi (rölanti) noktayı 1 px oynatır: [G_DEADBAND_DP] altındaki kıpırtı yeni kare çizdirmez; merkeze dönüş tam.
-        val g = activity.dp(G_DEADBAND_DP).toFloat()
-        if (abs(dot.translationX - tx) >= g || (tx == 0f && dot.translationX != 0f)) dot.translationX = tx
-        if (abs(dot.translationY - ty) >= g || (ty == 0f && dot.translationY != 0f)) dot.translationY = ty
-        slot.gValue?.let { setText(it, SportFormat.g(gFilter.magnitude)) }
+        dot.translationX = gOutX
+        dot.translationY = gOutY
+        slot.gValue?.let { setText(it, gOutText) }
     }
 
     // --- Geçiş ---
@@ -862,6 +758,7 @@ internal class SportStageView(
     /** Canlı değerler gizli, ibre sıfırda: geçişin başı (ekran kararıkken çağrılır). */
     fun prepareIntro() {
         live.forEach { it.animate().cancel(); it.alpha = 0f }
+        hideRpm()
         snapNeedle(0f)
         sweeping = true
     }
@@ -885,10 +782,10 @@ internal class SportStageView(
                 }.start()
             }
         }
-        // Gerçek spor araç ibresi gibi ağır: yavaş çıkış, tepede kısa bekleme, gerçek devire yumuşak iniş.
-        // İniş bitene dek canlı devir ibreyi sürmez (yoklama inişi kesmesin); sonra canlı değere bağlanır.
-        moveNeedle(SportMath.RPM_MAX.toFloat(), SportTransition.SWEEP_UP_MS, delay = SportTransition.SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
-            moveNeedle(targetRpm(), SportTransition.SWEEP_DOWN_MS, delay = SportTransition.SWEEP_HOLD_MS, interp = DECEL_SOFT) {
+        // Gerçek spor araç ibresi gibi ağır: hız ibresi yavaşça sona çıkar, tepede kısa bekler, gerçek hıza yumuşak iner.
+        // İniş bitene dek canlı hız ibreyi sürmez (inişi kesmesin); sonra canlı değere bağlanır.
+        moveNeedle(SportMath.SPEED_MAX.toFloat(), SportTransition.SWEEP_UP_MS, delay = SportTransition.SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
+            moveNeedle(targetKmh(), SportTransition.SWEEP_DOWN_MS, delay = SportTransition.SWEEP_HOLD_MS, interp = DECEL_SOFT) {
                 sweeping = false
                 refresh()
             }
@@ -903,6 +800,7 @@ internal class SportStageView(
     fun playOutro() {
         sweeping = true
         picker?.dismiss()
+        hideRpm()
         live.forEach { v ->
             v.animate().cancel()
             v.animate().alpha(0f).setStartDelay(0).setDuration(OUTRO_FADE_MS).apply { if (v === media) withLayer() }.start()
@@ -916,12 +814,24 @@ internal class SportStageView(
         live.forEach { it.animate().cancel(); it.alpha = 1f }
         sweeping = false
         refresh()
-        snapNeedle(targetRpm())
+        snapNeedle(targetKmh())
     }
 
-    private fun targetRpm(): Float =
-        if (LauncherDemo.enabled) SportDemo.RPM.toFloat()
-        else SportMath.rpm(metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM).takeIf { VehicleMetricsSnapshot.isValid(it) })?.toFloat() ?: 0f
+    private fun hideRpm() {
+        rpmShown = false
+        rpmText.animate().cancel()
+        rpmText.alpha = 0f
+    }
+
+    /** İbrenin ineceği gerçek hız (hızlı kaynak, yoksa gösterge hızı). */
+    private fun targetKmh(): Float {
+        if (LauncherDemo.enabled) return (trip.speedKmh ?: 0).toFloat()
+        if (carSpeed.live) return calibration.display(carSpeed.actualKmh)
+        val snap = metrics.currentSnapshot()
+        if (!snap.connected) return 0f
+        return if (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))
+            snap.preferredSpeed().coerceAtLeast(0).toFloat() else 0f
+    }
 
     private fun ensureGlows(g: SportGeometry) {
         if (glows.size == g.inOrder.size && glows.firstOrNull()?.dial?.let { it.cx == g.inOrder[0].cx } == true) return
@@ -1030,6 +940,8 @@ internal class SportStageView(
         speed.measure(exactly((g.rpmFace * 1.1f).toInt()), wrap)
         speedUnit.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedUnitSize)
         speedUnit.measure(exactly((g.rpmFace * 0.6f).toInt()), wrap)
+        rpmText.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.rpmTextSize)
+        rpmText.measure(exactly((g.rpmFace * 0.8f).toInt()), wrap)
         slots.forEach { s ->
             val d = s.dial ?: return@forEach
             s.value?.let { v ->
@@ -1086,7 +998,7 @@ internal class SportStageView(
         centerAt(needle, g.rpm.cx, g.rpm.cy)
         needle.pivotX = needle.measuredWidth / 2f
         needle.pivotY = needle.measuredHeight / 2f
-        needle.rotation = SportMath.needleDeg(shownRpm)
+        needle.rotation = SportMath.speedDeg(shownKmh)
         centerAt(peak, g.rpm.cx, g.rpm.cy)
         peak.pivotX = peak.measuredWidth / 2f
         peak.pivotY = peak.measuredHeight / 2f
@@ -1096,6 +1008,8 @@ internal class SportStageView(
         val fm = speed.paint.fontMetrics
         centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * SportGeometry.CAP / 2f)
         centerAt(speedUnit, g.rpm.cx, g.speedUnitY)
+        centerAt(rpmText, g.rpm.cx, g.rpmTextY)
+        g.sub(SportDial.G)?.let { gRangePx = it.r * SportGeometry.G_RANGE }
         slots.forEach { s ->
             val d = s.dial ?: return@forEach
             s.value?.let { centerAt(it, d.cx, d.cy + d.r * 0.02f) }
@@ -1126,23 +1040,28 @@ internal class SportStageView(
         private const val STATUS_READY = "Hazır"
         private const val STATUS_BEST = "En iyi"
         private const val PARK = 1
-        const val TICK_MS = 100L
+        /** Sakin tik: yedek hız, küçük kadranlar, devir, saat (hız ibresi tiki beklemez, [CarSpeedReader]). */
+        const val TICK_MS = 500L
         /** Medya kadranı içeriğinin tasarım yarıçapı (Tiggo 7'deki kadran). */
         const val MEDIA_NATURAL_R_DP = 210f
-        const val NEEDLE_MS = 110L
-        /** İbreyi oynatan en küçük devir farkı (kadranda ~1,7°): rölanti kıpırtısı çizdirmez. */
-        const val NEEDLE_DEADBAND_RPM = 50f
+        /** 10 Hz hızlı hızda ibre hareketi (örnek aralığı kadar: akıcı, gecikmesiz). */
+        const val NEEDLE_MS = 120L
+        /** Yedek (gösterge hızı, seyrek) kaynakta ibre hareketi. */
+        const val NEEDLE_SLOW_MS = 450L
+        /** İbreyi oynatan en küçük hız farkı (kadranda ~0,6°). */
+        const val NEEDLE_DEADBAND_KMH = 0.5f
+        const val RPM_FADE_MS = 300L
+
+        /** CAR_SPEED izni bu süreçte soruldu mu (bir kez). */
+        @Volatile var askedSpeedPermission = false
         /** G noktasını oynatan en küçük kayma (dp). */
         const val G_DEADBAND_DP = 2
-        const val G_UI_MS = 100L
         /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */
         const val RESULT_SHOW_MS = 10_000L
         const val FLASH_MS = 1_400L
         const val FLASH_UP_MS = 160L
         const val FLASH_DOWN_MS = 420L
         const val FLASH_SCALE = 1.12f
-        /** Tepe işareti 50 dev/dk adımla güncellenir (küçük kıpırtı yeniden çizdirmez). */
-        const val PEAK_STEP = 50
         const val SLOT_FADE_MS = 180L
         const val DEMO_SUMMARY_MS = 2_500L
 

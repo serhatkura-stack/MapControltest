@@ -65,7 +65,7 @@ internal object SportDialPrefs {
 }
 
 /**
- * Devir kadranında bu sürüşün en yüksek devri: ince kırmızı-turuncu tepe işareti (bölüntü halkasının üstünde kısa çizgi).
+ * Hız kadranında bu sürüşün en yüksek (gösterge) hızı: ince kırmızı-turuncu tepe işareti (bölüntü halkasının üstünde kısa çizgi).
  * Bir kez çizilir, donanım katmanında; yalnız döndürülür (tuval açısı, +x yönü 0°).
  */
 internal class PeakView(context: Context) : View(context) {

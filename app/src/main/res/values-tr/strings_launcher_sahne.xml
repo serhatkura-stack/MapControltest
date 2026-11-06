@@ -42,4 +42,6 @@
     <string name="launcher_sport_summary_time">Süre</string>
     <string name="launcher_sport_summary_max">Maks</string>
     <string name="launcher_sport_summary_avg">Tüketim</string>
+    <!-- Spor hız kadranının altındaki küçük devir okuması. -->
+    <string name="launcher_sport_rpm">%1$d dev/dk</string>
 </resources>
