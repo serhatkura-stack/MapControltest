@@ -119,6 +119,7 @@ internal object LauncherProbe {
         if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         val context = activity.applicationContext
         sendNavAreaIfRequested(intent)
+        clusterGridIfRequested(activity, intent)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (intent != null && intent.hasExtra(EXTRA)) {
             if (intent.getBooleanExtra(EXTRA, false)) {
@@ -131,6 +132,16 @@ internal object LauncherProbe {
             }
         }
         if (prefs.getLong(KEY_UNTIL, 0L) > System.currentTimeMillis() && !running) start(context)
+    }
+
+    /** [ClusterGrid.EXTRA] varsa göstergeye kalibrasyon ızgarasını açar/kapatır; ekstra silinir. */
+    private fun clusterGridIfRequested(activity: Activity, intent: Intent?) {
+        if (intent == null || !intent.hasExtra(ClusterGrid.EXTRA)) return
+        val mode = intent.getStringExtra(ClusterGrid.EXTRA) ?: return
+        val display = if (intent.hasExtra(ClusterGrid.EXTRA_DISPLAY)) intent.getIntExtra(ClusterGrid.EXTRA_DISPLAY, -1) else null
+        intent.removeExtra(ClusterGrid.EXTRA)
+        intent.removeExtra(ClusterGrid.EXTRA_DISPLAY)
+        ClusterGrid.handle(activity, mode, display)
     }
 
     /** [EXTRA_NAV_AREA] varsa değeri bir kez gönderir; ekstra silinir (aktivite yeniden oluşunca tekrar gitmesin). */
