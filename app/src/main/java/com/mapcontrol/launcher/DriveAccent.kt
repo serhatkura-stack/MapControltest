@@ -128,3 +128,19 @@ class DriveModePolicy(private val stableMs: Long) {
         return observed
     }
 }
+
+/**
+ * "Spor modu (deneysel)": araç Spor'a geçince Sahne'nin kronograf ekranı. Varsayılan KAPALI; kapalıyken Spor da diğer
+ * sürüş modları gibi orijinal temada kalır (sürüş rengi açıksa yalnız vurgu değişir). Profil başına saklanır.
+ */
+object SportModePrefs {
+    private const val PREFS_NAME = "launcher_settings"
+    private const val KEY = "sport_mode_experimental"
+
+    fun enabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(Profiles.key(context, KEY), false)
+
+    fun setEnabled(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(Profiles.key(context, KEY), on).apply()
+    }
+}

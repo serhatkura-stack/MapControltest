@@ -172,6 +172,7 @@
     <string name="launcher_body_fuel_cap">Yakıt kapağı</string>
     <string name="launcher_drive_theme">Sürüş moduna göre renk</string>
     <string name="launcher_auto_drive_layout">Otomatik sürüş düzeni</string>
+    <string name="launcher_sport_mode">Spor modu (deneysel)</string>
     <string name="launcher_sport_ambient">Spor modunda ambiyans rengi</string>
     <string name="launcher_sport_ambient_unverified">Spor modunda ambiyans rengi (henüz doğrulanmadı)</string>
     <string name="launcher_toggle_on">Açık</string>

@@ -172,6 +172,7 @@
     <string name="launcher_body_fuel_cap">Fuel cap</string>
     <string name="launcher_drive_theme">Drive mode colors</string>
     <string name="launcher_auto_drive_layout">Auto drive layout</string>
+    <string name="launcher_sport_mode">Sport mode (experimental)</string>
     <string name="launcher_sport_ambient">Sport ambient color</string>
     <string name="launcher_sport_ambient_unverified">Sport ambient color (not verified yet)</string>
     <string name="launcher_toggle_on">On</string>

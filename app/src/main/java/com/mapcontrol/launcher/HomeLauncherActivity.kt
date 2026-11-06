@@ -59,6 +59,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     private val layoutPolicy = DriveLayoutPolicy()
     /** Tercihler her turda SharedPreferences'tan okunmasın diye alanlarda tutulur; onCreate/onStart/ayar değişiminde tazelenir. */
     private var driveAccentOn = true
+    /** "Spor modu (deneysel)" seçeneği; kapalıyken Spor orijinal temada kalır. */
+    private var sportModeOn = false
     private var autoLayoutOn = true
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
@@ -438,8 +440,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (keep) sport?.applyInstant(true) else SportController.rememberedSport = false
     }
 
-    /** Spor modu sürüş modu temasına bağlıdır (seçenek kapalıysa yok); demo zorlaması her zaman geçer. */
-    private fun sportAllowed(): Boolean = driveAccentOn || (LauncherDemo.enabled && LauncherDemo.sportForced != null)
+    /** Spor ekranı yalnız "Spor modu (deneysel)" açıksa (varsayılan kapalı); demo zorlaması her zaman geçer. */
+    private fun sportAllowed(): Boolean = sportModeOn || (LauncherDemo.enabled && LauncherDemo.sportForced != null)
 
     private fun observedSportMode(): Int? = when {
         LauncherDemo.enabled -> LauncherDemo.sportForced?.let { if (it) DriveAccent.SPORT else DriveAccent.NORMAL } ?: LauncherDemo.driveMode
@@ -467,7 +469,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (!driveAccentOn) return
         val raw = if (LauncherDemo.enabled) LauncherDemo.driveMode else observedDriveMode
         // Sahne'de Spor kendi ekranıyla gelir ([sportTick]); vurgu için yeniden kurulum (ve ikinci bir geçiş) yapılmaz.
-        val observed = if (sahne != null && raw == DriveAccent.SPORT) null else raw
+        // Spor ekranı kapalıysa Spor da diğer modlar gibi yalnız vurgu rengini değiştirir.
+        val observed = if (sahne != null && raw == DriveAccent.SPORT && sportAllowed()) null else raw
         val to = driveModePolicy.update(System.currentTimeMillis(), observed, !editing && sheet == null)
         if (to != null && to != LauncherTheme.driveMode) {
             LauncherTheme.driveMode = to
@@ -639,6 +642,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Sürüş vurgusu ve otomatik düzen seçeneklerini bir kez okur (ayarlar bunları değiştirince çağrılır). */
     internal fun refreshDrivePrefs() {
         driveAccentOn = DriveAccent.enabled(this)
+        sportModeOn = SportModePrefs.enabled(this)
         autoLayoutOn = DriveLayoutPrefs.get(this)
     }
 

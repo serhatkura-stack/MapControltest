@@ -105,6 +105,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(driveModeToggle(d), fullWidth())
 
+        if (LauncherTheme.sahne) {
+            addView(gap(activity, 12, vertical = true))
+            addView(sportModeToggle(d), fullWidth())
+        }
+
         addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
@@ -205,6 +210,14 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             if (!value) ThemeTransition.retheme(activity)
         }
     }
+
+    /** "Spor modu (deneysel)": Açık | Kapalı. Kapatınca açık spor ekranı sakin geçişle orijinal temaya döner. */
+    private fun sportModeToggle(d: Dialog): View =
+        onOffControl(R.string.launcher_sport_mode, SportModePrefs.enabled(activity)) { value ->
+            d.dismiss()
+            SportModePrefs.setEnabled(activity, value)
+            (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
+        }
 
     /** Etiket (küçük, ikincil) + iki parçalı Açık | Kapalı; seçili olan vurgu renginde. Değişmeyen seçime dokunmak bir şey yapmaz. */
     private fun onOffControl(@StringRes labelRes: Int, on: Boolean, onChange: (Boolean) -> Unit): View =

@@ -11,6 +11,8 @@
     <string name="home_screen_bottom_bar_help_ours">Aracın çubuğu gizlenir, ana ekranın kendi çubuğu gelir.</string>
     <string name="home_screen_bottom_bar_help_hidden">Alt çubuk yok; widget\'lar tüm yüksekliği kullanır.</string>
     <string name="home_screen_drive_theme_help_on">Vurgu rengi sürüş moduna göre değişir.</string>
+    <string name="home_screen_sport_mode_help_on">Spor\'da kronograf ekranı açılır (yalnız Sahne düzeni).</string>
+    <string name="home_screen_sport_mode_help_off">Spor\'da da orijinal tema kalır.</string>
     <string name="home_screen_drive_theme_help_off">Hep temanın kendi vurgu rengi.</string>
     <string name="home_screen_auto_layout_help_on">Park ve Sürüş düzeni hıza ve vitese göre otomatik değişir.</string>
     <string name="home_screen_auto_layout_help_off">Hep Park düzeni.</string>

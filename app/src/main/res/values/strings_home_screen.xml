@@ -11,6 +11,8 @@
     <string name="home_screen_bottom_bar_help_ours">The car\'s bar is hidden; the launcher\'s own bar is shown.</string>
     <string name="home_screen_bottom_bar_help_hidden">No bottom bar; the widgets use the full height.</string>
     <string name="home_screen_drive_theme_help_on">The accent color follows the drive mode.</string>
+    <string name="home_screen_sport_mode_help_on">In Sport, a chronograph screen opens (Stage layout only).</string>
+    <string name="home_screen_sport_mode_help_off">Sport keeps the original theme.</string>
     <string name="home_screen_drive_theme_help_off">Always the theme\'s own accent color.</string>
     <string name="home_screen_auto_layout_help_on">Park and Drive layouts switch automatically by speed and gear.</string>
     <string name="home_screen_auto_layout_help_off">Always the Park layout.</string>
