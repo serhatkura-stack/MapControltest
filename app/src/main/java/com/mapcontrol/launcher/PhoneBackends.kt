@@ -489,14 +489,17 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
     }
 
     private val main = Handler(Looper.getMainLooper())
-    /** Yalnızca io'da yazılır: yoklama kurulu mu. */
+    /** Yalnızca io'da yazılır: boşta yoklaması kurulu mu. */
     @Volatile private var pollWanted = false
-    /** Kullanıcı 0 dışında yayın gelmeyebilir: arama sürerken 2 sn'de bir getCurrentCalls ([syncPoll]). */
+    /**
+     * Kullanıcı 0 dışında yayın gelmeyebilir: arama YOKKEN [IDLE_POLL_MS]'de bir getCurrentCalls ([syncPoll]); gelen ya
+     * da giden arama yalnızca böyle görülür. Arama sürerken PhoneModel.pollTask zaten 2 sn'de bir refreshState çağırır.
+     */
     private val poll = object : Runnable {
         override fun run() {
             if (onState == null || !pollWanted) return
             io.execute { readCurrent() }
-            main.postDelayed(this, POLL_MS)
+            main.postDelayed(this, IDLE_POLL_MS)
         }
     }
 
@@ -536,8 +539,8 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
             }
         }
         // Şu anki aramalar (yayın yalnızca değişiklikleri getirir): ana ekrana dönüşte süren görüşme de görünsün.
-        // Yoklama yalnızca arama sürerken kurulur ([syncPoll]); arama yokken hiç yoklama yok.
-        io.execute { readCurrent() }
+        // Kullanıcı 0 dışında boşta yavaş yoklama readCurrent → [syncPoll] ile kurulur; okuma başarısızsa da kurulsun.
+        io.execute { if (!readCurrent()) syncPoll(CallKind.NONE) }
     }
 
     /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. Okuyamazsa false. */
@@ -584,19 +587,21 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
     }
 
     /**
-     * io: kullanıcı 0 dışında yayın gelmeyebilir; getCurrentCalls yoklaması YALNIZCA arama sürerken ([CallPoll.shouldPoll])
-     * açık kalır. Arama bitince (ya da liste boşalınca) durur; boşta yoklama yok.
+     * io: kullanıcı 0 dışında yayın gelmeyebilir. Arama yokken (ya da PhoneModel'in yoklamadığı durumlarda) bu arka uç
+     * [IDLE_POLL_MS]'de bir yoklar, yoksa gelen arama hiç görülmez. Arama sürerken ([CallPoll.shouldPoll]) durur:
+     * PhoneModel.pollTask 2 sn'de bir refreshState → readCurrent yapar (çift yoklama olmasın). Kullanıcı 0'da hiç yoklama yok.
      */
     private fun syncPoll(kind: CallKind) {
-        val want = onState != null && HfpLink.userId != 0 && CallPoll.shouldPoll(kind, true)
+        val want = onState != null && HfpLink.userId != 0 && !CallPoll.shouldPoll(kind, true)
         if (want == pollWanted) return
         pollWanted = want
         main.removeCallbacks(poll)
-        if (want) main.postDelayed(poll, POLL_MS)
+        if (want) main.postDelayed(poll, IDLE_POLL_MS)
     }
 
     private companion object {
-        const val POLL_MS = 2_000L
+        /** Boşta yoklama: gelen arama en geç bu kadar gecikmeyle görülür (VDBus yayını varsa daha erken). */
+        const val IDLE_POLL_MS = 5_000L
     }
 }
 
@@ -1485,6 +1490,10 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
     // io kuyruğunda: doğrulama bekleyen istek.
     private var pending: ((AssistantResult) -> Unit)? = null
     private var pendingTimeout: Runnable? = null
+    // io kuyruğunda: bekleyen başlatma "önce durdur" sonrası mı (doğrulanmazsa logcat'te ayrıca söylenir).
+    private var pendingAfterReset = false
+    // io kuyruğunda: başlatma yalnızca SCO "bağlanıyor" (1) ile doğrulandıysa o anın elapsedRealtime'ı; değilse 0.
+    private var scoConnectingConfirmAt = 0L
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, intent: Intent?) {
@@ -1495,8 +1504,9 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
                     io.execute {
                         vr = on
                         stackMaybeActive = on
+                        scoConnectingConfirmAt = 0L
                         Log.i(TAG, "asistan durumu (telefon): ${if (on) "açık" else "kapalı"}")
-                        if (on) confirm()
+                        if (on) confirm(null)
                     }
                 }
                 HfpLink.ACTION_AUDIO -> {
@@ -1504,7 +1514,16 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
                     io.execute {
                         audio = state == HfpLink.AUDIO_CONNECTED
                         if (pending != null) Log.i(TAG, "asistan adım: SCO durumu=$state")
-                        if (VoicePlan.confirmsStart(state)) confirm()
+                        if (state == HfpLink.AUDIO_CONNECTED) scoConnectingConfirmAt = 0L
+                        if (state == AUDIO_DISCONNECTED && vr && scoConnectingConfirmAt != 0L &&
+                            SystemClock.elapsedRealtime() - scoConnectingConfirmAt <= SCO_FALLBACK_MS
+                        ) {
+                            // "Bağlanıyor" ile doğrulandı ama SCO bağlanmadan düştü: oturum açılmamış say.
+                            Log.i(TAG, "asistan adım: SCO bağlanmadan 0'a düştü; doğrulama geri alındı (vr=false)")
+                            vr = false
+                            scoConnectingConfirmAt = 0L
+                        }
+                        if (VoicePlan.confirmsStart(state)) confirm(state)
                     }
                 }
                 HfpLink.ACTION_CONNECTION -> {
@@ -1555,11 +1574,12 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
                 VoicePlan.Step.RESET_THEN_START -> {
                     // Yığın 1'de kalmış olabilir: başlatma sessizce düşerdi. Önce durdur (durum 0'da zararsız), OK'i
                     // bekleyip başlat.
-                    Log.i(TAG, "asistan: önce durdur, sonra başlat")
-                    HfpClientApi.stopVoiceRecognition(p, d)
+                    // Durdurma telefondan hata alırsa yığın 1'de kalır (HeadsetClientStateMachine hata dalı): bu yüzden
+                    // stackMaybeActive true kalır; yalnızca doğrulanmış başlatma ya da telefonun +BVRA:0'ı değiştirir.
+                    val stopOk = HfpClientApi.stopVoiceRecognition(p, d)
+                    Log.i(TAG, "asistan: önce durdur (binder=$stopOk), sonra başlat")
                     vr = false
-                    stackMaybeActive = false
-                    main.postDelayed({ io.execute { begin(p, d, done) } }, STALE_RESTART_MS)
+                    main.postDelayed({ io.execute { begin(p, d, done, afterReset = true) } }, STALE_RESTART_MS)
                 }
                 VoicePlan.Step.START -> begin(p, d, done)
             }
@@ -1567,27 +1587,45 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
     }
 
     /** io: AT+BVRA=1 ve doğrulama beklemesi. */
-    private fun begin(p: Any, d: BluetoothDevice, done: (AssistantResult) -> Unit) {
+    private fun begin(p: Any, d: BluetoothDevice, done: (AssistantResult) -> Unit, afterReset: Boolean = false) {
         finishPending(AssistantResult.FAILED)
-        if (!HfpClientApi.startVoiceRecognition(p, d)) return done(AssistantResult.FAILED)
-        // OK gelirse yığın sessizce 1 olur; doğrulanmasa da bir sonraki basışta önce durdurulur.
+        // OK gelirse yığın sessizce 1 olur; doğrulanmasa da bir sonraki basışta önce durdurulur. Binder false dönse de
+        // (yığın 1'de kalmış olabilir) true kalır.
         stackMaybeActive = true
+        if (!HfpClientApi.startVoiceRecognition(p, d)) {
+            if (afterReset) Log.i(TAG, "asistan adım: durdur+başlat sonrası başlatma binder'da reddedildi; yığın 1'de kalmış olabilir")
+            return done(AssistantResult.FAILED)
+        }
         pending = done
-        val t = Runnable { io.execute { Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)"); finishPending(AssistantResult.UNCONFIRMED) } }
+        pendingAfterReset = afterReset
+        scoConnectingConfirmAt = 0L
+        val t = Runnable {
+            io.execute {
+                val why = if (pendingAfterReset) " (durdur+başlat sonrası: yığın 1'de kalmış olabilir, durdurma hata almış olabilir)" else ""
+                Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)$why")
+                finishPending(AssistantResult.UNCONFIRMED)
+            }
+        }
         pendingTimeout = t
         main.postDelayed(t, CONFIRM_MS)
     }
 
-    /** io: +BVRA:1 ya da SCO bağlandı → bekleyen istek başarılı. */
-    private fun confirm() {
+    /**
+     * io: +BVRA:1 ya da SCO bağlanıyor/bağlı → bekleyen istek başarılı. [scoState] 1 (yalnızca bağlanıyor) ise an
+     * kaydedilir: SCO [SCO_FALLBACK_MS] içinde 0'a düşerse vr geri alınır (başka ses kaynağı ya da kurulamayan SCO).
+     */
+    private fun confirm(scoState: Int?) {
         if (pending == null) return
         vr = true
+        scoConnectingConfirmAt = if (scoState == 1) SystemClock.elapsedRealtime() else 0L
+        Log.i(TAG, "asistan adım: doğrulandı (${if (scoState == null) "+BVRA:1" else "SCO=$scoState"}${if (pendingAfterReset) ", durdur+başlat sonrası" else ""})")
         finishPending(AssistantResult.STARTED)
     }
 
     private fun finishPending(result: AssistantResult) {
         val cb = pending ?: return
         pending = null
+        pendingAfterReset = false
         pendingTimeout?.let { main.removeCallbacks(it) }
         pendingTimeout = null
         cb(result)
@@ -1608,5 +1646,9 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         /** SCO kurulumu telefona göre gecikebilir; doğrulama penceresi 2,5 sn'den 4 sn'ye (araçta ölçülecek). */
         const val CONFIRM_MS = 4_000L
         const val STALE_RESTART_MS = 700L
+        /** "Bağlanıyor" doğrulamasından sonra SCO bu süre içinde 0'a düşerse doğrulama geri alınır. */
+        const val SCO_FALLBACK_MS = 1_000L
+        /** BluetoothHeadsetClient.STATE_AUDIO_DISCONNECTED. */
+        const val AUDIO_DISCONNECTED = 0
     }
 }
