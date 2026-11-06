@@ -352,8 +352,12 @@ internal object HfpClientApi {
      * AT+BVRA=1. Dikkat: araç yığını yalnızca kendi durumu 0 iken gönderir, değilse sessizce düşürür ama yine de true
      * döner (HeadsetClientStateMachine.java:977-985); true "başladı" demek değildir.
      */
-    fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean =
-        invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device).getOrNull() == true
+    fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean {
+        val r = invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device)
+        // Teşhis (6 Kasım araç: Siri bir kez açıldı, sonra hep "başlatılamadı"): sonuç ya da hata türü, kişisel veri yok.
+        android.util.Log.i("PhoneSource", "asistan adım: startVoiceRecognition sonuç=${r.getOrNull()} hata=${r.exceptionOrNull()?.javaClass?.simpleName}:${r.exceptionOrNull()?.message?.take(80)}")
+        return r.getOrNull() == true
+    }
 
     /** AT+BVRA=0 (yalnızca yığının durumu 1 iken gönderilir). */
     fun stopVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean =
@@ -1098,6 +1102,7 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         register()
         HfpLink.withProxy(ctx, PROXY_WAIT_MS, io) { p ->
             val d = if (p != null) HfpLink.connectedDevice() else null
+            Log.i(TAG, "asistan adım: vekil=${p != null} cihaz=${d != null} vr=$vr ses=$audio muaf=${HiddenApi.exempt()}")
             if (p == null || d == null) return@withProxy done(AssistantResult.FAILED)
             if (vr && audio) {
                 // Açık oturum: ikinci basış kapatır.
@@ -1125,7 +1130,7 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         finishPending(AssistantResult.FAILED)
         if (!HfpClientApi.startVoiceRecognition(p, d)) return done(AssistantResult.FAILED)
         pending = done
-        val t = Runnable { io.execute { finishPending(AssistantResult.FAILED) } }
+        val t = Runnable { io.execute { Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)"); finishPending(AssistantResult.FAILED) } }
         pendingTimeout = t
         main.postDelayed(t, CONFIRM_MS)
     }
