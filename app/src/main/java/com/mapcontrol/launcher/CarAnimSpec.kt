@@ -163,6 +163,43 @@ object CarAnimSpec {
     /** Cam tavanın camı (tavan açıkken aynı renk; geniş yüzey olduğundan daha hafif). */
     val sunroof = Glass(Box(163f, 96f, 268f, 156f), null, strength = 0.6f)
 
+    // --- Panoramik tavan ([RoofState]; katmanlar car_roof_*.webp, base pikselinin 2 katı) ---
+
+    /**
+     * Tavan camının dış kutusu (base pikseli; car_*_base'deki ince açık kenar çizgisinin içi). Arka panel solda
+     * ([ROOF_X0]..[ROOF_SPLIT]), ön panel sağda ([ROOF_FRONT_X0]..[ROOF_X1]); burun sağda olduğundan "ön" = sağ.
+     */
+    const val ROOF_X0 = 162f
+    const val ROOF_X1 = 438f
+    const val ROOF_Y0 = 95f
+    const val ROOF_Y1 = 254f
+    const val ROOF_SPLIT = 291f
+    const val ROOF_FRONT_X0 = 293f
+    /** Katman bitmap'lerinin ölçeği (base pikseli başına piksel). */
+    const val ROOF_ART_SCALE = 2f
+    /** Ön panelin tam açıkken arkaya kayma yolu (panel genişliğinin ~%82'si; geri kalanı çerçevenin altında kalır). */
+    const val ROOF_GLASS_TRAVEL = 118f
+    /** Kısa yumuşak geçiş (yeni konum okununca) ve gerçek hareketi izlerken çizim adımı (~8 kare/sn yeter). */
+    const val ROOF_EASE_MS = 420L
+    const val ROOF_STEP_MS = 120L
+    /** Kenar ışığının kutu payı ve yoğunluğu (sakin: en dolu yerinde ~%55 kehribar). */
+    const val ROOF_EDGE_PAD = 9f
+    const val ROOF_EDGE_ALPHA = 0.55f
+
+    val roofW: Float get() = ROOF_X1 - ROOF_X0
+
+    /** Perdenin açık/kapalı sınırı (base x): açıklık [shade] önden (sağ) arkaya doğru büyür. */
+    fun shadeEdgeX(shade: Float): Float = ROOF_X1 - clamp01(shade) * roofW
+
+    /** Ön panelin o anki yeri: (sol, sağ) base x; [glass] 0..1. Sağ kenar aynı zamanda açıklığın arka kenarıdır. */
+    fun glassPanelX(glass: Float): FloatArray {
+        val d = clamp01(glass) * ROOF_GLASS_TRAVEL
+        return floatArrayOf(ROOF_FRONT_X0 - d, ROOF_X1 - d)
+    }
+
+    /** Açıklığın kutusu (sol, sağ) base x; kapalıyken genişlik 0. */
+    fun roofHoleX(glass: Float): FloatArray = floatArrayOf(glassPanelX(glass)[1], ROOF_X1)
+
     /** Vurgunun saydamlığı: [fade] cam açılış geçişi (0 kapalı, 1 açık), [doorOpen] o camın kapısının açıklığı (0..1). */
     fun glassAlpha(fade: Float, doorOpen: Float): Float = GLASS_MAX_ALPHA * clamp01(fade) * (1f - clamp01(doorOpen))
 

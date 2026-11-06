@@ -321,11 +321,35 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         val windows: List<BodyPart>,
         val car: CarSchematicView.State,
         val locked: Boolean?,
+        /** Panoramik tavanın konumu ([RoofTracker]); sinyal yoksa null. */
+        val roof: RoofState? = null,
     )
 
     private val TIRE_WHEEL_NAMES = listOf(R.string.launcher_tire_fl, R.string.launcher_tire_fr, R.string.launcher_tire_rl, R.string.launcher_tire_rr)
 
     private var lastUi: Ui? = null
+
+    /** Tavan konumu tahmini (perdenin yüzde sinyali yok; hareket süresiyle) ve son yazılan ham değerler ("Roof" günlüğü). */
+    private val roofTracker = RoofTracker()
+    private var roofRawLogged: List<Int>? = null
+
+    /**
+     * Tavan durumu: demoda `launcher_demo_roof`, araçta CarSetting SUNSHADE / SPF_POSI / SPF_OPERATE. Ham üçlü her değiştiğinde
+     * bir kez "Roof" etiketiyle yazılır (araçta ölçek kalibrasyonu: `adb logcat -s Roof`).
+     */
+    private fun roofState(s: VehicleMetricsSnapshot): RoofState? {
+        if (LauncherDemo.enabled) return LauncherDemo.roof
+        if (!s.connected) return null
+        fun raw(v: Int): Int? = v.takeIf { VehicleMetricsSnapshot.isValid(it) }
+        val speed = if (VehicleMetricsSnapshot.isValid(s.displaySpeed) || VehicleMetricsSnapshot.isValid(s.actualSpeed)) s.preferredSpeed() else null
+        val state = roofTracker.update(raw(s.sunshade), raw(s.sunroofPosi), raw(s.sunroofOperate), speed, s.isRaining(), android.os.SystemClock.uptimeMillis())
+        val key = listOf(s.sunshade, s.sunroofPosi, s.sunroofOperate)
+        if (key != roofRawLogged) {
+            roofRawLogged = key
+            android.util.Log.i("Roof", "raw sunshade=${s.sunshade} spfPosi=${s.sunroofPosi} spfOperate=${s.sunroofOperate} speed=$speed rain=${s.isRaining()} -> $state")
+        }
+        return state
+    }
 
     private fun render() {
         val s = snapshot
@@ -373,6 +397,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
                 locked = locked,
             ),
             locked = locked,
+            roof = if (knowsSunroof || LauncherDemo.enabled) roofState(s) else null,
         )
         val prev = lastUi
         if (ui == prev) return
@@ -429,7 +454,7 @@ class VehicleHeroCard(private val context: Context) : SizedWidget, Themeable, St
         calmRow.contentDescription = spoken
         val openings = if (!ui.knowsBody) null else Openings(
             doorFl = ui.car.doorLf, doorFr = ui.car.doorRf, doorRl = ui.car.doorLr, doorRr = ui.car.doorRr,
-            trunk = ui.car.trunk, hood = ui.car.hood, sunroof = ui.car.sunroof, windows = windows,
+            trunk = ui.car.trunk, hood = ui.car.hood, sunroof = ui.car.sunroof, windows = windows, roof = ui.roof,
         )
         OpeningsBus.publish(openings)
         val otherAlerts = alerts.filter { it != AlertSeg.WINDOWS }

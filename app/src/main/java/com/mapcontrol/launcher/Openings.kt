@@ -15,6 +15,8 @@ internal data class Openings(
     val sunroof: Boolean = false,
     /** Açık camlar (yalnızca cam sinyali okunabiliyorsa). */
     val windows: List<BodyPart> = emptyList(),
+    /** Panoramik tavanın konumu (perde, ön panel); sinyal yoksa null. [sunroof] yine "açık" uyarısı için tek kaynaktır. */
+    val roof: RoofState? = null,
 ) {
     val doors: Int get() = listOf(doorFl, doorFr, doorRl, doorRr).count { it }
     val anyDoor: Boolean get() = doors > 0

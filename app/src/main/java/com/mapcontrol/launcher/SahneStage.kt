@@ -325,6 +325,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val o = s?.openings
         car.setOpen(o?.carParts() ?: s?.openParts.orEmpty(), animate = carSeeded)
         car.setGlass(o?.windows.orEmpty(), o?.sunroof == true, animate = carSeeded)
+        car.setRoof(o?.roof, animate = carSeeded)
         car.setTireAlert(if (s?.tireAlert == true) s.tireLow?.wheel else null)
         lastParts = o?.carParts() ?: s?.openParts.orEmpty()
         setTrunkOpen(CarPart.TRUNK in lastParts, animate = carSeeded && visibleNow)

@@ -83,6 +83,25 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private val glassPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glassRect = RectF()
 
+    // --- Panoramik tavan ([setRoof]): perde ve ön cam panel, gerçek konumuyla ---
+    private var roof: RoofState? = null
+    private val shadeMotion = RoofMotion()
+    private val glassMotion = RoofMotion()
+    private var roofArt: RoofArt? = null
+    private val roofDst = RectF()
+    private val roofPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val roofLine = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val roofEdgePaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { color = ROOF_AMBER }
+    /** Kayan cam panel: yerel koordinatta (panel sol üstü 0,0) bir kez kurulan ton + çapraz parıltı. */
+    private val roofPanelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val w = CarAnimSpec.ROOF_X1 - CarAnimSpec.ROOF_FRONT_X0
+        val h = CarAnimSpec.ROOF_Y1 - CarAnimSpec.ROOF_Y0
+        shader = LinearGradient(0f, 0f, w, h,
+            intArrayOf(0x47101826, 0x3D5A7896, 0x29101826, 0x38080C12),
+            floatArrayOf(0f, 0.3f, 0.55f, 1f), Shader.TileMode.CLAMP)
+    }
+    private val roofTick = Runnable { onRoofTick() }
+
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(CarColorPrefs.PREFS_NAME, Context.MODE_PRIVATE)
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == CarColorPrefs.KEY) setColor(CarColorPrefs.get(context))
@@ -289,6 +308,54 @@ class CarStageView(context: Context) : ViewGroup(context) {
             })
             start()
         }
+    }
+
+    /**
+     * Panoramik tavan ([RoofState]; null = sinyal yok, taban görseli olduğu gibi). Perde kısmi konumda önden arkaya açılır,
+     * ön panel açıklığı kadar arkaya kayar. Çizim duraktır: yalnızca değişimde kısa yumuşak geçiş; perde gerçekten hareket
+     * ederken ([RoofState.shadeMs] > 0) seyrek adımla ([CarAnimSpec.ROOF_STEP_MS]) doğrusal izlenir. Aynı durum hiçbir şey yapmaz.
+     */
+    fun setRoof(state: RoofState?, animate: Boolean) {
+        if (state == roof) return
+        val now = android.os.SystemClock.uptimeMillis()
+        val anim = animate && isAttachedToWindow && isLaidOut && ValueAnimator.areAnimatorsEnabled()
+        val prev = roof
+        roof = state
+        if (state != null && roofArt == null) roofArt = RoofArt.get(context)
+        if (state == null) {
+            shadeMotion.snap(0f)
+            glassMotion.snap(0f)
+        } else {
+            val shade = state.shade
+            when {
+                shade == null -> shadeMotion.snap(0f)
+                // İlk okuma hareket halindeyse (ör. açılıyor) çizim tahmini yerden hedefe ilerler.
+                anim && prev?.shade == null && state.shadeMs > 0 -> {
+                    shadeMotion.snap(shadeStart(shade, state.shadeMs))
+                    shadeMotion.set(shade, state.shadeMs, now)
+                }
+                !anim || prev?.shade == null -> shadeMotion.snap(shade)
+                else -> shadeMotion.set(shade, state.shadeMs, now)
+            }
+            if (!anim || prev == null) glassMotion.snap(state.glass) else glassMotion.set(state.glass, 0L, now)
+        }
+        removeCallbacks(roofTick)
+        if (anim) postOnAnimation(roofTick)
+        invalidate()
+    }
+
+    /** Hareketin şu anki tahmini açıklığı: hedef ve kalan süreden ([RoofTracker] ile aynı süreler). */
+    private fun shadeStart(target: Float, ms: Long): Float =
+        if (target >= 0.5f) CarAnimSpec.clamp01(1f - ms.toFloat() / RoofDecode.SHADE_OPEN_MS)
+        else CarAnimSpec.clamp01(ms.toFloat() / RoofDecode.SHADE_CLOSE_MS)
+
+    private fun onRoofTick() {
+        val now = android.os.SystemClock.uptimeMillis()
+        invalidate()
+        if (shadeMotion.done(now) && glassMotion.done(now)) return
+        // Kısa geçiş her karede; gerçek perde hareketi seyrek adımla (çizim kaydı yok, yalnız kırpma değişir).
+        if (shadeMotion.tracking(now) && glassMotion.done(now)) postDelayed(roofTick, CarAnimSpec.ROOF_STEP_MS)
+        else postOnAnimation(roofTick)
     }
 
     /** Renk takımını değiştirir (tercih dinleyicisi ve ayar panelinden); görseller hemen değişir. */
@@ -550,6 +617,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
         glassAnim?.let { it.removeAllListeners(); it.cancel() }
         glassAnim = null
         glassTarget.copyInto(glassNow)
+        removeCallbacks(roofTick)
+        roof?.let { r -> r.shade?.let { shadeMotion.snap(it) }; glassMotion.snap(r.glass) }
         running = 0
         // isAttachedToWindow burada hâlâ true (mAttachInfo süper çağrıdan sonra boşalır): ayrı bayrakla kapatılır ki
         // göz kırpma/parlama geri çağrıları işleyiciden hâlâ kaldırılabilirken kaldırılsın.
@@ -567,6 +636,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         canvas.translate(CarAnimSpec.padLeft, CarAnimSpec.padTop)
         paint.alpha = 255
         b.base?.let { canvas.drawBitmap(it, 0f, 0f, paint) }
+        drawRoof(canvas)
         drawGlass(canvas)
         // 1) Boşluklar (tüm parçalar), 2) parça + gölge + kenar ışığı, 3) açık hal fotoğrafları (anim.json zOrder).
         for (i in parts.indices) {
@@ -589,6 +659,8 @@ class CarStageView(context: Context) : ViewGroup(context) {
     private fun drawGlass(canvas: Canvas) {
         glassPaint.color = Sahne.ICE
         for (i in glasses.indices) {
+            // Tavanın konumu biliniyorsa cam tavan kendi katmanlarıyla çizilir (buz mavisi yalnız yedek).
+            if (glassKeys[i] == null && roof != null) continue
             val d = glassDoor[i]
             val a = CarAnimSpec.glassAlpha(glassNow[i], if (d >= 0) motions[d].x else 0f) * glasses[i].strength
             if (a <= 0.001f) continue
@@ -597,6 +669,93 @@ class CarStageView(context: Context) : ViewGroup(context) {
             glassRect.set(g.x, g.y, g.right, g.bottom)
             canvas.drawRoundRect(glassRect, CarAnimSpec.GLASS_CORNER, CarAnimSpec.GLASS_CORNER, glassPaint)
         }
+    }
+
+    /**
+     * Tavan: perde (kapalı kumaş | açık cam, sınır [CarAnimSpec.shadeEdgeX]; sınırda ince perde kenarı), sonra açıklık
+     * (kabin, çerçevenin önünden), üstünde arkaya kaymış ön panel (ince cam levha: ton + parıltı, altı görünür) ve önündeki ince koyu
+     * aralık; havalandırmada arka kenarda ince aralık. Tavan açık + hız / yağmur: açıklığın kenarı hafif kehribar.
+     */
+    private fun drawRoof(canvas: Canvas) {
+        val r = roof ?: return
+        val art = roofArt ?: return
+        val now = android.os.SystemClock.uptimeMillis()
+        val x0 = CarAnimSpec.ROOF_X0
+        val x1 = CarAnimSpec.ROOF_X1
+        val y0 = CarAnimSpec.ROOF_Y0
+        val y1 = CarAnimSpec.ROOF_Y1
+        roofPaint.alpha = 255
+        if (r.shade != null) {
+            val xs = CarAnimSpec.shadeEdgeX(shadeMotion.at(now))
+            roofDst.set(x0, y0, x1, y1)
+            if (xs > x0 + 0.25f) art.closed?.let { clipped(canvas, it, x0, xs) }
+            if (xs < x1 - 0.25f) art.open?.let { clipped(canvas, it, xs, x1) }
+            if (xs > x0 + 0.5f && xs < x1 - 0.5f) {
+                // Perdenin ön kenarı: ince koyu gölge + üstünde çok ince açık çizgi (kumaşın sert kenarı).
+                roofLine.shader = null
+                roofLine.color = 0x8C000000.toInt()
+                canvas.drawRect(xs - 0.5f, y0 + 2f, xs + 1.6f, y1 - 2f, roofLine)
+                roofLine.color = 0x33FFFFFF
+                canvas.drawRect(xs - 1.4f, y0 + 2f, xs - 0.5f, y1 - 2f, roofLine)
+            }
+        }
+        val g = glassMotion.at(now)
+        if (g > 0.003f) {
+            // [CarAnimSpec.glassPanelX] / [CarAnimSpec.roofHoleX] ile aynı (çizimde dizi ayrılmasın).
+            val d = CarAnimSpec.clamp01(g) * CarAnimSpec.ROOF_GLASS_TRAVEL
+            val pl = CarAnimSpec.ROOF_FRONT_X0 - d
+            val pr = x1 - d
+            // Açıklık: kabin görünür (katman ön panelin tam yerini kaplar, açılan kısmı kırpılır).
+            art.hole?.let {
+                roofDst.set(CarAnimSpec.ROOF_FRONT_X0, y0, x1, y1)
+                val save = canvas.save()
+                canvas.clipRect(pr, y0, x1, y1)
+                canvas.drawBitmap(it, null, roofDst, roofPaint)
+                canvas.restoreToCount(save)
+            }
+            // Kayan panel: arka panelin üstünde ince bir cam levha (altı görünür kalır): ton + çapraz gökyüzü parıltısı,
+            // arkasında hafif gölge; çerçevenin dışına taşmaz.
+            val save = canvas.save()
+            canvas.clipRect(x0, y0, x1, y1)
+            roofLine.shader = null
+            roofLine.color = 0x59000000
+            canvas.drawRect(pl - 4f, y0 + 3f, pl, y1 - 3f, roofLine)
+            canvas.translate(pl, y0)
+            roofDst.set(0f, 0f, pr - pl, y1 - y0)
+            canvas.drawRoundRect(roofDst, PANEL_CORNER, PANEL_CORNER, roofPanelPaint)
+            canvas.restoreToCount(save)
+            roofLine.color = 0xB3000000.toInt()
+            canvas.drawRect(pr - 0.6f, y0 + 3f, pr + 1.8f, y1 - 3f, roofLine)
+            roofLine.color = 0x2EFFFFFF
+            canvas.drawRect(pr - 1.6f, y0 + 4f, pr - 0.6f, y1 - 4f, roofLine)
+        }
+        if (r.tilt) {
+            // Havalandırma: ön panelin arka kenarı kalkık, ince koyu aralık.
+            val gx = CarAnimSpec.ROOF_FRONT_X0
+            roofLine.color = 0xD9000000.toInt()
+            canvas.drawRect(gx - 1f, y0 + 3f, gx + 3.5f, y1 - 3f, roofLine)
+            roofLine.color = 0x47FFFFFF
+            canvas.drawRect(gx + 3.5f, y0 + 4f, gx + 4.6f, y1 - 4f, roofLine)
+        }
+        if (r.edgeAlert && (g > 0.003f || r.tilt)) {
+            val edge = art.edge ?: return
+            val pad = CarAnimSpec.ROOF_EDGE_PAD
+            val open = g > 0.003f
+            val hl = if (open) x1 - CarAnimSpec.clamp01(g) * CarAnimSpec.ROOF_GLASS_TRAVEL else CarAnimSpec.ROOF_FRONT_X0 - 3f
+            val hr = if (open) x1 else CarAnimSpec.ROOF_FRONT_X0 + 6f
+            roofDst.set(hl - pad, y0 - pad, hr + pad, y1 + pad)
+            roofEdgePaint.alpha = (255 * CarAnimSpec.ROOF_EDGE_ALPHA).toInt()
+            canvas.drawBitmap(edge, null, roofDst, roofEdgePaint)
+        }
+    }
+
+    /** Tavan katmanını tam kutusuna yerleştirip yalnız [left]..[right] arasını çizer. */
+    private fun clipped(canvas: Canvas, bmp: Bitmap, left: Float, right: Float) {
+        val save = canvas.save()
+        canvas.clipRect(left, CarAnimSpec.ROOF_Y0, right, CarAnimSpec.ROOF_Y1)
+        roofDst.set(CarAnimSpec.ROOF_X0, CarAnimSpec.ROOF_Y0, CarAnimSpec.ROOF_X1, CarAnimSpec.ROOF_Y1)
+        canvas.drawBitmap(bmp, null, roofDst, roofPaint)
+        canvas.restoreToCount(save)
     }
 
     private fun drawSprite(canvas: Canvas, i: Int, b: CarBitmaps) {
@@ -698,6 +857,60 @@ class CarStageView(context: Context) : ViewGroup(context) {
         }
     }
 }
+
+/**
+ * Tavan katmanları (renkten bağımsız; yalnız cam alanı, kenarlar saydam): [closed] perde kapalı kumaş, [open] perde açık
+ * cam + hafif gökyüzü yansıması, [hole] ön panel açıkken görünen kabin (ön panelin yeri). Kaynak: gpt-image ile mevcut
+ * araba görselinin tavanı üzerinde düzenlendi (katalog/konsept-openai/tavan). [edge] kenar ışığı maskesi (ALPHA_8).
+ * Süreç başına bir kez, yalnızca ilk tavan durumu gelince çözülür (~1,8 MB).
+ */
+private class RoofArt(val closed: Bitmap?, val open: Bitmap?, val hole: Bitmap?) {
+    val edge: Bitmap? by lazy { edgeMask() }
+
+    companion object {
+        @Volatile private var cached: RoofArt? = null
+
+        fun get(context: Context): RoofArt {
+            cached?.let { return it }
+            val res = context.resources
+            fun load(id: Int): Bitmap? = try {
+                BitmapFactory.decodeResource(res, id, BitmapFactory.Options().apply { inScaled = false })
+            } catch (e: OutOfMemoryError) {
+                null
+            }
+            return RoofArt(load(R.drawable.car_roof_shade_closed), load(R.drawable.car_roof_shade_open), load(R.drawable.car_roof_open_hole))
+                .also { cached = it }
+        }
+
+        /** Açıklığın çevresinde yumuşak ışıma: bulanık ince kontur, tam açık açıklık boyunda (kısmi açıklıkta yatay gerilir). */
+        private fun edgeMask(): Bitmap? = try {
+            val pad = CarAnimSpec.ROOF_EDGE_PAD
+            val w = CarAnimSpec.ROOF_GLASS_TRAVEL + 2 * pad
+            val h = CarAnimSpec.ROOF_Y1 - CarAnimSpec.ROOF_Y0 + 2 * pad
+            Bitmap.createBitmap(w.toInt(), h.toInt(), Bitmap.Config.ALPHA_8).also { bmp ->
+                val c = Canvas(bmp)
+                val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = 2.4f
+                    color = 0xFF000000.toInt()
+                    maskFilter = BlurMaskFilter(4f, BlurMaskFilter.Blur.NORMAL)
+                }
+                c.drawRoundRect(RectF(pad, pad, w - pad, h - pad), 10f, 10f, p)
+                p.maskFilter = null
+                p.strokeWidth = 1f
+                p.color = 0xB3000000.toInt()
+                c.drawRoundRect(RectF(pad, pad, w - pad, h - pad), 10f, 10f, p)
+            }
+        } catch (e: OutOfMemoryError) {
+            null
+        }
+    }
+}
+
+/** Tavan kenar ışığı: sakin kehribar (lastik / yakıt kapağıyla aynı aile). */
+private const val ROOF_AMBER = 0xFFFFA040.toInt()
+/** Kayan panelin köşe yarıçapı (base px; çerçevenin iç köşesiyle uyumlu, biraz daha küçük). */
+private const val PANEL_CORNER = 8f
 
 /** Yansıma bitmap'i: base'in 1/4 genişliğinde, alt kenardan [REFL_H] satır; üstte %40, aşağı doğru sıfıra söner. */
 private fun reflectionOf(base: Bitmap): Bitmap? = try {

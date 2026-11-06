@@ -48,6 +48,8 @@ internal data class CarDetailModel(
     val pm25In: Int?,
     /** Dış sıcaklık °C (HVAC 19); okunamadıysa null. */
     val outsideC: Double? = null,
+    /** Panoramik tavanın konumu ([Openings.roof]); bilinmiyorsa null. */
+    val roof: RoofState? = null,
 )
 
 internal object CarDetail {
@@ -86,6 +88,7 @@ internal object CarDetail {
             coolantCode = trip.coolantCode,
             pm25In = trip.pm25In,
             outsideC = trip.outsideC,
+            roof = o?.roof,
         )
     }
 
@@ -228,6 +231,7 @@ internal class CarDetailSheet(private val activity: Activity) {
         fun bind(m: CarDetailModel, parts: Set<CarPart>) {
             car.setOpen(parts, animate = false)
             car.setGlass(CarDetail.openWindows(m), m.sunroof == true, animate = false)
+            car.setRoof(m.roof, animate = false)
             labels.forEachIndexed { i, l -> l.bind(context.getString(TIRE_NAMES[i]), m.tiresPsi[i], m.tiresLow[i]) }
         }
 

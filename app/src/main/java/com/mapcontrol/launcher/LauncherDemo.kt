@@ -170,6 +170,17 @@ internal object LauncherDemo {
     var openParts: Set<String> = emptySet()
         private set
 
+    /**
+     * Panoramik tavan önizlemesi: `--es launcher_demo_roof "shade=30,glass=40"` (yüzde; perde 0 kapalı .. 100 açık, ön panel
+     * 0 kapalı .. 100 tam geri). İsteğe bağlı `tilt` (havalandırma), `alert` / `rain` / `speed=120` (açık kenar kehribar).
+     * Boş değer tavanı demo dışı bırakır (taban görseli). Bkz. [RoofDemo.parse].
+     */
+    const val EXTRA_ROOF = "launcher_demo_roof"
+
+    @Volatile
+    var roof: RoofState? = null
+        private set
+
     /** Yandan "kil beyazı" araç çiziminin önizlemesi: `--ez launcher_demo_side true` (varsayılan değil, yalnızca demo). */
     const val EXTRA_SIDE = "launcher_demo_side"
 
@@ -244,6 +255,10 @@ internal object LauncherDemo {
                 openParts = openParts - alertAdded
                 alertAdded = emptySet()
             }
+            onBodyChanged?.let { main.post(it) }
+        }
+        if (intent.hasExtra(EXTRA_ROOF)) {
+            roof = RoofDemo.parse(intent.getStringExtra(EXTRA_ROOF))
             onBodyChanged?.let { main.post(it) }
         }
         if (intent.hasExtra(EXTRA_DOORS_CYCLE)) setDoorsCycle(intent.getBooleanExtra(EXTRA_DOORS_CYCLE, false))
