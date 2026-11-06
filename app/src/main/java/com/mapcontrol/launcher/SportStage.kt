@@ -50,84 +50,206 @@ import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import com.desaysv.ivi.vdb.IVDBusNotify
 
 /**
  * Spor görünürken (yalnız o zaman) motor devrini (ReadOnly 62, ham ×4) ve gösterge hızını (119; geçersizse eski hız
- * sinyali 0) ~10 Hz okur. Araç deposu bu sinyalleri seyrek bildiriyor, TripSource canlı katmanı 1–3 sn'de bir okuyor:
- * araçta P'de gaz verince ibre geç ve eksik kalıyordu. Okuma TripSource ile aynı yol ([CarSignals] düzeni,
- * VDBus.getOnce), arka plan iş parçacığında; istek nesneleri bir kez kurulur, döngüde bizden ayırma yok (binder cevabı
- * kendi nesnesini üretir). Değer değişince ana iş parçacığına önceden kurulmuş [onChange] gönderilir; değişmezse iş yok.
+ * sinyali 0) okur. Araç deposu ([VehicleMetricsRepository]) değişimi ana iş parçacığına anlık görüntüyle taşıyor,
+ * TripSource canlı katmanı 1–3 sn'de bir okuyor: araçta P'de gaz verince ibre geç ve eksik kalıyordu.
+ *
+ * İki yol, aynı arayüz ([rpm], [speedKmh], [connected], [onChange]):
+ *  - push: CarInfo servisine yalnız bu üç kimlik için kendi geri çağrımız ([CarInfoProxy.regCallBack], CMD_ID_ARRAY
+ *    süzgeci). OEM CarInfoService her SV_CAN_LINK_DATA çerçevesini değişim süzgeci olmadan anında dağıtır
+ *    (SVVDSCarInfo a/a.java:105-145, 225-248; süzgeç yalnız kimlik listesi b/b.java:15-25). Binder iş parçacığında gelir.
+ *  - poll: [VDBus.getOnce] ~10 Hz ([CarSignals] düzeni). getOnce servisin aynı önbelleğini okur (a/a.java:270-277; önbellek
+ *    yalnız çerçeve gelince yazılır, a/a.java:135), yani push'tan hızlı olamaz; abonelik canlıyken 1 Hz güvenlik ağıdır,
+ *    abonelik kurulamazsa ya da 2 sn olay gelmezse yine 10 Hz.
+ * Değer değişince ana iş parçacığına tek bekleyen [onChange] gönderilir (birikme yok); değişmezse iş yok.
+ * Ölçüm: `--ez launcher_rpm_log true` ([RpmRateLog]).
  */
 internal class SportFastReader(private val onChange: Runnable) {
     @Volatile private var rpmRaw = INVALID
-    @Volatile private var kmh = INVALID
+    @Volatile private var gaugeKmh = INVALID
+    @Volatile private var legacyKmh = INVALID
     @Volatile private var live = false
+    @Volatile private var running = false
+    /** Yalnız [exec] iş parçacığında yazılır. */
+    @Volatile private var subscribed = false
+    @Volatile private var lastPushMs = 0L
+    private var tickCount = 0
+    private val pending = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
     private var task: ScheduledFuture<*>? = null
+    /** Yalnız [exec] iş parçacığında; 0 = ölçüm penceresi başlamadı. */
+    private var nextSummaryMs = 0L
     private val rpmReq = request(ReadOnlyID.ID_ENGINE_RPM)
     private val gaugeReq = request(ReadOnlyID.ID_SPEED_GAUGE_DISPLAY)
     private val legacyReq = request(ReadOnlyID.ID_CAR_SPEED)
+    private val stats = RpmRateStats()
 
     /** Okunan devir (dev/dk); bağlı değilse ya da geçersizse -1 (kutulama yok). */
     val rpm: Int get() = if (live && rpmRaw in 0..SportMath.RAW_MAX) rpmRaw * VehicleMetricsSnapshot.RPM_FACTOR else -1
     /** Gösterge hızı (km/sa); bilinmiyorsa -1. */
-    val speedKmh: Int get() = if (live && kmh != INVALID) kmh else -1
-    /** Araç servisine bağlı ve en az bir tur okundu. */
+    val speedKmh: Int get() = if (!live) -1 else pickSpeed(gaugeKmh, legacyKmh).let { if (it == INVALID) -1 else it }
+    /** Araç servisine bağlı ve en az bir değer alındı. */
     val connected: Boolean get() = live
+
+    private val fire = Runnable {
+        pending.set(false)
+        onChange.run()
+    }
+
+    private fun post() {
+        if (pending.compareAndSet(false, true)) main.post(fire)
+    }
+
+    private val push = object : IVDBusNotify.Stub() {
+        override fun onVDBusNotify(event: VDEvent?) {
+            try {
+                if (!running || event == null || event.id != RO) return
+                val p = event.payload ?: return
+                val v = decode(p.getIntArray(Constants.VALUE))
+                val now = SystemClock.elapsedRealtime()
+                lastPushMs = now
+                when (p.getInt(Constants.CMD_ID, -1)) {
+                    ReadOnlyID.ID_ENGINE_RPM -> apply(now, v ?: INVALID, KEEP, KEEP, RpmSource.PUSH)
+                    ReadOnlyID.ID_SPEED_GAUGE_DISPLAY -> apply(now, KEEP, v.speedOrInvalid(), KEEP, RpmSource.PUSH)
+                    ReadOnlyID.ID_CAR_SPEED -> apply(now, KEEP, KEEP, v.speedOrInvalid(), RpmSource.PUSH)
+                }
+            } catch (t: Throwable) {
+                android.util.Log.w("SportFastReader", "push işlenemedi", t)
+            }
+        }
+    }
+
+    /** Push (binder) ve poll (yürütücü) iş parçacıklarından; [KEEP] = bu örnekte o alan yok. */
+    @Synchronized
+    private fun apply(now: Long, r: Int, g: Int, l: Int, src: RpmSource) {
+        if (!running) return
+        var changed = !live
+        if (r != KEEP) {
+            if (RpmRateLog.enabled) logRpm(now, r, src)
+            if (r != rpmRaw) { rpmRaw = r; changed = true }
+        }
+        if (g != KEEP && g != gaugeKmh) { gaugeKmh = g; changed = true }
+        if (l != KEEP && l != legacyKmh) { legacyKmh = l; changed = true }
+        if (changed) {
+            live = true
+            post()
+        }
+    }
+
+    private fun logRpm(now: Long, raw: Int, src: RpmSource) {
+        val gap = stats.onSample(now, raw, src) ?: return
+        val rpmValue = if (raw in 0..SportMath.RAW_MAX) raw * VehicleMetricsSnapshot.RPM_FACTOR else -1
+        android.util.Log.i(RpmRateLog.TAG, RpmRateLog.changeLine(raw, rpmValue, gap, src))
+    }
 
     private val poll = Runnable {
         // Yakalanmayan hata scheduleWithFixedDelay'i sessizce durdurur; döngü sürsün.
         try {
             if (!CarInfoProxy.getInstance().isServiceConnnected) {
-                if (live) { live = false; main.post(onChange) }
+                // Servis düşerse sunucudaki kayıt da gider; yeniden bağlanınca yeniden abone olunur.
+                subscribed = false
+                if (live) { live = false; post() }
                 return@Runnable
             }
+            if (!subscribed) subscribe()
+            val now = SystemClock.elapsedRealtime()
+            maybeSummary(now)
+            tickCount++
+            if (subscribed && now - lastPushMs < PUSH_FRESH_MS && tickCount % SAFETY_EVERY != 0) return@Runnable
             val r = readInt(rpmReq)
-            val g = readInt(gaugeReq)?.takeIf { it in 0..MAX_KMH }
-            val v = g ?: readInt(legacyReq)?.takeIf { it in 0..MAX_KMH }
-            val nr = r ?: INVALID
-            val nv = v ?: INVALID
-            if (!live || nr != rpmRaw || nv != kmh) {
-                rpmRaw = nr
-                kmh = nv
-                live = true
-                main.post(onChange)
-            }
+            val g = readInt(gaugeReq).speedOrInvalid()
+            val l = if (g == INVALID) readInt(legacyReq).speedOrInvalid() else KEEP
+            apply(now, r ?: INVALID, g, l, RpmSource.POLL)
         } catch (t: Throwable) {
             android.util.Log.w("SportFastReader", "okuma başarısız", t)
         }
     }
 
+    /** [exec] iş parçacığında; başarısızsa poll sürer, sonraki turda yeniden denenir. */
+    private fun subscribe() {
+        try {
+            CarInfoProxy.getInstance().regCallBack(RO, push, PUSH_IDS)
+            subscribed = true
+            lastPushMs = 0L
+            if (RpmRateLog.enabled) android.util.Log.i(RpmRateLog.TAG, "abonelik kuruldu (CarInfo READONLY 62/119/0)")
+        } catch (t: Throwable) {
+            subscribed = false
+            if (RpmRateLog.enabled) android.util.Log.w(RpmRateLog.TAG, "abonelik kurulamadı, yalnız poll", t)
+        }
+    }
+
+    private fun unsubscribe() {
+        if (!subscribed) return
+        subscribed = false
+        try { CarInfoProxy.getInstance().unRegCallBack(RO, push) } catch (_: Throwable) {}
+    }
+
+    /** Poll turunda ([exec]); ölçüm sonradan açılırsa (onNewIntent) da kendiliğinden başlar. */
+    private fun maybeSummary(now: Long) {
+        if (!RpmRateLog.enabled) { nextSummaryMs = 0L; return }
+        if (nextSummaryMs == 0L) { stats.reset(); nextSummaryMs = now + RpmRateLog.SUMMARY_MS; return }
+        if (now < nextSummaryMs) return
+        nextSummaryMs = now + RpmRateLog.SUMMARY_MS
+        val s = stats.drain(now, subscribed) ?: return
+        android.util.Log.i(RpmRateLog.TAG, RpmRateLog.summaryLine(s))
+    }
+
     fun start() {
         if (task != null) return
+        running = true
+        tickCount = 0
+        nextSummaryMs = 0L
         task = exec.scheduleWithFixedDelay(poll, 0, PERIOD_MS, TimeUnit.MILLISECONDS)
     }
 
     fun stop() {
+        running = false
         task?.cancel(false)
         task = null
+        // Binder çağrısı ana iş parçacığında değil; tek iş parçacıklı yürütücüde sırayla (sonraki start'tan önce) çalışır.
+        exec.execute { if (!running) unsubscribe() }
         live = false
-        main.removeCallbacks(onChange)
+        main.removeCallbacks(fire)
+        pending.set(false)
     }
 
     companion object {
         const val PERIOD_MS = 100L
         const val MAX_KMH = 300
+        /** Abonelik canlıyken poll yalnız her 10. turda (1 Hz). */
+        private const val SAFETY_EVERY = 10
+        /** Bu kadar süre push gelmezse poll yeniden 10 Hz. */
+        private const val PUSH_FRESH_MS = 2_000L
         private const val INVALID = Int.MIN_VALUE
+        /** [apply]: bu alan bu örnekte yok, dokunma. */
+        private const val KEEP = Int.MIN_VALUE + 1
         private val RO = VDEventCarInfo.MODULE_READONLY_INFO
+        private val PUSH_IDS = intArrayOf(ReadOnlyID.ID_ENGINE_RPM, ReadOnlyID.ID_SPEED_GAUGE_DISPLAY, ReadOnlyID.ID_CAR_SPEED)
         private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sport-fast").apply { isDaemon = true } }
 
         private fun request(id: Int): VDEvent = VDEvent(RO, Bundle().apply { putInt(Constants.CMD_ID, id) })
 
-        /** [CarSignals.readInt] ile aynı çözüm; istek nesnesi yeniden kullanılır. */
-        private fun readInt(req: VDEvent): Int? {
-            val v = try { VDBus.getDefault().getOnce(req)?.payload?.getIntArray(Constants.VALUE) } catch (e: RuntimeException) { null } ?: return null
-            if (v.isEmpty()) return null
+        private fun Int?.speedOrInvalid(): Int = this?.takeIf { it in 0..MAX_KMH } ?: INVALID
+
+        /** Gösterge hızı geçerliyse o, değilse eski hız sinyali; ikisi de yoksa INVALID. */
+        private fun pickSpeed(gauge: Int, legacy: Int): Int = if (gauge != INVALID) gauge else legacy
+
+        /** [CarSignals.readInt] ile aynı çözüm (tek değer ya da büyük uçlu bayt dizisi). */
+        internal fun decode(v: IntArray?): Int? {
+            if (v == null || v.isEmpty()) return null
             if (v.size == 1) return v[0]
             var acc = 0
             for (b in v) acc = (acc shl 8) or (b and 0xFF)
             return acc
         }
+
+        /** İstek nesnesi yeniden kullanılır. */
+        private fun readInt(req: VDEvent): Int? =
+            decode(try { VDBus.getDefault().getOnce(req)?.payload?.getIntArray(Constants.VALUE) } catch (e: RuntimeException) { null })
     }
 }
 

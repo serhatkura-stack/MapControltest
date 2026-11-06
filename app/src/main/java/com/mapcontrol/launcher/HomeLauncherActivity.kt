@@ -112,6 +112,7 @@ class HomeLauncherActivity : Activity() {
         LauncherEdition.init(applicationContext)
         LauncherInfo.logOnce(this)
         LauncherDemo.applyFrom(this, intent)
+        RpmRateLog.applyFrom(this, intent)
         // Orta alan kurulmadan önce: düzen deposu ve alt çubuk biçimi etkin araç profiline göre.
         VehicleProfile.resolve(this)
         LauncherDemo.applyPreview(intent)
@@ -233,6 +234,7 @@ class HomeLauncherActivity : Activity() {
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
+        RpmRateLog.applyFrom(this, intent)
         // Demo: çalışırken araç profili değişirse (satır sayısı değişir) yeniden kurulur.
         if (LauncherDemo.enabled && intent?.hasExtra(VehicleProfile.EXTRA_PROFILE) == true) {
             VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
