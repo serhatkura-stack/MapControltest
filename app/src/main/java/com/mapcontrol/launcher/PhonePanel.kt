@@ -170,7 +170,7 @@ internal class PhonePanel(
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(context.dp(28), context.dp(28), Gravity.CENTER))
         }, LinearLayout.LayoutParams(context.dp(FAV_AVATAR_DP), context.dp(FAV_AVATAR_DP)))
-        addView(nameText(context.getString(R.string.phone_all)), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(6) })
+        addView(nameText(context.getString(R.string.phone_all)), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(4) })
         contentDescription = context.getString(R.string.phone_all)
         isClickable = true
         isFocusable = true
@@ -653,7 +653,7 @@ internal class PhonePanel(
         clipChildren = false
         addView(PhoneAvatarView(context, FAV_AVATAR_DP, FAV_INITIALS_SP).apply { bind(c.photoKey, c.initials) },
             LinearLayout.LayoutParams(context.dp(FAV_AVATAR_DP), context.dp(FAV_AVATAR_DP)))
-        addView(nameText(c.name), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(6) })
+        addView(nameText(c.name), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(4) })
         contentDescription = context.getString(R.string.launcher_phone_call_cd, c.name)
         isClickable = true
         isFocusable = true
@@ -667,7 +667,10 @@ internal class PhonePanel(
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
         gravity = Gravity.CENTER_HORIZONTAL
-        setPadding(context.dp(4), 0, context.dp(4), 0)
+        // Favori satırı sabit yükseklikte: yazının üst/alt yazı tipi payı ş/ç çengelini satır sınırına itiyordu
+        // ("Ayşe" "Avse" görünüyordu). Pay kaldırılır, çengel için altta 3 dp bırakılır.
+        includeFontPadding = false
+        setPadding(context.dp(4), 0, context.dp(4), context.dp(3))
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
