@@ -119,13 +119,16 @@ internal object MediaSourcePick {
     /**
      * [activePkg]: kartın oturumu (yoksa null). [oemSource]: `CURRENT_SOURCE_TYPE` (bilinmiyorsa null).
      * BT oturumu → BT servisi bağlıysa BT_CTRL (`com.android.bluetooth` oturumuna giden next/prev odak 42 yokken no-op,
-     * `A2dpMediaBrowserService.java:100-114`). OEM ses oturumu ya da oturum yok, kaynak svaudioapp'in ya da 13 → MEDIA_CTRL.
-     * Gerisi SESSION (üçüncü taraf uygulamanın kendi odağı var; OEM kaynağına dokunulmaz).
+     * `A2dpMediaBrowserService.java:100-114`). OEM ses oturumu, kaynak svaudioapp'in → MEDIA_CTRL; kaynak 13 ise SESSION
+     * (MEDIA_CTRL{13} BT denetçisine gider, `svmediasourceinfo/b/c.java` 13 → `d.b`: kart radyoyu gösterirken BT parçası
+     * değişirdi). Oturum yok, kaynak svaudioapp'in ya da 13 → MEDIA_CTRL. Gerisi SESSION (üçüncü taraf uygulamanın kendi
+     * odağı var; OEM kaynağına dokunulmaz).
      */
     fun skipPath(activePkg: String?, oemSource: Int?, btBus: Boolean, mediaBus: Boolean): SkipPath = when {
         isBluetooth(activePkg) -> if (btBus) SkipPath.BT_CTRL else SkipPath.SESSION
-        (activePkg == null || isOemAudio(activePkg)) && mediaBus &&
-            (isOemOwnSource(oemSource) || oemSource == OemAudioSource.BT_MUSIC) -> SkipPath.MEDIA_CTRL
+        !mediaBus -> SkipPath.SESSION
+        isOemAudio(activePkg) && isOemOwnSource(oemSource) -> SkipPath.MEDIA_CTRL
+        activePkg == null && (isOemOwnSource(oemSource) || oemSource == OemAudioSource.BT_MUSIC) -> SkipPath.MEDIA_CTRL
         else -> SkipPath.SESSION
     }
 
@@ -134,6 +137,37 @@ internal object MediaSourcePick {
         source == OemAudioSource.BT_MUSIC -> source
         isOemOwnSource(source) && switchedLive -> source
         else -> null
+    }
+}
+
+/**
+ * OEM kaynağı izleme durumu (saf, JVM'de sınanır; [OemAudioSource] kilit altında kullanır).
+ *
+ * Canlı geçiş (svaudioapp kaynağına) tek seferliktir: bir Bluetooth oturumu sonradan belirirse unutulur. Yoksa BT 13 → telefon
+ * koptu, kaynak radyoya (9) düştü → telefon yeniden bağlandı, kaynak 9'da kaldı zinciri 6 Kasım hatasını geri getirir
+ * (kart BT oturumu yerine boş radyo oturumunu seçer). Süreç uyku boyunca yaşarsa eski geçiş de böyle silinir.
+ */
+internal class SourceFollow {
+    /** Son bilinen `CURRENT_SOURCE_TYPE` (bilinmiyorsa null). */
+    var source: Int? = null
+        private set
+    private var switchedLive = false
+    private var hadBt = false
+
+    /** Yeni kaynak; değiştiyse true. İlk değer geçiş sayılmaz, sonraki her değişim geçiştir. */
+    fun onSource(type: Int): Boolean {
+        val old = source
+        if (old == type) return false
+        source = type
+        switchedLive = old != null
+        return true
+    }
+
+    /** [hasBt]: aday oturumlarda Bluetooth oturumu var mı. Yeni beliren BT oturumu canlı geçişi siler. */
+    fun follow(hasBt: Boolean): Int? {
+        if (hasBt && !hadBt) switchedLive = false
+        hadBt = hasBt
+        return MediaSourcePick.follow(source, switchedLive)
     }
 }
 
@@ -306,16 +340,18 @@ internal object OemAudioSource {
 
     private val sourceListeners = CopyOnWriteArraySet<SourceListener>()
 
-    /** Son bilinen `CURRENT_SOURCE_TYPE` (abonelik ya da okuma; bilinmiyorsa null). */
-    @Volatile var currentSource: Int? = null
-        private set
+    /** Kaynak ve canlı geçiş durumu ([SourceFollow]); `this` kilidi altında. */
+    private val sourceFollow = SourceFollow()
 
-    /** [currentSource] bu süreçte gözlenen bir geçişle mi geldi (ilk okuma değil). */
-    @Volatile private var switchedLive = false
+    /** Son bilinen `CURRENT_SOURCE_TYPE` (abonelik ya da okuma; bilinmiyorsa null). */
+    val currentSource: Int?
+        @Synchronized get() = sourceFollow.source
+
     @Volatile private var watching = false
 
-    /** Kartın izleyeceği kaynak ([MediaSourcePick.follow]). */
-    fun followSource(): Int? = MediaSourcePick.follow(currentSource, switchedLive)
+    /** Kartın izleyeceği kaynak ([SourceFollow.follow]); [hasBt]: aday oturumlarda Bluetooth oturumu var mı. */
+    @Synchronized
+    fun followSource(hasBt: Boolean): Int? = sourceFollow.follow(hasBt)
 
     private val notifyListener = VDNotifyListener { event, _ ->
         if (event == null || event.id != VDEventMedia.CURRENT_SOURCE_TYPE) return@VDNotifyListener
@@ -378,12 +414,10 @@ internal object OemAudioSource {
 
     @Synchronized
     private fun update(type: Int, live: Boolean) {
-        val old = currentSource
-        if (old == type) return
-        currentSource = type
-        // İlk değer (old == null) geçiş sayılmaz: BT yeniden bağlanınca radyoda kalan kaynak kartı radyoya çekmesin (6 Kasım).
-        // Sonraki her değişim (bildirim ya da aboneliğin kaçırdığını yakalayan okuma) geçiştir.
-        switchedLive = old != null
+        val old = sourceFollow.source
+        // İlk değer geçiş sayılmaz: BT yeniden bağlanınca radyoda kalan kaynak kartı radyoya çekmesin (6 Kasım).
+        // Sonraki her değişim (bildirim ya da aboneliğin kaçırdığını yakalayan okuma) geçiştir ([SourceFollow]).
+        if (!sourceFollow.onSource(type)) return
         Log.i(TAG, "source: $old -> $type live=$live")
         main.post { sourceListeners.forEach { it.onOemSourceChanged(type) } }
     }

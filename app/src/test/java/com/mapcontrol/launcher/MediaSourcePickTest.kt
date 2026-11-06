@@ -91,6 +91,9 @@ class MediaSourcePickTest {
         assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 24, btBus = false, mediaBus = true))
         assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 3, btBus = false, mediaBus = true))
         assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(null, 13, btBus = false, mediaBus = true))
+        // Radyo oturumu ama kaynak 13: MEDIA_CTRL{13} BT parçasını değiştirirdi (kart radyoyu gösterirken) → oturum.
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, 13, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, 13, btBus = true, mediaBus = true))
         assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(MediaSourcePick.OEM_AUDIO_PKG_OLD, 8, false, true))
         // Kaynak bilinmiyor, medya servisinde denetçisi yok (1, 31) ya da OEM kartının tıklamayla göndermediği (18, 20): oturum.
         assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, null, btBus = false, mediaBus = true))
@@ -127,6 +130,31 @@ class MediaSourcePickTest {
         assertNull(MediaSourcePick.follow(31, switchedLive = true))
         assertNull(MediaSourcePick.follow(18, switchedLive = true))
         assertNull(MediaSourcePick.follow(null, switchedLive = true))
+    }
+
+    @Test fun liveSwitchForgottenWhenBluetoothSessionAppears() {
+        val f = SourceFollow()
+        assertTrue(f.onSource(13))                 // ilk okuma: geçiş değil
+        assertEquals(13, f.follow(hasBt = true))
+        assertTrue(f.onSource(9))                  // telefon koptu, svaudioapp radyoya düştü (canlı)
+        assertEquals(9, f.follow(hasBt = false))
+        // Telefon yeniden bağlandı, kaynak 9'da kaldı: yeni BT oturumu canlı geçişi siler, kart BT'yi seçer.
+        val follow = f.follow(hasBt = true)
+        assertNull(follow)
+        assertEquals(1, MediaSourcePick.pick(listOf(radio, bt), 0, follow = follow))
+        assertNull(f.follow(hasBt = true))
+        // BT varken kullanıcı radyoya geçerse izlenir; BT oturumu sürdükçe izlenmeye devam eder.
+        assertFalse(f.onSource(9))
+        assertTrue(f.onSource(10))
+        assertEquals(10, f.follow(hasBt = true))
+        assertEquals(10, f.follow(hasBt = true))
+    }
+
+    @Test fun firstSourceReadIsNotALiveSwitch() {
+        val f = SourceFollow()
+        f.onSource(9)
+        assertNull(f.follow(hasBt = true))         // 6 Kasım
+        assertNull(f.follow(hasBt = false))
     }
 
     @Test fun cardFollowsOemSourceSwitch() {

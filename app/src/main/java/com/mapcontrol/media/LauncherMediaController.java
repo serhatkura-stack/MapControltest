@@ -533,14 +533,16 @@ public final class LauncherMediaController {
         }
         List<MediaSourcePick.Cand> cands = new ArrayList<>(controllers.size());
         int currentIndex = -1;
+        boolean hasBt = false;
         for (int i = 0; i < controllers.size(); i++) {
             MediaController c = controllers.get(i);
             cands.add(new MediaSourcePick.Cand(c.getPackageName(), isPlaying(c), hasMetadata(c)));
+            hasBt |= MediaSourcePick.INSTANCE.isBluetooth(c.getPackageName());
             if (current != null && currentIndex < 0 && c.getSessionToken().equals(current.getSessionToken())) {
                 currentIndex = i;
             }
         }
-        int pick = MediaSourcePick.INSTANCE.pick(cands, currentIndex, OemAudioSource.INSTANCE.followSource());
+        int pick = MediaSourcePick.INSTANCE.pick(cands, currentIndex, OemAudioSource.INSTANCE.followSource(hasBt));
         return pick >= 0 ? (pick == currentIndex ? current : controllers.get(pick)) : null;
     }
 
