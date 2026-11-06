@@ -1,10 +1,13 @@
 package com.mapcontrol.launcher
 
 import com.desaysv.ivi.vdb.event.id.bt.VDEventBT
+import com.desaysv.ivi.vdb.event.id.media.VDEventMedia
 import com.mapcontrol.launcher.MediaSourcePick.Cand
 import com.mapcontrol.launcher.MediaSourcePick.Path
+import com.mapcontrol.launcher.MediaSourcePick.SkipPath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -73,6 +76,76 @@ class MediaSourcePickTest {
         assertEquals(8, p.mediaPlayActionInfo.reason)
         assertEquals(2, p.mediaPlayActionInfo.disPlayView)
         assertEquals(1, p.mediaPlayActionInfo.intent)
+    }
+
+    @Test fun skipPathBySessionAndOemSource() {
+        val sv = MediaSourcePick.OEM_AUDIO_PKG
+        val bt = MediaSourcePick.BT_PKG
+        // BT oturumu: OEM BT servisi bağlıysa her zaman MUSIC_PLAY{5|4} (radyo odak tutsa da).
+        assertEquals(SkipPath.BT_CTRL, MediaSourcePick.skipPath(bt, 9, btBus = true, mediaBus = false))
+        assertEquals(SkipPath.BT_CTRL, MediaSourcePick.skipPath(bt, 13, btBus = true, mediaBus = false))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(bt, 9, btBus = false, mediaBus = true))
+        // Radyo/USB oturumu ya da oturum yok: OEM kartı gibi MEDIA_SOURCE_PLAY_STATUS{kaynak, 5|4}.
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 9, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 10, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 24, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(sv, 3, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(null, 13, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.MEDIA_CTRL, MediaSourcePick.skipPath(MediaSourcePick.OEM_AUDIO_PKG_OLD, 8, false, true))
+        // Kaynak bilinmiyor, medya servisinde denetçisi yok (1, 31) ya da OEM kartının tıklamayla göndermediği (18, 20): oturum.
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, null, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, 1, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, 31, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(null, 18, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(null, 20, btBus = false, mediaBus = true))
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath(sv, 9, btBus = false, mediaBus = false))
+        // Üçüncü taraf uygulama: OEM kaynağına dokunulmaz.
+        assertEquals(SkipPath.SESSION, MediaSourcePick.skipPath("com.spotify.music", 9, btBus = true, mediaBus = true))
+    }
+
+    @Test fun skipPayloadsMatchOem() {
+        // SVLauncher AudioSourceManager.java:334-349,734-762: {mediaType=geçerli, playAction 5 ileri / 4 geri}, bilgi yok.
+        val n = OemAudioSource.skipPayload(9, next = true)
+        assertEquals(9, n.mediaType)
+        assertEquals(5, n.playAction)
+        assertNull(n.mediaPlayActionInfo)
+        assertEquals(4, OemAudioSource.skipPayload(10, next = false).playAction)
+        // svaudioapp BTMusicManager.java:596-602 + OEM BT servisi h/g.java:254-259: playCtrl 5 ileri, 4 geri, playType 0.
+        val b = OemAudioSource.btCtrlPayload(OemAudioSource.CTRL_NEXT)
+        assertEquals(5, b.playCtrl)
+        assertEquals(0, b.playType)
+        assertEquals(4, OemAudioSource.btCtrlPayload(OemAudioSource.CTRL_PREV).playCtrl)
+        assertEquals(393220, VDEventMedia.MEDIA_SOURCE_PLAY_STATUS)
+        assertEquals(393217, VDEventMedia.CURRENT_SOURCE_TYPE)
+    }
+
+    @Test fun followOnlyBluetoothOrLiveSwitchToOemSource() {
+        assertEquals(13, MediaSourcePick.follow(13, switchedLive = false))
+        assertEquals(13, MediaSourcePick.follow(13, switchedLive = true))
+        assertNull(MediaSourcePick.follow(9, switchedLive = false))   // 6 Kasım: BT yeniden bağlandı, kaynak radyoda kaldı
+        assertEquals(9, MediaSourcePick.follow(9, switchedLive = true))
+        assertNull(MediaSourcePick.follow(31, switchedLive = true))
+        assertNull(MediaSourcePick.follow(18, switchedLive = true))
+        assertNull(MediaSourcePick.follow(null, switchedLive = true))
+    }
+
+    @Test fun cardFollowsOemSourceSwitch() {
+        // Kaynak BT'ye geçti: radyo seçiliyken bile BT oturumu (BT henüz çalmıyor).
+        assertEquals(1, MediaSourcePick.pick(listOf(radio, bt), 0, follow = 13))
+        // Kaynak canlı olarak radyoya geçti: BT seçili ve BT oturumu varken bile radyo oturumu.
+        assertEquals(0, MediaSourcePick.pick(listOf(radio, bt), 1, follow = 9))
+        assertEquals(0, MediaSourcePick.pick(listOf(radioOld, bt), -1, follow = 10))
+        // İzlenecek kaynak yok: eski kural (BT varken radyo yer tutucusu gösterilmez).
+        assertEquals(1, MediaSourcePick.pick(listOf(radio, bt), 0, follow = null))
+        // Çalan oturum yine önce.
+        assertEquals(1, MediaSourcePick.pick(listOf(radio, btPlaying), 0, follow = 9))
+        assertEquals(0, MediaSourcePick.pick(listOf(radioPlaying, bt), 1, follow = 13))
+        // Seçili üçüncü taraf uygulama OEM kaynağı yüzünden bırakılmaz.
+        assertEquals(0, MediaSourcePick.pick(listOf(spotify, bt, radio), 0, follow = 13))
+        assertEquals(0, MediaSourcePick.pick(listOf(spotify, bt, radio), 0, follow = 9))
+        // İzlenen kaynağın oturumu yoksa eski kurallar.
+        assertEquals(0, MediaSourcePick.pick(listOf(spotify), -1, follow = 13))
+        assertEquals(0, MediaSourcePick.pick(listOf(bt), 0, follow = 9))
     }
 
     @Test fun btPlayPayloadMatchesSvAudioApp() {

@@ -108,6 +108,9 @@ public final class LauncherMediaController {
     private final LauncherMediaNotificationListener.Listener notificationListener =
             this::onNotificationListenerConnected;
 
+    /** OEM ses kaynağı (CURRENT_SOURCE_TYPE) değişti: kart yeni kaynağı izlesin ({@link MediaSourcePick#pick}). */
+    private final OemAudioSource.SourceListener oemSourceListener = type -> refreshActiveController();
+
     private final MediaController.Callback controllerCallback = new MediaController.Callback() {
         @Override
         public void onMetadataChanged(MediaMetadata metadata) {
@@ -203,6 +206,7 @@ public final class LauncherMediaController {
         }
         started = true;
         LauncherMediaNotificationListener.addListener(notificationListener);
+        OemAudioSource.INSTANCE.watchSource(appContext, oemSourceListener);
         requestListenerRebindOnce();
         sessionManager = (MediaSessionManager) appContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         registerSessionsListener();
@@ -215,16 +219,16 @@ public final class LauncherMediaController {
         }
         started = false;
         LauncherMediaNotificationListener.removeListener(notificationListener);
+        OemAudioSource.INSTANCE.unwatchSource(oemSourceListener);
         mainHandler.removeCallbacks(progressTick);
         unregisterSessionsListener();
         detachController();
         notifyState();
     }
 
+    /** Geri: OEM kaynağına göre VDBus ya da oturum ({@link OemAudioSource#skip}). */
     public void skipToPrevious() {
-        if (activeController != null) {
-            activeController.getTransportControls().skipToPrevious();
-        }
+        skip(false);
     }
 
     /**
@@ -270,10 +274,27 @@ public final class LauncherMediaController {
         return null;
     }
 
+    /** İleri: OEM kaynağına göre VDBus ya da oturum ({@link OemAudioSource#skip}). */
     public void skipToNext() {
-        if (activeController != null) {
-            activeController.getTransportControls().skipToNext();
-        }
+        skip(true);
+    }
+
+    private void skip(boolean next) {
+        final MediaController target = activeController;
+        OemAudioSource.INSTANCE.skip(appContext, next, target != null ? target.getPackageName() : null, () -> {
+            if (target == null) {
+                return;
+            }
+            try {
+                if (next) {
+                    target.getTransportControls().skipToNext();
+                } else {
+                    target.getTransportControls().skipToPrevious();
+                }
+            } catch (Exception ignored) {
+                // oturum bu arada kapanmış olabilir
+            }
+        });
     }
 
     public void volumeDown() {
@@ -519,7 +540,7 @@ public final class LauncherMediaController {
                 currentIndex = i;
             }
         }
-        int pick = MediaSourcePick.INSTANCE.pick(cands, currentIndex);
+        int pick = MediaSourcePick.INSTANCE.pick(cands, currentIndex, OemAudioSource.INSTANCE.followSource());
         return pick >= 0 ? (pick == currentIndex ? current : controllers.get(pick)) : null;
     }
 
