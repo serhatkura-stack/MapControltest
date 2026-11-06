@@ -16,6 +16,9 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
+import com.mapcontrol.launcher.MediaSourcePick;
+import com.mapcontrol.launcher.OemAudioSource;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -220,16 +223,47 @@ public final class LauncherMediaController {
         }
     }
 
+    /**
+     * Oynat/duraklat. Oynat'ta bir Bluetooth oturumu varsa önce OEM ses kaynağı Bluetooth müziğine geçirilir (OEM medya
+     * uygulaması gibi; radyo odağı tutarken BT çalması 1-2 sn'de duruyordu), sonra BT oturumuna oynat gönderilir
+     * ({@link OemAudioSource#playBluetooth}). Yalnızca kullanıcı dokunuşuyla çağrılır.
+     */
     public void playPause() {
-        if (activeController == null) {
+        MediaController active = activeController;
+        PlaybackState state = active != null ? active.getPlaybackState() : null;
+        if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
+            active.getTransportControls().pause();
             return;
         }
-        PlaybackState state = activeController.getPlaybackState();
-        if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
-            activeController.getTransportControls().pause();
-        } else {
-            activeController.getTransportControls().play();
+        MediaController bt = MediaSourcePick.INSTANCE.isBluetooth(active != null ? active.getPackageName() : null)
+                ? active : findBluetooth(loadControllers());
+        if (bt != null) {
+            final MediaController target = bt;
+            OemAudioSource.INSTANCE.playBluetooth(appContext, () -> {
+                try {
+                    target.getTransportControls().play();
+                } catch (Exception ignored) {
+                    // oturum bu arada kapanmış olabilir
+                }
+            });
+            return;
         }
+        if (active != null) {
+            active.getTransportControls().play();
+        }
+    }
+
+    @Nullable
+    private static MediaController findBluetooth(@Nullable List<MediaController> controllers) {
+        if (controllers == null) {
+            return null;
+        }
+        for (MediaController c : controllers) {
+            if (MediaSourcePick.INSTANCE.isBluetooth(c.getPackageName())) {
+                return c;
+            }
+        }
+        return null;
     }
 
     public void skipToNext() {
@@ -408,16 +442,9 @@ public final class LauncherMediaController {
         // İzin yeni açıldıysa listener'ı kaydet
         registerSessionsListener();
         List<MediaController> all = loadControllers();
-        MediaController next = pickController(all);
-        // Hiçbiri çalmıyorsa seçili oturum (hâlâ listedeyse) korunur: duraklatılan müzik radyoya atlamaz.
-        if (activeController != null && all != null && !isPlaying(next)) {
-            for (MediaController c : all) {
-                if (c.getSessionToken().equals(activeController.getSessionToken())) {
-                    next = activeController;
-                    break;
-                }
-            }
-        }
+        // Hiçbiri çalmıyorsa seçili oturum (hâlâ listedeyse) korunur: duraklatılan müzik radyoya atlamaz. BT oturumu varken
+        // OEM radyosunun boş ("am") oturumu karta seçilmez (MediaSourcePick).
+        MediaController next = pickController(all, activeController);
         if (next != null && activeController != null
                 && next.getSessionToken().equals(activeController.getSessionToken())) {
             next = activeController;
@@ -456,21 +483,22 @@ public final class LauncherMediaController {
     }
 
     @Nullable
-    private static MediaController pickController(@Nullable List<MediaController> controllers) {
+    private static MediaController pickController(@Nullable List<MediaController> controllers,
+                                                  @Nullable MediaController current) {
         if (controllers == null || controllers.isEmpty()) {
             return null;
         }
-        MediaController withMetadata = null;
-        for (MediaController controller : controllers) {
-            PlaybackState state = controller.getPlaybackState();
-            if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
-                return controller;
-            }
-            if (withMetadata == null && hasMetadata(controller)) {
-                withMetadata = controller;
+        List<MediaSourcePick.Cand> cands = new ArrayList<>(controllers.size());
+        int currentIndex = -1;
+        for (int i = 0; i < controllers.size(); i++) {
+            MediaController c = controllers.get(i);
+            cands.add(new MediaSourcePick.Cand(c.getPackageName(), isPlaying(c), hasMetadata(c)));
+            if (current != null && currentIndex < 0 && c.getSessionToken().equals(current.getSessionToken())) {
+                currentIndex = i;
             }
         }
-        return withMetadata != null ? withMetadata : controllers.get(0);
+        int pick = MediaSourcePick.INSTANCE.pick(cands, currentIndex);
+        return pick >= 0 ? (pick == currentIndex ? current : controllers.get(pick)) : null;
     }
 
     private static boolean isPlaying(@Nullable MediaController controller) {
