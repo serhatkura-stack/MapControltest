@@ -44,7 +44,11 @@ internal object WidgetWritePolicy {
 
     private val TEMP_VALUES = (ClimateMath.RAW_LO..ClimateMath.RAW_HI).toSet()
 
-    /** HVAC 9 geri okuması: 1 olursa SystemUI OEM klima panelini açar; panel/dock kimliklerinin araçta karşılaştırması için izlenir. */
+    /**
+     * HVAC 9 geri okuması: bit alanı ([ClimatePanelBits]; bit 0 ön sıra, bit 1 PM2.5, bit 2 koku). Bitlerden biri gelince
+     * bizim araçta SVHvac OEM klima panelini açar (`SVHvac/.../svhvac/view/h.java:547-572`); panel/dock kimliklerinin araçta
+     * karşılaştırması için izlenir. Günlükte çözülmüş hâli de yazılır ([WidgetWriter]).
+     */
     private val PANEL_ACTIVE = sig("hvac9_display_active", HV, HvacID.ID_AC_DISPLAY_ACTIVE)
 
     val ENTRIES: List<Entry> = listOf(
@@ -62,8 +66,10 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (1..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL), PANEL_ACTIVE)),
-        // Klima, "fabrika paneli: Gizle": OEM alt dock'unun kimlikleri, aynı ham değerler (SVSystemUI HvacModel.java:774 sürücü 76,
-        // :899 yolcu 78, :1085 fan 77). Sonuç panel kimliklerinden (10/13/12) geri okunur. Panel kapatma araca yazma DEĞİL (HVAC 9 yok).
+        // Klima, "fabrika paneli: Gizle": OEM alt dock'unun kimlikleri, aynı ham değerler (bizim SVSystemUI model/svhvac/e/c.java:393
+        // sürücü 76, :431 yolcu 78; fan 77 = elektrikli düzenin dock fanı :476, otomatik klimada OEM dock 12 yazar, bkz.
+        // ClimateWriter.fanId). Sonuç panel kimliklerinden (10/13/12) geri okunur. HVAC 9'u biz yazmayız: panel kapatmada 9 ← 2'yi
+        // OEM HvacService (CLOSE_HVAC_BT) kendisi gönderir.
         Entry("ClimateTempDriverDock", HV, HvacID.ID_AC_DRIVER_SET_TEMPERATURE, TEMP_VALUES,
             listOf(sig("hvac10_temp_driver", HV, HvacID.ID_AC_TEMPERATURE_DRIVER), PANEL_ACTIVE)),
         Entry("ClimateTempPassengerDock", HV, HvacID.ID_AC_PASSENGER_SET_TEMPERATURE, TEMP_VALUES,

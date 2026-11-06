@@ -66,6 +66,8 @@ internal object WidgetWriter {
 
     private fun describe(s: ComfortPlan.Signal): String =
         if (s.module == com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD) SoundFieldIo.read()?.let { "[balance=${it.balance},fade=${it.fade}]" } ?: "null"
+        else if (s.module == VDEventCarInfo.MODULE_HVAC && s.id == com.desaysv.ivi.extra.project.carinfo.HvacID.ID_AC_DISPLAY_ACTIVE)
+            ClimatePanelBits.describe(CarSignals.readInt(s.module, s.id)) // HVAC 9 bit alanı: ör. 1[front]
         else CarSignals.read(s.module, s.id)?.joinToString(",", "[", "]") ?: "null"
 
     /** 3 sn boyunca sinyalleri 250 ms'de bir okur; yalnızca değişimleri günlüğe yazar. */

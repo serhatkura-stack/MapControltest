@@ -10,6 +10,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import com.desaysv.ivi.extra.project.carinfo.HvacID
+import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
 import kotlin.math.abs
 
@@ -27,7 +29,9 @@ internal object ClimatePanelGesture {
 
 /**
  * OEM klima panelini açar (araçta çubuğun gizlediği OEM yukarı kaydırma jestinin yerine). Araca yazma yok: yalnızca
- * OEM HVAC servisine arayüz açma isteği (`type` = OPEN_PANEL, `page` 0 = ön klima). Servis başarısız olursa OEM
+ * OEM HVAC servisine arayüz açma isteği (`type` = OPEN_PANEL, `page` 0 = ön klima). Not (bizim araç, T1E24): OPEN_PANEL
+ * statik `isHvacShow` bayrağını true yapar ama paneli ZORLA açmaz; HVAC 9 bit 0 o an 0 ise panel kapalı kalır
+ * (`SVHvac/.../svhvac/service/HvacService.java:83-87` → `view/h.java:647-655`). Servis başarısız olursa OEM
  * uygulamasının ana etkinliği, o da yoksa kısa uyarı. Sonuç ([TAG]) bir kez günlüğe yazılır.
  */
 internal object ClimatePanel {
@@ -56,41 +60,50 @@ internal object ClimatePanel {
     }
 
     /**
-     * OEM panelini YALNIZCA ARAYÜZDEN kapatır; araca yazma yok (HVAC 9 ← 2 gönderilmez). OEM yolu: `HvacService`
-     * `type` = CLOSE_PANEL'i `ACTION_HVAC_SERVICE` yayınına çevirir (`SVHvac/.../service/HvacService.java:61-72`), SystemUI
-     * `HvacActionReceiver` bunu `HideHvac` yapar (`SVSystemUI/.../receiver/HvacActionReceiver.java:122-131,178`) ve panel
-     * `HvacDisplayStatus.NONE` ile kapanır (`viewmodel/MainViewModel.java:689-692`). Servis yoksa aynı yayın doğrudan gönderilir.
+     * OEM panelini kapatır: `HvacService` `type` = CLOSE_HVAC_BT. Bizim araçta (T1E24, SVHvac 2025-11-12) panel SVHvac'ın
+     * kendisidir ve servis bu isteği şöyle işler (`SVHvac/.../svhvac/service/HvacService.java:88-106`, T1E24'te
+     * `svhvaclib.a.f()` false): HVAC 9 bit 0 (ön sıra) açıksa 9 ← 2, bit 2 (koku) açıksa 64 ← 2, bit 1 (PM2.5) açıksa 51 ← 0.
+     * Bu yazmaları BİZ değil OEM uygulaması yapar; değerler OEM'in panelde aşağı kaydırma kapatmasıyla aynıdır
+     * (`model/svhvac/f/d.java:179-181` X0: 9 ← 2). ECU 9=0 gönderince panel kendi animasyonuyla kapanır (`view/h.java:547-572`).
+     *
+     * CLOSE_PANEL KULLANILMAZ: servis statik `isHvacShow` bayrağını false yapar (`HvacService.java:79-82`) ve bayrak yeni bir
+     * OPEN_PANEL gelene kadar öyle kalır; o sürede ECU 9=1 gönderse de (fiziksel klima düğmesi, OEM dock) panel açılmaz
+     * (`view/h.java:554`; 6 Kasım günlüğü 15:48:42 `isHvacShow =false`). Arkadaşın build'inde servis aynı türü
+     * `ACTION_HVAC_SERVICE` yayınına çevirir, SystemUI `HvacActionReceiver` CLOSE_HVAC_BT'yi de işler; servis yoksa yayını biz göndeririz.
      */
-    fun close(context: Context): String = try {
-        context.startService(
-            Intent().setComponent(ComponentName(PACKAGE, SERVICE)).putExtra("type", TYPE_CLOSE).putExtra("page", PAGE_FRONT),
-        )?.let { "service" } ?: closeBroadcast(context)
-    } catch (e: SecurityException) {
-        closeBroadcast(context)
-    } catch (e: IllegalStateException) {
-        closeBroadcast(context)
+    fun close(context: Context): String {
+        val outcome = try {
+            context.startService(
+                Intent().setComponent(ComponentName(PACKAGE, SERVICE)).putExtra("type", TYPE_CLOSE_HVAC_BT).putExtra("page", PAGE_FRONT),
+            )?.let { "service" } ?: closeBroadcast(context)
+        } catch (e: SecurityException) {
+            closeBroadcast(context)
+        } catch (e: IllegalStateException) {
+            closeBroadcast(context)
+        }
+        // Araca yazmayı OEM servisi yapar (beyaz listemizden geçmez); iz kalsın diye WidgetWrite'a da bir satır.
+        val hv9 = CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_DISPLAY_ACTIVE)
+        Log.i(WidgetWritePolicy.LOG_TAG, "widget=ClimatePanelClose via=oem-service type=CLOSE_HVAC_BT outcome=$outcome hv9=${ClimatePanelBits.describe(hv9)}")
+        return outcome
     }
 
     private fun closeBroadcast(context: Context): String = try {
-        context.sendBroadcast(Intent(ACTION_HVAC_SERVICE).putExtra("type", TYPE_CLOSE).putExtra("page", PAGE_FRONT))
+        context.sendBroadcast(Intent(ACTION_HVAC_SERVICE).putExtra("type", TYPE_CLOSE_HVAC_BT).putExtra("page", PAGE_FRONT))
         "broadcast"
     } catch (e: SecurityException) {
         "failed"
     }
 
-    /** OEM paneli açık mı: SystemUI `HvacWindowController.showHvac/closeHvac` `hvacShow` yazar (`:870`, `:464`). */
+    /** OEM paneli açık mı: [ClimatePanelBits.SHOW_KEYS] anahtarlarından biri "true". */
     fun isShowing(context: Context): Boolean = try {
         val r = context.contentResolver
-        Settings.System.getString(r, KEY_HVAC_SHOW) == "true" || Settings.System.getString(r, KEY_DIALOG_SHOW) == "true"
+        ClimatePanelBits.anyShown { Settings.System.getString(r, it) }
     } catch (e: RuntimeException) {
         false
     }
 
-    private const val TYPE_CLOSE = "com.desaysv.svhvac.CLOSE_PANEL"
+    private const val TYPE_CLOSE_HVAC_BT = "com.desaysv.svhvac.CLOSE_HVAC_BT"
     private const val ACTION_HVAC_SERVICE = "com.desaysv.svhvac.ACTION_HVAC_SERVICE"
-    // SVVrControl `a/b.java:462-465` paneli bu iki anahtardan biri "true" ise açık sayıyor.
-    private const val KEY_HVAC_SHOW = "hvacShow"
-    private const val KEY_DIALOG_SHOW = "HVAC_DIALOG_IS_SHOW"
 
     private fun fallback(context: Context, reason: String): String {
         val intent = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return "failed"
@@ -102,6 +115,35 @@ internal object ClimatePanel {
         } catch (e: SecurityException) {
             "failed"
         }
+    }
+}
+
+/**
+ * OEM klima panelinin görünürlük anahtarları ve HVAC 9 bit alanı (saf, birim testli).
+ *
+ * Görünürlük: bizim araçta SVHvac `Settings.System "hvacshow"` (tamamı küçük harf) yazar; açılınca "true"
+ * (`SVHvac/.../svhvac/view/h.java:668`), kapanma animasyonu bitince ve yok edilirken "false" (`h.java:219`, `:835`).
+ * Settings anahtarları büyük/küçük harfe duyarlıdır. `hvacShow` ve `HVAC_DIALOG_IS_SHOW` arkadaşın build'inin (panel
+ * SystemUI'de) anahtarlarıdır; yedek olarak sonra okunur.
+ *
+ * HVAC 9 düz 1/0 değil, bit alanıdır: bit 0 ön sıra klima, bit 1 PM2.5, bit 2 koku (`SVHvac/.../model/svhvac/f/d.java:185-212`,
+ * `(f(9) >> n) & 1`).
+ */
+internal object ClimatePanelBits {
+    val SHOW_KEYS = listOf("hvacshow", "hvacShow", "HVAC_DIALOG_IS_SHOW")
+
+    /** [get]: anahtar → Settings değeri. Anahtarlardan biri tam "true" ise panel açık. */
+    fun anyShown(get: (String) -> String?): Boolean = SHOW_KEYS.any { get(it) == "true" }
+
+    fun frontRow(hv9: Int?): Boolean = hv9 != null && (hv9 and 1) != 0
+    fun pm25(hv9: Int?): Boolean = hv9 != null && (hv9 and 2) != 0
+    fun fragrance(hv9: Int?): Boolean = hv9 != null && (hv9 and 4) != 0
+
+    /** Günlük için kısa çözüm: `null`, `0` ya da `5[front,fragrance]`. */
+    fun describe(hv9: Int?): String {
+        if (hv9 == null) return "null"
+        val parts = listOfNotNull("front".takeIf { frontRow(hv9) }, "pm25".takeIf { pm25(hv9) }, "fragrance".takeIf { fragrance(hv9) })
+        return if (parts.isEmpty()) "$hv9" else "$hv9[${parts.joinToString(",")}]"
     }
 }
 
@@ -124,17 +166,23 @@ internal object ClimatePanelPrefs {
 /**
  * Bizim yazmamızdan sonra OEM panelinin kendiliğinden açılmasına dair SAF karar (birim testli).
  *
- * Neden açılıyor: SystemUI paneli HVAC 9 (`ID_AC_DISPLAY_ACTIVE`) geri 1 okununca açar
- * (`SVSystemUI/.../model/svhvac/model/HvacModel.java:260-264` → `svhvac/viewmodel/MainViewModel$mHvacCallback$1.java:79-88`).
- * OEM panelinin kendi düğmeleri HVAC 10/13/12 yazar (`HvacModel.java:764`, `:891`, `onWindSpeedClick`); OEM alt dock'u ise
- * AYNI ham değeri ayrı "dock" kimliklerine yazar: sürücü 76, yolcu 78, fan 77 (`HvacModel.java:774`, `:899`, `:1085`;
- * `MainViewModel.java:827`, `:989`, `:646`, `isDock` dalı). Yazmada "kaynak/sessiz" bayrağı yok; OEM'in sessiz yolu bu ayrı
- * kimlikler. Gizle'de onlar kullanılır; panel yine açılırsa yalnızca arayüzden kapatılır ([ClimatePanel.close], araca yazma yok).
+ * Neden açılıyor (bizim araç, T1E24): panel SVHvac'tadır ve HVAC 9'un bitlerinden biri gelince açılır
+ * (`SVHvac/.../svhvac/view/h.java:547-572` A1; [ClimatePanelBits]). Panel kimliğine (10) yazınca ECU ~85 ms sonra 9=1
+ * gönderiyor (6 Kasım günlüğü 15:51:23.637 → .721). OEM alt dock'u (SVSystemUI) sıcaklığı ayrı kimliklere yazar: sürücü 76,
+ * yolcu 78 (`SVSystemUI/.../model/svhvac/e/c.java:393-400`, `:431-438`); fan için bkz. [ClimateWriter.fanId]. Gizle'de bunlar
+ * kullanılır; panel yine açılırsa [ClimatePanel.close] (CLOSE_HVAC_BT, OEM'in aşağı kaydırma kapatmasıyla aynı yazma).
  */
 internal object ClimatePanelPolicy {
     /** Yazmadan sonra panelin açılmasını bekleme süresi (araç gidiş-dönüşü + SystemUI animasyonu). */
     const val GUARD_MS = 4_000L
     const val POLL_MS = 200L
+
+    /**
+     * Kapatma isteğinden sonra yeniden bakmadan önce bekleme: ECU ~130 ms'de 9=0 gönderir (6 Kasım günlüğü 15:48:51.722 →
+     * .849), panelin kapanma animasyonu 800 ms sürer ve `hvacshow` ancak animasyon bitince "false" olur (`view/h.java:219`,
+     * `:810`). Daha erken bakılırsa kapanmakta olan panel için 9 ← 2 boş yere yinelenirdi.
+     */
+    const val CLOSE_SETTLE_MS = 1_500L
 
     /** Bir koruma penceresinde en çok bu kadar kapatma (döngüye girmesin). */
     const val MAX_CLOSES = 3
@@ -163,7 +211,7 @@ internal object ClimatePanelPolicy {
 }
 
 /**
- * Gizle ayarında alt çubuktan yazmadan hemen önce kurulur ([arm]); [ClimatePanelPolicy.GUARD_MS] boyunca `hvacShow`'u
+ * Gizle ayarında alt çubuktan yazmadan hemen önce kurulur ([arm]); [ClimatePanelPolicy.GUARD_MS] boyunca `hvacshow`'u
  * izler, panel kendiliğinden açılırsa arayüzden kapatır. Kararlar `ClimatePanel` etiketiyle günlüğe yazılır.
  */
 internal object ClimatePanelGuard {
@@ -216,7 +264,7 @@ internal object ClimatePanelGuard {
             ClimatePanelPolicy.Decision.CLOSE -> {
                 closes++
                 Log.i(TAG, "guard close n=$closes outcome=${ClimatePanel.close(ctx)}")
-                main.postDelayed(tick, ClimatePanelPolicy.POLL_MS)
+                main.postDelayed(tick, ClimatePanelPolicy.CLOSE_SETTLE_MS)
             }
             else -> {
                 Log.i(TAG, "guard end reason=${d.name.lowercase()} closes=$closes")

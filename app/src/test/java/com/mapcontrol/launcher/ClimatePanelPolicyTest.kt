@@ -4,6 +4,8 @@ import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.launcher.ClimatePanelPolicy.Decision
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -52,7 +54,46 @@ class ClimatePanelPolicyTest {
         assertNull(WidgetWritePolicy.find(hv, 78, -1))
         assertNull(WidgetWritePolicy.find(hv, 77, 0))
         assertNull(WidgetWritePolicy.find(hv, 77, 11))
-        // Panel kapatma araca yazma değildir: HVAC 9 (görüntü etkin) beyaz listede YOK.
+        // HVAC 9'u biz yazmayız (kapatmada 9 ← 2'yi OEM HvacService gönderir): beyaz listede YOK.
         for (v in 0..3) assertNull(WidgetWritePolicy.find(hv, HvacID.ID_AC_DISPLAY_ACTIVE, v))
+    }
+
+    @Test fun ourCarsLowercaseShowKeyIsReadFirst() {
+        assertEquals("hvacshow", ClimatePanelBits.SHOW_KEYS.first())
+        // Bizim araç (SVHvac) yalnız küçük harfli anahtarı yazar; eskiden okunan "hvacShow" null kalıyordu.
+        assertTrue(ClimatePanelBits.anyShown { if (it == "hvacshow") "true" else null })
+        assertFalse(ClimatePanelBits.anyShown { if (it == "hvacshow") "false" else null })
+        assertFalse(ClimatePanelBits.anyShown { null })
+        // Arkadaşın build'i: yedek anahtarlar.
+        assertTrue(ClimatePanelBits.anyShown { if (it == "hvacShow") "true" else null })
+        assertTrue(ClimatePanelBits.anyShown { if (it == "HVAC_DIALOG_IS_SHOW") "true" else null })
+        assertFalse(ClimatePanelBits.anyShown { "TRUE" })
+    }
+
+    @Test fun hvac9IsABitField() {
+        assertFalse(ClimatePanelBits.frontRow(null))
+        assertFalse(ClimatePanelBits.frontRow(0))
+        assertTrue(ClimatePanelBits.frontRow(1))
+        assertFalse(ClimatePanelBits.frontRow(2))
+        assertTrue(ClimatePanelBits.pm25(2))
+        assertTrue(ClimatePanelBits.fragrance(4))
+        assertTrue(ClimatePanelBits.frontRow(5))
+        assertTrue(ClimatePanelBits.fragrance(5))
+        assertFalse(ClimatePanelBits.pm25(5))
+        assertEquals("null", ClimatePanelBits.describe(null))
+        assertEquals("0", ClimatePanelBits.describe(0))
+        assertEquals("1[front]", ClimatePanelBits.describe(1))
+        assertEquals("7[front,pm25,fragrance]", ClimatePanelBits.describe(7))
+    }
+
+    @Test fun closeWaitsForEcuAndCloseAnimationBeforeRechecking() {
+        // ECU ~130 ms + 800 ms animasyon; daha kısa beklenirse 9 ← 2 boş yere yinelenir.
+        assertTrue(ClimatePanelPolicy.CLOSE_SETTLE_MS >= 1_000L)
+        assertTrue(ClimatePanelPolicy.CLOSE_SETTLE_MS < ClimatePanelPolicy.GUARD_MS)
+    }
+
+    @Test fun dockFanIdStaysAt77UntilCarTestEvenThoughOemAutoDockUses12() {
+        assertEquals(77, ClimateWriter.fanId(quiet = true))
+        assertEquals(12, ClimateWriter.OEM_DOCK_FAN_ID_T1E24)
     }
 }
