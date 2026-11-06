@@ -17,9 +17,19 @@ data class SahneLayout(
     val left: SahneSlot?,
     val right: SahneSlot?,
     val strip: List<SahneSlot?>,
+    /**
+     * Dört panelli biçim (Tiggo 8, 6 Kasım kararı): her yanda üst üste iki panel. [left]/[right] üst panellerdir,
+     * [leftLower]/[rightLower] alttakiler. İki panelli biçimde (Tiggo 7) alt yuvalar hep null ve kayıt aynen eski biçimdir.
+     */
+    val quad: Boolean = false,
+    val leftLower: SahneSlot? = null,
+    val rightLower: SahneSlot? = null,
 ) {
-    /** Tüm dolu yuvalar (sol, sağ, şerit sırasıyla). */
-    fun slots(): List<SahneSlot> = listOfNotNull(left, right) + strip.filterNotNull()
+    /** Tüm dolu yuvalar (sol, sağ, sol alt, sağ alt, şerit sırasıyla). */
+    fun slots(): List<SahneSlot> = listOfNotNull(left, right, leftLower, rightLower) + strip.filterNotNull()
+
+    /** Bu biçimdeki panel yuvası sayısı (2 ya da 4). */
+    val panelCount: Int get() = if (quad) 4 else 2
 
     fun types(): Set<WidgetType> = slots().map { it.type }.toSet()
 }
@@ -27,7 +37,7 @@ data class SahneLayout(
 /** Yuva türü: yan panel ya da şerit öğesi. */
 enum class SahneSlotKind { PANEL, STRIP }
 
-/** Yuvanın adresi: panel için 0 = sol, 1 = sağ; şerit için 0..[STRIP_SLOTS]-1. */
+/** Yuvanın adresi: panel için 0 = sol (üst), 1 = sağ (üst), 2 = sol alt, 3 = sağ alt (yalnız dört panelli biçim); şerit için 0..[STRIP_SLOTS]-1. */
 data class SahneSlotRef(val kind: SahneSlotKind, val index: Int)
 
 const val STRIP_SLOTS = 6
@@ -87,13 +97,25 @@ object SahneForm {
 object SahneSlots {
 
     fun get(layout: SahneLayout, ref: SahneSlotRef): SahneSlot? = when (ref.kind) {
-        SahneSlotKind.PANEL -> if (ref.index == 0) layout.left else layout.right
+        SahneSlotKind.PANEL -> when (ref.index) {
+            0 -> layout.left
+            1 -> layout.right
+            2 -> layout.leftLower
+            3 -> layout.rightLower
+            else -> null
+        }
         SahneSlotKind.STRIP -> layout.strip.getOrNull(ref.index)
     }
 
     /** [ref] yuvasına [slot] konmuş (null: boşaltılmış) yeni düzen. */
     fun set(layout: SahneLayout, ref: SahneSlotRef, slot: SahneSlot?): SahneLayout = when (ref.kind) {
-        SahneSlotKind.PANEL -> if (ref.index == 0) layout.copy(left = slot) else layout.copy(right = slot)
+        SahneSlotKind.PANEL -> when (ref.index) {
+            0 -> layout.copy(left = slot)
+            1 -> layout.copy(right = slot)
+            2 -> if (layout.quad) layout.copy(leftLower = slot) else layout
+            3 -> if (layout.quad) layout.copy(rightLower = slot) else layout
+            else -> layout
+        }
         SahneSlotKind.STRIP -> layout.copy(strip = layout.strip.mapIndexed { i, s -> if (i == ref.index) slot else s })
     }
 
@@ -149,6 +171,43 @@ object SahneSlots {
         if (mode == LayoutMode.DRIVE) defaultDrive(appPackages) else defaultPark(appPackages)
 
     /**
+     * Tiggo 8 varsayılanı (Park ve Sürüş aynı panel dizilişi): sol üst medya, sol alt navigasyon, sağ üst yolculuk, sağ alt
+     * tüketim; şerit o modun Tiggo 7 şeridiyle aynı.
+     */
+    fun defaultsQuad(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
+        defaults(mode, appPackages).copy(
+            left = SahneSlot("media", WidgetType.MEDIA),
+            right = SahneSlot("trip", WidgetType.TRIP),
+            quad = true,
+            leftLower = SahneSlot("nav_turn", WidgetType.NAVIGATION),
+            rightLower = SahneSlot("consumption", WidgetType.CONSUMPTION),
+        )
+
+    /** Alt yuvaların tercih ettiği türler (yükseltme ve yedek için): sol alt navigasyon, sağ alt tüketim. */
+    private fun preferredPanel(index: Int): WidgetType = when (index) {
+        0 -> WidgetType.MEDIA
+        1 -> WidgetType.TRIP
+        2 -> WidgetType.NAVIGATION
+        else -> WidgetType.CONSUMPTION
+    }
+
+    /**
+     * İki panelli bir kaydı dört panelliye çevirir (Tiggo 8'in 6 Kasım öncesi kayıtları): üst paneller ve şerit aynen kalır,
+     * alt yuvalar düzende olmayan izinli panel türleriyle dolar (sol alt önce navigasyon, sağ alt önce tüketim). Zaten dört
+     * panelliyse aynen döner.
+     */
+    fun toQuad(layout: SahneLayout): SahneLayout {
+        if (layout.quad) return layout
+        var out = layout.copy(quad = true, leftLower = null, rightLower = null)
+        listOf(2, 3).forEach { i ->
+            val used = out.types()
+            val pick = (listOf(preferredPanel(i)) + SahneForm.PANEL_TYPES).firstOrNull { it !in used } ?: return@forEach
+            out = set(out, SahneSlotRef(SahneSlotKind.PANEL, i), SahneSlot(newId(out, pick), pick))
+        }
+        return out
+    }
+
+    /**
      * Okunan düzeni temizler: yuvaya sığmayan (seçkide olmayan) türler boşalır, şerit tam [STRIP_SLOTS] yuvaya tamamlanır/kırpılır,
      * tekil türlerin ikincisi ve yinelenen kimlikler atılır (ilk kalır).
      */
@@ -163,19 +222,25 @@ object SahneSlots {
         }
         val left = keep(layout.left, SahneSlotKind.PANEL)
         val right = keep(layout.right, SahneSlotKind.PANEL)
+        val leftLower = if (layout.quad) keep(layout.leftLower, SahneSlotKind.PANEL) else null
+        val rightLower = if (layout.quad) keep(layout.rightLower, SahneSlotKind.PANEL) else null
         val strip = (0 until STRIP_SLOTS).map { keep(layout.strip.getOrNull(it), SahneSlotKind.STRIP) }
-        return SahneLayout(left, right, strip)
+        return SahneLayout(left, right, strip, layout.quad, leftLower, rightLower)
     }
 
     // --- Kayıt biçimi ---
     // "v1|<sol>|<sağ>|<şerit1>,<şerit2>,..." ; yuva: boş = "", yoksa "tür~kimlik~ek". Paket adları ve kimlikler bu
     // ayraçları içermez (yalnızca harf, rakam, '.', '_'). Saf metin: JSON'a gerek yok, JVM'de sınanır.
+    // Dört panelli biçim (Tiggo 8) sona iki alan ekler: "v1|<sol>|<sağ>|<şerit>|<sol alt>|<sağ alt>". İki panelli kayıt
+    // aynen eski dört alanlı biçimdir; eski okuyucu altı alanlı kaydı çözemez ve varsayılana döner (yalnız Tiggo 8 dosyasında).
 
     private const val VERSION = "v1"
 
     fun encode(layout: SahneLayout): String {
         fun slot(s: SahneSlot?): String = if (s == null) "" else listOf(s.type.key, s.id, s.extra ?: "").joinToString("~")
-        return listOf(VERSION, slot(layout.left), slot(layout.right), layout.strip.joinToString(",") { slot(it) }).joinToString("|")
+        val base = listOf(VERSION, slot(layout.left), slot(layout.right), layout.strip.joinToString(",") { slot(it) })
+        val parts = if (layout.quad) base + listOf(slot(layout.leftLower), slot(layout.rightLower)) else base
+        return parts.joinToString("|")
     }
 
     /**
@@ -185,7 +250,7 @@ object SahneSlots {
     fun decode(raw: String?): SahneLayout? {
         if (raw.isNullOrEmpty()) return null
         val parts = raw.split("|")
-        if (parts.size != 4 || parts[0] != VERSION) return null
+        if ((parts.size != 4 && parts.size != 6) || parts[0] != VERSION) return null
         fun slot(s: String): SahneSlot? {
             if (s.isEmpty()) return null
             val f = s.split("~")
@@ -194,7 +259,9 @@ object SahneSlots {
             return SahneSlot(id, type, f.getOrNull(2)?.ifEmpty { null })
         }
         val strip = parts[3].split(",").map { slot(it) }
-        val raw = migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip))
+        val quad = parts.size == 6
+        val raw = migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip, quad,
+            if (quad) slot(parts[4]) else null, if (quad) slot(parts[5]) else null))
         return fallbackPanels(raw, sanitize(raw))
     }
 
@@ -205,11 +272,11 @@ object SahneSlots {
      */
     private fun fallbackPanels(raw: SahneLayout, clean: SahneLayout): SahneLayout {
         var out = clean
-        listOf(0, 1).forEach { i ->
+        (0 until raw.panelCount).forEach { i ->
             val ref = SahneSlotRef(SahneSlotKind.PANEL, i)
             val was = get(raw, ref)
             if (was == null || SahneForm.fitsPanel(was.type) || get(out, ref) != null) return@forEach
-            val preferred = if (i == 0) WidgetType.MEDIA else WidgetType.TRIP
+            val preferred = preferredPanel(i)
             val used = out.types()
             val pick = (listOf(preferred) + SahneForm.PANEL_TYPES).firstOrNull { it !in used } ?: return@forEach
             out = set(out, ref, SahneSlot(newId(out, pick), pick))
@@ -258,11 +325,21 @@ class SahneStore(
     private val prefs = context.applicationContext.getSharedPreferences(prefsName(Profiles.current(context), vehicle), Context.MODE_PRIVATE)
     private val key = key(mode)
 
-    fun load(): SahneLayout = SahneSlots.decode(prefs.getString(key, null)) ?: defaults()
+    /** Tiggo 8: her yanda üst üste iki panel (dört panelli biçim); Tiggo 7 iki panelli kalır. */
+    val quad: Boolean = vehicle == VehicleProfile.TIGGO8
+
+    fun load(): SahneLayout = forVehicle(SahneSlots.decode(prefs.getString(key, null)) ?: defaults())
 
     fun save(layout: SahneLayout) = prefs.edit().putString(key, SahneSlots.encode(layout)).apply()
 
-    fun defaults(): SahneLayout = SahneSlots.defaults(mode, appPackages)
+    fun defaults(): SahneLayout = if (quad) SahneSlots.defaultsQuad(mode, appPackages) else SahneSlots.defaults(mode, appPackages)
+
+    /** Kayıt bu aracın biçiminde değilse çevrilir: Tiggo 8'in eski iki panelli kaydı dört panelliye yükselir. */
+    private fun forVehicle(layout: SahneLayout): SahneLayout = when {
+        quad -> SahneSlots.toQuad(layout)
+        layout.quad -> SahneSlots.sanitize(layout.copy(quad = false, leftLower = null, rightLower = null))
+        else -> layout
+    }
 
     fun reset() = prefs.edit().remove(key).apply()
 

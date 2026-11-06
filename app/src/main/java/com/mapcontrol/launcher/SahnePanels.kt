@@ -57,6 +57,22 @@ internal object SahnePanelFactory {
  */
 internal class GlassPanel(context: Context, glow: Boolean) : FrameLayout(context) {
     private var glowing: Boolean? = null
+    private var content: View? = null
+
+    /**
+     * İçeriğin tasarım yüksekliği (dp; 0 = kapalı). Panel bundan kısaysa (Tiggo 8'in üst üste iki paneli) içerik bu
+     * yükseklikte, panelin en-boy oranında kurulur ve tek tip küçültülerek sığdırılır: panel tasarımları sıkışmadan kendi
+     * doğal ölçüsünde çizilir. Cam zemin ve zemin görseli küçültülmez. Tiggo 7'de kapalıdır (davranış aynı).
+     */
+    var naturalHeightDp: Int = 0
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+        }
+
+    /** Şu anki içerik ölçeği (1 = küçültme yok). */
+    private var contentScale = 1f
 
     init {
         setGlow(glow)
@@ -94,6 +110,38 @@ internal class GlassPanel(context: Context, glow: Boolean) : FrameLayout(context
         val p = context.dp(paddingDp)
         setPadding(p, p, p, p)
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        this.content = content
+    }
+
+    override fun removeAllViews() {
+        content?.let { it.scaleX = 1f; it.scaleY = 1f }
+        content = null
+        super.removeAllViews()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        val c = content ?: return
+        val innerW = measuredWidth - paddingLeft - paddingRight
+        val innerH = measuredHeight - paddingTop - paddingBottom
+        contentScale = PanelFit.scale(innerH, if (naturalHeightDp > 0) context.dp(naturalHeightDp) else 0)
+        if (contentScale >= 1f) return
+        c.measure(MeasureSpec.makeMeasureSpec(Math.round(innerW / contentScale), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(Math.round(innerH / contentScale), MeasureSpec.EXACTLY))
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        val c = content ?: return
+        if (contentScale >= 1f) {
+            c.scaleX = 1f; c.scaleY = 1f
+            return
+        }
+        c.layout(paddingLeft, paddingTop, paddingLeft + c.measuredWidth, paddingTop + c.measuredHeight)
+        c.pivotX = 0f
+        c.pivotY = 0f
+        c.scaleX = contentScale
+        c.scaleY = contentScale
     }
 
     /** Medya paneli ışıması: (60, 40) merkezli 360 × 240 eliptik, panelin yuvarlak köşelerine kırpılı. */
@@ -115,6 +163,13 @@ internal class GlassPanel(context: Context, glow: Boolean) : FrameLayout(context
         @Deprecated("Deprecated in Java")
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
+}
+
+/** Panel içeriğinin sığdırma ölçeği (saf; JVM'de sınanır). */
+internal object PanelFit {
+    /** [innerPx] yüksekliğindeki panelde [naturalPx] tasarım yükseklikli içeriğin ölçeği; küçültme gerekmezse 1. */
+    fun scale(innerPx: Int, naturalPx: Int): Float =
+        if (naturalPx <= 0 || innerPx <= 0 || innerPx >= naturalPx) 1f else innerPx.toFloat() / naturalPx
 }
 
 /**

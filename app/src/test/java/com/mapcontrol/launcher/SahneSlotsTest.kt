@@ -299,4 +299,93 @@ class SahneSlotsTest {
         assertEquals(HomeStyle.SERBEST, HomeStyle.parse("serbest"))
         assertEquals(HomeStyle.SAHNE, HomeStyle.parse(" Sahne "))
     }
+
+    // --- Dört panelli biçim (Tiggo 8, 6 Kasım) ---
+
+    private fun panel(l: SahneLayout, i: Int) = SahneSlots.get(l, SahneSlotRef(SahneSlotKind.PANEL, i))
+
+    @Test
+    fun quadDefaultsHaveTheFourPanelTypesOnce() {
+        LayoutMode.values().forEach { mode ->
+            val d = SahneSlots.defaultsQuad(mode, apps)
+            assertTrue(d.quad)
+            assertEquals(4, d.panelCount)
+            assertEquals(listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.NAVIGATION, WidgetType.CONSUMPTION),
+                (0..3).map { panel(d, it)?.type })
+            assertEquals(SahneForm.PANEL_TYPES.toSet(), (0..3).mapNotNull { panel(d, it)?.type }.toSet())
+            assertEquals(SahneSlots.defaults(mode, apps).strip, d.strip)
+            assertEquals(d, SahneSlots.sanitize(d))
+        }
+    }
+
+    @Test
+    fun twoPanelRecordStaysInTheOldFormat() {
+        val d = SahneSlots.defaultPark(apps)
+        assertFalse(d.quad)
+        val raw = SahneSlots.encode(d)
+        assertEquals(4, raw.split("|").size)
+        // Tiggo 7'de alt yuvalar yazılamaz ve okunmaz.
+        assertEquals(d, SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 2), SahneSlot("nav_turn", WidgetType.NAVIGATION)))
+        assertNull(panel(d, 3))
+    }
+
+    @Test
+    fun quadRoundTripKeepsEmptyLowerSlots() {
+        val d = SahneSlots.defaultsQuad(LayoutMode.PARK, apps)
+        val raw = SahneSlots.encode(d)
+        assertEquals(6, raw.split("|").size)
+        assertEquals(d, SahneSlots.decode(raw))
+        val gaps = SahneSlots.set(SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 2), null), SahneSlotRef(SahneSlotKind.PANEL, 3), null)
+        val back = SahneSlots.decode(SahneSlots.encode(gaps))!!
+        assertTrue(back.quad) // boşaltılmış alt yuvalar yeniden doldurulmaz
+        assertNull(back.leftLower)
+        assertNull(back.rightLower)
+        assertEquals(back, SahneSlots.toQuad(back))
+    }
+
+    @Test
+    fun oldTwoPanelRecordUpgradesToQuad() {
+        val old = SahneSlots.decode("v1|media~media~|trip~trip~|seat_driver~seat_driver~,,,,,")!!
+        assertFalse(old.quad)
+        val q = SahneSlots.toQuad(old)
+        assertTrue(q.quad)
+        assertEquals(WidgetType.MEDIA, q.left?.type)
+        assertEquals(WidgetType.TRIP, q.right?.type)
+        assertEquals(WidgetType.NAVIGATION, q.leftLower?.type)
+        assertEquals(WidgetType.CONSUMPTION, q.rightLower?.type)
+        assertEquals(old.strip, q.strip)
+        // Üstte navigasyon ve tüketim zaten varsa alt yuvalar kalan türleri alır.
+        val q2 = SahneSlots.toQuad(SahneSlots.decode("v1|nav_turn~n~|consumption~c~|")!!)
+        assertEquals(WidgetType.MEDIA, q2.leftLower?.type)
+        assertEquals(WidgetType.TRIP, q2.rightLower?.type)
+    }
+
+    @Test
+    fun quadDecodeDropsDuplicatesAndFallsBackPerSlot() {
+        val d = SahneSlots.decode("v1|media~m~|trip~t~||media~m2~|health~h~")!!
+        assertTrue(d.quad)
+        assertNull(d.leftLower) // ikinci medya atılır
+        assertEquals(WidgetType.CONSUMPTION, d.rightLower?.type) // izinsiz tür sağ alt yedeğe döner
+        assertNull(SahneSlots.decode("v1|media~m~|trip~t~||x"))
+    }
+
+    @Test
+    fun quadPlacementRuleCoversAllFourPanels() {
+        val d = SahneSlots.defaultsQuad(LayoutMode.PARK, apps)
+        val leftLower = SahneSlotRef(SahneSlotKind.PANEL, 2)
+        assertFalse(SahneForm.canPlace(d, leftLower, WidgetType.MEDIA))
+        assertFalse(SahneForm.canPlace(d, SahneSlotRef(SahneSlotKind.PANEL, 0), WidgetType.CONSUMPTION))
+        assertTrue(SahneForm.canPlace(d, leftLower, WidgetType.NAVIGATION))
+        val freed = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 3), null)
+        assertTrue(SahneForm.canPlace(freed, leftLower, WidgetType.CONSUMPTION))
+        assertEquals(WidgetType.TRIP, SahneSlots.get(SahneSlots.set(freed, leftLower, SahneSlot("trip2", WidgetType.TRIP)), leftLower)?.type)
+    }
+
+    @Test
+    fun panelContentShrinksOnlyWhenShorterThanItsDesign() {
+        assertEquals(1f, PanelFit.scale(567, 567), 0f) // Tiggo 7: tasarım boyu, küçültme yok
+        assertEquals(1f, PanelFit.scale(600, 567), 0f)
+        assertEquals(1f, PanelFit.scale(300, 0), 0f) // kapalı
+        assertEquals(469f / 567f, PanelFit.scale(469, 567), 1e-6f)
+    }
 }

@@ -45,6 +45,12 @@ class SahneScreen(
     private val stage = SahneStage(activity)
     private val leftPanel = GlassPanel(activity, glow = false)
     private val rightPanel = GlassPanel(activity, glow = false)
+    /** Dört panelli biçimde (Tiggo 8) her yanın alt paneli; iki panelli biçimde hiç eklenmez. */
+    private val quad = parkStore.quad
+    private val leftLowerPanel = GlassPanel(activity, glow = false)
+    private val rightLowerPanel = GlassPanel(activity, glow = false)
+    private val panels: List<GlassPanel> =
+        if (quad) listOf(leftPanel, rightPanel, leftLowerPanel, rightLowerPanel) else listOf(leftPanel, rightPanel)
     private val strip = StripBar()
 
     /** Yuvalardaki çalışan widget'lar (görünürlük ve bırakma için). */
@@ -67,16 +73,17 @@ class SahneScreen(
         clipChildren = false
         clipToPadding = false
         addView(stage)
-        addView(leftPanel)
-        addView(rightPanel)
+        panels.forEach { addView(it) }
+        // Dört panelde her panel Tiggo 7 panelinin tasarım yüksekliğinde kurulur ve sığacak kadar küçültülür.
+        if (quad) panels.forEach { it.naturalHeightDp = NATURAL_PANEL_H_DP }
         addView(strip)
-        (0..1).forEach { addOverlay(SahneSlotRef(SahneSlotKind.PANEL, it)) }
+        panels.indices.forEach { addOverlay(SahneSlotRef(SahneSlotKind.PANEL, it)) }
         (0 until STRIP_SLOTS).forEach { addOverlay(SahneSlotRef(SahneSlotKind.STRIP, it)) }
         rebuildAll()
     }
 
     /** Karşılama ([SahneWelcome]) için: araç sahnesi ve geri kalan orta alan (yan paneller, şerit). */
-    internal fun welcomeParts(): Pair<SahneStage, List<View>> = stage to listOf(leftPanel, rightPanel, strip)
+    internal fun welcomeParts(): Pair<SahneStage, List<View>> = stage to panels + strip
 
     // --- Yaşam döngüsü ---
 
@@ -129,8 +136,7 @@ class SahneScreen(
         val v = if (on) sportStage() else sport ?: return true
         val normal = if (on) View.INVISIBLE else View.VISIBLE
         stage.visibility = normal
-        leftPanel.visibility = normal
-        rightPanel.visibility = normal
+        panels.forEach { it.visibility = normal }
         strip.visibility = normal
         v.visibility = if (on) View.VISIBLE else View.GONE
         if (!on) {
@@ -177,8 +183,7 @@ class SahneScreen(
 
     private fun rebuildAll() {
         hosted.keys.toList().forEach { dropHosted(it) }
-        build(SahneSlotRef(SahneSlotKind.PANEL, 0))
-        build(SahneSlotRef(SahneSlotKind.PANEL, 1))
+        panels.indices.forEach { build(SahneSlotRef(SahneSlotKind.PANEL, it)) }
         strip.clearSlots()
         (0 until STRIP_SLOTS).forEach { build(SahneSlotRef(SahneSlotKind.STRIP, it)) }
         strip.syncDividers()
@@ -200,7 +205,7 @@ class SahneScreen(
         val widgets: List<LauncherWidget>
         when (ref.kind) {
             SahneSlotKind.PANEL -> {
-                val panel = if (ref.index == 0) leftPanel else rightPanel
+                val panel = panels[ref.index]
                 if (slot == null) {
                     panel.removeAllViews()
                     widgets = emptyList()
@@ -264,8 +269,9 @@ class SahneScreen(
     /** Boş yuvalar: düzenlemede "+" örtüsü, normalde soluk boş cam (panel) ya da boşluk (şerit). */
     private fun refreshEmpty() {
         overlays.forEach { (ref, o) -> o.bind(SahneSlots.get(shown, ref) != null) }
-        leftPanel.alpha = if (shown.left == null && !editMode) EMPTY_ALPHA else 1f
-        rightPanel.alpha = if (shown.right == null && !editMode) EMPTY_ALPHA else 1f
+        panels.forEachIndexed { i, p ->
+            p.alpha = if (SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, i)) == null && !editMode) EMPTY_ALPHA else 1f
+        }
     }
 
     private fun place(ref: SahneSlotRef, type: WidgetType) {
@@ -527,13 +533,13 @@ class SahneScreen(
         val panelW = (PANEL_W * k).toInt()
         val gapH = (GAP_H * k).toInt()
         val stageW = w - 2 * panelW - 2 * gapH
-        leftPanel.measure(exactly(panelW), exactly(bandH))
-        rightPanel.measure(exactly(panelW), exactly(bandH))
+        val panelH = panelHeight(bandH, gapV)
+        panels.forEach { it.measure(exactly(panelW), exactly(panelH)) }
         stage.measure(exactly(stageW), exactly(bandH + gapV))
         strip.measure(exactly(w), exactly(stripH))
         sport?.measure(exactly(w), exactly(h))
         overlays.forEach { (ref, o) ->
-            if (ref.kind == SahneSlotKind.PANEL) o.measure(exactly(panelW), exactly(bandH))
+            if (ref.kind == SahneSlotKind.PANEL) o.measure(exactly(panelW), exactly(panelH))
         }
     }
 
@@ -544,14 +550,19 @@ class SahneScreen(
         val gapV = context.dp(GAP_V_DP)
         val bandH = h - stripH - gapV
         val panelW = leftPanel.measuredWidth
-        leftPanel.layout(0, 0, panelW, bandH)
-        rightPanel.layout(w - panelW, 0, w, bandH)
+        val panelH = panelHeight(bandH, gapV)
+        leftPanel.layout(0, 0, panelW, panelH)
+        rightPanel.layout(w - panelW, 0, w, panelH)
+        if (quad) {
+            leftLowerPanel.layout(0, bandH - panelH, panelW, bandH)
+            rightLowerPanel.layout(w - panelW, bandH - panelH, w, bandH)
+        }
         stage.layout(panelW + (w - 2 * panelW - stage.measuredWidth) / 2, 0, w - panelW - (w - 2 * panelW - stage.measuredWidth) / 2, bandH + gapV)
         strip.layout(0, h - stripH, w, h)
         sport?.layout(0, 0, w, h)
         overlays.forEach { (ref, o) ->
             if (ref.kind == SahneSlotKind.PANEL) {
-                val p = if (ref.index == 0) leftPanel else rightPanel
+                val p = panels[ref.index]
                 o.layout(p.left, p.top, p.right, p.bottom)
             } else {
                 val v = strip.slotView(ref.index)
@@ -571,6 +582,9 @@ class SahneScreen(
     /** Düzenlemede yuva örtüleri dokunuşu alır; sahne zaten kilitli. */
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = false
 
+    /** Panel yüksekliği: iki panelli biçimde bant boyu, dört panelli biçimde aralarında [GAP_V_DP] boşlukla yarısı. */
+    private fun panelHeight(bandH: Int, gapV: Int): Int = if (quad) (bandH - gapV) / 2 else bandH
+
     private fun exactly(px: Int) = MeasureSpec.makeMeasureSpec(maxOf(0, px), MeasureSpec.EXACTLY)
 
     private companion object {
@@ -579,6 +593,8 @@ class SahneScreen(
         const val GAP_H = 16f
         const val STRIP_H_DP = 92
         const val GAP_V_DP = 16
+        /** Tiggo 7'deki yan panel yüksekliği (720 dp ekranda bant boyu); dört panelli biçimde içerik bu ölçüde kurulur. */
+        const val NATURAL_PANEL_H_DP = 378
         const val EMPTY_ALPHA = 0.45f
         const val DISABLED_ALPHA = 0.45f
         const val PICKER_COLUMNS = 5
