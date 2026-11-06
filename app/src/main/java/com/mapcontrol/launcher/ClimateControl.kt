@@ -28,7 +28,7 @@ import kotlin.math.abs
  * "Bizimki" alt çubuğunun klima bölümleri: sürücü sıcaklığı, fan, yolcu sıcaklığı. Her biri ayrı bir kart yüzeyidir
  * (çubuk üçünü ayrı yerleştirir) ve etkileşimlidir:
  *  - sıcaklık: dikey sürükleme (her 40dp = 0,5 °C, yukarı = sıcak), dokunuşta sağ yarı +0,5 / sol yarı −0,5,
- *    uzun basış OEM klima panelini açar ([ClimatePanel]);
+ *    (OEM klima paneli yalnız çubukta yukarı kaydırmayla; uzun basış 6 Kasım araç testinde kaldırıldı);
  *  - fan: yatay sürükleme 1..10, dokunuş kapat/aç, altında ince 10 noktalı kademe göstergesi.
  *
  * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
@@ -234,7 +234,8 @@ internal class ClimateControl(
                         target = base
                         downX = e.rawX
                         downY = e.rawY
-                        main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+                        // Uzun basış → OEM klima paneli KALDIRILDI (6 Kasım araç: dereceye kısa dokunuşta da panel
+                        // açılıyordu). Panel yalnız çubukta yukarı kaydırmayla açılır.
                     }
                 }
                 MotionEvent.ACTION_MOVE -> if (active && !longFired) {

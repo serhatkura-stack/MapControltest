@@ -825,9 +825,12 @@ object PhonePrefs {
     private const val KEY_ASSISTANT = "phone_voice_key_assistant"
     private const val KEY_PINNED = "phone_pinned_ids"
 
-    /** "Ses tuşu uzun basış: Telefon asistanı" (varsayılan Açık). */
+    /**
+     * "Ses tuşu uzun basış: Telefon asistanı" (varsayılan KAPALI: 6 Kasım araç testinde OEM uzun basışta kendi
+     * CarPlay/Android Auto kablosuz bağlantı penceresini açıyor; Siri için panel tuşu ve alt bar uzun basış yeterli).
+     */
     fun assistantOnVoiceKey(context: Context): Boolean =
-        prefs(context).getBoolean(Profiles.key(context, KEY_ASSISTANT), true)
+        prefs(context).getBoolean(Profiles.key(context, KEY_ASSISTANT), false)
 
     fun setAssistantOnVoiceKey(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean(Profiles.key(context, KEY_ASSISTANT), on).apply()
