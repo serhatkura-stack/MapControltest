@@ -82,11 +82,14 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     /** Oturmuş sayfa değişince (panel zeminindeki medya ışıması yalnız medya sayfasında). */
     var onFaceShown: ((CardFace) -> Unit)? = null
 
-    /** Kart şu an kayıyor mu (sürükleme ya da oturma; panel nabzı hareketi bozmasın). */
-    val moving: Boolean get() = dragging || settling
+    /** Kart şu an kayıyor mu (sürükleme, oturma ya da parmakla yarıda durdurulmuş oturma; panel nabzı hareketi bozmasın). */
+    val moving: Boolean get() = dragging || settling || frame.pending != null
+
+    /** İçeriğin gittiği sayfa: oturma ya da yarıda durdurulmuş oturma sürüyorsa hedefi, yoksa ekrandaki sayfa. */
+    private fun heading(): CardFace = if (settling) settleFace else frame.pending ?: face
 
     private val button = PageButton(context).apply {
-        setOnClickListener { userSlide(MediaFlipLogic.other(if (settling) settleFace else face)) }
+        setOnClickListener { userSlide(MediaFlipLogic.other(heading())) }
     }
 
     private val frame = PagerFrame(context).apply {
@@ -127,7 +130,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     override fun onHidden() {
         if (!visible) return
         visible = false
-        if (frame.abortDrag()) setPos(MediaFlipLogic.page(face).toFloat())
+        // Süren dokunuş kesilir; içerik bekleyen sayfaya anında oturur (görünmüyor: [slideTo] anında uygular).
+        frame.abortDrag()?.let { slideTo(it) }
         if (settling) settle.end()
         media.onHidden()
         PhoneSource.removeListener(this)
@@ -154,9 +158,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         connected = c
         button.visibility = if (MediaFlipLogic.flipAvailable(c)) View.VISIBLE else View.GONE
         // Telefon koptuysa süren sürükleme kesilir (içerik aşağıda medyaya kayar).
-        val aborted = !c && frame.abortDrag()
+        val aborted = !c && frame.abortDrag() != null
         val want = MediaFlipLogic.shown(saved, c, held)
-        if (!aborted && want == (if (settling) settleFace else face)) return
+        if (!aborted && want == heading()) return
         // Kart görünürken sayfa değişimi hep görünür bir kaymayla (kopma da, açılışta geç bağlanan telefonla son sayfaya
         // dönüş de); görünmüyorsa [slideTo] anında uygular.
         slideTo(want)
@@ -181,6 +185,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
      */
     private fun slideTo(target: CardFace) {
         val to = MediaFlipLogic.page(target).toFloat()
+        // Parmak basılıyken gelen kaydırma (bağlantı bildirimi, erişilebilirlik tıklaması) sürüklemeyi keser: ikisi aynı anda
+        // konumu yazıp içeriği titretmesin; kayma o anki konumdan başlar.
+        frame.abortDrag()
         settling = false
         settle.cancel()
         if (!visible || !frame.isAttachedToWindow || frame.width == 0 || !ValueAnimator.areAnimatorsEnabled() ||
@@ -212,9 +219,11 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         phone.view.translationX = (1f - p) * w
         media.view.visibility = if (p < 1f - EPS) View.VISIBLE else View.INVISIBLE
         phone.view.visibility = if (p > EPS) View.VISIBLE else View.INVISIBLE
-        // Köşe simgesi yerinde durur; kayarken gelen sayfanın başlığıyla üst üste binmesin diye ortada söner.
+        // Köşe simgesi yerinde durur; kayarken gelen sayfanın başlığıyla üst üste binmesin diye ortada söner, uçta
+        // çekilirken de (içerik altına kayar) taşmayla birlikte söner.
         val f = p.coerceIn(0f, 1f)
-        button.alpha = kotlin.math.abs(1f - 2f * f)
+        val over = kotlin.math.min(1f, kotlin.math.abs(p - f) / MediaFlipLogic.MAX_OVER)
+        button.alpha = kotlin.math.min(kotlin.math.abs(1f - 2f * f), 1f - over)
         syncPhoneListening()
     }
 
@@ -243,7 +252,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     /**
      * Kart kabı: yatay sürüklemeyi yakalar ve içeriği parmakla kaydırır. Basış ilerleme çubuğunda
      * ([MediaCard.horizontalDragViews]) başladıysa o dokunuş sayfa kaydırmaz. Yatay niyet belli olunca dokunuş alttaki
-     * düğmeden alınır; bırakınca [MediaFlipLogic.settle] hedef sayfayı seçer. Oturma sürerken basılırsa oturma hemen biter.
+     * düğmeden alınır; bırakınca [MediaFlipLogic.settle] hedef sayfayı seçer. Oturma sürerken basılırsa içerik olduğu yerde
+     * durur (zıplamaz): sürükleme oradan sürer, sürüklemeye dönmeyen dokunuş bitince oturma kaldığı yerden tamamlanır.
+     * Sürüklemeyi tek parmak (etkin işaretçi) yürütür; o kalkarsa kalan parmağa geçilir, içerik yerinde kalır.
      */
     private inner class PagerFrame(context: Context) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -254,6 +265,12 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         /** Sürüklemenin başladığı nokta ve sayfa (yakalama anından: içerik zıplamaz). */
         private var originX = 0f
         private var anchor = 0
+        /** Son sürükleme konumu, dirençsiz (parmak değişince yeniden temellendirme için). */
+        private var lastRaw = 0f
+        private var activePointerId = MotionEvent.INVALID_POINTER_ID
+        /** Bu dokunuş bir oturmayı yarıda durdurdu: oturmanın hedefi (sürükleme olmazsa oraya tamamlanır). */
+        private var resumeFace: CardFace? = null
+        val pending: CardFace? get() = resumeFace
         private var onDrag = false
         private var tracker: VelocityTracker? = null
         private val gesture = MediaFlipLogic.SwipeGesture(slop)
@@ -281,30 +298,58 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
             (tracker ?: VelocityTracker.obtain().also { tracker = it }).addMovement(ev)
         }
 
+        private fun pointerIndex(ev: MotionEvent): Int = ev.findPointerIndex(activePointerId).let { if (it < 0) 0 else it }
+
         private fun down(ev: MotionEvent) {
-            // Oturma sürerken basış: hareket hemen tamamlanır, dokunuş oturmuş sayfada işlenir.
-            if (settling) settle.end()
+            // Oturma sürerken basış: içerik olduğu yerde durur (end() hedefe zıplatırdı). Aynı basış kesmeden sonra
+            // onTouchEvent'e de gelebilir; o zaman [resumeFace] korunur.
+            if (settling) {
+                settling = false
+                settle.cancel()
+                resumeFace = settleFace
+            }
             tracker?.clear()
             track(ev)
+            activePointerId = ev.getPointerId(0)
             downX = ev.x; downY = ev.y
             onDrag = startsOnDrag(ev.x, ev.y)
             gesture.down(onDrag)
         }
 
+        /** Etkin parmak kalktı: kalan parmağa geçilir ve başlangıç noktası kaydırılır (içerik yerinde kalır). */
+        private fun pointerUp(ev: MotionEvent) {
+            val upIdx = ev.actionIndex
+            if (ev.getPointerId(upIdx) != activePointerId) return
+            val newIdx = if (upIdx == 0) 1 else 0
+            val nx = ev.getX(newIdx)
+            val ny = ev.getY(newIdx)
+            activePointerId = ev.getPointerId(newIdx)
+            if (dragging) {
+                originX = nx + (lastRaw - anchor) * width
+            } else {
+                downX += nx - ev.getX(upIdx)
+                downY += ny - ev.getY(upIdx)
+            }
+        }
+
         /** Hareket kararı; DRAG ilk geldiğinde sürükleme başlar. */
         private fun decide(ev: MotionEvent): Boolean {
             if (dragging) return true
-            if (gesture.move(ev.x - downX, ev.y - downY, connected && width > 0) != MediaFlipLogic.Swipe.DRAG) return false
+            val i = pointerIndex(ev)
+            val x = ev.getX(i)
+            if (gesture.move(x - downX, ev.getY(i) - downY, connected && width > 0) != MediaFlipLogic.Swipe.DRAG) return false
             dragging = true
-            originX = ev.x
-            anchor = MediaFlipLogic.page(face)
+            // Yarıda durdurulan oturmada en yakın sayfa temel alınır; içerik bulunduğu yerden sürüklenir.
+            anchor = if (resumeFace != null) Math.round(pos).coerceIn(0, maxPage()) else MediaFlipLogic.page(face)
+            lastRaw = pos
+            originX = x + (pos - anchor) * width
             parent?.requestDisallowInterceptTouchEvent(true)
             return true
         }
 
         private fun drag(ev: MotionEvent) {
-            val raw = anchor - (ev.x - originX) / width
-            setPos(MediaFlipLogic.resist(raw, maxPage()))
+            lastRaw = anchor - (ev.getX(pointerIndex(ev)) - originX) / width
+            setPos(MediaFlipLogic.resist(lastRaw, maxPage()))
         }
 
         private fun maxPage(): Int = if (connected) 1 else 0
@@ -312,30 +357,42 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         private fun release(cancelled: Boolean) {
             val t = tracker
             tracker = null
+            val resume = resumeFace
+            resumeFace = null
             if (dragging) {
                 dragging = false
                 var v = 0f
                 if (t != null && !cancelled) {
                     t.computeCurrentVelocity(1000)
-                    v = t.xVelocity
+                    v = t.getXVelocity(activePointerId)
                 }
                 val page = MediaFlipLogic.settle(anchor, pos, v, flingPx, maxPage())
-                if (page == anchor) slideTo(face) else userSlide(MediaFlipLogic.faceAt(page))
+                if (resume == null && page == anchor) slideTo(face) else userSlide(MediaFlipLogic.faceAt(page))
+            } else if (resume != null) {
+                // Sürüklemeye dönmeyen dokunuş: yarıda kalan oturma kaldığı yerden tamamlanır.
+                slideTo(resume)
             }
+            activePointerId = MotionEvent.INVALID_POINTER_ID
             t?.recycle()
         }
 
-        /** Süren sürükleme dışarıdan kesilir (içerik yerinde kalır; çağıran kaydırır). Sürükleme vardı mı. */
-        fun abortDrag(): Boolean {
+        /**
+         * Süren sürükleme (ya da yarıda durdurulmuş oturma) dışarıdan kesilir; içerik yerinde kalır, çağıran kaydırır.
+         * Dönüş: içeriğin oturması gereken sayfa, kesilecek bir şey yoksa null.
+         */
+        fun abortDrag(): CardFace? {
             gesture.cancel()
-            val was = dragging
+            val rest = resumeFace ?: if (dragging) face else null
             dragging = false
-            return was
+            resumeFace = null
+            return rest
         }
 
         override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> down(ev)
+                MotionEvent.ACTION_POINTER_DOWN -> track(ev)
+                MotionEvent.ACTION_POINTER_UP -> { track(ev); pointerUp(ev) }
                 MotionEvent.ACTION_MOVE -> {
                     track(ev)
                     if (decide(ev)) { drag(ev); return true }
@@ -348,11 +405,14 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(ev: MotionEvent): Boolean {
             when (ev.actionMasked) {
-                // Boş bir yere basıldı: kaydırma izlenebilsin diye dokunuş alınır (tıklama davranışı yok).
+                // Boş bir yere basıldı: kaydırma izlenebilsin diye dokunuş alınır (tıklama davranışı yok). Yarıda durdurulan
+                // oturma varsa da alınır ki bırakınca tamamlansın.
                 MotionEvent.ACTION_DOWN -> {
                     down(ev)
-                    return connected && !onDrag
+                    return (connected && !onDrag) || resumeFace != null
                 }
+                MotionEvent.ACTION_POINTER_DOWN -> track(ev)
+                MotionEvent.ACTION_POINTER_UP -> { track(ev); pointerUp(ev) }
                 MotionEvent.ACTION_MOVE -> {
                     track(ev)
                     if (decide(ev)) drag(ev)
