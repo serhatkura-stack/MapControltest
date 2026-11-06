@@ -17,7 +17,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import com.mapcontrol.R
@@ -165,12 +164,13 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         frame.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         pendingFace = target
         val first = ObjectAnimator.ofFloat(card, View.ROTATION_Y, 0f, EDGE_DEG * direction).apply {
-            duration = HALF_MS
-            interpolator = AccelerateInterpolator(1.4f)
+            // Dokunur dokunmaz hareket (yavaş başlayan hızlanma "geç tepki" gibi hissettiriyordu).
+            duration = FIRST_MS
+            interpolator = android.view.animation.LinearInterpolator()
         }
         val second = ObjectAnimator.ofFloat(card, View.ROTATION_Y, -EDGE_DEG * direction, 0f).apply {
-            duration = HALF_MS
-            interpolator = DecelerateInterpolator(1.4f)
+            duration = SECOND_MS
+            interpolator = DecelerateInterpolator(1.6f)
         }
         val set = android.animation.AnimatorSet().apply { playSequentially(first, second) }
         first.addListener(object : AnimatorListenerAdapter() {
@@ -301,7 +301,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
 
     private companion object {
         const val MATCH = FrameLayout.LayoutParams.MATCH_PARENT
-        const val HALF_MS = 120L
+        /** Dönüşün iki yarısı: ilk yarı doğrusal ve kısa (anında tepki), ikinci yarı yavaşlayarak oturur; toplam 240 ms. */
+        const val FIRST_MS = 100L
+        const val SECOND_MS = 140L
         const val EDGE_DEG = 90f
         /** Kamera uzaklığı (dp cinsinden çarpan): kart dönerken kenarı aşırı büyümesin. */
         const val CAMERA_DISTANCE = 9000f
