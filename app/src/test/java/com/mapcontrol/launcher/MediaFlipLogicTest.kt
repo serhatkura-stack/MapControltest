@@ -115,11 +115,11 @@ class MediaFlipLogicTest {
     fun rightPhonePanelIsRemovedWhenMediaIsOnTheLeft() {
         val out = SahneSlots.migratePhonePanel(layout(WidgetType.MEDIA, WidgetType.PHONE))
         assertEquals(WidgetType.MEDIA, out.left?.type)
-        assertNull(out.right)
-        // Kayıttan okunurken de (telefon artık panel türü değil, sağ boş kalır; yolculuk eklenmez).
+        // Boşalan sağ yuva varsayılanla dolar (kullanıcı kararı 6 Kasım: sağda Yolculuk/Tüketim).
+        assertEquals(WidgetType.TRIP, out.right?.type)
         val decoded = SahneSlots.decode(SahneSlots.encode(layout(WidgetType.MEDIA, WidgetType.PHONE)))!!
         assertEquals(WidgetType.MEDIA, decoded.left?.type)
-        assertNull(decoded.right)
+        assertEquals(WidgetType.TRIP, decoded.right?.type)
         assertFalse(SahneForm.fitsPanel(WidgetType.PHONE))
         assertFalse(WidgetType.PHONE in SahneForm.offered(SahneSlotKind.PANEL))
     }

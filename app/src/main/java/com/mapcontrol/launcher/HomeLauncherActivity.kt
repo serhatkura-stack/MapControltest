@@ -1148,7 +1148,7 @@ class HomeLauncherActivity : Activity() {
         const val WELCOME_ARM_MS = 1_500L
         const val RESET_SHEET_WIDTH_DP = 640
         const val PHONE_SHEET_WIDTH_DP = 760
-        const val PHONE_SHEET_HEIGHT_DP = 500
+        const val PHONE_SHEET_HEIGHT_DP = 440
         /** Arama şeridinin üst kenardan payı (başlığın üstünde durur). */
         const val CALL_BANNER_TOP_DP = 12
         /** Öne getirmede arama sayfasını açtıran ekstra (karar §15). */

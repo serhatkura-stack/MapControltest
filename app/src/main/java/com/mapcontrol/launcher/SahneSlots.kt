@@ -341,7 +341,13 @@ object SahneSlots {
             if (get(out, ref)?.type != WidgetType.PHONE) return@forEach
             val cleared = set(out, ref, null)
             val hasMedia = refs.any { get(cleared, it)?.type == WidgetType.MEDIA }
-            out = if (hasMedia) cleared else {
+            out = if (hasMedia) {
+                // Boşalan yuva o tarafın varsayılanıyla dolar (sağ: yolculuk, yoksa tüketim); ekran tek taraflı kalmaz.
+                val used = cleared.types()
+                val pick = (listOf(preferredPanel(ref.index)) + listOf(WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION))
+                    .firstOrNull { it != WidgetType.MEDIA && it !in used && SahneForm.fitsPanel(it) }
+                if (pick == null) cleared else set(cleared, ref, SahneSlot(newId(cleared, pick), pick))
+            } else {
                 val first = refs.first()
                 val media = SahneSlot(newId(cleared, WidgetType.MEDIA), WidgetType.MEDIA)
                 set(set(cleared, ref, get(cleared, first)), first, media)

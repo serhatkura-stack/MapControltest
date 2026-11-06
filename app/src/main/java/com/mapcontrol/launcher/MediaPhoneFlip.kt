@@ -301,7 +301,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
 
     private companion object {
         const val MATCH = FrameLayout.LayoutParams.MATCH_PARENT
-        const val HALF_MS = 175L
+        const val HALF_MS = 120L
         const val EDGE_DEG = 90f
         /** Kamera uzaklığı (dp cinsinden çarpan): kart dönerken kenarı aşırı büyümesin. */
         const val CAMERA_DISTANCE = 9000f
@@ -319,7 +319,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
  */
 @SuppressLint("ViewConstructor")
 internal class FlipButton(context: Context) : View(context) {
-    private val base: Drawable = context.getDrawable(R.drawable.ic_sahne_flip)!!.mutate().apply { setTint(Sahne.INK_3) }
+    private val base: Drawable = context.getDrawable(R.drawable.ic_sahne_flip)!!.mutate().apply { setTint(Sahne.INK_2) }
     private val lit: Drawable = context.getDrawable(R.drawable.ic_sahne_flip)!!.mutate().apply { setTint(warm()) }
     private val halo = Paint(Paint.ANTI_ALIAS_FLAG)
     private var glow = 0f
