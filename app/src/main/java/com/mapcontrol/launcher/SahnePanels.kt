@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.mapcontrol.R
 
 /**
@@ -243,14 +244,21 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     override fun stripState(): StripState? = stripNow
     override fun stripTap(part: Int) = Unit
 
+    private fun one(v: Double) = String.format(java.util.Locale.getDefault(), "%,.1f", v)
+
+    /** Son çizilen içerik: yalnızca ekranda görünen metinler değişince yeniden bağlanır (hız, anlık tüketim, ışık vb. değişimi çizdirmez). */
+    private var shown: Any? = null
+    /** "Toplam" satırları yerinde güncellenir; yalnızca satır sayısı değişince yeniden kurulur (her turda yerleşim zinciri olmasın). */
+    private val totalRows = ArrayList<Pair<TextView, TextView>>()
+
     /** İlk çizim veri beklemeden: boş kart çizgisiz, sakin cümleyle. */
     init { bind() }
-
-    private fun one(v: Double) = String.format(java.util.Locale.getDefault(), "%,.1f", v)
 
     private fun bind() {
         val km = data.tripKm
         if (!data.connected || km == null) {
+            if (shown == NO_DATA) return
+            shown = NO_DATA
             // Veri yok: tire ve eksen çizgileri yerine tek sakin cümle (sahnedeki "Araç verisi bekleniyor" tekrarlanmaz).
             big.text = ""
             big.visibility = View.GONE
@@ -266,34 +274,28 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             onStripChanged?.invoke()
             return
         }
-        big.visibility = View.VISIBLE
-        sub.textSize = SahneType.SUB
-        big.setTextSmooth(one(km), animate = false)
-        big.setTextColor(Sahne.NUMERAL)
-        bigUnit.text = context.getString(R.string.launcher_sahne_km)
-        bigUnit.visibility = View.VISIBLE
-        sub.setText(R.string.launcher_trip_since_reset)
         val stats = listOfNotNull(
             data.avgL100?.let { context.getString(R.string.launcher_trip_avg_cons_label) to context.getString(R.string.launcher_l100_value, one(it)) },
             data.avgSpeedKmh?.let { context.getString(R.string.launcher_trip_avg_speed_label) to context.getString(R.string.launcher_kmh_value, it) },
         )
+        val rows = totalsRows()
+        val key = Triple(one(km), stats, rows)
+        if (key == shown) return
+        val first = shown !is Triple<*, *, *>
+        shown = key
+        if (first) {
+            big.visibility = View.VISIBLE
+            sub.textSize = SahneType.SUB
+            big.setTextColor(Sahne.NUMERAL)
+            bigUnit.text = context.getString(R.string.launcher_sahne_km)
+            bigUnit.visibility = View.VISIBLE
+            sub.setText(R.string.launcher_trip_since_reset)
+        }
+        big.setTextSmooth(one(km), animate = false)
         stat1.bind(stats.getOrNull(0))
         stat2.bind(stats.getOrNull(1))
         statsRow.visibility = if (stats.isEmpty()) View.GONE else View.VISIBLE
-        val rows = totalsRows()
-        totals.removeAllViews()
-        if (rows.isNotEmpty()) {
-            // "Toplam" sessiz: başlık ve satırlar ikincil renkte, aynı küçük ölçekte (kartın tek öncü sayısı mesafe kalır).
-            totals.addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 600).apply { setText(R.string.launcher_widget_trip_totals) })
-            rows.forEach { (label, value) ->
-                totals.addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 400).apply { text = label }, LinearLayout.LayoutParams(0, WRAP, 1f))
-                    addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 500).apply { text = value })
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(TOTALS_ROW_DP)))
-            }
-        }
+        bindTotals(rows)
         totals.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
         totalsDivider.visibility = totals.visibility
         val distance = context.getString(R.string.launcher_km_value, one(km))
@@ -302,6 +304,32 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         stripNow = StripState(context.getString(R.string.launcher_widget_trip), distance, R.drawable.ic_sahne_route,
             detail = context.getString(R.string.launcher_trip_since_reset))
         onStripChanged?.invoke()
+    }
+
+    private fun bindTotals(rows: List<Pair<String, String>>) {
+        if (rows.size != totalRows.size) {
+            totals.removeAllViews()
+            totalRows.clear()
+            if (rows.isNotEmpty()) {
+                // "Toplam" sessiz: başlık ve satırlar ikincil renkte, aynı küçük ölçekte (kartın tek öncü sayısı mesafe kalır).
+                totals.addView(sahneText(context, TOTALS_SP, Sahne.INK_3, 600).apply { setText(R.string.launcher_widget_trip_totals) })
+                repeat(rows.size) {
+                    val label = sahneText(context, TOTALS_SP, Sahne.INK_3, 400)
+                    val value = sahneText(context, TOTALS_SP, Sahne.INK_3, 500)
+                    totals.addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(label, LinearLayout.LayoutParams(0, WRAP, 1f))
+                        addView(value)
+                    }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(TOTALS_ROW_DP)))
+                    totalRows += label to value
+                }
+            }
+        }
+        rows.forEachIndexed { i, (label, value) ->
+            totalRows[i].first.setTextSmooth(label, animate = false)
+            totalRows[i].second.setTextSmooth(value, animate = false)
+        }
     }
 
     private fun totalsRows(): List<Pair<String, String>> {
@@ -338,8 +366,8 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         fun bind(entry: Pair<String, String>?) {
             view.visibility = if (entry == null) View.INVISIBLE else View.VISIBLE
             if (entry == null) return
-            label.text = entry.first
-            value.text = withUnit(context, entry.second)
+            label.setTextSmooth(entry.first, animate = false)
+            value.setTextSmooth(withUnit(context, entry.second), animate = false)
         }
     }
 
@@ -349,6 +377,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         const val TRIP_HERO_SP = 40f
         const val TOTALS_SP = 20f
         const val TOTALS_ROW_DP = 28
+        val NO_DATA = Any()
     }
 }
 

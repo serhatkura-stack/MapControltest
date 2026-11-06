@@ -225,6 +225,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (pendingEdit) openPendingEdit()
         // Favori tuşu: etkinlik ömrü boyunca dinlenir (HOME etkinliği başka uygulama öndeyken de yaşar, yalnızca durur).
         FavoriteKey.sync(this)
+        DrawTrace.applyFrom(this, intent)
     }
 
     /** Çalışırken gelen yeni istek (singleTask): demo sürüş modu değiştirilebilir (`--ei launcher_demo_drive_mode N`). */

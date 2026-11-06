@@ -378,7 +378,7 @@ internal class SportStageView(
         val range: Int?
         val s = SportSessionStore.session
         if (demo) {
-            rpm = SportDemo.RPM
+            rpm = LauncherDemo.rpm()
             gearText = SportMath.gearText(SportDemo.GEAR_STATE, SportDemo.GEAR_NUMBER)
             instant = SportDemo.INSTANT_L100
             best = SportDemo.ZERO100_MS
@@ -527,7 +527,9 @@ internal class SportStageView(
     }
 
     private fun moveNeedle(rpm: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DECEL, end: (() -> Unit)? = null) {
-        if (abs(rpm - shownRpm) < 10f && end == null && !needleAnim.isStarted) return
+        // Rölantide devir her turda birkaç on dev/dk oynar: [NEEDLE_DEADBAND_RPM]'den küçük fark ibreyi oynatmaz (yoksa 10 Hz
+        // takipte 110 ms'lik hareketler birbirine eklenip ekran durmadan çizilir). Süren harekette hedefle karşılaştırılır.
+        if (end == null && abs(rpm - (if (needleAnim.isStarted) needleTo else shownRpm)) < NEEDLE_DEADBAND_RPM) return
         // Süren hareketin bitiş işi düşer (yerine yenisi geldi).
         needleEnd = null
         needleAnim.cancel()
@@ -582,8 +584,10 @@ internal class SportStageView(
         // Tam piksele yuvarlanır: sabit duruşta süzgecin küçük kıpırtısı yeni kare çizdirmez.
         val tx = Math.round(GFilter.clampUnit(gFilter.lateral) * range).toFloat()
         val ty = Math.round(-GFilter.clampUnit(gFilter.longitudinal) * range).toFloat()
-        if (dot.translationX != tx) dot.translationX = tx
-        if (dot.translationY != ty) dot.translationY = ty
+        // Motor titreşimi (rölanti) noktayı 1 px oynatır: [G_DEADBAND_DP] altındaki kıpırtı yeni kare çizdirmez; merkeze dönüş tam.
+        val g = activity.dp(G_DEADBAND_DP).toFloat()
+        if (abs(dot.translationX - tx) >= g || (tx == 0f && dot.translationX != 0f)) dot.translationX = tx
+        if (abs(dot.translationY - ty) >= g || (ty == 0f && dot.translationY != 0f)) dot.translationY = ty
         slot.gValue?.let { setText(it, SportFormat.g(gFilter.magnitude)) }
     }
 
@@ -852,6 +856,10 @@ internal class SportStageView(
         /** Medya kadranı içeriğinin tasarım yarıçapı (Tiggo 7'deki kadran). */
         const val MEDIA_NATURAL_R_DP = 210f
         const val NEEDLE_MS = 110L
+        /** İbreyi oynatan en küçük devir farkı (kadranda ~1,7°): rölanti kıpırtısı çizdirmez. */
+        const val NEEDLE_DEADBAND_RPM = 50f
+        /** G noktasını oynatan en küçük kayma (dp). */
+        const val G_DEADBAND_DP = 2
         const val G_UI_MS = 100L
         /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */
         const val RESULT_SHOW_MS = 10_000L

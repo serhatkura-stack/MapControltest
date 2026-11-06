@@ -162,6 +162,20 @@ internal object LauncherDemo {
     var sidePreview = false
         private set
 
+    /**
+     * Araçtaki boşta duruşun taklidi (`--ez launcher_demo_noise true`): motor rölantide, araç duruyor; devir 735–785, akü
+     * 14,3–14,6 V, motor suyu 88–90 °C ve PM2.5 her saniye kıpırdar (araçta ölçülen oynamalar gibi). Boştaki kare sayısını
+     * emülatörde ölçmek içindir: ekranda görünen bir şey değişmedikçe kare çizilmemeli.
+     */
+    const val EXTRA_NOISE = "launcher_demo_noise"
+
+    @Volatile
+    var noise = false
+        private set
+
+    /** Spor kadranındaki demo devri: kıpırtı açıksa rölanti, değilse sabit [SportDemo.RPM]. */
+    fun rpm(): Int = if (noise) 735 + (System.nanoTime() / 1_000 % 51).toInt() else SportDemo.RPM
+
     /** Koltuk seviyesi önizlemesi: `--ei launcher_demo_seat N` (0..3) tüm ısıtma/soğutma koltuklarını N yapar. */
     const val EXTRA_SEAT = "launcher_demo_seat"
 
@@ -225,6 +239,7 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
         if (intent.hasExtra(EXTRA_SPORT_DIALS)) sportDials = intent.getStringExtra(EXTRA_SPORT_DIALS)
         if (intent.hasExtra(EXTRA_SPORT_SUMMARY)) sportSummary = intent.getBooleanExtra(EXTRA_SPORT_SUMMARY, false)
+        if (intent.hasExtra(EXTRA_NOISE)) noise = intent.getBooleanExtra(EXTRA_NOISE, false)
         if (intent.hasExtra(EXTRA_SEAT)) seatOverride = intent.getIntExtra(EXTRA_SEAT, 0).coerceIn(0, 3)
         if (intent.hasExtra(EXTRA_NAV)) NavigationSource.setDemo(intent.getBooleanExtra(EXTRA_NAV, false))
         if (intent.hasExtra(EXTRA_LIGHTS)) lights = CarLights.parse(intent.getStringExtra(EXTRA_LIGHTS))
@@ -386,6 +401,11 @@ internal object LauncherDemo {
             else -> base
         }
         val alerted = if (alerts) sick.copy(serviceKm = 800, serviceDays = 40, lowFuel = true, pm25In = 80, pm25Out = 95) else sick
+        if (noise) {
+            val t = (System.currentTimeMillis() / 1000 % 60).toInt()
+            return alerted.copy(moving = false, speedKmh = 0, instantL100 = null, lights = lights,
+                batteryV = 14.3 + (t % 4) * 0.1, coolantC = 88 + t % 3, pm25In = 1 + t % 3, pm25Out = 4 + t % 2)
+        }
         return alerted.copy(moving = isMoving, speedKmh = speed, instantL100 = instant, lights = lights)
     }
 

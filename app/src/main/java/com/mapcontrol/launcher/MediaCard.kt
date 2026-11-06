@@ -680,6 +680,11 @@ class MediaCard(
         totalView.textSize = 20f
         SahneFonts.apply(elapsedView, 400)
         SahneFonts.apply(totalView, 400)
+        // Süreler sabit genişlikte: saniyede bir değişen metin yalnızca kendini çizdirir, kart ve ekran yeniden yerleşmez.
+        val timeW = elapsedView.paint.measureText(TIME_WIDEST).toInt() + 2
+        elapsedView.layoutParams = LinearLayout.LayoutParams(timeW, LinearLayout.LayoutParams.WRAP_CONTENT)
+        totalView.layoutParams = LinearLayout.LayoutParams(timeW, LinearLayout.LayoutParams.WRAP_CONTENT)
+        totalView.gravity = Gravity.END
         val meta = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, context.dp(4), 0, 0)
@@ -813,6 +818,8 @@ class MediaCard(
         /** Sahne: kapak kenarı ve ilerleme topuzu (dp). */
         const val ART_DP = 156
         const val KNOB_DP = 14
+        /** Sürelerin en geniş biçimi (dakika 3 haneye kadar): sabit genişlik bundan ölçülür. */
+        const val TIME_WIDEST = "888:88"
         /** Görüntü boyutu henüz bilinmiyorsa kapak kenarı üst sınırı (px). */
         const val ARTWORK_MAX_PX = 480
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */

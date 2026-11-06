@@ -63,7 +63,7 @@ class HeaderBar(
     /** Wi-Fi durumu (bağlı + seviye, bağlı değil, hotspot); dokununca Wi-Fi paneli. Olaylarla güncellenir, polling yok. */
     private val wifiGlyph = WifiGlyph(context)
     private var wifiUi = WifiUi(WifiUi.Kind.OFF)
-    private val wifiStatus = WifiStatus(context) { bindWifi(it) }
+    private val wifiStatus = WifiStatus(context) { if (it != wifiUi) bindWifi(it) }
 
     /**
      * FrostNav web paneli sunucusu çalışıyorsa Wi-Fi simgesinde küçük nokta. Durum sunucunun sahibinden okunur
@@ -99,7 +99,7 @@ class HeaderBar(
     /** Bluetooth durumu (kapalı, açık, telefon bağlı); dokununca launcher'dan çıkmadan Bluetooth paneli açılır. Olaylarla güncellenir. */
     private var btUi = BtUi.OFF
     private val btImage = icon(context, R.drawable.ic_mdi_bluetooth_off, LauncherTheme.ICON_M_DP + 4)
-    private val btStatus = BluetoothStatus(context) { bindBluetooth(it) }
+    private val btStatus = BluetoothStatus(context) { if ((LauncherDemo.bluetooth() ?: it) != btUi) bindBluetooth(it) }
     /** Kablosuz şarj göstergesi: yalnızca telefon pedde şarj olurken görünür (dokunulmaz); [ExtraSource]'tan beslenir. */
     private val chargeImage = icon(context, R.drawable.ic_mdi_cellphone_charging, LauncherTheme.ICON_M_DP + 4)
     private val chargeBox = LinearLayout(context).apply {
