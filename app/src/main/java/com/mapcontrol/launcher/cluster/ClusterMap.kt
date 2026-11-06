@@ -24,6 +24,7 @@ import android.view.Display
 import android.view.View
 import android.view.WindowManager
 import com.mapcontrol.launcher.LauncherTheme
+import com.mapcontrol.util.AppLaunchHelper
 import com.mapcontrol.launcher.cluster.ClusterMapMath.Box
 import com.mapcontrol.launcher.cluster.ClusterMapMath.Frame
 import com.mapcontrol.launcher.cluster.ClusterMapMath.FrameChoice
@@ -50,7 +51,7 @@ import com.mapcontrol.launcher.cluster.ClusterMapMath.WindowSize
  * Debug ekstraları (yalnızca debug yapı; HomeLauncherActivity, launcher açıkken de):
  *   --ez launcher_cluster_map true|false          çerçeveli haritayı aç/kapat (ayarı değiştirmez)
  *   --es launcher_cluster_frame gece|gunduz|uydu|otomatik   çerçeve stili (ayara yazılır)
- *   --es launcher_cluster_rect 510,150,1310,600   pencere (oturumluk; QNX alanına giriyorsa reddedilir)
+ *   --es launcher_cluster_rect 510,180,1310,600   pencere (oturumluk; QNX alanına giriyorsa reddedilir)
  *   --ei launcher_cluster_map_display <id>        gösterge ekran numarasını zorla
  *   --es launcher_cluster_image /sdcard/Download/x.png   görseli göstergede tam ekran göster (1920x720'ye ölçeklenir)
  *   --ez launcher_cluster_image_off true          görseli kaldır
@@ -91,6 +92,12 @@ internal object ClusterMap {
     private var sessionHole: Box? = null
     private var forcedDisplay: Int? = null
 
+    /** Her açılış/kapanışta artar: bekleyen görev denetimi eski oturuma ait sonucu uygulamaz. */
+    private var session = 0
+
+    /** Açılıştan sonra harita görevinin boyutu bu kadar sonra denetlenir. */
+    private const val VERIFY_DELAY_MS = 1500L
+
     // --- Ayarlar ---
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -119,28 +126,35 @@ internal object ClusterMap {
 
     /**
      * Çerçeveyi kurar ve [pkg]'yi (null ise ayardaki Yandex) göstergede pencerede açar. Ana iş parçacığından çağrılır.
+     * [targetDisplay]: eski yolun haritayı açacağı ekran (FrostNav: AppLaunchHelper.getClusterDisplayId); çerçeve ve harita
+     * aynı ekrana düşsün diye o ekran yoksa açılmaz. Verilmezse (debug ekstrası) gösterge ekranı aranır.
      * @return true: çerçeveli harita açıldı. false: hiçbir şey değişmedi; çağıran eski davranışı uygulamalı.
+     *  Açıldıktan sonra görev istenen boyutta değilse (harita zaten açıktı, serbest pencere yok sayıldı) çerçeve kalkar
+     *  ve harita eski yoldan tam ekran açılır.
      */
     @JvmStatic
     @JvmOverloads
-    fun startFramed(context: Context, pkg: String? = null): Boolean {
+    fun startFramed(context: Context, pkg: String? = null, targetDisplay: Int = Display.INVALID_DISPLAY): Boolean {
         val c = context.applicationContext
         appContext = c
         val target = pkg?.trim()?.takeIf { it.isNotEmpty() } ?: chooseMapPackage(c)
             ?: return fail(c, "harita uygulaması kurulu değil (Yandex Navigator / Yandex Haritalar)")
-        val display = findDisplay(c, forcedDisplay, log = true) ?: return fail(c, "gösterge ekranı bulunamadı")
+        if (!ClusterMapMath.canFrame(target, isDebug(c))) return fail(c, "yalnızca Yandex çerçevelenir, hedef: $target")
+        val display = (if (targetDisplay != Display.INVALID_DISPLAY) displayById(c, targetDisplay) else findDisplay(c, forcedDisplay, log = true))
+            ?: return fail(c, "gösterge ekranı bulunamadı (istenen=$targetDisplay)")
         if (!Settings.canDrawOverlays(c)) return fail(c, "SYSTEM_ALERT_WINDOW izni yok (adb shell appops set ${c.packageName} SYSTEM_ALERT_WINDOW allow)")
         if (!freeformOn(c)) return fail(c, "serbest pencere (freeform) kapalı (adb shell settings put global $SETTING_FREEFORM 1)")
         val launch = c.packageManager.getLaunchIntentForPackage(target) ?: return fail(c, "başlatma intent'i yok: $target")
 
         val hole = sessionHole ?: windowSize(c).hole
-        if (!ClusterMapMath.isSafe(hole)) return fail(c, "pencere QNX alanına giriyor: $hole")
+        if (!ClusterMapMath.isSafeWindow(hole)) return fail(c, "pencere QNX alanına giriyor: $hole (başlıkla ${ClusterMapMath.launchBounds(hole)})")
         val m = DisplayMetrics().also { display.getRealMetrics(it) }
         val sx = m.widthPixels / ClusterMapMath.DESIGN_W.toFloat()
         val sy = m.heightPixels / ClusterMapMath.DESIGN_H.toFloat()
         if (sx != 1f || sy != 1f) Log.w(TAG, "gösterge ${m.widthPixels}x${m.heightPixels}, 1920x720 değil; ölçekleniyor")
 
         removeFrame()
+        val token = ++session
         try {
             val dctx = c.createDisplayContext(display)
             val wm = dctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -173,7 +187,56 @@ internal object ClusterMap {
         launchedPkg = target
         listen(c, true)
         Log.i(TAG, "çerçeveli harita açıldı: $target ekran=${display.displayId} pencere=$hole sınır=$b çerçeve=${currentFrame(c).key}")
+        main.postDelayed({ verify(c, token, target, display.displayId, b) }, VERIFY_DELAY_MS)
         return true
+    }
+
+    /**
+     * Harita görevi istenen küçük pencerede mi (dumpsys ile, arka planda). Değilse çerçeve kaldırılır ve eski yol
+     * uygulanır. dumpsys okunamıyorsa (uygulama kimliğinde DUMP izni yok) yalnızca loga yazılır.
+     */
+    private fun verify(c: Context, token: Int, pkg: String, id: Int, expected: Box) {
+        if (token != session || frameView == null) return
+        Thread({
+            val dump = try {
+                val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "dumpsys activity activities"))
+                val out = p.inputStream.bufferedReader().use { it.readText() }
+                p.waitFor()
+                out
+            } catch (e: Throwable) {
+                Log.w(TAG, "görev denetimi: dumpsys çalışmadı: ${e.javaClass.simpleName}: ${e.message}")
+                null
+            }
+            val result = ClusterMapMath.checkTask(dump, pkg, id, expected)
+            main.post {
+                if (token != session || frameView == null) return@post
+                when (result) {
+                    ClusterMapMath.TaskCheck.OK -> Log.i(TAG, "görev denetimi: $pkg ekran $id, $expected içinde")
+                    ClusterMapMath.TaskCheck.UNKNOWN -> Log.w(TAG, "görev denetimi: doğrulanamadı (dumpsys okunamadı ya da görev yok); çerçeve kalıyor")
+                    ClusterMapMath.TaskCheck.WRONG ->
+                        stopAndRestore(c, "görev istenen pencerede değil (harita zaten açıktı ya da serbest pencere yok sayıldı)")
+                }
+            }
+        }, "ClusterMapVerify").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Çerçeveyi kaldırır ve haritayı eski yoldan (FrostNav'ın tam ekran açılışı) göstergeye yeniden getirir: yansıtma
+     * sürerken ayar kapatılınca ya da görev denetimi başarısız olunca. Çerçeve yoksa bir şey yapmaz.
+     */
+    @JvmStatic
+    fun stopAndRestore(context: Context, why: String) {
+        val pkg = launchedPkg
+        val id = displayId
+        val was = frameView != null
+        stop(context, why)
+        if (!was || pkg == null || id == Display.INVALID_DISPLAY) return
+        try {
+            AppLaunchHelper.launchAppOnDisplay(context.applicationContext, pkg, id, Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            Log.i(TAG, "eski yol: $pkg ekran $id tam ekran açıldı")
+        } catch (e: Throwable) {
+            Log.w(TAG, "eski yol açılamadı: ${e.javaClass.simpleName}: ${e.message}")
+        }
     }
 
     /**
@@ -184,7 +247,9 @@ internal object ClusterMap {
     @JvmStatic
     fun stop(context: Context, why: String) {
         val was = frameView != null
+        session++
         removeFrame()
+        hideImage()
         launchedPkg = null
         listen(context.applicationContext, false)
         if (was) Log.i(TAG, "çerçeveli harita kapatıldı ($why)")
@@ -193,7 +258,7 @@ internal object ClusterMap {
     /** FrostNav "Göstergeye yansıt" kapanınca: çerçeve kalkar (sonra eski kapanış akışı aynen sürer). */
     @JvmStatic
     fun onProjectionClosed(context: Context) {
-        val run = Runnable { if (frameView != null) stop(context, "yansıtma kapandı") }
+        val run = Runnable { if (frameView != null) stop(context, "yansıtma kapandı") else hideImage() }
         if (Looper.myLooper() == Looper.getMainLooper()) run.run() else main.post(run)
     }
 
@@ -293,7 +358,7 @@ internal object ClusterMap {
             sessionHole = when {
                 raw.isNullOrBlank() || raw == "off" -> null
                 box == null -> { Log.w(TAG, "pencere biçimi bozuk: $raw (l,t,r,b)"); sessionHole }
-                !ClusterMapMath.isSafe(box) -> { Log.w(TAG, "pencere reddedildi (QNX alanı): $box"); sessionHole }
+                !ClusterMapMath.isSafeWindow(box) -> { Log.w(TAG, "pencere reddedildi (QNX alanı, başlık payıyla): $box"); sessionHole }
                 else -> box
             }
             Log.i(TAG, "oturum penceresi: ${sessionHole ?: "ayar (${windowSize(c).key})"}")
@@ -408,6 +473,15 @@ internal object ClusterMap {
         val dm = c.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
         if (on) dm.registerDisplayListener(displayListener, main) else dm.unregisterDisplayListener(displayListener)
         listening = on
+    }
+
+    /** FrostNav'ın verdiği ekran numarası (ana ekran olamaz). */
+    private fun displayById(c: Context, id: Int): Display? {
+        if (id == Display.DEFAULT_DISPLAY) return null
+        val dm = c.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return null
+        val d = dm.getDisplay(id)
+        Log.i(TAG, "gösterge ekranı (FrostNav): ${d?.let { "id=${it.displayId} ${it.name}" } ?: "id=$id yok"}")
+        return d
     }
 
     /** Gösterge: zorlanan numara; yoksa 2 (araç); yoksa 1920x720 varsayılan-dışı ekran; yoksa ilk sunum ekranı. */

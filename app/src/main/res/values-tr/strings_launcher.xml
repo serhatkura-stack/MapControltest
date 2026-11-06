@@ -230,5 +230,5 @@
     <string name="launcher_cluster_window">Harita penceresi</string>
     <string name="launcher_cluster_window_mid">Orta</string>
     <string name="launcher_cluster_window_wide">Geniş</string>
-    <string name="launcher_cluster_map_failed">Gösterge haritası açılamadı; ayrıntı günlükte (ClusterMap)</string>
+    <string name="launcher_cluster_map_next">Göstergeye yansıt bir sonraki açılışında uygulanır</string>
 </resources>

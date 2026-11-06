@@ -132,8 +132,9 @@ public class ClusterDisplayManager {
                                     callback.log("Launch intent bulunamadı: " + targetPackage);
                                 } else {
                                     int clusterId = AppLaunchHelper.getClusterDisplayId(context);
-                                    // Gösterge haritası (deneysel, varsayılan kapalı): çerçeveli küçük pencere; olmazsa eski tam ekran yol.
-                                    if (ClusterMap.isEnabled(context) && ClusterMap.startFramed(context, tp)) {
+                                    // Gösterge haritası (deneysel, varsayılan kapalı): yalnızca Yandex, eski yolun ekranında çerçeveli
+                                    // küçük pencere; olmazsa eski tam ekran yol.
+                                    if (ClusterMap.isEnabled(context) && ClusterMap.startFramed(context, tp, clusterId)) {
                                         callback.log("Intent cluster'da çerçeveli pencerede başlatıldı");
                                     } else {
                                         AppLaunchHelper.launchAppOnDisplay(context, tp, clusterId, Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);

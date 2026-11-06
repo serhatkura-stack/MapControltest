@@ -272,13 +272,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(onOffControl(R.string.launcher_cluster_map, on) { value ->
             d.dismiss()
+            // Yalnızca kaydedilir: harita "Göstergeye yansıt" açılınca çerçevelenir. Yansıtma sürerken kapatılırsa
+            // çerçeve kalkar ve harita eski yoldan yeniden açılır.
             ClusterMap.setEnabled(activity, value)
             if (value) {
-                if (!ClusterMap.startFramed(activity)) {
-                    Toast.makeText(activity, R.string.launcher_cluster_map_failed, Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
             } else {
-                ClusterMap.stop(activity, "ayar kapatıldı")
+                ClusterMap.stopAndRestore(activity, "ayar kapatıldı")
             }
         }, fullWidth())
         addView(gap(activity, 4, vertical = true))
@@ -300,14 +300,16 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             ClusterMapMath.MapApp.values().indexOf(app)) { i ->
             d.dismiss()
             ClusterMap.setMapApp(activity, ClusterMapMath.MapApp.values()[i])
-            if (ClusterMap.isRunning()) ClusterMap.startFramed(activity)
+            // Açık haritaya dokunulmaz: sonraki yansıtmada uygulanır.
+            if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
         }
         val win = ClusterMap.windowSize(activity)
         addLabeledSegments(R.string.launcher_cluster_window, listOf(R.string.launcher_cluster_window_mid, R.string.launcher_cluster_window_wide),
             ClusterMapMath.WindowSize.values().indexOf(win)) { i ->
             d.dismiss()
             ClusterMap.setWindowSize(activity, ClusterMapMath.WindowSize.values()[i])
-            if (ClusterMap.isRunning()) ClusterMap.startFramed(activity)
+            // Açık haritaya dokunulmaz: sonraki yansıtmada uygulanır.
+            if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
         }
     }
 

@@ -296,6 +296,8 @@ class HomeLauncherActivity : Activity() {
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
         syncAutoNight()
+        // Gösterge haritası Otomatik stil: gündüz/gece değişince çerçeve bir kez yeniden çizilir (kapalıysa bir şey yapmaz).
+        com.mapcontrol.launcher.cluster.ClusterMap.refreshStyle(this)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         rootLayout?.setBackgroundColor(LauncherTheme.GROUND)
 

@@ -29,11 +29,14 @@ internal object ClusterMapMath {
 
     /** Harita penceresinin boyu. */
     enum class WindowSize(val key: String, val hole: Box) {
-        /** Orta güvenli alan: 800x450 (16:9), üst simgeler (y≈140) ile alt şerit (y 620) arasında. */
-        ORTA("orta", Box(510, 150, 1310, 600)),
+        /**
+         * Orta güvenli alan: 800x420, alt şerit (y 620) üstünde biter. Görünür pencere y 180'de başlar; başlık çubuğu
+         * payıyla gerçek pencere y 140'ta: çerçeve süreç ölümüyle kalksa bile başlık QNX simgelerine (y≈140) girmez.
+         */
+        ORTA("orta", Box(510, 180, 1310, 600)),
 
         /** Sağdaki boşluğu da kullanan geniş şerit: sağ alt geçici yazı (y 530) üstünde biter. */
-        GENIS("genis", Box(510, 150, 1870, 515));
+        GENIS("genis", Box(510, 180, 1870, 515));
 
         companion object {
             fun of(key: String?): WindowSize = values().firstOrNull { it.key == key } ?: ORTA
@@ -69,6 +72,12 @@ internal object ClusterMapMath {
         if (b.right > 1320 && (b.bottom > 525 || b.top < 140)) return false
         return b.width >= 320 && b.height >= 200
     }
+
+    /**
+     * Görünür pencere VE gerçek pencere (üstte başlık payıyla, [launchBounds]) QNX alanına girmiyor mu. Çerçeve
+     * penceresi süreçle birlikte ölürse harita penceresi kalır; onun da güvenli olması gerekir.
+     */
+    fun isSafeWindow(hole: Box): Boolean = isSafe(hole) && isSafe(launchBounds(hole))
 
     /** "l,t,r,b" (debug ekstrası) → kutu; biçim bozuksa null. */
     fun parseBox(text: String?): Box? {
@@ -107,6 +116,55 @@ internal object ClusterMapMath {
         val order = listOf(preferred.pkg, if (preferred == MapApp.NAVI) YANDEX_MAPS else YANDEX_NAVI)
         order.firstOrNull(installed)?.let { return it }
         return if (debug && installed(GOOGLE_MAPS)) GOOGLE_MAPS else null
+    }
+
+    /**
+     * Çerçevelenebilir hedef: yalnızca Yandex Navigator / Yandex Haritalar (debug yapıda emülatör yerine Google
+     * Haritalar). Diğer her hedef eski tam ekran yoldan açılır (Google Maps'in araç gösterge etkinliği dahil).
+     */
+    fun canFrame(pkg: String?, debug: Boolean): Boolean =
+        pkg == YANDEX_NAVI || pkg == YANDEX_MAPS || (debug && pkg == GOOGLE_MAPS)
+
+    /** Açılıştan sonra harita görevinin denetimi: istenen boyutta mı, değil mi, bilinemiyor mu (dumpsys izni yok). */
+    enum class TaskCheck { OK, WRONG, UNKNOWN }
+
+    private val DISPLAY_RE = Regex("""^\s*Display #(\d+)""")
+    private val BOUNDS_RE = Regex("""mBounds=Rect\((-?\d+), (-?\d+) - (-?\d+), (-?\d+)\)""")
+
+    /**
+     * `dumpsys activity activities` çıktısında [pkg]'nin en üstteki görevi [displayId] ekranında, serbest pencerede ve
+     * [expected] sınırlarında (±[tol] px) mı. Çıktı okunamıyorsa (uygulama kimliğiyle dumpsys izni yok) ya da görev
+     * henüz görünmüyorsa UNKNOWN. Sınır Rect(0, 0 - 0, 0) = ekranı dolduruyor (tam ekran) → WRONG.
+     */
+    fun checkTask(dump: String?, pkg: String, displayId: Int, expected: Box, tol: Int = 8): TaskCheck {
+        if (dump == null || !dump.contains("Display #")) return TaskCheck.UNKNOWN
+        var display = -1
+        var inTarget = false
+        var targetDisplay = -1
+        var freeform = false
+        for (line in dump.lineSequence()) {
+            val dm = DISPLAY_RE.find(line)
+            if (dm != null) {
+                if (inTarget) return TaskCheck.UNKNOWN
+                display = dm.groupValues[1].toInt()
+                continue
+            }
+            val t = line.trimStart()
+            if (t.startsWith("* Task{")) {
+                if (inTarget) return TaskCheck.UNKNOWN // hedef görevin sınırı yoktu
+                inTarget = t.contains(":$pkg ") || t.contains(":$pkg}")
+                if (inTarget) { targetDisplay = display; freeform = t.contains("mode=freeform") }
+                continue
+            }
+            if (!inTarget) continue
+            val m = BOUNDS_RE.find(line) ?: continue
+            val (l, tp, r, b) = m.groupValues.drop(1).map { it.toInt() }
+            if (targetDisplay != displayId || !freeform) return TaskCheck.WRONG
+            val ok = Math.abs(l - expected.left) <= tol && Math.abs(tp - expected.top) <= tol &&
+                Math.abs(r - expected.right) <= tol && Math.abs(b - expected.bottom) <= tol
+            return if (ok) TaskCheck.OK else TaskCheck.WRONG
+        }
+        return TaskCheck.UNKNOWN
     }
 
     /** Çerçevenin renkleri (ARGB). Kenarlar her stilde siyaha düşer: QNX yazıları okunaklı kalsın. */

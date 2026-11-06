@@ -230,5 +230,5 @@
     <string name="launcher_cluster_window">Map window</string>
     <string name="launcher_cluster_window_mid">Center</string>
     <string name="launcher_cluster_window_wide">Wide</string>
-    <string name="launcher_cluster_map_failed">Cluster map could not open; see log (ClusterMap)</string>
+    <string name="launcher_cluster_map_next">Applies the next time the map is projected to the cluster</string>
 </resources>
