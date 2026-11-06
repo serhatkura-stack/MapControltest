@@ -220,8 +220,9 @@ internal object SportArt {
                 c.drawLine(d.cx, d.cy - gr, d.cx, d.cy + gr, p)
                 centered(c, "G", d.cx, d.cy - d.r * 0.62f, label)
                 val small = textPaint(context, d.r * 0.15f, SportInk.INK_3, 400)
-                centered(c, "1", d.cx + gr + d.r * 0.12f, d.cy, small)
-                centered(c, "1", d.cx - gr - d.r * 0.12f, d.cy, small)
+                // Dış çember tam ölçek (GFilter.FULL_SCALE_G = 0,5 g), iç çember 0,25 g.
+                centered(c, "0,5", d.cx + gr + d.r * 0.14f, d.cy, small)
+                centered(c, "0,5", d.cx - gr - d.r * 0.14f, d.cy, small)
             }
             else -> {
                 // Birim ve durum ("Hazır", "En iyi") canlı yazı; durağan çizimde yalnız etiket.
@@ -511,7 +512,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
         /** Medya kadranında ilerleme halkası yarıçapı ve kalınlığı (dış yarıçapa oran). */
         const val PROGRESS_R = 0.82f
         const val PROGRESS_W = 0.016f
-        /** G-metre: 1 g'nin kadrandaki yarıçapı, büyük değerin boyu ve dikey yeri (dış yarıçapa oran). */
+        /** G-metre: tam ölçeğin (0,5 g) kadrandaki yarıçapı, büyük değerin boyu ve dikey yeri (dış yarıçapa oran). */
         const val G_RANGE = 0.42f
         const val G_VALUE = 0.30f
         const val G_VALUE_Y = 0.64f

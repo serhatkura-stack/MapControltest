@@ -236,9 +236,30 @@ class SportLogicTest {
         repeat(200) { f.add(t, 0f, 8f, 5.6f); t += 66_666_000L }
         assertEquals(0f, f.lateral, 0.01f)
         assertEquals(0f, f.longitudinal, 0.01f)
-        // Sola dönüş: ani 0,5 g ivme -x; yolcu sağa itilir, kısa sürede görünür.
+        // Sola dönüş (araç gidiyor): ani 0,5 g ivme -x; yolcu sağa itilir, kısa sürede görünür.
+        f.still = false
         repeat(8) { f.add(t, -0.5f * GFilter.G, 8f, 5.6f); t += 66_666_000L }
         assertTrue(f.lateral > 0.3f)
+    }
+
+    @Test fun aLongCornerIsNotEatenByTheGravityEstimateWhileMoving() {
+        val f = GFilter(linear = false)
+        var t = 0L
+        repeat(200) { f.add(t, 0f, 8f, 5.6f); t += 66_666_000L }
+        f.still = false
+        // 10 sn süren 0,3 g viraj: giderken yerçekimi kestirimi kaymaz, değer korunur.
+        repeat(150) { f.add(t, -0.3f * GFilter.G, 8f, 5.6f); t += 66_666_000L }
+        assertTrue(f.lateral > 0.25f)
+        // Durunca (ör. eğimde park) yeni duruş birkaç saniyede sıfırlanır.
+        f.still = true
+        repeat(150) { f.add(t, -0.3f * GFilter.G, 8f, 5.6f); t += 66_666_000L }
+        assertEquals(0f, f.lateral, 0.03f)
+    }
+
+    @Test fun dialReachesTheEdgeAtHalfAG() {
+        assertEquals(0.4f, GFilter.dialUnit(0.2f), 0.001f)
+        assertEquals(1f, GFilter.dialUnit(0.5f), 0.001f)
+        assertEquals(-1f, GFilter.dialUnit(-0.9f), 0.001f)
     }
 
     @Test fun linearAccelerationIsSmoothed() {

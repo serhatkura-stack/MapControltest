@@ -382,8 +382,9 @@ data class SportSummary(
 /**
  * G-metre süzgeci (saf, JVM'de sınanır). Girdi m/s², Android cihaz ekseni: x ekranın sağı, y yukarısı, z ekrandan
  * sürücüye doğru (ekran sürücüye baktığı için +z aracın arkası). Ekran yatay doğal yönde, öne bakan konsolda varsayılır.
- *  - [linear] false (yalnız TYPE_ACCELEROMETER): yerçekimi yavaş bir alçak geçiren süzgeçle ([GRAVITY_TAU_S]) kestirilip
- *    çıkarılır; ekranın eğimi böylece sıfırlanır.
+ *  - [linear] false (yalnız TYPE_ACCELEROMETER): yerçekimi alçak geçiren süzgeçle kestirilip çıkarılır; ekranın eğimi
+ *    böylece sıfırlanır. Araç dururken ([still]) hızlı öğrenir ([GRAVITY_TAU_STILL_S]), giderken neredeyse sabit tutulur
+ *    ([GRAVITY_TAU_MOVING_S]): uzun fren ya da viraj yerçekimi sanılıp noktadan silinmez (Tur 6: "G çok az oynuyor").
  *  - Sonuç [DISPLAY_TAU_S] ile yumuşatılır (titreşim ve yol pürüzü).
  * Çıktı g biriminde ve **hissedilen kuvvet** yönünde (ivmenin tersi; G-metre noktası yolcuyu iten yöne gider):
  *  - [lateral] sağa itiş +: sola dönüşte araç sola ivmelenir (ivme -x), yolcu sağa itilir, değer +.
@@ -398,6 +399,8 @@ class GFilter(private val linear: Boolean) {
         private set
     var longitudinal = 0f
         private set
+    /** Araç duruyor mu (hız ~0): yerçekimi kestirimi yalnız o zaman hızlı güncellenir. Sensör iş parçacığı okur. */
+    @Volatile var still = true
 
     fun reset() {
         seeded = false
@@ -420,7 +423,7 @@ class GFilter(private val linear: Boolean) {
         if (linear) {
             lx = x; lz = z
         } else {
-            val a = alpha(dt, GRAVITY_TAU_S)
+            val a = alpha(dt, if (still) GRAVITY_TAU_STILL_S else GRAVITY_TAU_MOVING_S)
             gravity[0] += a * (x - gravity[0])
             gravity[1] += a * (y - gravity[1])
             gravity[2] += a * (z - gravity[2])
@@ -444,7 +447,10 @@ class GFilter(private val linear: Boolean) {
 
     companion object {
         const val G = 9.80665f
-        const val GRAVITY_TAU_S = 3f
+        const val GRAVITY_TAU_STILL_S = 1f
+        const val GRAVITY_TAU_MOVING_S = 60f
+        /** Kadranın tam ölçeği (g): günlük sürüş 0,1–0,4 g; 0,5 g'de nokta kenara varır. */
+        const val FULL_SCALE_G = 0.5f
         /** Ekran süzgeci (sakin nokta; ani sarsıntı kadranı titretmez). */
         const val DISPLAY_TAU_S = 0.35f
         /** Sensör 10 Hz (SENSOR_DELAY_UI'den seyrek); olaylar ana iş parçacığına değil sensör iş parçacığına gelir. */
@@ -454,6 +460,9 @@ class GFilter(private val linear: Boolean) {
 
         /** Ekranda 1 g'yi aşan değer kenarda durur. */
         fun clampUnit(v: Float): Float = v.coerceIn(-1f, 1f)
+
+        /** g değerinin kadran yarıçapına oranı ([FULL_SCALE_G]'de kenar, ötesi kenarda durur). */
+        fun dialUnit(g: Float): Float = clampUnit(g / FULL_SCALE_G)
     }
 }
 

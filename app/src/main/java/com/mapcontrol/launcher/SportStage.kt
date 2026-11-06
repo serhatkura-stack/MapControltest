@@ -35,6 +35,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
+import com.mapcontrol.BuildConfig
 import com.mapcontrol.R
 import com.mapcontrol.media.LauncherMediaController
 import com.mapcontrol.media.LauncherMediaController.MediaState
@@ -517,6 +518,8 @@ internal class SportStageView(
             if (fastKmh >= 0f) calibration.learn(fastKmh, gaugeKmh)
             kmh = if (fastKmh >= 0f) Math.round(calibration.display(fastKmh)) else gaugeKmh ?: -1
         }
+        // G süzgeci yerçekimini yalnız araç dururken öğrenir; hız bilinmiyorsa duruyor sayılır (eski davranış).
+        gFilter.still = kmh <= 0
         // Hızlı kaynak canlıyken ibre ve dijital hız onu izler ([onCarSpeed]); tik yalnız yedek kaynakta sürer.
         val fastLive = !demo && (carSpeed.live || vhal.speedLive)
         if (!fastLive) showSpeed(now, kmh)
@@ -763,8 +766,9 @@ internal class SportStageView(
             gFilter.add(e.timestamp, e.values[0], e.values[1], e.values[2])
             val range = gRangePx
             if (range <= 0f) return
-            val tx = Math.round(GFilter.clampUnit(gFilter.lateral) * range).toFloat()
-            val ty = Math.round(-GFilter.clampUnit(gFilter.longitudinal) * range).toFloat()
+            val tx = Math.round(GFilter.dialUnit(gFilter.lateral) * range).toFloat()
+            val ty = Math.round(-GFilter.dialUnit(gFilter.longitudinal) * range).toFloat()
+            if (BuildConfig.DEBUG) gRawLog(e)
             val band = gBandPx
             val nx = SportMath.gStep(gSentX, tx, band)
             val ny = SportMath.gStep(gSentY, ty, band)
@@ -782,6 +786,16 @@ internal class SportStageView(
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
     private val gPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var gRawAt = 0L
+    /** Yalnız debug, 2 sn'de bir: ham ivme ekseni ve süzülmüş değer (araçta eksen/montaj doğrulaması; etiket SportG). */
+    private fun gRawLog(e: SensorEvent) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - gRawAt < 2000L) return
+        gRawAt = now
+        android.util.Log.i("SportG", String.format(java.util.Locale.US,
+            "ham x=%.2f y=%.2f z=%.2f | yanal=%.2fg boyuna=%.2fg duruyor=%s",
+            e.values[0], e.values[1], e.values[2], gFilter.lateral, gFilter.longitudinal, gFilter.still))
+    }
     // Yalnız "sport-io": son gönderilen nokta ve metin.
     private var gSentX = 0f
     private var gSentY = 0f
