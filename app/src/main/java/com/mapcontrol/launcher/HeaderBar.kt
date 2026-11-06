@@ -490,6 +490,7 @@ class HeaderBar(
         wifiStatus.start()
         btStatus.start()
         ExtraSource.add(context, extraListener)
+        TripSource.add(context, tripListener)
         webHandler.removeCallbacks(webPoll)
         if (features.available) {
             webHandler.post(webPoll)
@@ -509,6 +510,7 @@ class HeaderBar(
         wifiStatus.stop()
         btStatus.stop()
         ExtraSource.remove(extraListener)
+        TripSource.remove(tripListener)
         webHandler.removeCallbacks(webPoll)
         webUnwatch?.invoke()
         webUnwatch = null
@@ -559,9 +561,25 @@ class HeaderBar(
         date.text = noticeText ?: dateFormat.format(now).replaceFirstChar { it.titlecase(Locale.getDefault()) }
     }
 
+    /** Aracın ölçtüğü dış sıcaklık (HVAC 19); varsa üstteki sayı budur, internet havası yalnız durum/ikon için. */
+    private var carOutsideC: Double? = null
+    private val tripListener = TripSource.Listener { d ->
+        val c = d.outsideC
+        if (c != carOutsideC) {
+            carOutsideC = c
+            lastWeather?.let { bindWeather(it) } ?: bindCarTempOnly()
+        }
+    }
+
+    /** İnternet havası henüz yokken araç sıcaklığını tek başına göster. */
+    private fun bindCarTempOnly() {
+        val c = carOutsideC ?: return
+        weatherTemp.text = context.getString(R.string.launcher_degrees, Math.round(c).toInt())
+    }
+
     private fun bindWeather(snapshot: OpenMeteoWeatherSnapshot) {
         lastWeather = snapshot
-        weatherTemp.text = context.getString(R.string.launcher_degrees, snapshot.temperatureC.roundToInt())
+        weatherTemp.text = context.getString(R.string.launcher_degrees, Math.round(carOutsideC ?: snapshot.temperatureC.toDouble()).toInt())
         weatherLabel.text = OpenMeteoWeatherLabels.labelFor(context, snapshot.weatherCode, snapshot.day)
         // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.
         weatherIcon.setImageResource(when {
@@ -572,7 +590,7 @@ class HeaderBar(
         })
         // Eski veri ikincil tonda; veri hiç yoksa grup gizli kalır.
         val updatedAt = weatherClient.lastUpdatedMs
-        val stale = updatedAt > 0L && System.currentTimeMillis() - updatedAt > WEATHER_STALE_MS
+        val stale = carOutsideC == null && updatedAt > 0L && System.currentTimeMillis() - updatedAt > WEATHER_STALE_MS
         weatherTemp.setTextColor(if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
         weatherIcon.imageTintList = android.content.res.ColorStateList.valueOf(
             if (LauncherTheme.sahne) Sahne.HEADER_ICON else if (stale) LauncherTheme.TEXT_SECONDARY else LauncherTheme.TEXT)
