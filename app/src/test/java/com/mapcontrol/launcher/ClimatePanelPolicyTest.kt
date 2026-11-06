@@ -24,6 +24,26 @@ class ClimatePanelPolicyTest {
         assertEquals(Decision.EXPIRED, decide(showing = true, now = 4_001))
     }
 
+    @Test fun aRepeatedWriteDoesNotCutTheCloseSettleShort() {
+        // Kapatmadan 300 ms sonra yeni yazma: bakış oturma süresinin sonuna (1200 ms sonra) kalır, 200 ms'ye değil.
+        assertEquals(1_200L, ClimatePanelPolicy.nextCheckDelay(nowMs = 1_300, settleUntilMs = 2_500))
+        assertEquals(ClimatePanelPolicy.POLL_MS, ClimatePanelPolicy.nextCheckDelay(nowMs = 2_450, settleUntilMs = 2_500))
+        assertEquals(ClimatePanelPolicy.POLL_MS, ClimatePanelPolicy.nextCheckDelay(nowMs = 5_000, settleUntilMs = 0))
+    }
+
+    @Test fun aPanelTheCloseCannotTouchEndsTheGuardInsteadOfBurningCloses() {
+        assertTrue(ClimatePanelBits.closeCanAct(null))
+        assertTrue(ClimatePanelBits.closeCanAct(1))
+        assertTrue(ClimatePanelBits.closeCanAct(2))
+        assertTrue(ClimatePanelBits.closeCanAct(4))
+        assertFalse(ClimatePanelBits.closeCanAct(0))
+        assertFalse(ClimatePanelBits.closeCanAct(8))
+        val d = ClimatePanelPolicy.decide(false, false, showingNow = true, nowMs = 1_000, deadlineMs = 4_000, closes = 0, closeCanAct = false)
+        assertEquals(Decision.UNCLOSABLE, d)
+        // Panel kapalıyken bit olmaması bir şey değiştirmez: beklemeye devam.
+        assertEquals(Decision.WAIT, ClimatePanelPolicy.decide(false, false, showingNow = false, nowMs = 1_000, deadlineMs = 4_000, closes = 0, closeCanAct = false))
+    }
+
     @Test fun neverClosesAnExplicitlyOpenedOrAlreadyOpenPanel() {
         // Yukarı kaydırma ile açılan panel: süre içinde de olsa kapanmaz.
         assertEquals(Decision.KEEP_EXPLICIT_OPEN, decide(explicit = true, showing = true))

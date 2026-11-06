@@ -71,7 +71,7 @@ internal object ClimatePanel {
      * (`view/h.java:554`; 6 Kasım günlüğü 15:48:42 `isHvacShow =false`). Arkadaşın build'inde servis aynı türü
      * `ACTION_HVAC_SERVICE` yayınına çevirir, SystemUI `HvacActionReceiver` CLOSE_HVAC_BT'yi de işler; servis yoksa yayını biz göndeririz.
      */
-    fun close(context: Context): String {
+    fun close(context: Context, hv9Before: Int?): String {
         val outcome = try {
             context.startService(
                 Intent().setComponent(ComponentName(PACKAGE, SERVICE)).putExtra("type", TYPE_CLOSE_HVAC_BT).putExtra("page", PAGE_FRONT),
@@ -81,11 +81,14 @@ internal object ClimatePanel {
         } catch (e: IllegalStateException) {
             closeBroadcast(context)
         }
-        // Araca yazmayı OEM servisi yapar (beyaz listemizden geçmez); iz kalsın diye WidgetWrite'a da bir satır.
-        val hv9 = CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_DISPLAY_ACTIVE)
-        Log.i(WidgetWritePolicy.LOG_TAG, "widget=ClimatePanelClose via=oem-service type=CLOSE_HVAC_BT outcome=$outcome hv9=${ClimatePanelBits.describe(hv9)}")
+        // Araca yazmayı OEM servisi yapar (beyaz listemizden geçmez); iz kalsın diye WidgetWrite'a da bir satır. HVAC 9
+        // isteği göndermeden ÖNCE okunur (servisin hangi yazmayı yapacağını o belirler); sonrası 9 ← 2 geri okumasında görünür.
+        Log.i(WidgetWritePolicy.LOG_TAG, "widget=ClimatePanelClose via=oem-service type=CLOSE_HVAC_BT outcome=$outcome hv9Before=${ClimatePanelBits.describe(hv9Before)}")
         return outcome
     }
+
+    /** HVAC 9'u bir kez okur (eşzamanlı VDBus; yalnızca panel açık görünürken çağrılır). */
+    fun readHv9(): Int? = CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_DISPLAY_ACTIVE)
 
     private fun closeBroadcast(context: Context): String = try {
         context.sendBroadcast(Intent(ACTION_HVAC_SERVICE).putExtra("type", TYPE_CLOSE_HVAC_BT).putExtra("page", PAGE_FRONT))
@@ -139,6 +142,13 @@ internal object ClimatePanelBits {
     fun pm25(hv9: Int?): Boolean = hv9 != null && (hv9 and 2) != 0
     fun fragrance(hv9: Int?): Boolean = hv9 != null && (hv9 and 4) != 0
 
+    /**
+     * CLOSE_HVAC_BT bir şey yazar mı: yalnızca ön sıra, PM2.5 ve koku bitlerini temizler (`HvacService.java:88-106`).
+     * Panel arka sıralar için de açılır (`view/h.java:547-572` A1: 2. sıra config 151, 3. sıra config 138); o durumda ya da
+     * servisin modeli boşsa hiçbir şey yazılmaz. Okunamadıysa (`null`) denemeye izin verilir.
+     */
+    fun closeCanAct(hv9: Int?): Boolean = hv9 == null || frontRow(hv9) || pm25(hv9) || fragrance(hv9)
+
     /** Günlük için kısa çözüm: `null`, `0` ya da `5[front,fragrance]`. */
     fun describe(hv9: Int?): String {
         if (hv9 == null) return "null"
@@ -187,11 +197,14 @@ internal object ClimatePanelPolicy {
     /** Bir koruma penceresinde en çok bu kadar kapatma (döngüye girmesin). */
     const val MAX_CLOSES = 3
 
-    enum class Decision { WAIT, CLOSE, KEEP_EXPLICIT_OPEN, KEEP_ALREADY_OPEN, EXPIRED, LIMIT }
+    enum class Decision { WAIT, CLOSE, KEEP_EXPLICIT_OPEN, KEEP_ALREADY_OPEN, EXPIRED, LIMIT, UNCLOSABLE }
 
     /**
      * [explicitOpenSinceArm]: kullanıcı korumadan sonra paneli bilerek açtı (yukarı kaydırma) → asla kapatma.
      * [shownAtArm]: yazmadan önce panel zaten açıktı → kullanıcının paneli, kapatma.
+     * [closeCanAct]: [ClimatePanelBits.closeCanAct]; panel açık ama CLOSE_HVAC_BT'nin temizleyeceği bit yoksa (arka sıra
+     * ya da bilinmeyen neden) kapatma boşa gider → UNCLOSABLE, koruma günlüğe yazıp biter. CLOSE_PANEL'e DÜŞÜLMEZ:
+     * statik `isHvacShow`'u kapalı bırakır (bkz. [ClimatePanel.close]). Araç kontrolü: config 151 ve 138 = 0 olmalı.
      */
     fun decide(
         explicitOpenSinceArm: Boolean,
@@ -200,14 +213,22 @@ internal object ClimatePanelPolicy {
         nowMs: Long,
         deadlineMs: Long,
         closes: Int,
+        closeCanAct: Boolean = true,
     ): Decision = when {
         explicitOpenSinceArm -> Decision.KEEP_EXPLICIT_OPEN
         shownAtArm -> Decision.KEEP_ALREADY_OPEN
         nowMs > deadlineMs -> Decision.EXPIRED
         !showingNow -> Decision.WAIT
+        !closeCanAct -> Decision.UNCLOSABLE
         closes >= MAX_CLOSES -> Decision.LIMIT
         else -> Decision.CLOSE
     }
+
+    /**
+     * Sonraki bakışa kadar bekleme: kapatmanın oturma süresi ([settleUntilMs]) sürüyorsa onun sonuna kadar, değilse
+     * [POLL_MS]. Yeni bir yazma (arm) oturma süresini kısaltamaz; yoksa kapanmakta olan panel yeniden kapatılır.
+     */
+    fun nextCheckDelay(nowMs: Long, settleUntilMs: Long): Long = maxOf(POLL_MS, settleUntilMs - nowMs)
 }
 
 /**
@@ -222,6 +243,7 @@ internal object ClimatePanelGuard {
     private var deadline = 0L
     private var shownAtArm = false
     private var closes = 0
+    private var settleUntil = 0L
     private var explicitOpenAt = Long.MIN_VALUE
     private val tick = Runnable { check() }
 
@@ -244,11 +266,12 @@ internal object ClimatePanelGuard {
             armedAt = t
             shownAtArm = ClimatePanel.isShowing(context)
             closes = 0
+            settleUntil = 0L
         }
         deadline = t + ClimatePanelPolicy.GUARD_MS
         Log.i(TAG, "write what=$what mode=hide ids=dock guard=arm shownAtArm=$shownAtArm")
         main.removeCallbacks(tick)
-        main.postDelayed(tick, ClimatePanelPolicy.POLL_MS)
+        main.postDelayed(tick, ClimatePanelPolicy.nextCheckDelay(t, settleUntil))
     }
 
     private fun disarm() {
@@ -259,15 +282,19 @@ internal object ClimatePanelGuard {
     private fun check() {
         val ctx = app ?: return disarm()
         val showing = ClimatePanel.isShowing(ctx)
-        when (val d = ClimatePanelPolicy.decide(explicitOpenAt >= armedAt, shownAtArm, showing, now(), deadline, closes)) {
+        // HVAC 9 yalnızca panel açık görünürken okunur (eşzamanlı VDBus çağrısı; her 200 ms'lik bakışta değil).
+        val hv9 = if (showing) ClimatePanel.readHv9() else null
+        val canAct = ClimatePanelBits.closeCanAct(hv9)
+        when (val d = ClimatePanelPolicy.decide(explicitOpenAt >= armedAt, shownAtArm, showing, now(), deadline, closes, canAct)) {
             ClimatePanelPolicy.Decision.WAIT -> main.postDelayed(tick, ClimatePanelPolicy.POLL_MS)
             ClimatePanelPolicy.Decision.CLOSE -> {
                 closes++
-                Log.i(TAG, "guard close n=$closes outcome=${ClimatePanel.close(ctx)}")
+                Log.i(TAG, "guard close n=$closes outcome=${ClimatePanel.close(ctx, hv9)}")
+                settleUntil = now() + ClimatePanelPolicy.CLOSE_SETTLE_MS
                 main.postDelayed(tick, ClimatePanelPolicy.CLOSE_SETTLE_MS)
             }
             else -> {
-                Log.i(TAG, "guard end reason=${d.name.lowercase()} closes=$closes")
+                Log.i(TAG, "guard end reason=${d.name.lowercase()} closes=$closes hv9=${ClimatePanelBits.describe(hv9)}")
                 disarm()
             }
         }
