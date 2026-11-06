@@ -29,6 +29,11 @@ import com.mapcontrol.R
  *    yalnızca sessizdeyken küçük mikrofon-kapalı işareti (parça AMBER yanar, rozet yok) ve sağda 76×76 **Kapat**.
  *  - Gelen arama: büyük düzen; arayanın adı, "Gelen arama"; solda kırmızı **Reddet**, sağda yeşil **Cevapla** (96dp).
  *
+ * Yerleşim OEM arama pencerelerine göre (SVBluetoothPhone PhoneCallService.java:929-958, TYPE_PHONE, bizim ekranın
+ * üstüne çizilir; 160 dpi'de dp = px): gelen aramada OEM şeridi 1200×234 üst ortada (y 0-234), konuşmada küçük hap
+ * x 421-661, y 16-70. Bu yüzden gelen arama kartı OEM şeridinin altından başlar ([INCOMING_TOP_DP]; üst omuzdaki
+ * "Kilitli" hapını da örtmez) ve kompakt hap OEM hapına değmeyecek kadar dardır ([COMPACT_MAX_W_DP]).
+ *
  * Şeridin gövdesine (düğmeler dışı) dokunmak tam ekran arama sayfasını açar ([onOpen]). Tek zamanlayıcı konuşma
  * süresidir: yalnızca konuşma sürerken, şerit görünürken ve arama sayfası onu örtmüyorken saniyede bir, yazı değişince.
  *
@@ -260,12 +265,15 @@ internal class CallBanner(
             // 76dp: avatar 44 + 2×16 pay; Kapat düğmesi 76×76 hapın sağ ucunu doldurur (dokunma alanı tam 76dp).
             card.setPadding(context.dp(16), 0, 0, 0)
             card.minimumHeight = context.dp(STRIP_DP)
+            (card.layoutParams as FrameLayout.LayoutParams).topMargin = 0
             title.textSize = COMPACT_TITLE_SP
             status.visibility = View.VISIBLE
             sub.visibility = View.GONE
         } else {
             card.setPadding(context.dp(24), context.dp(14), context.dp(14), context.dp(14))
             card.minimumHeight = 0
+            // OEM gelen arama şeridinin (y 0-234) altında: görünür kalır, üst omuzdaki "Kilitli" hapını örtmez.
+            (card.layoutParams as FrameLayout.LayoutParams).topMargin = context.dp(INCOMING_TOP_DP)
             title.textSize = TITLE_SP
             status.visibility = View.GONE
             sub.visibility = View.VISIBLE
@@ -411,7 +419,13 @@ internal class CallBanner(
         /** Kompakt hap yüksekliği (başlık bandı) ve Kapat düğmesinin dokunma alanı. */
         const val STRIP_DP = 76
         const val END_INSET_DP = 6
-        const val COMPACT_MAX_W_DP = 640
+        /** 580: 1920 genişlikte x 670-1250; OEM küçük hapı (x 421-661) ile çakışmaz. */
+        const val COMPACT_MAX_W_DP = 580
+        /**
+         * Gelen arama kartının şerit çerçevesi içindeki üst payı: etkinlik 12dp aşağıda başlatır, kart 12 + 234 = 246'da
+         * başlar (OEM gelen arama şeridi 234 yüksek, y=0).
+         */
+        const val INCOMING_TOP_DP = 234
         const val COMPACT_TITLE_SP = 20f
         const val COMPACT_STATUS_SP = 20f
         const val AVATAR_DP = 44

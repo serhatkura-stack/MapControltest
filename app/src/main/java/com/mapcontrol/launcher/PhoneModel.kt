@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.util.Log
+import com.desaysv.ivi.vdb.event.id.bt.VDValueBT
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -23,7 +24,8 @@ import java.util.Locale
  *
  * GİZLİLİK: Bu dosyadaki isim ve numaralar yalnızca ekranda gösterilir. Hiçbir zaman günlüğe (Log), dosyaya,
  * SharedPreferences'a (sabitlenmiş favori KİMLİKLERİ hariç), çökme metnine yazılmaz; diske önbelleğe alınmaz.
- * Bu yüzden veri sınıflarının toString'i isim/numara içermez.
+ * Rehber/geçmiş yalnızca bellek içi depoda (süreç ömrü, bağlı cihaz başına) tutulur: kalıcı değildir, uygulama
+ * yeniden başlayınca OEM önbelleğinden yeniden okunur. Bu yüzden veri sınıflarının toString'i isim/numara içermez.
  *
  * Arama, cevaplama, kapatma ve sesli asistan YALNIZCA kullanıcının açık bir eylemiyle (dokunuş ya da direksiyon tuşu)
  * çağrılır. Araç yapılandırmasına hiçbir yazma yoktur.
@@ -727,7 +729,11 @@ object PhoneSource {
             Log.i(TAG, "rehber: indirme gerekmiyor (önbellek=${vd.cacheTotal} istendi=$downloadRequested)")
             return
         }
-        val status = vd.syncStatus()
+        // OEM ana ekranının tarifi (SVLauncher y.java:165-178): durum tür başına sorulur (7 rehber, 6 geçmiş).
+        val status = PhonebookRefresh.combine(
+            vd.syncStatus(VDValueBT.PhoneBookSyncType.CONTACT_SYNC),
+            vd.syncStatus(VDValueBT.PhoneBookSyncType.CALLLOG_SYNC),
+        )
         step = PhonebookRefresh.next(store.hasData, vd.cacheTotal, status, downloadRequested)
         if (step != PhonebookRefresh.Step.DOWNLOAD) {
             Log.i(TAG, "rehber: indirme sürüyor ya da gerekmiyor (durum=$status)")
@@ -1150,8 +1156,8 @@ object PhoneSource {
         val matched = raw.number?.let { byNumber[FavoritesRanker.normalizeNumber(it)] }
         val shownName = raw.name ?: matched?.name
         val nowElapsed = SystemClock.elapsedRealtime()
-        val oemStart = if (kind == CallKind.ACTIVE && raw.startWallMs > 0L) {
-            CallClock.startElapsed(raw.startWallMs, System.currentTimeMillis(), nowElapsed)
+        val oemStart = if (kind == CallKind.ACTIVE && raw.startElapsedMs > 0L) {
+            CallClock.startElapsed(raw.startElapsedMs, nowElapsed)
         } else {
             null
         }

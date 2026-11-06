@@ -170,6 +170,8 @@ internal class PhoneAllSheet private constructor(private val activity: Activity)
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = context.dp(TOUCH_DP)
             setPadding(context.dp(8), 0, context.dp(8), 0)
+            // Avatar gölgesi kırpılmasın (satır içinde kalır).
+            clipChildren = false
             addView(avatar, LinearLayout.LayoutParams(context.dp(AVATAR_DP), context.dp(AVATAR_DP)))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL

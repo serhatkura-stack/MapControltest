@@ -115,6 +115,8 @@ internal class PhonePanel(
         gravity = Gravity.CENTER_VERTICAL
         background = rounded(context, Sahne.SOFT_FILL, Sahne.SQUARE_RADIUS_DP, Sahne.HAIR_2)
         setPadding(context.dp(10), context.dp(10), context.dp(10), context.dp(10))
+        // Avatar gölgesi kendi sınırından taşar: kartın iç payına çizilebilsin.
+        clipChildren = false
         addView(lastAvatar, LinearLayout.LayoutParams(context.dp(LAST_AVATAR_DP), context.dp(LAST_AVATAR_DP)))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -135,6 +137,7 @@ internal class PhonePanel(
     private val allCell: View = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
+        clipChildren = false
         addView(FrameLayout(context).apply {
             background = GlassDrawable(context, FAV_AVATAR_DP / 2f, shadow = 0.4f, control = true)
             addView(ImageView(context).apply {
@@ -395,6 +398,8 @@ internal class PhonePanel(
     private fun favoriteCell(c: PhoneContact): View = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
+        // Avatar gölgesi kırpılmasın.
+        clipChildren = false
         addView(PhoneAvatarView(context, FAV_AVATAR_DP, FAV_INITIALS_SP).apply { bind(c.photoKey, c.initials) },
             LinearLayout.LayoutParams(context.dp(FAV_AVATAR_DP), context.dp(FAV_AVATAR_DP)))
         addView(nameText(c.name), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(6) })

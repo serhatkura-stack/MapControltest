@@ -219,6 +219,9 @@ internal class CallScreen(
         }
         // Fotoğraf alanı: avatar ya da (aynı yerde) tuş takımı.
         val stage = FrameLayout(context).apply {
+            // Avatar camının gölgesi kendi sınırından taşar (GlassDrawable): kırpılmasın.
+            clipChildren = false
+            clipToPadding = false
             addView(avatar, FrameLayout.LayoutParams(context.dp(AVATAR_DP), context.dp(AVATAR_DP), Gravity.CENTER))
             addView(keypad, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
@@ -226,6 +229,8 @@ internal class CallScreen(
         val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
             addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
             addView(stage, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(nameText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {

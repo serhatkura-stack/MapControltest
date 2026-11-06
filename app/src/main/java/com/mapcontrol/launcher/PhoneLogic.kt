@@ -414,21 +414,52 @@ internal object AudioModeMap {
 }
 
 /**
- * Konuşma sayacının başlangıcı. VDBTDialInfo.time = OEM'in arama başlangıcı (SVCallInfo.getCallStartMills,
- * m/m.java:233); biz konuşmanın ortasında açılsak da OEM ile aynı süreyi göstermek için duvar saatinden
- * elapsedRealtime'a çevrilir. Değer makul değilse (0, gelecekte ya da 12 saatten eski) null: çağıran
- * [PhoneStateMap.nextCall]'ın kendi başlangıcını kullanır.
+ * Konuşma sayacının başlangıcı. VDBTDialInfo.time = OEM'in arama başlangıcı, **SystemClock.elapsedRealtime** (duvar
+ * saati değil): SVVDSBluetooth (T1E24) l/j.java:315-320, 351-354 değeri elapsedRealtime ile koyar; ilk değer
+ * BluetoothHeadsetClientCall.getCreationElapsedMilli (m/a.java:183) → l/m.java:233 putTime. elapsedRealtime cihaz
+ * genelinde tek saat olduğundan doğrudan bizim [android.os.SystemClock.elapsedRealtime] ile karşılaştırılır; çevirme
+ * yok. Değer makul değilse (0, gelecekte ya da 12 saatten eski) null: çağıran [PhoneStateMap.nextCall]'ın kendi
+ * başlangıcını kullanır.
  */
 internal object CallClock {
     private const val MAX_AGE_MS = 12 * 60 * 60 * 1000L
     private const val FUTURE_SLACK_MS = 5_000L
 
-    fun startElapsed(oemStartWallMs: Long, nowWallMs: Long, nowElapsedMs: Long): Long? {
-        if (oemStartWallMs <= 0L) return null
-        val age = nowWallMs - oemStartWallMs
+    fun startElapsed(oemStartElapsedMs: Long, nowElapsedMs: Long): Long? {
+        if (oemStartElapsedMs <= 0L) return null
+        val age = nowElapsedMs - oemStartElapsedMs
         if (age < -FUTURE_SLACK_MS || age > MAX_AGE_MS) return null
-        return nowElapsedMs - age.coerceAtLeast(0L)
+        return oemStartElapsedMs.coerceAtMost(nowElapsedMs)
     }
+}
+
+/**
+ * HFP sesli tanıma (BVRA, Siri/Google) başlatma planı (saf). Araç yığını (DsvBluetooth HeadsetClientStateMachine):
+ *  - AT+BVRA=1 yalnızca kendi durumu 0 iken gönderilir, değilse sessizce düşer ama binder yine true döner (:977-985);
+ *    AT+BVRA=0 yalnızca durum 1 iken gönderilir, durum 0'da zararsız bir hiçliktir (:986-993).
+ *  - Bizim isteğimizin OK'i durumu SESSİZCE 1/0 yapar, yayın yok (:1136-1146); telefondan gelen +BVRA yalnızca değer
+ *    değişirse AG_EVENT olarak yayınlanır (:1056-1063). HF'nin başlattığı oturumda AG_EVENT 1 hiç gelmeyebilir: tek
+ *    sağlam doğrulama SCO'nun bağlanması (AUDIO_STATE 1 bağlanıyor / 2 bağlı).
+ *  - Durum yalnızca +BVRA:0, kendi durdurmamızın OK'i ya da durum makinesinin yeniden kurulması (:559) ile 0 olur.
+ * Bu yüzden yığının 1'de kalmış olabileceğini bildiğimiz sürece ([stackMaybeActive]; süreç başında bilinmez = true)
+ * başlatmadan önce durdurulur ve kısa beklenir. 6 Kasım araç: UNCONFIRMED sonrası doğrudan başlatma hep düşüyordu.
+ */
+internal object VoicePlan {
+    enum class Step { STOP_SESSION, BUSY, RESET_THEN_START, START }
+
+    /**
+     * [sessionOpen]: açık oturum biliniyor; [scoUp]: SCO bağlı; [stackMaybeActive]: yığın 1'de olabilir;
+     * [callBusy]: sürmekte olan arama var.
+     */
+    fun next(sessionOpen: Boolean, scoUp: Boolean, stackMaybeActive: Boolean, callBusy: Boolean): Step = when {
+        sessionOpen && scoUp -> Step.STOP_SESSION
+        callBusy -> Step.BUSY
+        stackMaybeActive -> Step.RESET_THEN_START
+        else -> Step.START
+    }
+
+    /** AUDIO_STATE_CHANGED: 1 (bağlanıyor) ya da 2 (bağlı) telefonun sesli tanımayı açtığını doğrular. */
+    fun confirmsStart(audioState: Int): Boolean = audioState == 1 || audioState == 2
 }
 
 /**
@@ -443,21 +474,32 @@ internal object CallPoll {
 }
 
 /**
- * Rehber/geçmiş yenileme kararı (saf). Bellekteki depo süreç boyunca tutulur; boş bir okuma dolu depoyu SİLMEZ
+ * Rehber/geçmiş yenileme kararı (saf). Bellek içi depo süreç boyunca tutulur; boş bir okuma dolu depoyu SİLMEZ
  * (yalnızca farklı bir telefon bağlanınca depo sıfırlanır).
  *
- * OEM gerçeği (SVVDSBluetooth q/r.java, q/v.java): _CACHE haritası yalnızca bir PBAP indirmesi bitince dolar
- * (v.java:23-40 → r.F/E) ve PBAP kopunca silinir (v.java:105-109 → r.a). SYNC_DB yüklemesi de _LIST_DB'ye aynı
- * önbellek haritasını yayımlar (v.java:43-60), bu yüzden indirme olmadan ikisi de total=0 döner (6 Kasım araç).
+ * OEM gerçeği (bizim araç T1E24, SVVDSBluetooth p/r.java, p/v.java): _CACHE haritası yalnızca o PBAP oturumunda bir
+ * indirme bitince dolar (p/v.java:35-53 → r.F/E) ve PBAP kopunca silinir (p/v.java:108-113 → r.a). _DB yolu indirme
+ * sonrası hiç yanıt vermez (k/e.java:320-328, p/v.java:56-75), kullanılmaz. Boş harita tek {total 0} yayını verir
+ * (6 Kasım araç: BT yığını yeniden başladı, PBAP koptu, indirme bitmeden istendi).
  * Çözüm: önbellek boşsa bağlantı başına EN ÇOK BİR KEZ PHONE_BOOK_SYNC (262346) ctrl 1 tür 50 (rehber+geçmiş
- * indirmesi; r.java:95-110), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
+ * indirmesi; p/r.java:103-112), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
  * toplanır; PHONE_BOOK_SYNC durum yayını FINISHED (1) gelince önbellek yeniden istenir.
  */
 internal object PhonebookRefresh {
     enum class Step { NONE, CACHE, DOWNLOAD }
 
-    /** VDValueBT.SyncStatus: START 0, FINISHED 1, IDLE 20, WAITING 21 (r.java:416-452). */
+    /** VDValueBT.SyncStatus: START 0, FINISHED 1, IDLE 20, WAITING 21 (p/r.java:416-452). */
     fun downloading(syncStatus: Int?): Boolean = syncStatus == 0 || syncStatus == 21
+
+    /**
+     * Rehber (tür 7) ve geçmiş (tür 6) görevlerinin durumları tek karara indirgenir: biri iniyorsa "iniyor" (yeni
+     * indirme istenmez; bitince FINISHED yayını önbelleği yeniden okutur). Değilse rehberinki, yoksa geçmişinki.
+     */
+    fun combine(contactStatus: Int?, callLogStatus: Int?): Int? = when {
+        downloading(contactStatus) -> contactStatus
+        downloading(callLogStatus) -> callLogStatus
+        else -> contactStatus ?: callLogStatus
+    }
 
     /**
      * [storeHasData]: bellekteki depo dolu. [cacheTotal]: son önbellek isteğinin toplamı (null = henüz sorulmadı).
@@ -474,8 +516,8 @@ internal object PhonebookRefresh {
 }
 
 /**
- * Arka uçtan gelen ham arama durumu (herhangi bir iş parçacığı → io). [uuid]: OEM arama kimliği; [startWallMs]: OEM
- * arama başlangıcı (VDBTDialInfo.time, duvar saati; yoksa 0); [portrait]: arayanın fotoğrafı (VDBTDialInfo.portrait;
+ * Arka uçtan gelen ham arama durumu (herhangi bir iş parçacığı → io). [uuid]: OEM arama kimliği; [startElapsedMs]: OEM
+ * arama başlangıcı (VDBTDialInfo.time, elapsedRealtime; yoksa 0); [portrait]: arayanın fotoğrafı (VDBTDialInfo.portrait;
  * yalnızca bellekte, [PhonePhotos]'a çözülür). toString isim/numara/fotoğraf içermez.
  */
 internal class RawCall(
@@ -483,10 +525,10 @@ internal class RawCall(
     val name: String? = null,
     val number: String? = null,
     val uuid: String? = null,
-    val startWallMs: Long = 0L,
+    val startElapsedMs: Long = 0L,
     val portrait: ByteArray? = null,
 ) {
-    override fun toString(): String = "RawCall(kind=$kind, start=${startWallMs != 0L}, photo=${portrait?.isNotEmpty() == true})"
+    override fun toString(): String = "RawCall(kind=$kind, start=${startElapsedMs != 0L}, photo=${portrait?.isNotEmpty() == true})"
 
     companion object {
         val NONE = RawCall(CallKind.NONE)

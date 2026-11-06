@@ -391,7 +391,7 @@ internal object HfpClientApi {
     fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean {
         val r = invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device)
         // Teşhis (6 Kasım araç: Siri bir kez açıldı, sonra hep "başlatılamadı"): sonuç ya da hata türü, kişisel veri yok.
-        android.util.Log.i("PhoneSource", "asistan adım: startVoiceRecognition sonuç=${r.getOrNull()} hata=${r.exceptionOrNull()?.javaClass?.simpleName}:${r.exceptionOrNull()?.message?.take(80)}")
+        android.util.Log.i("PhoneSource", "asistan adım: startVoiceRecognition sonuç=${r.getOrNull()} hata=${r.exceptionOrNull()?.javaClass?.simpleName}")
         return r.getOrNull() == true
     }
 
@@ -489,10 +489,12 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
     }
 
     private val main = Handler(Looper.getMainLooper())
-    /** Kullanıcı 0 dışında yayın gelmeyebilir: açıkken 2 sn'de bir getCurrentCalls. */
+    /** Yalnızca io'da yazılır: yoklama kurulu mu. */
+    @Volatile private var pollWanted = false
+    /** Kullanıcı 0 dışında yayın gelmeyebilir: arama sürerken 2 sn'de bir getCurrentCalls ([syncPoll]). */
     private val poll = object : Runnable {
         override fun run() {
-            if (onState == null) return
+            if (onState == null || !pollWanted) return
             io.execute { readCurrent() }
             main.postDelayed(this, POLL_MS)
         }
@@ -534,11 +536,8 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
             }
         }
         // Şu anki aramalar (yayın yalnızca değişiklikleri getirir): ana ekrana dönüşte süren görüşme de görünsün.
+        // Yoklama yalnızca arama sürerken kurulur ([syncPoll]); arama yokken hiç yoklama yok.
         io.execute { readCurrent() }
-        if (HfpLink.userId != 0) {
-            main.removeCallbacks(poll)
-            main.postDelayed(poll, POLL_MS)
-        }
     }
 
     /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. Okuyamazsa false. */
@@ -549,12 +548,18 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         val list = HfpClientApi.currentCalls(p, d) ?: return false
         calls.clear()
         for (c in list) HfpClientApi.callInfo(c)?.let { calls[it.id] = it }
-        if (calls.isEmpty()) cb(RawCall.NONE) else emit()
+        if (calls.isEmpty()) {
+            cb(RawCall.NONE)
+            syncPoll(CallKind.NONE)
+        } else {
+            emit()
+        }
         return true
     }
 
     override fun close() {
         onState = null
+        pollWanted = false
         main.removeCallbacks(poll)
         calls.clear()
         if (registered) runCatching { ctx.unregisterReceiver(receiver) }
@@ -575,6 +580,19 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
         // Biten aramalar listeden çıkar (durum bir kez bildirildikten sonra).
         calls.entries.removeAll { it.value.state == PhoneStateMap.TERMINATED }
         onState?.invoke(RawCall(kind, null, src?.number?.takeIf { it.isNotBlank() }))
+        syncPoll(kind)
+    }
+
+    /**
+     * io: kullanıcı 0 dışında yayın gelmeyebilir; getCurrentCalls yoklaması YALNIZCA arama sürerken ([CallPoll.shouldPoll])
+     * açık kalır. Arama bitince (ya da liste boşalınca) durur; boşta yoklama yok.
+     */
+    private fun syncPoll(kind: CallKind) {
+        val want = onState != null && HfpLink.userId != 0 && CallPoll.shouldPoll(kind, true)
+        if (want == pollWanted) return
+        pollWanted = want
+        main.removeCallbacks(poll)
+        if (want) main.postDelayed(poll, POLL_MS)
     }
 
     private companion object {
@@ -941,7 +959,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
             name = src?.name?.takeIf { it.isNotBlank() },
             number = src?.number?.takeIf { it.isNotBlank() },
             uuid = src?.uuid?.takeIf { it.isNotBlank() },
-            startWallMs = src?.time ?: 0L,
+            startElapsedMs = src?.time ?: 0L,
             portrait = src?.portrait?.takeIf { it.isNotEmpty() },
         )
         io.execute { onState?.invoke(raw) }
@@ -1013,24 +1031,31 @@ internal object VdbusBtNotify {
 /**
  * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan).
  *
+ * Kaynaklar bizim aracın dökümü (T1E24, SVVDSBluetooth 251114): VDPBAPManager = p/v.java, VDPBAPDataParse = p/r.java,
+ * yükleme = u/o.java, indirme görevi = k/e.java. (Arkadaşın T18T28 sürümünde aynı sınıflar q/v, q/r, v/o; davranış
+ * normalize diff ile aynı.)
+ *
  * OEM telefon uygulaması (SVBluetoothPhone) rehberi VDBus'tan DEĞİL, BT servisinin AndLinker arayüzünden alır
- * (sdk/bluetooth/manager/AndLinkerManager.java:36 → IPBAPManager.loadContact/loadCallLog, PBAPManager.java:414-530).
- * O servis exported=false (SVVDSBluetooth manifesti, AndLinkerService); biz bağlanamayız. Aynı veri BT servisinin
- * VDBus PBAP dağıtıcısında da var (SVVDSBluetooth q/v.java = VDPBAPManager, q/r.java = VDPBAPDataParse):
+ * (sdk/bluetooth/manager/AndLinkerManager.java:36 → IPBAPManager.loadContact/loadCallLog). Bizim araçta o servis
+ * (AndLinkerService) exported=true ve izinsiz; arkadaşın sürümünde exported=false. OTA ile kapanabileceği için burada
+ * kullanılmıyor; aynı veri BT servisinin VDBus PBAP dağıtıcısında da var:
  *
- * 1. ..._LIST_CACHE (262376 rehber / 262377 geçmiş) ve ..._LIST_DB (262379/262380) STANDART aboneliği ([VdbusBtNotify]).
+ * 1. ..._LIST_CACHE (262376 rehber / 262377 geçmiş) STANDART aboneliği ([VdbusBtNotify]).
  * 2. set PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber / 6 geçmiş, adres null = bağlı
- *    cihaz, key = bizim etiketimiz} (q/v.java:230, q/r.java:95-171). Sunucu önbellek haritasını (yoksa boş liste)
- *    10'arlık parçalarla yayar: {"data": liste, "status": VDBTListProgress(adres, index, total, key)} (q/r.java:538-560,
- *    v/o.java:52-110). Get yok: bu olayların onGet'i null (q/v.java:197-215).
- * 3. Önbellek boşsa set PHONE_BOOK_SYNC_DB (262378): servis kaydedilmiş listeyi yükler (q/q.java:393-440), bitince
- *    ..._LIST_DB key=null yayımlanır (q/v.java:56-96). Dikkat: DB yüklemesi de AYNI önbellek haritasını yayımlar
- *    (v.java:43-60); önbellek yalnızca bir PBAP indirmesi bitince dolar (v.java:23-40) ve PBAP kopunca silinir.
+ *    cihaz, key = bizim etiketimiz} (p/r.java:125-131, 153-159, 251-277). Sunucu bellekteki haritayı (yoksa tek boş
+ *    yayın {index 0, total 0}) 10'arlık parçalarla yayar: {"data": liste, "status": VDBTListProgress(adres, index,
+ *    total, key)} (u/o.java:52-110). Harita yalnızca o PBAP oturumunda indirme bitince (durum 1 → p/v.java:35-53,
+ *    r.F/E) ya da liste değişince dolar; PBAP kopunca silinir (p/v.java:108-113 → r.a).
+ * 3. PHONE_BOOK_SYNC_DB (262378) KULLANILMAZ: indirme görevleri SharedPreferences'ı her kayıtta siliyor
+ *    (k/e.java:320-325; görevler z2=true ile kurulur: q/r.java:45, q/i.java:39); indirme bitince yükleme durumu 0 olur
+ *    (k/e.java:328) ve _LIST_DB yalnızca durum 3'te yayınlanır (p/v.java:56-75). İndirme sonrası hiç yanıt gelmez;
+ *    eski kod her okumada boşuna beklerdi.
  *
- * Bu yüzden ayrıca ([watch]): indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348, key null;
- * v.java:85-87, 101-103) ve eşitleme durumu PHONE_BOOK_SYNC (262346, VDBTPhoneBookSync{status, type}; r.java:562-568)
- * edilgen dinlenir (yalnızca itme, yoklama yok). İndirme isteği ([requestDownload]: PHONE_BOOK_SYNC ctrl 1 tür 50)
- * yalnızca kullanıcı rehber sayfasını açınca, bağlantı başına bir kez, PhoneSource'tan gelir.
+ * Ayrıca ([watch]): indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348, key null) ve eşitleme
+ * durumu PHONE_BOOK_SYNC (262346, VDBTPhoneBookSync{status, type 7 rehber / 6 geçmiş}) edilgen dinlenir. Durum
+ * getOnce ile tür başına sorulur ([syncStatus]; p/r.java:300-324; OEM ana ekranı da önbellekten önce bunu sorar,
+ * SVLauncher y.java:165-178). İndirme isteği ([requestDownload]: PHONE_BOOK_SYNC ctrl 1 tür 50) yalnızca kullanıcı
+ * rehber sayfasını açınca, bağlantı başına bir kez, PhoneSource'tan gelir.
  *
  * Kişiler: tam liste (isimli olanlar; "Tümü" sayfası için yalnızca bellekte). Fotoğraf yalnızca gereken alt küme için
  * çözülür (geçmişte geçen numaralar ve sabitlenenler): [PhonePhotos.putEncoded] başarılıysa [PhoneContact.photoKey].
@@ -1104,14 +1129,16 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         return acc.result()
     }
 
-    /** Önbellek, boşsa veritabanı. Önbellek hiç yanıt vermezse veritabanı denenmez (servis bu yolu bilmiyor). */
-    private fun <T> load(syncType: Int, cacheId: Int, dbId: Int, parse: (VDEvent) -> List<*>?, cls: Class<T>): List<T>? {
+    /**
+     * Yalnızca önbellek (_DB yolu indirmeden sonra hiç yanıt vermez; bkz. sınıf belgesi madde 3). Sunucu boş haritada
+     * da tek bir {index 0, total 0} yayını yollar, yani boş yanıt hızlı gelir.
+     */
+    private fun <T> load(syncType: Int, cacheId: Int, parse: (VDEvent) -> List<*>?, cls: Class<T>): List<T>? {
         val key = "ml-" + UUID.randomUUID().toString().take(8)
         val cache = collect(cacheId, key, { request(it, VDEventBT.PHONE_BOOK_SYNC_CACHE, syncType, key) }, parse, cls)
             ?: return null
         cacheSeen = (cacheSeen ?: 0) + cache.size
-        if (cache.isNotEmpty()) return cache
-        return collect(dbId, null, { request(it, VDEventBT.PHONE_BOOK_SYNC_DB, syncType, null) }, parse, cls) ?: cache
+        return cache
     }
 
     override fun read(pinnedIds: List<String>): PhoneData? {
@@ -1122,12 +1149,12 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         return try {
             cacheSeen = null
             val records = load(
-                VDValueBT.PhoneBookSyncType.CALLLOG_SYNC, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
+                VDValueBT.PhoneBookSyncType.CALLLOG_SYNC, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE,
                 { VDBTRecord.getList(it) }, VDBTRecord::class.java,
             )
             val recents = convertRecords(records.orEmpty())
             val raw = load(
-                VDValueBT.PhoneBookSyncType.CONTACT_SYNC, VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB,
+                VDValueBT.PhoneBookSyncType.CONTACT_SYNC, VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE,
                 { VDBTContacts.getList(it) }, VDBTContacts::class.java,
             )
             cacheTotal = cacheSeen
@@ -1185,13 +1212,16 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         return contacts
     }
 
-    /** io: PHONE_BOOK_SYNC getOnce {tür 7} → indirme durumu (VDValueBT.SyncStatus; r.java:300-325). null = bilinmiyor. */
-    fun syncStatus(): Int? {
+    /**
+     * io: PHONE_BOOK_SYNC getOnce {tür} → indirme durumu (VDValueBT.SyncStatus; p/r.java:300-324: tür 1/2/7 rehber
+     * görevinin, 3-6/8 geçmiş görevinin durumu, adres boşsa bağlı cihaz). null = bilinmiyor (bean yok ya da hata).
+     */
+    fun syncStatus(syncType: Int): Int? {
         val b = call.bus ?: return null
         if (!available()) return null
         return try {
             val r = b.getOnce(VDBTPhoneBookSync.createEvent(VDEventBT.PHONE_BOOK_SYNC, VDBTPhoneBookSync().apply {
-                putSyncType(VDValueBT.PhoneBookSyncType.CONTACT_SYNC)
+                putSyncType(syncType)
             }))
             VDBTPhoneBookSync.getValue(r)?.syncStatus
         } catch (t: Throwable) {
@@ -1304,7 +1334,6 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         const val MAX_PHOTOS = 64
         val LIST_IDS = intArrayOf(
             VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE,
-            VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
         )
         val PASSIVE_IDS = intArrayOf(
             VDEventBT.PHONE_BOOK_CONTACTS_LIST, VDEventBT.PHONE_BOOK_RECORD_LIST, VDEventBT.PHONE_BOOK_SYNC,
@@ -1433,14 +1462,13 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
 
 /**
  * Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Döküm analizi (6 Kasım): OEM yazılımı
- * BVRA'yı hiç çağırmaz ve bunun için VDBus olayı ya da dışa açık intent yoktur; tek yol BluetoothHeadsetClient
+ * BVRA'yı hiç çağırmaz ve bunun için VDBus olayı ya da dışa açık intent yoktur; yol BluetoothHeadsetClient
  * (yalnızca android.permission.BLUETOOTH + etkin kullanıcı denetimi, HeadsetClientService.java:158-169,492-505).
  *
- * Durum: yığın kendi isteğimizin OK'inde yayın yapmaz, yalnızca telefondan gelen +BVRA'da AG_EVENT yayınlar
- * (HeadsetClientStateMachine.java:1057-1062, 1138-1146). Başarı bu yüzden "AG_EVENT VOICE_RECOGNITION=1 ya da SCO
- * sesi bağlandı" ile [CONFIRM_MS] içinde doğrulanır; binder'ın true dönmesi yetmez (durum 1'de takılıysa istek sessizce
- * düşer ama true döner). Açıkken ikinci basış kapatır. Durum 1 ama SCO yoksa oturum bayat sayılır: önce kapatılır,
- * kısa beklemeden sonra yeniden açılır. Alıcı ilk kullanımda uygulama bağlamına kaydedilir ve açık kalır (hafif).
+ * Yığın davranışı ve plan: [VoicePlan]. Başarı "SCO bağlanıyor/bağlı ya da AG_EVENT VOICE_RECOGNITION=1" ile
+ * [CONFIRM_MS] içinde doğrulanır; binder'ın true dönmesi yetmez. Açıkken ikinci basış kapatır. Yığın 1'de kalmış
+ * olabilirse ([stackMaybeActive]) önce durdurulur, [STALE_RESTART_MS] sonra başlatılır. Alıcı ilk kullanımda uygulama
+ * bağlamına kaydedilir ve açık kalır (hafif).
  */
 internal class HfpAssistant(private val ctx: Context, private val io: Executor) : AssistantBackend {
     private val main = Handler(Looper.getMainLooper())
@@ -1448,6 +1476,11 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
     @Volatile private var vr = false
     /** SCO sesi bağlı. */
     @Volatile private var audio = false
+    /**
+     * Yığının sesli tanıma durumu 1'de olabilir (bizim başlatmamız gönderildi ve +BVRA:0 / durdurma görülmedi). Süreç
+     * başında bilinmez: true. Yalnızca AG_EVENT 0 ya da kendi durdurmamız false yapar.
+     */
+    @Volatile private var stackMaybeActive = true
     private var registered = false
     // io kuyruğunda: doğrulama bekleyen istek.
     private var pending: ((AssistantResult) -> Unit)? = null
@@ -1461,20 +1494,23 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
                     val on = intent.getIntExtra(HfpLink.EXTRA_VOICE_RECOGNITION, 0) == 1
                     io.execute {
                         vr = on
+                        stackMaybeActive = on
                         Log.i(TAG, "asistan durumu (telefon): ${if (on) "açık" else "kapalı"}")
                         if (on) confirm()
                     }
                 }
                 HfpLink.ACTION_AUDIO -> {
-                    val on = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1) == HfpLink.AUDIO_CONNECTED
+                    val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1)
                     io.execute {
-                        audio = on
-                        if (on) confirm()
+                        audio = state == HfpLink.AUDIO_CONNECTED
+                        if (pending != null) Log.i(TAG, "asistan adım: SCO durumu=$state")
+                        if (VoicePlan.confirmsStart(state)) confirm()
                     }
                 }
                 HfpLink.ACTION_CONNECTION -> {
                     if (intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1) != BluetoothProfile.STATE_CONNECTED) {
-                        io.execute { vr = false; audio = false }
+                        // Yeniden bağlanınca yığının durumu bilinmez: ilk başlatmadan önce yine durdurulur.
+                        io.execute { vr = false; audio = false; stackMaybeActive = true }
                     }
                 }
             }
@@ -1504,26 +1540,29 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         register()
         HfpLink.withProxy(ctx, PROXY_WAIT_MS, io) { p ->
             val d = if (p != null) HfpLink.connectedDevice() else null
-            Log.i(TAG, "asistan adım: vekil=${p != null} cihaz=${d != null} vr=$vr ses=$audio muaf=${HiddenApi.exempt()}")
+            Log.i(TAG, "asistan adım: vekil=${p != null} cihaz=${d != null} vr=$vr ses=$audio yığın1=$stackMaybeActive muaf=${HiddenApi.exempt()}")
             if (p == null || d == null) return@withProxy done(AssistantResult.FAILED)
-            if (vr && audio) {
-                // Açık oturum: ikinci basış kapatır.
-                val ok = HfpClientApi.stopVoiceRecognition(p, d)
-                if (ok) vr = false
-                return@withProxy done(if (ok) AssistantResult.STOPPED else AssistantResult.FAILED)
-            }
             val busy = HfpClientApi.currentCalls(p, d)?.mapNotNull { HfpClientApi.callInfo(it) }
                 ?.any { it.state != PhoneStateMap.TERMINATED } == true
-            if (busy) return@withProxy done(AssistantResult.BUSY)
-            if (vr) {
-                // Bayat (SCO yok): yığın 1'de takılıysa başlatma düşer; önce kapat, OK'i bekleyip yeniden aç.
-                Log.i(TAG, "asistan: bayat oturum kapatılıp yeniden açılıyor")
-                HfpClientApi.stopVoiceRecognition(p, d)
-                vr = false
-                main.postDelayed({ io.execute { begin(p, d, done) } }, STALE_RESTART_MS)
-                return@withProxy
+            when (VoicePlan.next(vr, audio, stackMaybeActive, busy)) {
+                VoicePlan.Step.STOP_SESSION -> {
+                    // Açık oturum: ikinci basış kapatır.
+                    val ok = HfpClientApi.stopVoiceRecognition(p, d)
+                    if (ok) { vr = false; stackMaybeActive = false }
+                    done(if (ok) AssistantResult.STOPPED else AssistantResult.FAILED)
+                }
+                VoicePlan.Step.BUSY -> done(AssistantResult.BUSY)
+                VoicePlan.Step.RESET_THEN_START -> {
+                    // Yığın 1'de kalmış olabilir: başlatma sessizce düşerdi. Önce durdur (durum 0'da zararsız), OK'i
+                    // bekleyip başlat.
+                    Log.i(TAG, "asistan: önce durdur, sonra başlat")
+                    HfpClientApi.stopVoiceRecognition(p, d)
+                    vr = false
+                    stackMaybeActive = false
+                    main.postDelayed({ io.execute { begin(p, d, done) } }, STALE_RESTART_MS)
+                }
+                VoicePlan.Step.START -> begin(p, d, done)
             }
-            begin(p, d, done)
         }
     }
 
@@ -1531,6 +1570,8 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
     private fun begin(p: Any, d: BluetoothDevice, done: (AssistantResult) -> Unit) {
         finishPending(AssistantResult.FAILED)
         if (!HfpClientApi.startVoiceRecognition(p, d)) return done(AssistantResult.FAILED)
+        // OK gelirse yığın sessizce 1 olur; doğrulanmasa da bir sonraki basışta önce durdurulur.
+        stackMaybeActive = true
         pending = done
         val t = Runnable { io.execute { Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)"); finishPending(AssistantResult.UNCONFIRMED) } }
         pendingTimeout = t
@@ -1557,14 +1598,15 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         HfpLink.withProxy(ctx, PROXY_WAIT_MS, io) { p ->
             val d = if (p != null) HfpLink.connectedDevice() else null
             val ok = p != null && d != null && HfpClientApi.stopVoiceRecognition(p, d)
-            if (ok) vr = false
+            if (ok) { vr = false; stackMaybeActive = false }
             done(if (ok) AssistantResult.STOPPED else AssistantResult.FAILED)
         }
     }
 
     private companion object {
         const val PROXY_WAIT_MS = 1_500L
-        const val CONFIRM_MS = 2_500L
+        /** SCO kurulumu telefona göre gecikebilir; doğrulama penceresi 2,5 sn'den 4 sn'ye (araçta ölçülecek). */
+        const val CONFIRM_MS = 4_000L
         const val STALE_RESTART_MS = 700L
     }
 }
