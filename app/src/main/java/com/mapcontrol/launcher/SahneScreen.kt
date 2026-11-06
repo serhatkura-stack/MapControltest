@@ -329,7 +329,7 @@ class SahneScreen(
     private fun refreshEmpty() {
         overlays.forEach { (ref, o) -> o.bind(SahneSlots.get(shown, ref) != null) }
         panels.forEachIndexed { i, p -> p.alpha = panelAlpha(i) }
-        // Boş yan düzenlemede açılır, dışında kapanır: araç sahnesi genişliği değişir.
+        // Boş yan düzenlemede açılır, dışında kapanır (sahne ortada kaldığından yerinden oynamaz).
         requestLayout()
     }
 
@@ -597,7 +597,7 @@ class SahneScreen(
         val bandH = h - stripH - gapV
         val panelW = (PANEL_W * k).toInt()
         val gapH = (GAP_H * k).toInt()
-        val stageW = w - sideW(0, panelW, gapH) - sideW(1, panelW, gapH)
+        val stageW = w - 2 * stageInset(panelW, gapH)
         val panelH = panelHeight(bandH, gapV)
         panels.forEachIndexed { i, p -> p.measure(exactly(if (SahneBand.occupies(shown, i, editMode)) panelW else 0), exactly(panelH)) }
         stage.measure(exactly(stageW), exactly(bandH + gapV))
@@ -624,8 +624,8 @@ class SahneScreen(
             leftLowerPanel.layout(0, bandH - panelH, panelW, bandH)
             rightLowerPanel.layout(w - panelW, bandH - panelH, w, bandH)
         }
-        // Sahne iki yanın arasında: kapalı (boş) yan varsa o boşluğa genişler.
-        val stageL = sideW(0, panelW, gapH)
+        // Sahne ekranın ortasında (araç saat ve şeritle aynı eksende); kapalı yan boş kalır.
+        val stageL = stageInset(panelW, gapH)
         stage.layout(stageL, 0, stageL + stage.measuredWidth, bandH + gapV)
         strip.layout(0, h - stripH, w, h)
         sport?.layout(0, 0, w, h)
@@ -653,6 +653,13 @@ class SahneScreen(
 
     /** Bir yanın (0 sol, 1 sağ) bantta kapladığı genişlik: panel + aralık, kapalı (boş) yanda 0 ([SahneBand]). */
     private fun sideW(side: Int, panelW: Int, gapH: Int): Int = if (SahneBand.occupies(shown, side, editMode)) panelW + gapH else 0
+
+    /**
+     * Sahnenin iki yandaki eşit payı: dolu yanların genişi. Sahne hep ekranın ortasında kalır (araç x = w/2, saat ve şeritle
+     * aynı eksen; "Kilitli" hapı araca her zamanki uzaklıkta). Tek yan kapalıyken sahne o boşluğa kaymaz; yalnız iki yan da
+     * kapalıysa tam genişlik. Düzenlemeye girip çıkınca boş yuva açılıp kapansa da sahne yerinden oynamaz.
+     */
+    private fun stageInset(panelW: Int, gapH: Int): Int = maxOf(sideW(0, panelW, gapH), sideW(1, panelW, gapH))
 
     /** Panel yüksekliği: iki panelli biçimde bant boyu, dört panelli biçimde aralarında [GAP_V_DP] boşlukla yarısı. */
     private fun panelHeight(bandH: Int, gapV: Int): Int = if (quad) (bandH - gapV) / 2 else bandH

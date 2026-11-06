@@ -26,10 +26,11 @@ import com.mapcontrol.R
  * Sahne sol paneli: iki yüzlü kart. Ön yüz [MediaCard] (Sahne kipi), arka yüz [PhonePanel] (eski sağ telefon paneliyle aynı
  * görünüm ve davranış; mantık tek yerde). Sağ üst köşede sessiz bir çevirme simgesi ([FlipButton]; 64dp dokunma alanı,
  * ~22dp çizim) kartı gerçek bir dönüşle çevirir (rotationY, ~350 ms, yalnız dönüş sürerken donanım katmanı; içerik 90°'de
- * değişir). Kartta yatay kaydırma da çevirir; ilerleme çubuğunda başlayan dokunuş çevirmez ([MediaFlipLogic.swipe]).
+ * değişir; gölge kesilmesin diye katman cam panelde değil içerikte, cam zemin ve gölgesi panelle birlikte döner). Kartta yatay kaydırma da çevirir; ilerleme çubuğunda başlayan dokunuş çevirmez ([MediaFlipLogic.swipe]).
  *
  * Kurallar ([MediaFlipLogic]): bağlı telefon yoksa simge gizli ve kart medyada; telefon yüzündeyken telefon koparsa kart
- * medyaya döner. Son yüz kalıcıdır ([CardFaceStore]); arama bitince kart kendiliğinden dönmez. Telefon yüzündeyken müzik
+ * medyaya döner (aynı görünürlükte geri bağlanınca kendiliğinden dönmez; bu yalnız bellekte tutulur). Son yüz kalıcıdır
+ * ([CardFaceStore]) ve yalnız kullanıcı çevirince değişir: kopma kaydı silmez. Arama bitince kart kendiliğinden dönmez. Telefon yüzündeyken müzik
  * çalıyorsa simge yumuşakça ışır (yalnız simge; rozet/nokta yok).
  *
  * Yaşam döngüsü: medya kartı ekran görünürken hep çalışır (ışıma için çalma durumu); telefon paneli yalnız telefon yüzü
@@ -52,6 +53,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     private var connected = false
     /** Son bildirimdeki bağlantı (null: bu görünürlükte henüz bildirim gelmedi). */
     private var wasConnected: Boolean? = null
+    /** Bu görünürlükte bağlı görülen telefon koptu: kart medyada tutulur (kaydedilmez; [MediaFlipLogic.holdAfter]). */
+    private var held = false
     private var visible = false
     private var phoneListening = false
     private var turn: Animator? = null
@@ -91,6 +94,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         visible = true
         media.onVisible()
         wasConnected = null
+        held = false
         PhoneSource.start(activity, this, wantsData = false)
         PhoneSource.addListener(this)
         syncPhoneListening()
@@ -119,19 +123,16 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     override fun onPhoneChanged(snapshot: PhoneSnapshot) {
         val c = snapshot.connected
         if (c == wasConnected) return
-        val before = saved
-        saved = MediaFlipLogic.savedAfter(saved, wasConnected, c)
-        if (saved != before) store.save(saved)
+        // Kayıtlı yüz burada hiç değişmez; kopma yalnız bellekteki "medyada tut" bayrağını koyar.
+        held = MediaFlipLogic.holdAfter(held, wasConnected, c)
         wasConnected = c
         connected = c
         button.visibility = if (MediaFlipLogic.flipAvailable(c)) View.VISIBLE else View.GONE
-        val want = MediaFlipLogic.shown(saved, c)
+        val want = MediaFlipLogic.shown(saved, c, held)
         if (want == face && pendingFace == null) return
-        // Telefon koptu: kart görünür biçimde medyaya döner. Açılışta son yüze dönüş sessizce (hareket yok).
-        if (!c) turnTo(want, -1) else {
-            finishTurn()
-            showFace(want)
-        }
+        // Kart görünürken yüz değişimi hep görünür bir dönüşle (kopma da, açılışta geç bağlanan telefonla son yüze dönüş de);
+        // görünmüyorsa [turnTo] anında uygular.
+        turnTo(want, -1)
     }
 
     // --- Çevirme ---
@@ -140,6 +141,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     private fun flip(direction: Int) {
         if (!connected || turn != null) return
         val target = MediaFlipLogic.other(face)
+        held = false
         saved = target
         store.save(target)
         turnTo(target, direction)
@@ -147,7 +149,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
 
     /**
      * Kartı [target] yüzüne döndürür: panel (cam zemin dahil) 0 → 90° döner, 90°'de içerik değişir, -90° → 0 ile tamamlanır.
-     * Dönüş boyunca panel tek donanım katmanıdır; bitince bırakılır. Görünmüyorsa ya da animasyonlar kapalıysa anında.
+     * Dönüş boyunca kart içeriği ([frame]) tek donanım katmanıdır; bitince bırakılır. Katman panelin kendisine konmaz: cam
+     * gölgesi panel sınırının dışına çizilir ve katman onu keserdi. Panel katmansız döner; zemini (tek yuvarlak dikdörtgen ve
+     * gölgesi) her karede yeniden kaydedilmeden çizilir, gölge kartla birlikte döner. Görünmüyorsa ya da animasyonlar kapalıysa anında.
      */
     private fun turnTo(target: CardFace, direction: Int) {
         finishTurn()
@@ -158,7 +162,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
             return
         }
         card.cameraDistance = context.resources.displayMetrics.density * CAMERA_DISTANCE
-        card.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        frame.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         pendingFace = target
         val first = ObjectAnimator.ofFloat(card, View.ROTATION_Y, 0f, EDGE_DEG * direction).apply {
             duration = HALF_MS
@@ -181,7 +185,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
                 if (turn !== set) return
                 turn = null
                 card.rotationY = 0f
-                card.setLayerType(View.LAYER_TYPE_NONE, null)
+                frame.setLayerType(View.LAYER_TYPE_NONE, null)
             }
         })
         turn = set
@@ -195,7 +199,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         t.cancel()
         val card = frame.parent as? View ?: frame
         card.rotationY = 0f
-        card.setLayerType(View.LAYER_TYPE_NONE, null)
+        frame.setLayerType(View.LAYER_TYPE_NONE, null)
         pendingFace?.let { showFace(it) }
         pendingFace = null
     }
@@ -236,7 +240,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         private var downX = 0f
         private var downY = 0f
         private var onDrag = false
-        private var done = false
+        /** Dokunuşun kararı hareket boyunca hatırlanır (önce dikey giden sürükleme sonradan çevirmez). */
+        private val gesture = MediaFlipLogic.SwipeGesture(slop, flipPx)
 
         private fun startsOnDrag(x: Float, y: Float): Boolean {
             if (face != CardFace.MEDIA) return false
@@ -252,15 +257,17 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
         }
 
         private fun decide(ev: MotionEvent): MediaFlipLogic.Swipe =
-            MediaFlipLogic.swipe(ev.x - downX, ev.y - downY, slop, flipPx, onDrag || done, connected && turn == null)
+            gesture.move(ev.x - downX, ev.y - downY, connected && turn == null)
+
+        private fun down(ev: MotionEvent) {
+            downX = ev.x; downY = ev.y
+            onDrag = startsOnDrag(ev.x, ev.y)
+            gesture.down(onDrag)
+        }
 
         override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = ev.x; downY = ev.y
-                    onDrag = startsOnDrag(ev.x, ev.y)
-                    done = false
-                }
+                MotionEvent.ACTION_DOWN -> down(ev)
                 MotionEvent.ACTION_MOVE -> when (decide(ev)) {
                     MediaFlipLogic.Swipe.CAPTURE -> return true
                     MediaFlipLogic.Swipe.FLIP -> { fire(ev); return true }
@@ -275,9 +282,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
             when (ev.actionMasked) {
                 // Boş bir yere basıldı: kaydırma izlenebilsin diye dokunuş alınır (tıklama davranışı yok).
                 MotionEvent.ACTION_DOWN -> {
-                    downX = ev.x; downY = ev.y
-                    onDrag = startsOnDrag(ev.x, ev.y)
-                    done = false
+                    down(ev)
                     return connected && !onDrag
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -288,9 +293,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
             return true
         }
 
+        /** [SwipeGesture] FLIP'i dokunuş başına bir kez verir. */
         private fun fire(ev: MotionEvent) {
-            if (done) return
-            done = true
             flip(MediaFlipLogic.direction(ev.x - downX))
         }
     }

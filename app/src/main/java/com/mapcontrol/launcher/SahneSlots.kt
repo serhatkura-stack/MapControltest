@@ -329,8 +329,9 @@ object SahneSlots {
 
     /**
      * Telefon paneli kalktı (6 Kasım kararı: telefon medya kartının arka yüzü). Eski kayıttaki telefon paneli, düzende medya
-     * paneli varsa boşalır (iki panelli biçimde o yan kapanır, araç sahnesi genişler; [SahneBand]); medya hiç yoksa yerine
-     * medya gelir ki telefon yüzüne kart çevrilerek yine ulaşılsın. Telefon paneli yoksa düzen aynen döner.
+     * paneli varsa boşalır (iki panelli biçimde o yan kapanır; [SahneBand]); medya hiç yoksa medya gelir ki telefon yüzüne
+     * kart çevrilerek yine ulaşılsın. İki yüzlü kart solda yaşar: medya ilk yuvaya (sol, dört panelde sol üst) konur, oradaki
+     * widget telefonun boşalttığı yuvaya taşınır. Telefon paneli yoksa düzen aynen döner.
      */
     fun migratePhonePanel(layout: SahneLayout): SahneLayout {
         val refs = (0 until layout.panelCount).map { SahneSlotRef(SahneSlotKind.PANEL, it) }
@@ -340,7 +341,11 @@ object SahneSlots {
             if (get(out, ref)?.type != WidgetType.PHONE) return@forEach
             val cleared = set(out, ref, null)
             val hasMedia = refs.any { get(cleared, it)?.type == WidgetType.MEDIA }
-            out = if (hasMedia) cleared else set(cleared, ref, SahneSlot(newId(cleared, WidgetType.MEDIA), WidgetType.MEDIA))
+            out = if (hasMedia) cleared else {
+                val first = refs.first()
+                val media = SahneSlot(newId(cleared, WidgetType.MEDIA), WidgetType.MEDIA)
+                set(set(cleared, ref, get(cleared, first)), first, media)
+            }
         }
         return out
     }

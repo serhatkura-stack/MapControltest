@@ -9,19 +9,25 @@ enum class CardFace { MEDIA, PHONE }
  */
 object MediaFlipLogic {
 
-    /** Gösterilecek yüz: bağlı telefon yokken hep medya; varken kayıtlı (son) yüz. */
-    fun shown(saved: CardFace, connected: Boolean): CardFace = if (connected) saved else CardFace.MEDIA
+    /**
+     * Gösterilecek yüz: bağlı telefon yokken hep medya; varken kayıtlı (son) yüz. [held]: bu görünürlükte telefon koptuğu için
+     * kart medyada tutuluyor ([holdAfter]); kayıt değişmez.
+     */
+    fun shown(saved: CardFace, connected: Boolean, held: Boolean = false): CardFace =
+        if (connected && !held) saved else CardFace.MEDIA
 
     /** Çevirme simgesi yalnız bağlı telefon varken görünür (arka yüzde gösterilecek bir şey yok). */
     fun flipAvailable(connected: Boolean): Boolean = connected
 
     /**
-     * Bağlantı bildirimi sonrası kayıtlı yüz: daha önce bağlı görülen telefon koptuysa kart medyaya döner ve bu da kayda geçer
-     * (telefon geri gelince kart kendiliğinden telefona dönmez). İlk bildirim ([wasConnected] null: durum henüz bilinmiyor)
-     * kaydı değiştirmez; açılışta telefon bağlanır bağlanmaz son yüz geri gelir. Arama bitince hiçbir şey değişmez.
+     * Bağlantı bildirimi sonrası "medyada tut" bayrağı (yalnız bellekte; kayıtlı yüz hiç değişmez): ekran açıkken daha önce
+     * bağlı görülen telefon koparsa kart medyaya döner ve aynı görünürlükte telefon geri gelince kendiliğinden telefona
+     * dönmez (kullanıcı o an medya kontrollerine dokunuyor olabilir). Bayrak ekran yeniden görünür olunca ya da kullanıcı
+     * çevirince kalkar; böylece Bluetooth kopması, kapsama dışı ya da kontak kapanması kullanıcının son seçimini silmez.
+     * İlk bildirim ([wasConnected] null: durum henüz bilinmiyor) bayrağı koymaz; açılışta telefon bağlanınca son yüz gelir.
      */
-    fun savedAfter(saved: CardFace, wasConnected: Boolean?, connected: Boolean): CardFace =
-        if (wasConnected == true && !connected) CardFace.MEDIA else saved
+    fun holdAfter(held: Boolean, wasConnected: Boolean?, connected: Boolean): Boolean =
+        held || (wasConnected == true && !connected)
 
     /** Çevirme simgesi ışır mı: kart telefon yüzündeyken arkada müzik çalıyorsa (yalnız simge yanar; rozet/nokta yok). */
     fun iconGlows(face: CardFace, playing: Boolean): Boolean = face == CardFace.PHONE && playing
@@ -65,6 +71,25 @@ object MediaFlipLogic {
             ax >= flipPx -> Swipe.FLIP
             ax > slopPx -> Swipe.CAPTURE
             else -> Swipe.WAIT
+        }
+    }
+
+    /**
+     * Bir dokunuşun kaydırma izi: [swipe] kararını hareket boyunca hatırlar. Bir kez IGNORE (ör. önce dikey kaydı) ya da FLIP
+     * olan dokunuş, bırakılana dek bir daha çevirmez/yakalamaz; önce dikey gidip sonra yataya dönen sürükleme kartı çevirmez.
+     */
+    class SwipeGesture(private val slopPx: Float, private val flipPx: Float) {
+        private var blocked = false
+
+        /** Yeni basış; [startsOnDrag]: ilerleme çubuğu gibi yatay sürüklenen bir kontrolde. */
+        fun down(startsOnDrag: Boolean) {
+            blocked = startsOnDrag
+        }
+
+        fun move(dx: Float, dy: Float, enabled: Boolean): Swipe {
+            val s = swipe(dx, dy, slopPx, flipPx, blocked, enabled)
+            if (s == Swipe.IGNORE || s == Swipe.FLIP) blocked = true
+            return s
         }
     }
 

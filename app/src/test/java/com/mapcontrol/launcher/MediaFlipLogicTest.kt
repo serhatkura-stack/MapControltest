@@ -21,16 +21,37 @@ class MediaFlipLogicTest {
     }
 
     @Test
-    fun disconnectAfterSeenConnectedFallsBackToMediaAndIsRemembered() {
-        // Telefon yüzündeyken koptu: kayıt medyaya döner (geri bağlanınca kart kendiliğinden telefona dönmez).
-        assertEquals(CardFace.MEDIA, MediaFlipLogic.savedAfter(CardFace.PHONE, wasConnected = true, connected = false))
-        // İlk bildirim (durum bilinmiyor) kaydı değiştirmez: açılışta son yüz korunur.
-        assertEquals(CardFace.PHONE, MediaFlipLogic.savedAfter(CardFace.PHONE, wasConnected = null, connected = false))
-        assertEquals(CardFace.PHONE, MediaFlipLogic.savedAfter(CardFace.PHONE, wasConnected = null, connected = true))
-        // Bağlanma ya da bağlı kalma (ör. arama bitti) kaydı değiştirmez.
-        assertEquals(CardFace.PHONE, MediaFlipLogic.savedAfter(CardFace.PHONE, wasConnected = false, connected = true))
-        assertEquals(CardFace.PHONE, MediaFlipLogic.savedAfter(CardFace.PHONE, wasConnected = true, connected = true))
-        assertEquals(CardFace.MEDIA, MediaFlipLogic.savedAfter(CardFace.MEDIA, wasConnected = true, connected = true))
+    fun disconnectHoldsMediaInMemoryWithoutTouchingTheSavedFace() {
+        // Ekran açıkken bağlı görülen telefon koptu: kart medyada tutulur (kayıtlı yüz parametre olarak hiç değişmez).
+        assertTrue(MediaFlipLogic.holdAfter(false, wasConnected = true, connected = false))
+        // Aynı görünürlükte geri bağlandı: bayrak kalır, kart kendiliğinden telefona dönmez.
+        assertTrue(MediaFlipLogic.holdAfter(true, wasConnected = false, connected = true))
+        assertEquals(CardFace.MEDIA, MediaFlipLogic.shown(CardFace.PHONE, connected = true, held = true))
+        // İlk bildirim (durum bilinmiyor) ya da bağlanma bayrak koymaz: açılışta geç bağlanan telefonla son yüz gelir.
+        assertFalse(MediaFlipLogic.holdAfter(false, wasConnected = null, connected = false))
+        assertFalse(MediaFlipLogic.holdAfter(false, wasConnected = null, connected = true))
+        assertFalse(MediaFlipLogic.holdAfter(false, wasConnected = false, connected = true))
+        assertEquals(CardFace.PHONE, MediaFlipLogic.shown(CardFace.PHONE, connected = true, held = false))
+        // Bağlı kalma (ör. arama bitti) bir şey değiştirmez.
+        assertFalse(MediaFlipLogic.holdAfter(false, wasConnected = true, connected = true))
+    }
+
+    @Test
+    fun gestureThatWentVerticalFirstNeverFlipsLater() {
+        val g = MediaFlipLogic.SwipeGesture(slopPx = 10f, flipPx = 72f)
+        g.down(startsOnDrag = false)
+        assertEquals(Swipe.IGNORE, g.move(2f, 30f, enabled = true))
+        // Sonradan yataya dönen sürükleme: yine bırakılır (alttaki kaydırma alanından dokunuş alınmaz).
+        assertEquals(Swipe.IGNORE, g.move(150f, 30f, enabled = true))
+        // Yeni basış kararı sıfırlar.
+        g.down(startsOnDrag = false)
+        assertEquals(Swipe.CAPTURE, g.move(20f, 2f, enabled = true))
+        assertEquals(Swipe.FLIP, g.move(80f, 4f, enabled = true))
+        // Çevirme dokunuş başına bir kez.
+        assertEquals(Swipe.IGNORE, g.move(200f, 4f, enabled = true))
+        // İlerleme çubuğunda başlayan dokunuş hiç çevirmez.
+        g.down(startsOnDrag = true)
+        assertEquals(Swipe.IGNORE, g.move(200f, 0f, enabled = true))
     }
 
     @Test
@@ -105,9 +126,13 @@ class MediaFlipLogicTest {
 
     @Test
     fun phonePanelBecomesMediaWhenNoMediaPanelExists() {
+        // İki yüzlü kart solda: medya sola, soldaki widget telefonun boşalttığı sağ yuvaya.
         val out = SahneSlots.migratePhonePanel(layout(WidgetType.NAVIGATION, WidgetType.PHONE))
-        assertEquals(WidgetType.NAVIGATION, out.left?.type)
-        assertEquals(WidgetType.MEDIA, out.right?.type)
+        assertEquals(WidgetType.MEDIA, out.left?.type)
+        assertEquals(WidgetType.NAVIGATION, out.right?.type)
+        val emptyLeft = SahneSlots.migratePhonePanel(layout(null, WidgetType.PHONE))
+        assertEquals(WidgetType.MEDIA, emptyLeft.left?.type)
+        assertNull(emptyLeft.right)
         val left = SahneSlots.migratePhonePanel(layout(WidgetType.PHONE, WidgetType.TRIP))
         assertEquals(WidgetType.MEDIA, left.left?.type)
         assertEquals(WidgetType.TRIP, left.right?.type)
