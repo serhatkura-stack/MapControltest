@@ -16,6 +16,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -111,6 +112,10 @@ public final class LauncherMediaController {
         public void onPlaybackStateChanged(PlaybackState state) {
             notifyState();
             scheduleProgressTick(state);
+            // Seçili oturum durdu: başka çalan varsa ona geç.
+            if (state == null || state.getState() != PlaybackState.STATE_PLAYING) {
+                mainHandler.post(LauncherMediaController.this::refreshActiveController);
+            }
         }
 
         @Override
@@ -119,6 +124,51 @@ public final class LauncherMediaController {
             refreshActiveController();
         }
     };
+
+    /**
+     * Seçili olmayan oturumlar da izlenir: biri çalmaya başlarsa ya da seçili oturum durursa yeniden seçilir.
+     * 6 Kasım araç: radyo (svaudioapp, "am") seçiliyken Bluetooth müziği başladı; iki oturum zaten etkin olduğundan
+     * oturum listesi değişmedi ve kart radyoda kaldı.
+     */
+    private final List<MediaController> watched = new ArrayList<>();
+
+    private final MediaController.Callback watcherCallback = new MediaController.Callback() {
+        @Override
+        public void onPlaybackStateChanged(PlaybackState state) {
+            if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
+                mainHandler.post(LauncherMediaController.this::refreshActiveController);
+            }
+        }
+    };
+
+    private void watchOthers(@Nullable List<MediaController> controllers) {
+        unwatchOthers();
+        if (controllers == null) {
+            return;
+        }
+        for (MediaController c : controllers) {
+            if (c == activeController) {
+                continue;
+            }
+            try {
+                c.registerCallback(watcherCallback, mainHandler);
+                watched.add(c);
+            } catch (Exception ignored) {
+                // oturum kapanmış olabilir
+            }
+        }
+    }
+
+    private void unwatchOthers() {
+        for (MediaController c : watched) {
+            try {
+                c.unregisterCallback(watcherCallback);
+            } catch (Exception ignored) {
+                // no-op
+            }
+        }
+        watched.clear();
+    }
 
     private final Runnable progressTick = () -> {
         notifyState();
@@ -357,8 +407,23 @@ public final class LauncherMediaController {
         }
         // İzin yeni açıldıysa listener'ı kaydet
         registerSessionsListener();
-        MediaController next = pickController(loadControllers());
+        List<MediaController> all = loadControllers();
+        MediaController next = pickController(all);
+        // Hiçbiri çalmıyorsa seçili oturum (hâlâ listedeyse) korunur: duraklatılan müzik radyoya atlamaz.
+        if (activeController != null && all != null && !isPlaying(next)) {
+            for (MediaController c : all) {
+                if (c.getSessionToken().equals(activeController.getSessionToken())) {
+                    next = activeController;
+                    break;
+                }
+            }
+        }
+        if (next != null && activeController != null
+                && next.getSessionToken().equals(activeController.getSessionToken())) {
+            next = activeController;
+        }
         if (next == activeController) {
+            watchOthers(all);
             notifyState();
             PlaybackState sameState = activeController != null
                     ? activeController.getPlaybackState() : null;
@@ -370,6 +435,7 @@ public final class LauncherMediaController {
         if (activeController != null) {
             activeController.registerCallback(controllerCallback, mainHandler);
         }
+        watchOthers(all);
         notifyState();
         PlaybackState state = activeController != null ? activeController.getPlaybackState() : null;
         scheduleProgressTick(state);
@@ -407,6 +473,11 @@ public final class LauncherMediaController {
         return withMetadata != null ? withMetadata : controllers.get(0);
     }
 
+    private static boolean isPlaying(@Nullable MediaController controller) {
+        PlaybackState state = controller != null ? controller.getPlaybackState() : null;
+        return state != null && state.getState() == PlaybackState.STATE_PLAYING;
+    }
+
     private static boolean hasMetadata(MediaController controller) {
         MediaMetadata metadata = controller.getMetadata();
         if (metadata == null) {
@@ -418,6 +489,7 @@ public final class LauncherMediaController {
 
     private void detachController() {
         mainHandler.removeCallbacks(progressTick);
+        unwatchOthers();
         if (activeController != null) {
             activeController.unregisterCallback(controllerCallback);
             activeController = null;
