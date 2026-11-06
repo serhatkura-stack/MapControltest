@@ -443,6 +443,9 @@ class SportLogicTest {
         assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, null)) // hız bilinmiyor: duruyor sayılır
         assertEquals(SportTransition.Kind.CALM, SportTransition.choose(true, true))
         assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, true, inPark = true))
+        assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, null, inPark = true)) // P ve hız bilinmiyor
+        assertEquals(SportTransition.Kind.CALM, SportTransition.choose(true, true, inPark = false))
+        assertEquals(SportTransition.Kind.INSTANT, SportTransition.choose(false, true, inPark = true))
         assertEquals(SportTransition.Kind.INSTANT, SportTransition.choose(false, true))
         assertEquals(SportTransition.Kind.INSTANT, SportTransition.choose(false, false))
     }

@@ -31,6 +31,8 @@ internal class SportController(
     private val root: () -> View?,
     /** Araç gidiyor mu (hız > 0); bilinmiyorsa null (duruyor sayılır). */
     private val moving: () -> Boolean? = { null },
+    /** Vites P mi (ReadOnly 26); bilinmiyorsa null. P ise hız bilinmese de tam giriş (süpürme) seçilir. */
+    private val inPark: () -> Boolean? = { null },
 ) {
     /** Ekranda spor görünümü var mı (değişim yapıldı). */
     var shown = false
@@ -142,7 +144,7 @@ internal class SportController(
         true
     }
 
-    private fun kind(): SportTransition.Kind = SportTransition.choose(animationsOn(), moving())
+    private fun kind(): SportTransition.Kind = SportTransition.choose(animationsOn(), moving(), inPark())
 
     private fun enter() {
         val s = sahne() ?: return

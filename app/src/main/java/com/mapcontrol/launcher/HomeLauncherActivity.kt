@@ -34,6 +34,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         // Hareket: gösterge hızı > 0 (okunamıyorsa bilinmiyor; sayaçlar sıfırlanır).
         observedPowerOn = WelcomeGate.powerOn(snap)
         observedMoving = if (snap.connected && (VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed))) snap.preferredSpeed() > 0 else null
+        // Vites P mi (ReadOnly 26: P=1); okunamıyorsa bilinmiyor.
+        observedInPark = if (snap.connected && VehicleMetricsSnapshot.isValid(snap.gearSignal)) snap.gearSignal == 1 else null
         window.decorView.post {
             if (editing && LauncherSafeArea.isMoving(snap, EDIT_EXIT_KMH)) exitEditMode()
         }
@@ -42,6 +44,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Aracın bildirdiği son sürüş modu (veri yoksa null); tema vurgusu bundan [DRIVE_STABLE_MS] sonra uyarlanır. */
     @Volatile private var observedDriveMode: Int? = null
     @Volatile private var observedMoving: Boolean? = null
+    @Volatile private var observedInPark: Boolean? = null
     /** Güç modu açık mı (kontak; bilinmiyorsa null): karşılama (§7.4) bundan karar verir. */
     @Volatile private var observedPowerOn: Boolean? = null
     /** Sahne karşılaması; Sahne yoksa null. Etkinlik başına bir kez kurulur. */
@@ -425,7 +428,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         // En yüksek hız ve 0–100 süreç düzeyinde beslenir (ana ekran görünmezken de; yalnız okuma).
         SportSessionStore.start(this)
         sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout },
-            moving = { if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving })
+            moving = { if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving },
+            inPark = { if (LauncherDemo.enabled) null else observedInPark })
         val keep = SportController.rememberedSport && sportAllowed() && observedSportMode() == DriveAccent.SPORT
         sportGate.reset(keep)
         if (keep) sport?.applyInstant(true) else SportController.rememberedSport = false
