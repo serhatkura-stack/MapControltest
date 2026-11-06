@@ -70,8 +70,22 @@ object SahneForm {
     fun fitsStrip(type: WidgetType): Boolean = type in STRIP_TYPES
     fun fits(type: WidgetType, kind: SahneSlotKind): Boolean = if (kind == SahneSlotKind.PANEL) fitsPanel(type) else fitsStrip(type)
 
-    /** Seçicide [kind] yuvası için sunulan türler. */
-    fun offered(kind: SahneSlotKind): List<WidgetType> = if (kind == SahneSlotKind.PANEL) PANEL_TYPES else STRIP_TYPES
+    /**
+     * Tiggo 7'de (iki panelli biçim) gizlenen türler: arka hoparlör çalışamıyor (DSP servisi SELinux ile kapalı, `service call` de
+     * reddedildi; 6 Kasım). Kod duruyor (Tiggo 8 ya da ileride yetkili bir yol için); seçicide sunulmaz, kayıtlarda yerine
+     * [TIGGO7_REPLACEMENTS]'tan biri gelir ([SahneSlots.forTiggo7]).
+     */
+    val TIGGO7_HIDDEN: Set<WidgetType> = setOf(WidgetType.REAR_SPEAKER)
+
+    /** Gizlenen şerit yuvasının yerine sırayla denenen türler (düzende olmayan ilki). */
+    val TIGGO7_REPLACEMENTS: List<WidgetType> = listOf(WidgetType.CONSUMPTION, WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER)
+
+    /** Bu biçimde ([quad] false = Tiggo 7) gösterilebilir mi. */
+    fun available(type: WidgetType, quad: Boolean): Boolean = quad || type !in TIGGO7_HIDDEN
+
+    /** Seçicide [kind] yuvası için sunulan türler ([quad] false = Tiggo 7: gizlenenler yok). */
+    fun offered(kind: SahneSlotKind, quad: Boolean = false): List<WidgetType> =
+        (if (kind == SahneSlotKind.PANEL) PANEL_TYPES else STRIP_TYPES).filter { available(it, quad) }
 
     /** Türün panelde kendi büyük biçimi var mı (yoksa kutucuğu büyütülür). */
     fun hasLargeForm(type: WidgetType): Boolean = type.sizes.any { it.w >= 4 || it.h >= 4 }
@@ -87,7 +101,7 @@ object SahneForm {
      * mevcut widget'ın yerine konabilir). Park ve Sürüş aynı kuralı kullanır: her widget sürüşte de çalışır.
      */
     fun canPlace(layout: SahneLayout, ref: SahneSlotRef, type: WidgetType): Boolean {
-        if (!fits(type, ref.kind)) return false
+        if (!fits(type, ref.kind) || !available(type, layout.quad)) return false
         if (type == WidgetType.APP) return true
         val here = SahneSlots.get(layout, ref)
         return layout.slots().none { it.type == type && it !== here }
@@ -133,17 +147,17 @@ object SahneSlots {
 
     /**
      * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şeritte iki uçta koltuklar (sol direksiyonlu kabine
-     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), arka hoparlör
-     * (arkada uyuyan çocukla beklerken), iki uygulama (yola çıkmadan müzik/harita) ve sürüş modu (kapı kilidi sahnenin
-     * sağ üstündeki hapta; şeritte çift olmasın).
+     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), anlık tüketim
+     * ([rearSpeaker] ise arka hoparlör: yalnız Tiggo 8; Tiggo 7'de DSP erişilemiyor), iki uygulama (yola çıkmadan
+     * müzik/harita) ve sürüş modu (kapı kilidi sahnenin sağ üstündeki hapta; şeritte çift olmasın).
      */
-    fun defaultPark(appPackages: List<String> = emptyList()): SahneLayout = SahneLayout(
+    fun defaultPark(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
         right = SahneSlot("trip", WidgetType.TRIP),
         strip = listOf(
             SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
             SahneSlot("trunk", WidgetType.TRUNK),
-            SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER),
+            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("consumption", WidgetType.CONSUMPTION),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
             SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
             SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
@@ -151,15 +165,15 @@ object SahneSlots {
     )
 
     /**
-     * Sürüş varsayılanı: solda medya, sağda anlık tüketim (sürüşte akan tek büyük değer); şeritte sürücü koltuğu · arka
-     * hoparlör · iki uygulama · mola hatırlatıcı · sürüş modu · yolcu koltuğu.
+     * Sürüş varsayılanı: solda medya, sağda anlık tüketim (sürüşte akan tek büyük değer); şeritte sürücü koltuğu · ekranı kapat
+     * ([rearSpeaker] ise arka hoparlör, yalnız Tiggo 8) · iki uygulama · mola hatırlatıcı · sürüş modu · yolcu koltuğu.
      */
-    fun defaultDrive(appPackages: List<String> = emptyList()): SahneLayout = SahneLayout(
+    fun defaultDrive(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
         right = SahneSlot("consumption", WidgetType.CONSUMPTION),
         strip = listOf(
             SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
-            SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER),
+            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
             SahneSlot("break_reminder", WidgetType.BREAK_REMINDER),
             SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
@@ -167,15 +181,15 @@ object SahneSlots {
         ),
     )
 
-    fun defaults(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
-        if (mode == LayoutMode.DRIVE) defaultDrive(appPackages) else defaultPark(appPackages)
+    fun defaults(mode: LayoutMode, appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout =
+        if (mode == LayoutMode.DRIVE) defaultDrive(appPackages, rearSpeaker) else defaultPark(appPackages, rearSpeaker)
 
     /**
      * Tiggo 8 varsayılanı (Park ve Sürüş aynı panel dizilişi): sol üst medya, sol alt navigasyon, sağ üst yolculuk, sağ alt
      * tüketim; şerit o modun Tiggo 7 şeridiyle aynı.
      */
     fun defaultsQuad(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
-        defaults(mode, appPackages).copy(
+        defaults(mode, appPackages, rearSpeaker = true).copy(
             left = SahneSlot("media", WidgetType.MEDIA),
             right = SahneSlot("trip", WidgetType.TRIP),
             quad = true,
@@ -302,6 +316,24 @@ object SahneSlots {
         return out
     }
 
+    /**
+     * Tiggo 7 kaydı: gizlenen türdeki ([SahneForm.TIGGO7_HIDDEN]) şerit yuvası, düzende olmayan ilk yedek türe
+     * ([SahneForm.TIGGO7_REPLACEMENTS]) döner, hiçbiri boşta değilse boşalır; panelde gizli tür olmaz. Gizli tür yoksa aynen döner.
+     */
+    fun forTiggo7(layout: SahneLayout): SahneLayout {
+        if (layout.slots().none { it.type in SahneForm.TIGGO7_HIDDEN }) return layout
+        var out = layout
+        layout.strip.forEachIndexed { i, s ->
+            if (s == null || s.type !in SahneForm.TIGGO7_HIDDEN) return@forEachIndexed
+            val ref = SahneSlotRef(SahneSlotKind.STRIP, i)
+            val cleared = set(out, ref, null)
+            val used = cleared.types()
+            val pick = SahneForm.TIGGO7_REPLACEMENTS.firstOrNull { it !in used && SahneForm.fitsStrip(it) }
+            out = if (pick == null) cleared else set(cleared, ref, SahneSlot(newId(cleared, pick), pick))
+        }
+        return out
+    }
+
     /** Yeni yuva kimliği: tür anahtarı, gerekirse sıra eki (APP birden çok olabilir). */
     fun newId(layout: SahneLayout, type: WidgetType): String {
         val used = layout.slots().map { it.id }.toSet()
@@ -337,8 +369,8 @@ class SahneStore(
     /** Kayıt bu aracın biçiminde değilse çevrilir: Tiggo 8'in eski iki panelli kaydı dört panelliye yükselir. */
     private fun forVehicle(layout: SahneLayout): SahneLayout = when {
         quad -> SahneSlots.toQuad(layout)
-        layout.quad -> SahneSlots.sanitize(layout.copy(quad = false, leftLower = null, rightLower = null))
-        else -> layout
+        layout.quad -> SahneSlots.forTiggo7(SahneSlots.sanitize(layout.copy(quad = false, leftLower = null, rightLower = null)))
+        else -> SahneSlots.forTiggo7(layout)
     }
 
     fun reset() = prefs.edit().remove(key).apply()

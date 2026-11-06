@@ -31,7 +31,8 @@ class SahneSlotsTest {
         }
         // Seçici yalnızca listeyi sunar: araç kartı (sahnenin kendisi) hiçbir yuvada yok.
         assertFalse(WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.PANEL) || WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.STRIP))
-        assertEquals(SahneForm.STRIP_TYPES, SahneForm.offered(SahneSlotKind.STRIP))
+        assertEquals(SahneForm.STRIP_TYPES - WidgetType.REAR_SPEAKER, SahneForm.offered(SahneSlotKind.STRIP))
+        assertEquals(SahneForm.STRIP_TYPES, SahneForm.offered(SahneSlotKind.STRIP, quad = true))
         assertEquals(SahneForm.PANEL_TYPES, SahneForm.offered(SahneSlotKind.PANEL))
     }
 
@@ -90,10 +91,12 @@ class SahneSlotsTest {
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.CONSUMPTION, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
         assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[3]?.extra))
+        // Tiggo 8 şeridinde arka hoparlör duruyor.
+        assertEquals(WidgetType.REAR_SPEAKER, SahneSlots.defaultsQuad(LayoutMode.PARK, apps).strip[2]?.type)
     }
 
     @Test
@@ -103,9 +106,38 @@ class SahneSlotsTest {
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.CONSUMPTION, d.right?.type)
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.BREAK_REMINDER, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.SCREEN_OFF, WidgetType.APP, WidgetType.BREAK_REMINDER, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
+    }
+
+    @Test
+    fun rearSpeakerHiddenOnTiggo7() {
+        // Seçicide yok (Tiggo 7), Tiggo 8'de var; Tiggo 7 düzenine konamaz.
+        assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad = false))
+        assertTrue(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+        val t7 = SahneSlots.defaultPark(apps)
+        assertFalse(SahneForm.canPlace(t7, SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
+        assertTrue(SahneForm.canPlace(SahneSlots.defaultsQuad(LayoutMode.PARK, apps).let { SahneSlots.set(it, SahneSlotRef(SahneSlotKind.STRIP, 2), null) },
+            SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
+        // Eski Park kaydı: arka hoparlör yuvası düzende olmayan ilk yedeğe (anlık tüketim) döner.
+        val oldPark = SahneSlots.defaultPark(apps, rearSpeaker = true)
+        val park = SahneSlots.forTiggo7(SahneSlots.decode(SahneSlots.encode(oldPark))!!)
+        assertEquals(WidgetType.CONSUMPTION, park.strip[2]?.type)
+        assertFalse(WidgetType.REAR_SPEAKER in park.types())
+        // Eski Sürüş kaydı: tüketim panelde olduğundan ekranı kapat gelir.
+        val drive = SahneSlots.forTiggo7(SahneSlots.defaultDrive(apps, rearSpeaker = true))
+        assertEquals(WidgetType.SCREEN_OFF, drive.strip[1]?.type)
+        assertEquals(drive, SahneSlots.sanitize(drive))
+        // Yedeklerin hepsi düzendeyse yuva boşalır.
+        var full = SahneSlots.defaultPark(apps, rearSpeaker = true)
+        SahneForm.TIGGO7_REPLACEMENTS.forEachIndexed { i, type ->
+            val ref = SahneSlotRef(SahneSlotKind.STRIP, listOf(0, 1, 4, 5)[i])
+            full = SahneSlots.set(full, ref, SahneSlot(type.key, type))
+        }
+        assertNull(SahneSlots.forTiggo7(full).strip[2])
+        // Gizli tür yoksa kayıt aynen kalır.
+        assertEquals(t7, SahneSlots.forTiggo7(t7))
     }
 
     @Test
@@ -213,7 +245,7 @@ class SahneSlotsTest {
         // Ekranda başka yuvada olan tekil tür konamaz; kendi yerine yeniden konabilir.
         assertFalse(SahneForm.canPlace(d, right, WidgetType.MEDIA))
         assertTrue(SahneForm.canPlace(d, right, WidgetType.TRIP))
-        assertTrue(SahneForm.canPlace(d, right, WidgetType.CONSUMPTION))
+        assertTrue(SahneForm.canPlace(d, right, WidgetType.NAVIGATION))
         assertFalse(SahneForm.canPlace(d, right, WidgetType.HEALTH))
         // Biçim kuralları (seçki); Park/Sürüş ayrımı yok, fotoğraf da sürüşte konabilir.
         assertFalse(SahneForm.canPlace(d, right, WidgetType.APP))
@@ -255,7 +287,7 @@ class SahneSlotsTest {
             d.strip.map { it?.type },
         )
         assertEquals("drive_mode", d.strip[4]?.id)
-        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d")), d)
+        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d"), rearSpeaker = true), d)
         assertEquals(d, SahneSlots.decode(SahneSlots.encode(d)))
     }
 
@@ -313,7 +345,7 @@ class SahneSlotsTest {
             assertEquals(listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.NAVIGATION, WidgetType.CONSUMPTION),
                 (0..3).map { panel(d, it)?.type })
             assertEquals(SahneForm.PANEL_TYPES.toSet(), (0..3).mapNotNull { panel(d, it)?.type }.toSet())
-            assertEquals(SahneSlots.defaults(mode, apps).strip, d.strip)
+            assertEquals(SahneSlots.defaults(mode, apps, rearSpeaker = true).strip, d.strip)
             assertEquals(d, SahneSlots.sanitize(d))
         }
     }

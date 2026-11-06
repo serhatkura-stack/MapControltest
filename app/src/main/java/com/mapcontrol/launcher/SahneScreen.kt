@@ -314,7 +314,7 @@ class SahneScreen(
     private fun openPicker(ref: SahneSlotRef) {
         if (!canEdit() || activity.isFinishing || activity.isDestroyed) return
         val current = SahneSlots.get(stored, ref)
-        val types = SahneForm.offered(ref.kind)
+        val types = SahneForm.offered(ref.kind, quad)
         val title = if (ref.kind == SahneSlotKind.PANEL) R.string.launcher_sahne_pick_panel else R.string.launcher_sahne_pick_strip
         val d = showLauncherSheet(activity, title, PICKER_WIDTH_DP) { dialog ->
             if (current != null) {
