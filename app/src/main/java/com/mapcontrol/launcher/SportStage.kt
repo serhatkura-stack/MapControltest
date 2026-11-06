@@ -568,6 +568,8 @@ internal class SportStageView(
                     slot.unit?.let { setText(it, SportFormat.durationUnit(min)) }
                 }
                 SportDial.RANGE -> setText(v, range?.toString() ?: DASH)
+                // Üst çubuktaki araç sıcaklığıyla aynı kaynak (TripSource, HVAC 19, 5 sn katmanı); yeni araç okuması yok.
+                SportDial.OUTSIDE -> setText(v, SportFormat.outside(if (demo) LauncherDemo.trip().outsideC else trip.outsideC) ?: DASH)
                 SportDial.PASS80 -> setText(v, SportFormat.seconds(pass) ?: DASH)
                 SportDial.G, SportDial.CLOCK -> Unit
             }

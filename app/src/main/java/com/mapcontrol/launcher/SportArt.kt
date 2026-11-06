@@ -448,6 +448,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.AVG_SPEED -> "Ortalama"
             SportDial.TRIP_TIME -> "Süre"
             SportDial.RANGE -> "Menzil"
+            SportDial.OUTSIDE -> "Dış"
             SportDial.PASS80 -> "80–120"
             SportDial.CLOCK -> ""
         }
@@ -459,6 +460,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.MAX, SportDial.AVG_SPEED, SportDial.SPEED -> "km/sa"
             SportDial.TRIP_TIME -> "dk"
             SportDial.RANGE -> "km"
+            SportDial.OUTSIDE -> "°C"
             SportDial.G, SportDial.CLOCK -> ""
         }
 
@@ -472,6 +474,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.AVG_SPEED -> "Ortalama hız"
             SportDial.TRIP_TIME -> "Yolculuk süresi"
             SportDial.RANGE -> "Menzil"
+            SportDial.OUTSIDE -> "Dış sıcaklık"
             SportDial.PASS80 -> "80–120"
             SportDial.CLOCK -> "Analog saat"
         }

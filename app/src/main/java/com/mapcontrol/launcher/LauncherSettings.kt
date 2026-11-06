@@ -111,6 +111,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(sportModeToggle(d), fullWidth())
 
         addView(gap(activity, 12, vertical = true))
+        addView(sportCloseOemDialogToggle(d), fullWidth())
+
+        addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
         addView(bottomBarSegments(d), fullWidth())
@@ -252,6 +255,17 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         onOffControl(R.string.launcher_sport_mode, SportModePrefs.enabled(activity)) { value ->
             d.dismiss()
             SportModePrefs.setEnabled(activity, value)
+            (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
+        }
+
+    /**
+     * "Sürüş modu penceresini kapat" (varsayılan açık): spor geçişi başlarken aracın sürüş modu penceresi kapatılır
+     * ([OemDriveDialogCloser]); yalnız "Spor modu (deneysel)" açıkken etkisi var.
+     */
+    private fun sportCloseOemDialogToggle(d: Dialog): View =
+        onOffControl(R.string.launcher_sport_close_oem_dialog, SportModePrefs.closeOemDialog(activity)) { value ->
+            d.dismiss()
+            SportModePrefs.setCloseOemDialog(activity, value)
             (activity as? HomeLauncherActivity)?.refreshDrivePrefs()
         }
 

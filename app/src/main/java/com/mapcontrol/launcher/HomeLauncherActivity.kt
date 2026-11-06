@@ -59,6 +59,9 @@ class HomeLauncherActivity : Activity() {
     private var driveAccentOn = true
     /** "Spor modu (deneysel)" seçeneği; kapalıyken Spor orijinal temada kalır. */
     private var sportModeOn = false
+    /** Spor geçişinde aracın sürüş modu penceresini kapat (varsayılan açık; [OemDriveDialogCloser]). */
+    private var closeOemDialogOn = true
+    private val oemDialogCloser = OemDriveDialogCloser()
     private var autoLayoutOn = true
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
@@ -434,6 +437,10 @@ class HomeLauncherActivity : Activity() {
     /** Spor kararı: [SportGate] (~1 sn titreşim süzgeci); düzenleme ya da sayfa açıkken ertelenir. */
     private fun sportTick() {
         val ctl = sport ?: return
+        // Spor geçişi başlayacaksa aracın sürüş modu penceresi kapatılır (odak döner, geçiş beklemez). Yalnız gerçek araç
+        // verisinde (demo değil), gözlenen değişim başına en çok bir kez.
+        if (!LauncherDemo.enabled && oemDialogCloser.update(android.os.SystemClock.elapsedRealtime(), observedDriveMode,
+                sportModeOn && closeOemDialogOn, ctl.shown)) closeOemDriveDialog()
         val observed = if (sportAllowed()) observedSportMode() else DriveAccent.NORMAL
         // Süzgeç sayarken durağan çizim şimdiden hazırlanır; mod geri dönerse bırakılır.
         if (observed == DriveAccent.SPORT && !editing) ctl.prepare() else ctl.idle()
@@ -442,6 +449,19 @@ class HomeLauncherActivity : Activity() {
         // pencere kapanıp odak dönünce geçiş başlar.
         val to = sportGate.update(android.os.SystemClock.elapsedRealtime(), observed, !editing && sheet == null && windowFocused) ?: return
         ctl.request(to)
+    }
+
+    /**
+     * OEM sürüş modu penceresini kapatır: SystemUI'nin kendi gönderdiği yayınla aynı (SVSystemUI util/s.java:319-325,
+     * bayraklar 0x20 | 0x01000000 | 0x10000000). Yayın tüm OEM pencerelerini kapatır; çağıran [OemDriveDialogCloser] süzer.
+     */
+    private fun closeOemDriveDialog() {
+        try {
+            sendBroadcast(android.content.Intent(OEM_DIALOG_CLOSE).addFlags(OEM_DIALOG_CLOSE_FLAGS))
+            Log.i(SPORT_TAG, "sürüş modu değişti: OEM penceresi kapatma yayını gönderildi ($OEM_DIALOG_CLOSE)")
+        } catch (e: Exception) {
+            Log.w(SPORT_TAG, "OEM pencere kapatma yayını gönderilemedi: ${e.javaClass.simpleName}")
+        }
     }
 
     /**
@@ -625,6 +645,7 @@ class HomeLauncherActivity : Activity() {
     internal fun refreshDrivePrefs() {
         driveAccentOn = DriveAccent.enabled(this)
         sportModeOn = SportModePrefs.enabled(this)
+        closeOemDialogOn = SportModePrefs.closeOemDialog(this)
         autoLayoutOn = DriveLayoutPrefs.get(this)
     }
 
@@ -1115,6 +1136,10 @@ class HomeLauncherActivity : Activity() {
         @Volatile var pendingEdit = false
         const val DRIVE_STABLE_MS = 2_000L
         const val DRIVE_TICK_MS = 500L
+        const val OEM_DIALOG_CLOSE = "com.desaysv.systemui.ACTION_DIALOG_CLOSE"
+        /** FLAG_INCLUDE_STOPPED_PACKAGES | FLAG_RECEIVER_INCLUDE_BACKGROUND (gizli API) | FLAG_RECEIVER_FOREGROUND. */
+        const val OEM_DIALOG_CLOSE_FLAGS = 0x00000020 or 0x01000000 or 0x10000000
+        const val SPORT_TAG = "SportMode"
         /** Soğuk açılışta karşılama için güç sinyalinin en çok beklendiği süre (ekran bu sırada siyah). */
         const val WELCOME_ARM_MS = 1_500L
         const val RESET_SHEET_WIDTH_DP = 640

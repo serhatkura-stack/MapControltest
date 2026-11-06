@@ -304,7 +304,7 @@ class SportSession {
     }
 }
 
-/** Spor modundaki dört küçük kadranın gösterebileceği değerler (yalnız gerçek veri; akü voltajı ve dış sıcaklık yok). */
+/** Spor modundaki dört küçük kadranın gösterebileceği değerler (yalnız gerçek veri; akü voltajı yok). */
 enum class SportDial(val key: String) {
     ZERO100("z100"),
     G("g"),
@@ -315,6 +315,8 @@ enum class SportDial(val key: String) {
     AVG_SPEED("avg"),
     TRIP_TIME("time"),
     RANGE("range"),
+    /** Aracın ölçtüğü dış sıcaklık (HVAC 19, üst çubuktaki sayıyla aynı kaynak: [TripData.outsideC]). */
+    OUTSIDE("out"),
     PASS80("p80"),
     CLOCK("clock");
 
@@ -507,6 +509,9 @@ object SportFormat {
     /** Süre (dk): 60'tan azsa "47", yoksa "1:05" (birimi [durationUnit]). */
     fun duration(min: Int?): String? = min?.takeIf { it >= 0 }?.let { if (it < 60) it.toString() else "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
     fun durationUnit(min: Int?): String = if (min != null && min >= 60) "sa" else "dk"
+
+    /** Dış sıcaklık: tam dereceye yuvarlanır (üst çubuktaki sayı gibi, "17", "-3"); bilinmiyorsa null. */
+    fun outside(c: Double?): String? = c?.let { Math.round(it).toInt().toString() }
 
     /** Onda bir hassasiyet, virgülle ("9,6"). */
     fun tenths(v: Double): String {

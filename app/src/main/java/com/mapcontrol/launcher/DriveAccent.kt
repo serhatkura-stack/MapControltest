@@ -143,4 +143,51 @@ object SportModePrefs {
     fun setEnabled(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(Profiles.key(context, KEY), on).apply()
     }
+
+    private const val KEY_CLOSE_OEM_DIALOG = "sport_close_oem_drive_dialog"
+
+    /** "Aracın sürüş modu penceresini kapat" ([OemDriveDialogCloser]); varsayılan AÇIK, profil başına. */
+    fun closeOemDialog(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(Profiles.key(context, KEY_CLOSE_OEM_DIALOG), true)
+
+    fun setCloseOemDialog(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(Profiles.key(context, KEY_CLOSE_OEM_DIALOG), on).apply()
+    }
+}
+
+/**
+ * OEM sürüş modu penceresini kapatma kararı (saf; JVM'de sınanır). Aracın SVVehicleSetting `DriveModeDialog`'u mod
+ * değişince açılır ve `com.desaysv.systemui.ACTION_DIALOG_CLOSE` yayınını dinleyip kapanır (izinsiz, dinamik alıcı;
+ * DriveModeDialog.java:45-51, 359). Pencere odağı aldığı için spor geçişi ([SportGate]) onun kapanmasını bekler.
+ *
+ * Yayın BÜTÜN OEM pencerelerini kapatır; bu yüzden yalnız gözlenen bir sürüş modu değişiminden sonra, değişim başına en çok
+ * bir kez ve yalnız spor geçişi başlayacaksa: yeni mod Spor, ya da eski mod Spor ve spor ekranı açık (çıkış). İlk gözlem
+ * değişim sayılmaz; veri kesintisi (null) son modu korur. Pencere önce açılabilsin diye değişimden [delayMs] sonra.
+ */
+class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
+    private var last: Int? = null
+    private var dueAt: Long? = null
+
+    /** true: yayını şimdi gönder (bu değişim için bir daha true dönmez). */
+    fun update(now: Long, mode: Int?, allowed: Boolean, sportShown: Boolean): Boolean {
+        if (mode != null) {
+            val prev = last
+            last = mode
+            if (prev != null && prev != mode) {
+                val starts = mode == DriveAccent.SPORT || (prev == DriveAccent.SPORT && sportShown)
+                // Yeni değişim önceki bekleyeni geçersiz kılar (değişim başına en çok bir yayın).
+                dueAt = if (allowed && starts) now + delayMs else null
+            }
+        }
+        val at = dueAt ?: return false
+        if (!allowed) { dueAt = null; return false }
+        if (now < at) return false
+        dueAt = null
+        return true
+    }
+
+    companion object {
+        /** Dökümdeki öneri: mod değişiminden ~300 ms sonra (pencere açılmış olsun). */
+        const val DELAY_MS = 300L
+    }
 }
