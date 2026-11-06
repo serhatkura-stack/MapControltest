@@ -67,16 +67,17 @@ public class VDConnector {
             super.handleMessage(message);
             int i9 = message.what;
             if (i9 == 1000) {
-                Log.d(VDConnector.TAG, "MSG_RECONNECT_SERVICE: reconnectCount=" + VDConnector.this.mReconnectCount + " service=" + VDConnector.this.mServiceInfo.getServiceName());
+                VdLog.d(VDConnector.TAG, "MSG_RECONNECT_SERVICE: reconnectCount=" + VDConnector.this.mReconnectCount + " service=" + VDConnector.this.mServiceInfo.getServiceName());
                 if (VDConnector.this.mReconnectCount >= 10) {
                     VDConnector.this.mReconnectCount = 0;
                     Log.w(VDConnector.TAG, "Reconnect deneme limiti aşıldı, tekrar denenmeyecek. service=" + VDConnector.this.mServiceInfo.getServiceName());
                     return;
                 }
                 VDConnector.access$108(VDConnector.this);
-                Log.d(VDConnector.TAG, "Reconnect denemesi başlatılıyor, count=" + VDConnector.this.mReconnectCount + " service=" + VDConnector.this.mServiceInfo.getServiceName());
+                VdLog.d(VDConnector.TAG, "Reconnect denemesi başlatılıyor, count=" + VDConnector.this.mReconnectCount + " service=" + VDConnector.this.mServiceInfo.getServiceName());
                 VDConnector.this.bindService();
             } else if (i9 == 2000) {
+                VdLog.d(VDConnector.TAG, "MSG_DISPATCH_EVENT: main thread notify, eventId=" + ((VDEvent) message.obj).getId());
                 VDConnector.this.dispatchEvent((VDEvent) message.obj, VDThreadType.MAIN_THREAD);
             } else if (i9 == 3000) {
                 Iterator it = ((Map) message.obj).entrySet().iterator();
@@ -93,11 +94,11 @@ public class VDConnector {
     public int mReconnectCount = 0;
     private ServiceConnection mServiceConn = new ServiceConnection() {
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            Log.d(VDConnector.TAG, "onServiceConnected: component=" + componentName + " service=" + VDConnector.this.mServiceInfo.getServiceName());
+            VdLog.d(VDConnector.TAG, "onServiceConnected: component=" + componentName + " service=" + VDConnector.this.mServiceInfo.getServiceName());
             try {
                 iBinder.linkToDeath(VDConnector.this.mDeathRecipient, 0);
                 VDConnector.this.mIVDBus = IVDBus.Stub.asInterface(iBinder);
-                Log.d(VDConnector.TAG, "onServiceConnected: IVDBus arayüzü alındı");
+                VdLog.d(VDConnector.TAG, "onServiceConnected: IVDBus arayüzü alındı");
                 VDConnector.this.stopReconnect();
                 VDConnector.this.onVDBusConnected();
             } catch (Exception e10) {
@@ -211,7 +212,7 @@ public class VDConnector {
         this.mContext = context;
         this.mServiceInfo = serviceInfo;
         this.mThreadPoolExecutor = threadPoolExecutor;
-        Log.d(TAG, "VDConnector oluşturuldu service=" + serviceInfo.getServiceName() + " type=" + serviceInfo.getServiceType());
+        VdLog.d(TAG, "VDConnector oluşturuldu service=" + serviceInfo.getServiceName() + " type=" + serviceInfo.getServiceType());
         this.mICallback = new IVDBusCallback.Stub() {
             public void onVDBusCallback(VDEvent vDEvent) {
                 if (vDEvent.getPayload() != null) {
@@ -431,11 +432,11 @@ public class VDConnector {
             Iterator<VDEvent> it = this.mSubscribeBuffer.iterator();
             while (it.hasNext()) {
                 if (vDEvent.getId() == it.next().getId()) {
-                    Log.d(TAG, "addSubscribe: zaten buffer'da, eventId=" + vDEvent.getId() + " service=" + this.mServiceInfo.getServiceName());
+                    VdLog.d(TAG, "addSubscribe: zaten buffer'da, eventId=" + vDEvent.getId() + " service=" + this.mServiceInfo.getServiceName());
                     return;
                 }
             }
-            Log.d(TAG, "addSubscribe: eklendi, eventId=" + vDEvent.getId() + " threadType=" + vDEvent.getThreadType());
+            VdLog.d(TAG, "addSubscribe: eklendi, eventId=" + vDEvent.getId() + " threadType=" + vDEvent.getThreadType());
             this.mSubscribeBuffer.add(vDEvent);
             this.mIsSubscribeModified = true;
             synchronized (this.mThreadSubscribeBuffer) {
@@ -447,9 +448,9 @@ public class VDConnector {
     }
 
     public boolean bindService() {
-        Log.d(TAG, "bindService: çağrıldı service=" + this.mServiceInfo.getServiceName() + " system=" + this.mServiceInfo.isSystemService());
+        VdLog.d(TAG, "bindService: çağrıldı service=" + this.mServiceInfo.getServiceName() + " system=" + this.mServiceInfo.isSystemService());
         if (this.mIVDBus != null) {
-            Log.d(TAG, "bindService: zaten bağlı, IVDBus null değil");
+            VdLog.d(TAG, "bindService: zaten bağlı, IVDBus null değil");
             return true;
         }
         startReconnect();
@@ -460,7 +461,7 @@ public class VDConnector {
                     serviceFromServiceManager.linkToDeath(this.mDeathRecipient, 0);
                     try {
                         this.mIVDBus = IVDBus.Stub.asInterface(serviceFromServiceManager);
-                        Log.d(TAG, "bindService: system service üzerinden IVDBus alındı");
+                        VdLog.d(TAG, "bindService: system service üzerinden IVDBus alındı");
                         stopReconnect();
                         onVDBusConnected();
                     } catch (Exception e10) {
@@ -487,6 +488,7 @@ public class VDConnector {
     }
 
     public void dispatchEvent(VDEvent vDEvent, int i9) {
+        VdLog.d(TAG, "dispatchEvent: id=" + vDEvent.getId() + " threadType=" + i9 + " listenerCount=" + this.mVDNotifyListenerList.size());
         synchronized (this.mVDNotifyListenerList) {
             int i10 = 0;
             while (i10 < this.mVDNotifyListenerList.size()) {
@@ -511,13 +513,13 @@ public class VDConnector {
             return;
         }
         if (this.mIVDBus == null) {
-            Log.d(TAG, "get: IVDBus null, bindService çağrılıyor. eventId=" + vDEvent.getId());
+            VdLog.d(TAG, "get: IVDBus null, bindService çağrılıyor. eventId=" + vDEvent.getId());
             bindService();
         }
         try {
             IVDBus iVDBus = this.mIVDBus;
             if (iVDBus != null) {
-                Log.d(TAG, "get: IVDBus.get çağrılıyor, eventId=" + vDEvent.getId());
+                VdLog.d(TAG, "get: IVDBus.get çağrılıyor, eventId=" + vDEvent.getId());
                 VDEvent vDEvent3 = iVDBus.get(vDEvent);
                 if (!VDValue.isNullEvent(vDEvent3)) {
                     if (vDEvent3.getPayload() != null) {
@@ -557,7 +559,7 @@ public class VDConnector {
                     }
                 }
                 this.mGetBuffer.add(vDEvent);
-                Log.d(TAG, "get: IVDBus null, istek buffer'a eklendi. eventId=" + vDEvent.getId());
+                VdLog.d(TAG, "get: IVDBus null, istek buffer'a eklendi. eventId=" + vDEvent.getId());
             } catch (Throwable th) {
                 while (true) {
                     throw th;
@@ -574,14 +576,14 @@ public class VDConnector {
             return null;
         }
         if (this.mIVDBus == null) {
-            Log.d(TAG, "getOnce: IVDBus null, bindService çağrılıyor. eventId=" + vDEvent.getId());
+            VdLog.d(TAG, "getOnce: IVDBus null, bindService çağrılıyor. eventId=" + vDEvent.getId());
             bindService();
         }
         boolean z9 = true;
         try {
             IVDBus iVDBus = this.mIVDBus;
             if (iVDBus != null) {
-                Log.d(TAG, "getOnce: IVDBus.get çağrılıyor, eventId=" + vDEvent.getId());
+                VdLog.d(TAG, "getOnce: IVDBus.get çağrılıyor, eventId=" + vDEvent.getId());
                 VDEvent vDEvent3 = iVDBus.get(vDEvent);
                 if (!VDValue.isNullEvent(vDEvent3)) {
                     if (vDEvent3.getPayload() != null) {
@@ -595,7 +597,7 @@ public class VDConnector {
             Log.e(TAG, "getOnce: beklenmeyen hata", unused2);
         }
         if (z9) {
-            Log.d(TAG, "getOnce: IVDBus null veya hata sonrası bindService tekrar çağrılıyor. eventId=" + vDEvent.getId());
+            VdLog.d(TAG, "getOnce: IVDBus null veya hata sonrası bindService tekrar çağrılıyor. eventId=" + vDEvent.getId());
             bindService();
         }
         return vDEvent2;
@@ -607,7 +609,7 @@ public class VDConnector {
 
     public boolean isServiceConnected() {
         boolean connected = this.mIVDBus != null;
-        Log.d(TAG, "isServiceConnected: " + connected + " service=" + this.mServiceInfo.getServiceName());
+        VdLog.d(TAG, "isServiceConnected: " + connected + " service=" + this.mServiceInfo.getServiceName());
         if (connected) {
             return true;
         }
@@ -619,7 +621,7 @@ public class VDConnector {
     }
 
     public void onVDBusConnected() {
-        Log.d(TAG, "onVDBusConnected: service=" + this.mServiceInfo.getServiceName());
+        VdLog.d(TAG, "onVDBusConnected: service=" + this.mServiceInfo.getServiceName());
         int i9;
         synchronized (this.mSubscribeBuffer) {
             try {
@@ -649,7 +651,7 @@ public class VDConnector {
                     VDEvent vDEvent = arrayList.get(i10);
                     i10++;
                     VDEvent vDEvent2 = vDEvent;
-                    Log.d(TAG, "onVDBusConnected: pending get işleniyor, eventId=" + vDEvent2.getId());
+                    VdLog.d(TAG, "onVDBusConnected: pending get işleniyor, eventId=" + vDEvent2.getId());
                     dispatchGet(vDEvent2, this.mIVDBus.get(vDEvent2));
                 }
             } catch (Exception e12) {
@@ -666,7 +668,7 @@ public class VDConnector {
                 i11++;
                 VDBindListener vDBindListener2 = vDBindListener;
                 if (vDBindListener2 != null) {
-                    Log.d(TAG, "onVDBusConnected: VDBindListener'e onVDConnected bildiriliyor, serviceType=" + this.mServiceInfo.getServiceType());
+                    VdLog.d(TAG, "onVDBusConnected: VDBindListener'e onVDConnected bildiriliyor, serviceType=" + this.mServiceInfo.getServiceType());
                     vDBindListener2.onVDConnected(this.mServiceInfo.getServiceType());
                 }
             }
@@ -905,7 +907,7 @@ public class VDConnector {
      * taşındı (jadx temiz çözüyor). Abonelik listesi değişmediyse hiçbir şey yapmaz; dağıtım iş parçacığı bir kez açılır.
      */
     public void subscribeCommit() {
-        Log.d(TAG, "subscribeCommit: service=" + this.mServiceInfo.getServiceName() + " client=" + this.mContext.getPackageName());
+        VdLog.d(TAG, "subscribeCommit: service=" + this.mServiceInfo.getServiceName() + " client=" + this.mContext.getPackageName());
         if (!this.mServiceInfo.isExist()) {
             Log.w(TAG, "subscribeCommit: service mevcut değil. name=" + this.mServiceInfo.getServiceName());
             return;
@@ -915,7 +917,7 @@ public class VDConnector {
                 this.mIsSubscribeModified = false;
                 createDispatchEventThread();
                 if (this.mIVDBus == null) {
-                    Log.d(TAG, "subscribeCommit: IVDBus null");
+                    VdLog.d(TAG, "subscribeCommit: IVDBus null");
                     if (this.mServiceInfo.isSystemService()) {
                         bindService();
                     } else {
