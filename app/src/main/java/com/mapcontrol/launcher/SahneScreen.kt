@@ -102,7 +102,7 @@ class SahneScreen(
     fun flashPanel(type: WidgetType) {
         if (sportShown) return
         val i = panelIndexOf(type) ?: return
-        if (flipAt(i)?.turning == true) return
+        if (flipAt(i)?.moving == true) return
         val v = panels[i]
         v.animate().cancel()
         v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(FLASH_MS).withEndAction {

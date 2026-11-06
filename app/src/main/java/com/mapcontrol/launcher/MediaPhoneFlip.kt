@@ -2,12 +2,12 @@ package com.mapcontrol.launcher
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Rect
@@ -15,26 +15,31 @@ import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewOutlineProvider
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import com.mapcontrol.R
 
 /**
- * Sahne sol paneli: iki yüzlü kart. Ön yüz [MediaCard] (Sahne kipi), arka yüz [PhonePanel] (eski sağ telefon paneliyle aynı
- * görünüm ve davranış; mantık tek yerde). Sağ üst köşede sessiz bir çevirme simgesi ([FlipButton]; 64dp dokunma alanı,
- * ~22dp çizim) kartı gerçek bir dönüşle çevirir (rotationY, ~350 ms, yalnız dönüş sürerken donanım katmanı; içerik 90°'de
- * değişir; gölge kesilmesin diye katman cam panelde değil içerikte, cam zemin ve gölgesi panelle birlikte döner). Kartta yatay kaydırma da çevirir; ilerleme çubuğunda başlayan dokunuş çevirmez ([MediaFlipLogic.swipe]).
+ * Sahne sol paneli: iki sayfalı kart. İlk sayfa [MediaCard] (Sahne kipi), yandaki sayfa [PhonePanel] (eski sağ telefon
+ * paneliyle aynı görünüm ve davranış; mantık tek yerde). Sayfalar kartın içinde yan yana durur ve yalnız içerik kayar
+ * (translationX): cam zemin, gölgesi ve zemin görseli yerinde kalır; içerik kartın yuvarlak köşelerine kırpılır, kart
+ * dışına hiçbir şey taşmaz. Yatay sürüklemede içerik parmağı 1:1 izler (uçlarda dirençle); bırakınca en yakın sayfaya,
+ * %30'dan fazla sürüklendiyse ya da savrulduysa ([FLING_DP_S]) yandaki sayfaya oturur ([SETTLE_MS], yavaşlayarak, o anki
+ * konumdan). Sağ üst köşedeki sessiz sayfa simgesi ([PageButton]; 64dp dokunma alanı, ~22dp çizim) aynı oturma
+ * hareketiyle öbür sayfaya geçer. İlerleme çubuğunda başlayan dokunuş sayfa kaydırmaz ([MediaFlipLogic.SwipeGesture]).
  *
- * Kurallar ([MediaFlipLogic]): bağlı telefon yoksa simge gizli ve kart medyada; telefon yüzündeyken telefon koparsa kart
- * medyaya döner (aynı görünürlükte geri bağlanınca kendiliğinden dönmez; bu yalnız bellekte tutulur). Son yüz kalıcıdır
- * ([CardFaceStore]) ve yalnız kullanıcı çevirince değişir: kopma kaydı silmez. Arama bitince kart kendiliğinden dönmez. Telefon yüzündeyken müzik
- * çalıyorsa simge yumuşakça ışır (yalnız simge; rozet/nokta yok).
+ * Kurallar ([MediaFlipLogic]): bağlı telefon yoksa simge gizli, kaydırma kapalı ve kart medyada; telefon sayfasındayken
+ * telefon koparsa kart medyaya kayar (aynı görünürlükte geri bağlanınca kendiliğinden dönmez; bu yalnız bellekte tutulur).
+ * Son sayfa kalıcıdır ([CardFaceStore]) ve yalnız kullanıcı değiştirince değişir: kopma kaydı silmez. Arama bitince kart
+ * kendiliğinden kaymaz. Telefon sayfasındayken müzik çalıyorsa simge yumuşakça ışır (yalnız simge; rozet/nokta yok).
  *
- * Yaşam döngüsü: medya kartı ekran görünürken hep çalışır (ışıma için çalma durumu); telefon paneli yalnız telefon yüzü
- * görünürken [PhoneSource]'u dinler. Bağlantı durumu için kart, arama şeridi gibi yalnız durum isteyen bir sahiptir
- * (`wantsData = false`: rehber/geçmiş okunmaz).
+ * Yaşam döngüsü: medya kartı ekran görünürken hep çalışır (ışıma için çalma durumu); telefon paneli yalnız telefon
+ * sayfası (kısmen de olsa) görünürken [PhoneSource]'u dinler. Bağlantı durumu için kart, arama şeridi gibi yalnız durum
+ * isteyen bir sahiptir (`wantsData = false`: rehber/geçmiş okunmaz).
  */
 @SuppressLint("ViewConstructor")
 internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, PhoneListener {
@@ -44,9 +49,9 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     private val phone = PhonePanel(activity, headerEndInsetDp = PHONE_HEADER_INSET_DP)
     private val store = CardFaceStore(activity)
 
-    /** Kayıtlı (son seçilen) yüz. */
+    /** Kayıtlı (son seçilen) sayfa. */
     private var saved = store.load()
-    /** Ekrandaki yüz. */
+    /** Oturmuş (ekrandaki) sayfa; kayarken eski sayfa, oturunca hedef. */
     var face = CardFace.MEDIA
         private set
     private var connected = false
@@ -56,32 +61,52 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     private var held = false
     private var visible = false
     private var phoneListening = false
-    private var turn: Animator? = null
-    /** Dönüşün ikinci yarısında gösterilecek yüz (dönüş iptal edilirse hemen uygulanır). */
-    private var pendingFace: CardFace? = null
 
-    /** Ekrandaki yüz değişince (panel zeminindeki medya ışıması yalnız medya yüzünde). */
-    var onFaceShown: ((CardFace) -> Unit)? = null
-
-    /** Kart şu an dönüyor mu (panel nabzı dönüşü bozmasın). */
-    val turning: Boolean get() = turn != null
-
-    private val button = FlipButton(context).apply {
-        setOnClickListener { flip(MediaFlipLogic.direction(0f)) }
+    /** İçerik konumu, sayfa biriminde (0 medya, 1 telefon; uçlarda biraz taşabilir). */
+    private var pos = 0f
+    private var dragging = false
+    private var settling = false
+    private var settleFrom = 0f
+    private var settleTo = 0f
+    private var settleFace = CardFace.MEDIA
+    /** Tek oturma animatörü (her kaydırmada yeniden kullanılır; karede ayırma yok: kesir ilkel okunur). */
+    private val settle = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = SETTLE_MS
+        interpolator = DecelerateInterpolator(SETTLE_EASE)
+        addUpdateListener { setPos(settleFrom + (settleTo - settleFrom) * it.animatedFraction) }
+        addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) = finishSettle()
+        })
     }
 
-    private val frame = FlipFrame(context).apply {
-        clipChildren = false
-        clipToPadding = false
+    /** Oturmuş sayfa değişince (panel zeminindeki medya ışıması yalnız medya sayfasında). */
+    var onFaceShown: ((CardFace) -> Unit)? = null
+
+    /** Kart şu an kayıyor mu (sürükleme ya da oturma; panel nabzı hareketi bozmasın). */
+    val moving: Boolean get() = dragging || settling
+
+    private val button = PageButton(context).apply {
+        setOnClickListener { userSlide(MediaFlipLogic.other(if (settling) settleFace else face)) }
+    }
+
+    private val frame = PagerFrame(context).apply {
+        // İçerik kartın yuvarlak köşelerine kırpılır; cam zemin ve gölgesi panelde (GlassPanel) kalır, kırpılmaz.
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(v: View, outline: Outline) =
+                outline.setRoundRect(0, 0, v.width, v.height, context.dpF(Sahne.PANEL_RADIUS_DP))
+        }
+        clipToOutline = true
         addView(media.view.also { it.background = null; it.elevation = 0f }, FrameLayout.LayoutParams(MATCH, MATCH))
         addView(phone.view.also { it.background = null; it.elevation = 0f; it.visibility = View.INVISIBLE }, FrameLayout.LayoutParams(MATCH, MATCH))
-        addView(button, FrameLayout.LayoutParams(context.dp(FlipButton.TOUCH_DP), context.dp(FlipButton.TOUCH_DP), Gravity.TOP or Gravity.END))
+        addView(button, FrameLayout.LayoutParams(context.dp(PageButton.TOUCH_DP), context.dp(PageButton.TOUCH_DP), Gravity.TOP or Gravity.END))
     }
 
     init {
         media.onPlayingChanged = { refreshGlow() }
         connected = PhoneSource.snapshot().connected
-        showFace(MediaFlipLogic.shown(saved, connected))
+        val f = MediaFlipLogic.shown(saved, connected)
+        setPos(MediaFlipLogic.page(f).toFloat())
+        showFace(f)
         button.visibility = if (MediaFlipLogic.flipAvailable(connected)) View.VISIBLE else View.GONE
     }
 
@@ -102,7 +127,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     override fun onHidden() {
         if (!visible) return
         visible = false
-        finishTurn()
+        if (frame.abortDrag()) setPos(MediaFlipLogic.page(face).toFloat())
+        if (settling) settle.end()
         media.onHidden()
         PhoneSource.removeListener(this)
         PhoneSource.stop(this)
@@ -122,104 +148,89 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     override fun onPhoneChanged(snapshot: PhoneSnapshot) {
         val c = snapshot.connected
         if (c == wasConnected) return
-        // Kayıtlı yüz burada hiç değişmez; kopma yalnız bellekteki "medyada tut" bayrağını koyar.
+        // Kayıtlı sayfa burada hiç değişmez; kopma yalnız bellekteki "medyada tut" bayrağını koyar.
         held = MediaFlipLogic.holdAfter(held, wasConnected, c)
         wasConnected = c
         connected = c
         button.visibility = if (MediaFlipLogic.flipAvailable(c)) View.VISIBLE else View.GONE
+        // Telefon koptuysa süren sürükleme kesilir (içerik aşağıda medyaya kayar).
+        val aborted = !c && frame.abortDrag()
         val want = MediaFlipLogic.shown(saved, c, held)
-        if (want == face && pendingFace == null) return
-        // Kart görünürken yüz değişimi hep görünür bir dönüşle (kopma da, açılışta geç bağlanan telefonla son yüze dönüş de);
-        // görünmüyorsa [turnTo] anında uygular.
-        turnTo(want, -1)
+        if (!aborted && want == (if (settling) settleFace else face)) return
+        // Kart görünürken sayfa değişimi hep görünür bir kaymayla (kopma da, açılışta geç bağlanan telefonla son sayfaya
+        // dönüş de); görünmüyorsa [slideTo] anında uygular.
+        slideTo(want)
     }
 
-    // --- Çevirme ---
+    // --- Sayfalar ---
 
-    /** Kullanıcı çevirdi (simge ya da kaydırma): yeni yüz kayda geçer. */
-    private fun flip(direction: Int) {
-        if (!connected || turn != null) return
-        val target = MediaFlipLogic.other(face)
+    /** Kullanıcı sayfa seçti (simge ya da kaydırma): seçim kayda geçer. */
+    private fun userSlide(target: CardFace) {
+        if (!connected && target == CardFace.PHONE) return
         held = false
-        saved = target
-        store.save(target)
-        turnTo(target, direction)
+        if (target != saved) {
+            saved = target
+            store.save(target)
+        }
+        slideTo(target)
     }
 
     /**
-     * Kartı [target] yüzüne döndürür: panel (cam zemin dahil) 0 → 90° döner, 90°'de içerik değişir, -90° → 0 ile tamamlanır.
-     * Dönüş boyunca kart içeriği ([frame]) tek donanım katmanıdır; bitince bırakılır. Katman panelin kendisine konmaz: cam
-     * gölgesi panel sınırının dışına çizilir ve katman onu keserdi. Panel katmansız döner; zemini (tek yuvarlak dikdörtgen ve
-     * gölgesi) her karede yeniden kaydedilmeden çizilir, gölge kartla birlikte döner. Görünmüyorsa ya da animasyonlar kapalıysa anında.
+     * İçeriği [target] sayfasına o anki konumdan kaydırır ([SETTLE_MS], yavaşlayarak). Görünmüyorsa, ölçülmemişse ya da
+     * animasyonlar kapalıysa anında.
      */
-    private fun turnTo(target: CardFace, direction: Int) {
-        finishTurn()
-        if (target == face) return
-        val card = frame.parent as? View ?: frame
-        if (!visible || !frame.isAttachedToWindow || card.width == 0 || !ValueAnimator.areAnimatorsEnabled()) {
+    private fun slideTo(target: CardFace) {
+        val to = MediaFlipLogic.page(target).toFloat()
+        settling = false
+        settle.cancel()
+        if (!visible || !frame.isAttachedToWindow || frame.width == 0 || !ValueAnimator.areAnimatorsEnabled() ||
+            kotlin.math.abs(pos - to) < EPS) {
+            setPos(to)
             showFace(target)
             return
         }
-        card.cameraDistance = context.resources.displayMetrics.density * CAMERA_DISTANCE
-        frame.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        pendingFace = target
-        val first = ObjectAnimator.ofFloat(card, View.ROTATION_Y, 0f, EDGE_DEG * direction).apply {
-            // Dokunur dokunmaz hareket (yavaş başlayan hızlanma "geç tepki" gibi hissettiriyordu).
-            duration = FIRST_MS
-            interpolator = android.view.animation.LinearInterpolator()
-        }
-        val second = ObjectAnimator.ofFloat(card, View.ROTATION_Y, -EDGE_DEG * direction, 0f).apply {
-            duration = SECOND_MS
-            interpolator = DecelerateInterpolator(1.6f)
-        }
-        val set = android.animation.AnimatorSet().apply { playSequentially(first, second) }
-        first.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                if (turn !== set) return
-                pendingFace?.let { showFace(it) }
-                pendingFace = null
-            }
-        })
-        set.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                if (turn !== set) return
-                turn = null
-                card.rotationY = 0f
-                frame.setLayerType(View.LAYER_TYPE_NONE, null)
-            }
-        })
-        turn = set
-        set.start()
+        settleFrom = pos
+        settleTo = to
+        settleFace = target
+        settling = true
+        settle.start()
     }
 
-    /** Süren dönüş bitirilir: kart düz, katman bırakılmış, hedef yüz ekranda. */
-    private fun finishTurn() {
-        val t = turn ?: return
-        turn = null
-        t.cancel()
-        val card = frame.parent as? View ?: frame
-        card.rotationY = 0f
-        frame.setLayerType(View.LAYER_TYPE_NONE, null)
-        pendingFace?.let { showFace(it) }
-        pendingFace = null
+    /** Oturma bitti (ya da [ValueAnimator.end]): içerik tam sayfada, hedef sayfa ekranda. İptalde [settling] zaten kapalı. */
+    private fun finishSettle() {
+        if (!settling) return
+        settling = false
+        setPos(settleTo)
+        showFace(settleFace)
+    }
+
+    /** İçerik konumu: iki sayfa yan yana, yalnız translationX; tamamen dışarıdaki sayfa çizilmez. */
+    private fun setPos(p: Float) {
+        pos = p
+        val w = frame.width.toFloat()
+        media.view.translationX = -p * w
+        phone.view.translationX = (1f - p) * w
+        media.view.visibility = if (p < 1f - EPS) View.VISIBLE else View.INVISIBLE
+        phone.view.visibility = if (p > EPS) View.VISIBLE else View.INVISIBLE
+        // Köşe simgesi yerinde durur; kayarken gelen sayfanın başlığıyla üst üste binmesin diye ortada söner.
+        val f = p.coerceIn(0f, 1f)
+        button.alpha = kotlin.math.abs(1f - 2f * f)
+        syncPhoneListening()
     }
 
     private fun showFace(f: CardFace) {
         val changed = f != face
         face = f
-        media.view.visibility = if (f == CardFace.MEDIA) View.VISIBLE else View.INVISIBLE
-        phone.view.visibility = if (f == CardFace.PHONE) View.VISIBLE else View.INVISIBLE
         button.contentDescription = context.getString(
             if (f == CardFace.MEDIA) R.string.launcher_flip_to_phone else R.string.launcher_flip_to_media)
         syncPhoneListening()
-        // Yüz kenardan (90°) değişti: ışıma geçişsiz (yeni yüzde eski ışıma sönerken görünmesin).
-        refreshGlow(animate = false)
+        refreshGlow()
         if (changed) onFaceShown?.invoke(f)
     }
 
-    /** Telefon paneli yalnız telefon yüzü görünürken dinler. */
+    /** Telefon paneli yalnız telefon sayfası (kısmen de olsa) görünürken dinler. */
     private fun syncPhoneListening() {
-        val want = visible && face == CardFace.PHONE
+        val want = visible && (face == CardFace.PHONE || pos > EPS)
         if (want == phoneListening) return
         phoneListening = want
         if (want) phone.onVisible() else phone.onHidden()
@@ -230,21 +241,31 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     // --- Kaydırma ---
 
     /**
-     * Kart kabı: yatay kaydırmayı yakalar. Basış ilerleme çubuğunda ([MediaCard.horizontalDragViews]) başladıysa o dokunuş
-     * çevirmez. Yatay niyet belli olunca dokunuş alttaki düğmeden alınır; çevirme mesafesinde kart bir kez döner.
+     * Kart kabı: yatay sürüklemeyi yakalar ve içeriği parmakla kaydırır. Basış ilerleme çubuğunda
+     * ([MediaCard.horizontalDragViews]) başladıysa o dokunuş sayfa kaydırmaz. Yatay niyet belli olunca dokunuş alttaki
+     * düğmeden alınır; bırakınca [MediaFlipLogic.settle] hedef sayfayı seçer. Oturma sürerken basılırsa oturma hemen biter.
      */
-    private inner class FlipFrame(context: Context) : FrameLayout(context) {
+    private inner class PagerFrame(context: Context) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-        private val flipPx = context.dpF(FLIP_DISTANCE_DP)
+        private val flingPx = context.dpF(FLING_DP_S)
         private val hit = Rect()
         private var downX = 0f
         private var downY = 0f
+        /** Sürüklemenin başladığı nokta ve sayfa (yakalama anından: içerik zıplamaz). */
+        private var originX = 0f
+        private var anchor = 0
         private var onDrag = false
-        /** Dokunuşun kararı hareket boyunca hatırlanır (önce dikey giden sürükleme sonradan çevirmez). */
-        private val gesture = MediaFlipLogic.SwipeGesture(slop, flipPx)
+        private var tracker: VelocityTracker? = null
+        private val gesture = MediaFlipLogic.SwipeGesture(slop)
+
+        override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+            super.onLayout(changed, left, top, right, bottom)
+            // Genişlik değişince sayfalar yeni genişliğe göre yerleşir.
+            if (changed) setPos(pos)
+        }
 
         private fun startsOnDrag(x: Float, y: Float): Boolean {
-            if (face != CardFace.MEDIA) return false
+            if (face != CardFace.MEDIA || moving) return false
             for (v in media.horizontalDragViews()) {
                 if (v.visibility != View.VISIBLE || !v.isAttachedToWindow) continue
                 hit.set(0, 0, v.width, v.height)
@@ -256,23 +277,70 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
             return false
         }
 
-        private fun decide(ev: MotionEvent): MediaFlipLogic.Swipe =
-            gesture.move(ev.x - downX, ev.y - downY, connected && turn == null)
+        private fun track(ev: MotionEvent) {
+            (tracker ?: VelocityTracker.obtain().also { tracker = it }).addMovement(ev)
+        }
 
         private fun down(ev: MotionEvent) {
+            // Oturma sürerken basış: hareket hemen tamamlanır, dokunuş oturmuş sayfada işlenir.
+            if (settling) settle.end()
+            tracker?.clear()
+            track(ev)
             downX = ev.x; downY = ev.y
             onDrag = startsOnDrag(ev.x, ev.y)
             gesture.down(onDrag)
         }
 
+        /** Hareket kararı; DRAG ilk geldiğinde sürükleme başlar. */
+        private fun decide(ev: MotionEvent): Boolean {
+            if (dragging) return true
+            if (gesture.move(ev.x - downX, ev.y - downY, connected && width > 0) != MediaFlipLogic.Swipe.DRAG) return false
+            dragging = true
+            originX = ev.x
+            anchor = MediaFlipLogic.page(face)
+            parent?.requestDisallowInterceptTouchEvent(true)
+            return true
+        }
+
+        private fun drag(ev: MotionEvent) {
+            val raw = anchor - (ev.x - originX) / width
+            setPos(MediaFlipLogic.resist(raw, maxPage()))
+        }
+
+        private fun maxPage(): Int = if (connected) 1 else 0
+
+        private fun release(cancelled: Boolean) {
+            val t = tracker
+            tracker = null
+            if (dragging) {
+                dragging = false
+                var v = 0f
+                if (t != null && !cancelled) {
+                    t.computeCurrentVelocity(1000)
+                    v = t.xVelocity
+                }
+                val page = MediaFlipLogic.settle(anchor, pos, v, flingPx, maxPage())
+                if (page == anchor) slideTo(face) else userSlide(MediaFlipLogic.faceAt(page))
+            }
+            t?.recycle()
+        }
+
+        /** Süren sürükleme dışarıdan kesilir (içerik yerinde kalır; çağıran kaydırır). Sürükleme vardı mı. */
+        fun abortDrag(): Boolean {
+            gesture.cancel()
+            val was = dragging
+            dragging = false
+            return was
+        }
+
         override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> down(ev)
-                MotionEvent.ACTION_MOVE -> when (decide(ev)) {
-                    MediaFlipLogic.Swipe.CAPTURE -> return true
-                    MediaFlipLogic.Swipe.FLIP -> { fire(ev); return true }
-                    else -> Unit
+                MotionEvent.ACTION_MOVE -> {
+                    track(ev)
+                    if (decide(ev)) { drag(ev); return true }
                 }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> release(cancelled = true)
             }
             return false
         }
@@ -286,47 +354,46 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
                     return connected && !onDrag
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (decide(ev) == MediaFlipLogic.Swipe.FLIP) fire(ev)
-                    return true
+                    track(ev)
+                    if (decide(ev)) drag(ev)
                 }
+                MotionEvent.ACTION_UP -> { track(ev); release(cancelled = false) }
+                MotionEvent.ACTION_CANCEL -> release(cancelled = true)
             }
             return true
-        }
-
-        /** [SwipeGesture] FLIP'i dokunuş başına bir kez verir. */
-        private fun fire(ev: MotionEvent) {
-            flip(MediaFlipLogic.direction(ev.x - downX))
         }
     }
 
     private companion object {
         const val MATCH = FrameLayout.LayoutParams.MATCH_PARENT
-        /** Dönüşün iki yarısı: ilk yarı doğrusal ve kısa (anında tepki), ikinci yarı yavaşlayarak oturur; toplam 240 ms. */
-        const val FIRST_MS = 100L
-        const val SECOND_MS = 140L
-        const val EDGE_DEG = 90f
-        /** Kamera uzaklığı (dp cinsinden çarpan): kart dönerken kenarı aşırı büyümesin. */
-        const val CAMERA_DISTANCE = 9000f
-        const val FLIP_DISTANCE_DP = 72f
+        /** Oturma: o anki konumdan hedef sayfaya, yavaşlayarak. */
+        const val SETTLE_MS = 190L
+        const val SETTLE_EASE = 1.5f
+        /** Savurma eşiği (dp/s): bunu aşan bırakış yandaki sayfaya geçer. */
+        const val FLING_DP_S = 800f
+        const val EPS = 0.001f
         const val DRAG_PAD_DP = 16
-        /** Telefon başlığının sağında çevirme simgesine bırakılan pay. */
+        /** Telefon başlığının sağında sayfa simgesine bırakılan pay. */
         const val PHONE_HEADER_INSET_DP = 28
     }
 }
 
 /**
- * Çevirme simgesi: 64dp dokunma alanının ortasında ~22dp ince çizgili iki dönüş oku, kartın kendi mürekkep renginde. Işıma
+ * Sayfa simgesi: 64dp dokunma alanının ortasında ~22dp ince çizgili iki köşeli ok (sola/sağa), kartın kendi mürekkep renginde. Işıma
  * açıkken simgenin kendisi medya kartının sıcak renginde yanar ve arkasında yumuşak bir ışık lekesi belirir (rozet/halka yok);
  * geçiş 400 ms, kare başına ayırma yok (iki sabit tonlu kopya ve tek gölgelendirici).
  */
 @SuppressLint("ViewConstructor")
-internal class FlipButton(context: Context) : View(context) {
-    private val base: Drawable = context.getDrawable(R.drawable.ic_sahne_flip)!!.mutate().apply { setTint(Sahne.INK_2) }
-    private val lit: Drawable = context.getDrawable(R.drawable.ic_sahne_flip)!!.mutate().apply { setTint(warm()) }
+internal class PageButton(context: Context) : View(context) {
+    private val base: Drawable = context.getDrawable(R.drawable.ic_sahne_page)!!.mutate().apply { setTint(Sahne.INK_2) }
+    private val lit: Drawable = context.getDrawable(R.drawable.ic_sahne_page)!!.mutate().apply { setTint(warm()) }
     private val halo = Paint(Paint.ANTI_ALIAS_FLAG)
     private var glow = 0f
     private var glowOn = false
     private var anim: ValueAnimator? = null
+
+    /** Kayarken saydamlaşır: tek kopya çizildiği varsayılır (ara katman gerekmez). */
+    override fun hasOverlappingRendering(): Boolean = false
 
     init {
         isClickable = true
@@ -399,7 +466,7 @@ internal class FlipButton(context: Context) : View(context) {
     }
 }
 
-/** Kartın son yüzü: profil başına kalıcı (yeniden başlatmada aynı yüz). */
+/** Kartın son sayfası: profil başına kalıcı (yeniden başlatmada aynı yüz). */
 internal class CardFaceStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(Profiles.key(context, PREFS), Context.MODE_PRIVATE)
 

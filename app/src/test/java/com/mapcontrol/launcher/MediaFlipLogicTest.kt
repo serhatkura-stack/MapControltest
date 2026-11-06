@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Medya/telefon kartı: yüz kuralları, kalıcılık, kaydırma kararı; telefon panelinin düzenden kalkışı ve bant yerleşimi. */
+/** Medya/telefon kartı: sayfa kuralları, kalıcılık, kaydırma kararı, oturma ve uç direnci; telefon panelinin düzenden kalkışı ve bant yerleşimi. */
 class MediaFlipLogicTest {
 
     @Test
@@ -37,19 +37,21 @@ class MediaFlipLogicTest {
     }
 
     @Test
-    fun gestureThatWentVerticalFirstNeverFlipsLater() {
-        val g = MediaFlipLogic.SwipeGesture(slopPx = 10f, flipPx = 72f)
+    fun gestureThatWentVerticalFirstNeverPagesLater() {
+        val g = MediaFlipLogic.SwipeGesture(slopPx = 10f)
         g.down(startsOnDrag = false)
         assertEquals(Swipe.IGNORE, g.move(2f, 30f, enabled = true))
         // Sonradan yataya dönen sürükleme: yine bırakılır (alttaki kaydırma alanından dokunuş alınmaz).
         assertEquals(Swipe.IGNORE, g.move(150f, 30f, enabled = true))
-        // Yeni basış kararı sıfırlar.
+        // Yeni basış kararı sıfırlar; yakalanan sürükleme bırakılana dek sürüklemedir (dikeye kaysa da).
         g.down(startsOnDrag = false)
-        assertEquals(Swipe.CAPTURE, g.move(20f, 2f, enabled = true))
-        assertEquals(Swipe.FLIP, g.move(80f, 4f, enabled = true))
-        // Çevirme dokunuş başına bir kez.
+        assertEquals(Swipe.WAIT, g.move(4f, 1f, enabled = true))
+        assertEquals(Swipe.DRAG, g.move(20f, 2f, enabled = true))
+        assertEquals(Swipe.DRAG, g.move(25f, 60f, enabled = true))
+        // Dışarıdan kesilen (telefon koptu) sürükleme dokunuş bitene dek yok sayılır.
+        g.cancel()
         assertEquals(Swipe.IGNORE, g.move(200f, 4f, enabled = true))
-        // İlerleme çubuğunda başlayan dokunuş hiç çevirmez.
+        // İlerleme çubuğunda başlayan dokunuş hiç kaydırmaz.
         g.down(startsOnDrag = true)
         assertEquals(Swipe.IGNORE, g.move(200f, 0f, enabled = true))
     }
@@ -73,25 +75,79 @@ class MediaFlipLogicTest {
     }
 
     private fun swipe(dx: Float, dy: Float, onDrag: Boolean = false, enabled: Boolean = true) =
-        MediaFlipLogic.swipe(dx, dy, slopPx = 10f, flipPx = 72f, startsOnDrag = onDrag, enabled = enabled)
+        MediaFlipLogic.swipe(dx, dy, slopPx = 10f, startsOnDrag = onDrag, enabled = enabled)
 
     @Test
-    fun horizontalSwipeFlipsVerticalAndSeekBarDoNot() {
+    fun horizontalSwipeDragsVerticalAndSeekBarDoNot() {
         assertEquals(Swipe.WAIT, swipe(4f, 1f))
-        assertEquals(Swipe.CAPTURE, swipe(20f, 2f))
-        assertEquals(Swipe.FLIP, swipe(80f, 10f))
-        assertEquals(Swipe.FLIP, swipe(-80f, -10f))
+        assertEquals(Swipe.DRAG, swipe(20f, 2f))
+        assertEquals(Swipe.DRAG, swipe(-80f, -10f))
         // Dikey kayma: bırakılır (kaydırma alanları ve sayfa hareketi çalışır).
         assertEquals(Swipe.IGNORE, swipe(5f, 30f))
-        // Çapraz (yatay dikeyin 1,5 katı değil): çevirmez.
+        // Çapraz (yatay dikeyin 1,5 katı değil): kaydırmaz.
         assertEquals(Swipe.IGNORE, swipe(80f, 70f))
-        // İlerleme çubuğunda başlayan dokunuş hiçbir mesafede çevirmez.
+        // İlerleme çubuğunda başlayan dokunuş hiçbir mesafede kaydırmaz.
         assertEquals(Swipe.IGNORE, swipe(200f, 0f, onDrag = true))
-        // Bağlı telefon yok: çevirme kapalı.
+        // Bağlı telefon yok: kaydırma kapalı.
         assertEquals(Swipe.IGNORE, swipe(200f, 0f, enabled = false))
-        assertEquals(-1, MediaFlipLogic.direction(-50f))
-        assertEquals(1, MediaFlipLogic.direction(50f))
-        assertEquals(-1, MediaFlipLogic.direction(0f))
+    }
+
+    private val fling = 800f
+
+    @Test
+    fun releaseSettlesToNearestOrNextPastThirtyPercent() {
+        // Medyadan sola (telefona doğru) sürükleme: %30'a kadar geri döner, üstü telefona.
+        assertEquals(0, MediaFlipLogic.settle(0, 0.2f, 0f, fling, maxPage = 1))
+        assertEquals(0, MediaFlipLogic.settle(0, 0.3f, 0f, fling, maxPage = 1))
+        assertEquals(1, MediaFlipLogic.settle(0, 0.31f, 0f, fling, maxPage = 1))
+        assertEquals(1, MediaFlipLogic.settle(0, 0.9f, 0f, fling, maxPage = 1))
+        // Telefondan sağa (medyaya doğru).
+        assertEquals(1, MediaFlipLogic.settle(1, 0.75f, 0f, fling, maxPage = 1))
+        assertEquals(0, MediaFlipLogic.settle(1, 0.6f, 0f, fling, maxPage = 1))
+        // Uçtaki taşma: yerine döner.
+        assertEquals(0, MediaFlipLogic.settle(0, -0.1f, 0f, fling, maxPage = 1))
+        assertEquals(1, MediaFlipLogic.settle(1, 1.1f, 0f, fling, maxPage = 1))
+    }
+
+    @Test
+    fun flingPagesInVelocityDirectionAndStaysInRange() {
+        // Kısa ama hızlı savurma: sola savurma sonraki sayfa, sağa savurma önceki.
+        assertEquals(1, MediaFlipLogic.settle(0, 0.05f, -900f, fling, maxPage = 1))
+        assertEquals(0, MediaFlipLogic.settle(1, 0.95f, 900f, fling, maxPage = 1))
+        // Eşik altı hız: mesafe kuralı.
+        assertEquals(0, MediaFlipLogic.settle(0, 0.05f, -700f, fling, maxPage = 1))
+        // Geri savurma sürüklemeyi geri alır.
+        assertEquals(0, MediaFlipLogic.settle(0, 0.6f, 1200f, fling, maxPage = 1))
+        // Uçtan dışarı savurma ve tek sayfa (telefon yok): aralıkta kalır.
+        assertEquals(0, MediaFlipLogic.settle(0, -0.05f, 2000f, fling, maxPage = 1))
+        assertEquals(1, MediaFlipLogic.settle(1, 1.05f, -2000f, fling, maxPage = 1))
+        assertEquals(0, MediaFlipLogic.settle(0, 0.6f, -2000f, fling, maxPage = 0))
+    }
+
+    @Test
+    fun dragFollowsInsideAndResistsPastTheEnds() {
+        // İçeride 1:1.
+        assertEquals(0f, MediaFlipLogic.resist(0f, 1), 0f)
+        assertEquals(0.42f, MediaFlipLogic.resist(0.42f, 1), 0f)
+        assertEquals(1f, MediaFlipLogic.resist(1f, 1), 0f)
+        // Uçlarda: taşma küçülür, yönü korunur, hiçbir mesafede sınırı geçmez, artan taşmada artar.
+        val small = MediaFlipLogic.resist(-0.1f, 1)
+        assertTrue(small < 0f && small > -0.1f)
+        val big = MediaFlipLogic.resist(-5f, 1)
+        assertTrue(big < small && big > -MediaFlipLogic.MAX_OVER)
+        val right = MediaFlipLogic.resist(1.2f, 1)
+        assertTrue(right > 1f && right < 1f + MediaFlipLogic.MAX_OVER)
+        // Başlangıç eğimi RESIST.
+        assertEquals(-0.001f * MediaFlipLogic.RESIST, MediaFlipLogic.resist(-0.001f, 1), 1e-5f)
+        // Tek sayfa: 0'ın iki yanı dirençli.
+        assertTrue(MediaFlipLogic.resist(0.5f, 0) < 0.5f * MediaFlipLogic.RESIST + 1e-6f)
+    }
+
+    @Test
+    fun pagesMapToFaces() {
+        assertEquals(0, MediaFlipLogic.page(CardFace.MEDIA))
+        assertEquals(1, MediaFlipLogic.page(CardFace.PHONE))
+        CardFace.values().forEach { assertEquals(it, MediaFlipLogic.faceAt(MediaFlipLogic.page(it))) }
     }
 
     @Test

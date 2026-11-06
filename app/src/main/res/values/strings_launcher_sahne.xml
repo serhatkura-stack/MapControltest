@@ -45,6 +45,6 @@
     <!-- Spor hız kadranının altındaki küçük devir okuması. -->
     <string name="launcher_sport_rpm">%1$d rpm</string>
     <!-- Medya kartının sağ üst köşesindeki çevirme simgesi (kartın arka yüzü telefon). -->
-    <string name="launcher_flip_to_phone">Flip to phone</string>
-    <string name="launcher_flip_to_media">Flip to media</string>
+    <string name="launcher_flip_to_phone">Show phone</string>
+    <string name="launcher_flip_to_media">Show media</string>
 </resources>
