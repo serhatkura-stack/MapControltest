@@ -45,6 +45,8 @@ internal data class CarDetailModel(
     val batteryV: Double?,
     val coolantC: Int?,
     val pm25In: Int?,
+    /** Dış sıcaklık °C (HVAC 19); okunamadıysa null. */
+    val outsideC: Double? = null,
 )
 
 internal object CarDetail {
@@ -82,6 +84,7 @@ internal object CarDetail {
             batteryV = trip.batteryV,
             coolantC = trip.coolantC,
             pm25In = trip.pm25In,
+            outsideC = trip.outsideC,
         )
     }
 
@@ -159,6 +162,7 @@ internal class CarDetailSheet(private val activity: Activity) {
             m.health?.any { it == HealthMath.Issue.BATTERY_LOW || it == HealthMath.Issue.BATTERY_HIGH } == true)
         row(s(R.string.launcher_health_row_engine), m.coolantC?.let { activity.getString(R.string.launcher_temp_c, it) } ?: dash,
             m.health?.contains(HealthMath.Issue.ENGINE_HOT) == true)
+        row(s(R.string.launcher_detail_outside), m.outsideC?.let { activity.getString(R.string.launcher_temp_c, Math.round(it).toInt()) } ?: dash, false)
         val air = m.pm25In?.let { pm ->
             val grade = s(when (AirGrade.of(pm)) {
                 AirGrade.GOOD -> R.string.launcher_air_good

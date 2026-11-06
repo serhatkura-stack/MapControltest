@@ -127,6 +127,7 @@
     <string name="launcher_health_service_in" formatted="true">Bakıma %1$s</string>
     <string name="launcher_health_row_service">Bakıma kalan</string>
     <string name="launcher_health_row_service_days">Bakıma kalan süre</string>
+    <string name="launcher_detail_outside">Dış sıcaklık</string>
     <string name="launcher_health_row_engine">Motor</string>
     <string name="launcher_layout_park">Park</string>
     <string name="launcher_layout_drive">Sürüş</string>

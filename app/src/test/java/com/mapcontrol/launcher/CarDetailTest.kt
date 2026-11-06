@@ -21,7 +21,13 @@ class CarDetailTest {
         assertNull(m.serviceKm)
         assertNull(m.health)
         assertNull(m.pm25In)
+        assertNull(m.outsideC)
         assertNull(CarDetail.openIndices(m.doors))
+    }
+
+    @Test
+    fun outsideTemperatureComesFromTrip() {
+        assertEquals(17.0, CarDetail.model(null, ExtraData(), TripData(outsideC = 17.0), null).outsideC!!, 1e-9)
     }
 
     @Test

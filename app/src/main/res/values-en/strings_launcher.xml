@@ -127,6 +127,7 @@
     <string name="launcher_health_service_in" formatted="true">Service in %1$s</string>
     <string name="launcher_health_row_service">Until service</string>
     <string name="launcher_health_row_service_days">Time to service</string>
+    <string name="launcher_detail_outside">Outside</string>
     <string name="launcher_health_row_engine">Engine</string>
     <string name="launcher_layout_park">Park</string>
     <string name="launcher_layout_drive">Drive</string>

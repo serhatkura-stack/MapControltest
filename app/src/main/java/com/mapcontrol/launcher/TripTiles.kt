@@ -52,6 +52,12 @@ internal object TripDecode {
     fun liveIntervalMs(rpmRaw: Int?, speedKmh: Int?): Long =
         if (rpmRaw == 0 && speedKmh == 0) 3_000L else 1_000L
 
+    /**
+     * Dış sıcaklık (HVAC 19 `ID_AC_TEMPERATURE_CELSIUS_OUTSIDE`): °C = ham / 2 − 55 (0,5 °C adım). Araçta iki noktayla
+     * doğrulandı (2026-11-06, Tiggo 7): ham 144 = gösterge 17 °C, ham 140 = 15 °C. 255 (0xFF) ve −40..80 dışı geçersiz.
+     */
+    fun outsideC(raw: Int?): Double? = raw?.takeIf { it in 0..254 }?.let { it / 2.0 - 55.0 }?.takeIf { it in -40.0..80.0 }
+
     /** Anlık tüketim (sinyal 70): ham/10 L/100 km. 0xFFFF (araç duruyor) ve aralık dışı değer geçersizdir. */
     fun instantL100(raw: Int?): Double? = raw?.takeIf { it in 0..999 }?.let { it / 10.0 }
 
@@ -130,6 +136,8 @@ internal data class TripData(
     /** Kabin içi / dışı PM2.5 (µg/m³). */
     val pm25In: Int? = null,
     val pm25Out: Int? = null,
+    /** Dış sıcaklık °C ([TripDecode.outsideC]); 5 sn katmanında okunur. */
+    val outsideC: Double? = null,
     /** Toplam km (150, yoksa 71), toplam yakıt L (153), sürüş süresi dk: çalışmadan beri (151) ve sıfırlamadan beri (152). */
     val totalKm: Int? = null,
     val totalFuelL: Double? = null,
@@ -253,6 +261,7 @@ internal object TripSource {
                 batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
                 coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
                 lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
+                outsideC = TripDecode.outsideC(hvac(HvacID.ID_AC_TEMPERATURE_CELSIUS_OUTSIDE)),
             )
         }
         if (mask and T_SLOW != 0) {
