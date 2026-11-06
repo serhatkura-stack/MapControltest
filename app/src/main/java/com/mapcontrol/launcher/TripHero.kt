@@ -28,10 +28,14 @@ internal object TripHero {
     }
 
     /**
-     * Sürüşteki öncü satırın alt satırına eklenecek yolculuk mesafesi: yalnız canlı içerikte ve km okunuyorsa (yoksa null).
-     * Parkta mesafe zaten öncü sayıdır; eklenmez.
+     * Sürüşteki öncü satırın alt satırına eklenecek yolculuk mesafesi: km okunuyorsa yalnız kısa etiketli durumlarda
+     * (VALUE, CAP, IDLE); "20 km/sa üstünde ölçülür" ve "Araç verisi bekleniyor" zaten uzun, eklenirse satır kayar (null).
+     * Parkta mesafe zaten öncü sayıdır; bu çağrılmaz.
      */
-    fun liveSubDistance(content: Content, tripKm: Double?): Double? = if (content == Content.LIVE) tripKm else null
+    fun liveSubDistance(live: Live, tripKm: Double?): Double? = when (live) {
+        Live.VALUE, Live.CAP, Live.IDLE -> tripKm
+        Live.LOW_SPEED, Live.WAITING -> null
+    }
 
     /** İki içerik arasında çapraz geçiş gerekir mi: yalnızca TRIP ile LIVE arasında (veri yokluğu anında değişir). */
     fun crossfade(from: Content?, to: Content): Boolean =

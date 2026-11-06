@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.TextUtils
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
@@ -304,6 +305,8 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             big.text = ""
             big.visibility = View.GONE
             bigUnit.visibility = View.GONE
+            sub.maxLines = Int.MAX_VALUE
+            sub.ellipsize = null
             sub.setText(R.string.launcher_trip_no_data)
             sub.textSize = 22f
             sub.setTextColor(Sahne.INK_3)
@@ -357,12 +360,13 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
 
     /**
      * Canlı anlık tüketim: tüketim kutucuğuyla aynı metinler ve durumlar. Yolculuk mesafesi kaybolmasın diye alt satırın
-     * sonuna küçük "· Yol 53,8 km" eklenir ([TripHero.liveSubDistance]); satır parktaki "Son sıfırlamadan beri" ile aynı
+     * sonuna küçük "· Yol 53,8 km" eklenir (yalnız kısa etiketli durumlarda, [TripHero.liveSubDistance]); tek satıra sığmazsa
+     * üç noktayla kısalır. Satır parktaki "Son sıfırlamadan beri" ile aynı
      * yerde ve boyutta, yerleşim kaymaz.
      */
     private fun liveHero(km: Double?): Hero {
         val h = liveHeroBase()
-        val distance = TripHero.liveSubDistance(TripHero.Content.LIVE, km)?.let { one(it) } ?: return h
+        val distance = TripHero.liveSubDistance(TripHero.live(display), km)?.let { one(it) } ?: return h
         return h.copy(sub = context.getString(R.string.launcher_trip_live_sub, h.sub, distance))
     }
 
@@ -386,6 +390,9 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         if (h.unit != null) bigUnit.text = h.unit
         bigUnit.visibility = if (h.unit == null) View.GONE else View.VISIBLE
         sub.setTextColor(Sahne.INK_3)
+        // Öncü alt satırı hep tek satır: uzun dil/4 haneli km satırı kaydırıp ortalamaları aşağı itmesin.
+        sub.maxLines = 1
+        sub.ellipsize = TextUtils.TruncateAt.END
         sub.setTextSmooth(h.sub, animate = false)
     }
 

@@ -3,6 +3,7 @@ package com.mapcontrol.launcher
 import com.mapcontrol.launcher.TripHero.Content
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,6 +31,17 @@ class TripHeroTest {
         assertEquals(TripHero.Live.LOW_SPEED, TripHero.live(ConsumptionSmoother.Display(ConsumptionSmoother.Mode.TAKEOFF)))
         assertEquals(TripHero.Live.VALUE, TripHero.live(ConsumptionSmoother.Display(ConsumptionSmoother.Mode.VALUE, 7.2)))
         assertEquals(TripHero.Live.CAP, TripHero.live(ConsumptionSmoother.Display(ConsumptionSmoother.Mode.CAP, 30.0)))
+    }
+
+    @Test fun liveSubDistanceOnlyOnShortLiveStates() {
+        assertEquals(53.8, TripHero.liveSubDistance(TripHero.Live.VALUE, 53.8)!!, 0.0)
+        assertEquals(1234.5, TripHero.liveSubDistance(TripHero.Live.CAP, 1234.5)!!, 0.0)
+        assertEquals(53.8, TripHero.liveSubDistance(TripHero.Live.IDLE, 53.8)!!, 0.0)
+        // km okunamıyorsa eklenmez.
+        assertNull(TripHero.liveSubDistance(TripHero.Live.VALUE, null))
+        // Uzun mesajlı durumlarda satır kaymasın diye eklenmez.
+        assertNull(TripHero.liveSubDistance(TripHero.Live.LOW_SPEED, 53.8))
+        assertNull(TripHero.liveSubDistance(TripHero.Live.WAITING, 53.8))
     }
 
     @Test fun crossfadeOnlyBetweenTripAndLive() {
