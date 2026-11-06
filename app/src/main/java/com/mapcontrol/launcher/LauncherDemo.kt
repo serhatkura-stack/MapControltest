@@ -54,6 +54,7 @@ internal object LauncherDemo {
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
         if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
         if (enabled && intent.hasExtra(EXTRA_TITLE)) title = intent.getStringExtra(EXTRA_TITLE)
+        if (enabled) still = intent.getBooleanExtra(EXTRA_STILL, false)
         if (enabled && intent.hasExtra(EXTRA_ARTIST)) artist = intent.getStringExtra(EXTRA_ARTIST)
         if (enabled && intent.hasExtra(EXTRA_SOURCE)) source = intent.getStringExtra(EXTRA_SOURCE)
     }
@@ -448,8 +449,18 @@ internal object LauncherDemo {
     }
 
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */
+    /**
+     * Otomatik test için durgun ekran (`--ez launcher_demo_still true`): demo müziği duraklatılmış görünür, geçen süre her
+     * saniye değişmez. uiautomator ekran ağacını ancak arayüz yarım saniye sessiz kalınca alabilir.
+     */
+    const val EXTRA_STILL = "launcher_demo_still"
+
+    @Volatile
+    var still = false
+        private set
+
     fun media(): MediaState = MediaState(
-        true, true, true,
+        true, true, !still,
         title ?: "Yolun Sonu", artist ?: "Demo Sanatçı", source ?: "com.google.android.apps.youtube.music",
         72_000L, 215_000L, artwork,
     )
