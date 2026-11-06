@@ -133,6 +133,19 @@ internal class SportStageView(
     private val needle = NeedleView(activity)
     private val peak = PeakView(activity)
     private val gear = sahneText(activity, 40f, SportInk.INK, 600, dayBump = false).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+    /** Devir kadranının ortasındaki dijital hız: ince, büyük, eşit genişlikli rakamlar ("tnum"); altında küçük birim. */
+    private val speed = sahneText(activity, 80f, SportInk.INK, 300, -0.03f, dayBump = false).apply {
+        gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
+        text = SpeedReadout.DASH
+        contentDescription = null
+    }
+    private val speedUnit = sahneText(activity, 14f, SportInk.INK_3, 500, 0.12f, dayBump = false).apply {
+        gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
+        text = SportGeometry.unit(SportDial.SPEED)
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    private val speedReadout = SpeedReadout()
+    private var speedText: String = SpeedReadout.DASH
     private val slots = ArrayList<Slot>()
     private val media = SportMediaDial(activity)
     private val car = CarStageView(activity).apply {
@@ -147,7 +160,7 @@ internal class SportStageView(
     private val carLight = CarLightView(activity)
     private val glows = ArrayList<GlowView>()
     /** Geçişte solup beliren canlı görünümler (yalnız geçişte okunur). */
-    private val live: List<View> get() = listOf(gear, peak, media, car, carLight) + slots.flatMap { it.liveViews }
+    private val live: List<View> get() = listOf(gear, speed, speedUnit, peak, media, car, carLight) + slots.flatMap { it.liveViews }
 
     private var visibleNow = false
     private var sweeping = false
@@ -221,6 +234,9 @@ internal class SportStageView(
         addView(car)
         addView(carLight)
         addView(gear)
+        // Sabit genişlik: hız değişince yalnız yeniden çizilir, yerleşim istenmez (TextView.checkForRelayout).
+        addView(speed, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        addView(speedUnit)
         addView(peak)
         addView(needle)
         buildSlots()
@@ -259,6 +275,7 @@ internal class SportStageView(
         if (visibleNow) return
         visibleNow = true
         lastGearState = null
+        speedReadout.reset()
         media.onVisible()
         car.setActive(true)
         TripSource.add(activity, tripListener)
@@ -382,6 +399,7 @@ internal class SportStageView(
         val results: Int
         val ready: Boolean
         val range: Int?
+        val kmh: Int?
         val s = SportSessionStore.session
         if (demo) {
             rpm = LauncherDemo.rpm()
@@ -397,6 +415,7 @@ internal class SportStageView(
             results = 0
             ready = trip.speedKmh == 0
             range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
+            kmh = trip.speedKmh
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
@@ -422,6 +441,17 @@ internal class SportStageView(
             results = s.results
             ready = s.stopped && !s.timing
             range = snap.rangeKm.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) && it >= 0 }
+            // Gösterge hızı (119; aracın kadranıyla aynı) 10 Hz okunur; yoksa sürüş verisinin hızı (1 Hz).
+            kmh = when {
+                !snap.connected -> null
+                VehicleMetricsSnapshot.isValid(snap.displaySpeed) || VehicleMetricsSnapshot.isValid(snap.actualSpeed) -> snap.preferredSpeed()
+                else -> trip.speedKmh
+            }
+        }
+        speedReadout.next(now, kmh)?.let { t ->
+            speedText = t
+            speed.text = t
+            speed.contentDescription = if (t == SpeedReadout.DASH) null else "$t ${SportGeometry.unit(SportDial.SPEED)}"
         }
         setText(gear, gearText)
         for (i in slots.indices) {
@@ -458,6 +488,7 @@ internal class SportStageView(
                     }
                 }
                 SportDial.MAX -> setText(v, maxKmh?.toString() ?: DASH)
+                SportDial.SPEED -> setText(v, speedText)
                 SportDial.COOLANT -> setText(v, trip.coolantC?.toString() ?: DASH)
                 SportDial.AVG_SPEED -> setText(v, trip.avgSpeedKmh?.toString() ?: DASH)
                 SportDial.TRIP_TIME -> {
@@ -766,6 +797,10 @@ internal class SportStageView(
         gear.setTextSize(TypedValue.COMPLEX_UNIT_PX, win.height() * 0.72f)
         gear.measure(exactly(win.width().toInt()), exactly(win.height().toInt()))
         val wrap = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        speed.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedSize)
+        speed.measure(exactly((g.rpmFace * 1.1f).toInt()), wrap)
+        speedUnit.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedUnitSize)
+        speedUnit.measure(exactly((g.rpmFace * 0.6f).toInt()), wrap)
         slots.forEach { s ->
             val d = s.dial ?: return@forEach
             s.value?.let { v ->
@@ -828,6 +863,10 @@ internal class SportStageView(
         peak.pivotY = peak.measuredHeight / 2f
         val win = g.gearWindow()
         centerAt(gear, win.centerX(), win.centerY())
+        // Rakamların görsel ortası (büyük harf yüksekliği) hedefte: satır kutusu yazı tipi boşluklarıyla kayar.
+        val fm = speed.paint.fontMetrics
+        centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * SportGeometry.CAP / 2f)
+        centerAt(speedUnit, g.rpm.cx, g.speedUnitY)
         slots.forEach { s ->
             val d = s.dial ?: return@forEach
             s.value?.let { centerAt(it, d.cx, d.cy + d.r * 0.02f) }

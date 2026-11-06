@@ -319,12 +319,16 @@ internal object SportArt {
             val a = Math.toRadians(SportMath.needleDeg(k * 1000f).toDouble())
             centered(c, k.toString(), d.cx + cos(a).toFloat() * rn, d.cy + sin(a).toFloat() * rn, num)
         }
-        // Birim etiketi göbekle vites penceresi arasında: ibre seyirde (2 000–4 000) üst yarıdan geçer, üstünü örtmez.
-        centered(c, "RPM ×1000", d.cx, d.cy + rf * 0.205f, textPaint(context, rf * 0.07f, SportInk.INK_2, 500))
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 1f
-        p.color = 0x22FFFFFF
-        c.drawCircle(d.cx, d.cy, rf * 0.52f, p)
+        // Dijital hızın zemini: göbeğin altında çok hafif koyu bir yuva (yüzden ayrışır, kutu gibi durmaz). Rakamlar
+        // canlı yazı; burada yalnız zemin.
+        p.style = Paint.Style.FILL
+        val sy = d.cy + rf * SportGeometry.SPEED_Y
+        val sr = rf * 0.36f
+        p.shader = RadialGradient(d.cx, sy, sr, intArrayOf(0x8C000000.toInt(), 0x4D000000, 0x00000000), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
+        c.drawCircle(d.cx, sy, sr, p)
+        p.shader = null
+        // Birim etiketi en altta, vites penceresinin altında: ibre o bölgeye inmez.
+        centered(c, "RPM ×1000", d.cx, d.cy + rf * SportGeometry.RPM_LABEL_Y, textPaint(context, rf * 0.05f, SportInk.INK_3, 500).apply { letterSpacing = 0.12f })
         // Vites penceresi: metal çerçeveli koyu pencere.
         val win = g.gearWindow()
         p.style = Paint.Style.FILL
@@ -411,14 +415,25 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
     /** Devir kadranı yüz yarıçapı. */
     val rpmFace: Float get() = rpm.r - rpm.r * 0.075f - 2f
 
+    /**
+     * Vites penceresi: dijital hızın altında, kadranın alt boşluğunda (ibre 0–8 000 arası üst yarıyı süpürür, buraya
+     * hiç inmez; kuyruğu göbekten ~0,14 yüz yarıçapı taşar).
+     */
     fun gearWindow(): RectF {
         val rf = rpmFace
         val cx = rpm.cx
-        val cy = rpm.cy + rf * 0.42f
-        val hw = rf * 0.23f
-        val hh = rf * 0.15f
+        val cy = rpm.cy + rf * GEAR_Y
+        val hw = rf * GEAR_HW
+        val hh = rf * GEAR_HH
         return RectF(cx - hw, cy - hh, cx + hw, cy + hh)
     }
+
+    /** Dijital hız rakamlarının dikey ortası ve yazı boyu (px). */
+    val speedY: Float get() = rpm.cy + rpmFace * SPEED_Y
+    val speedSize: Float get() = rpmFace * SPEED_SIZE
+    /** "km/sa" biriminin dikey ortası ve yazı boyu (px). */
+    val speedUnitY: Float get() = rpm.cy + rpmFace * SPEED_UNIT_Y
+    val speedUnitSize: Float get() = rpmFace * SPEED_UNIT_SIZE
 
     /** Araç kadranında aracın gövde boyu (burun yukarı). */
     fun carLength(): Float = (car.r - car.r * 0.075f - 2f) * 1.52f
@@ -433,6 +448,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.G -> "G"
             SportDial.INSTANT -> "Anlık"
             SportDial.MAX -> "Maks"
+            SportDial.SPEED -> "Hız"
             SportDial.COOLANT -> "Motor"
             SportDial.AVG_SPEED -> "Ortalama"
             SportDial.TRIP_TIME -> "Süre"
@@ -445,7 +461,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
         fun unit(kind: SportDial): String = when (kind) {
             SportDial.ZERO100, SportDial.PASS80 -> "sn"
             SportDial.INSTANT -> "L/100"
-            SportDial.MAX, SportDial.AVG_SPEED -> "km/sa"
+            SportDial.MAX, SportDial.AVG_SPEED, SportDial.SPEED -> "km/sa"
             SportDial.COOLANT -> "°C"
             SportDial.TRIP_TIME -> "dk"
             SportDial.RANGE -> "km"
@@ -458,6 +474,7 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.G -> "G-metre"
             SportDial.INSTANT -> "Anlık tüketim"
             SportDial.MAX -> "Maks hız"
+            SportDial.SPEED -> "Hız"
             SportDial.COOLANT -> "Motor suyu"
             SportDial.AVG_SPEED -> "Ortalama hız"
             SportDial.TRIP_TIME -> "Yolculuk süresi"
@@ -465,6 +482,19 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
             SportDial.PASS80 -> "80–120"
             SportDial.CLOCK -> "Analog saat"
         }
+
+        // Devir kadranının alt yarısı (yüz yarıçapına oran, göbekten aşağı): dijital hız, birimi, vites penceresi,
+        // "RPM ×1000". Hız ibre kuyruğunun (≈0,14) altında başlar; ibre bu bölgeye hiç girmez (SportLogicTest).
+        const val SPEED_Y = 0.31f
+        const val SPEED_SIZE = 0.34f
+        const val SPEED_UNIT_Y = 0.485f
+        const val SPEED_UNIT_SIZE = 0.058f
+        const val GEAR_Y = 0.655f
+        const val GEAR_HW = 0.165f
+        const val GEAR_HH = 0.1f
+        const val RPM_LABEL_Y = 0.855f
+        /** Yazı tipinin büyük harf/rakam yüksekliği (yazı boyuna oran, Manrope ~0,72). */
+        const val CAP = 0.72f
 
         /** Analog saat: saniye alt kadranının merkez yüksekliği ve yarıçapı (yüz yarıçapına oran). */
         const val CLOCK_SEC_Y = 0.42f

@@ -273,6 +273,8 @@ enum class SportDial(val key: String) {
     G("g"),
     INSTANT("inst"),
     MAX("max"),
+    /** Anlık hız (gösterge hızı; devir kadranının ortasında da yazar). */
+    SPEED("spd"),
     COOLANT("cool"),
     AVG_SPEED("avg"),
     TRIP_TIME("time"),
@@ -412,6 +414,38 @@ class GFilter(private val linear: Boolean) {
 
         /** Ekranda 1 g'yi aşan değer kenarda durur. */
         fun clampUnit(v: Float): Float = v.coerceIn(-1f, 1f)
+    }
+}
+
+/**
+ * Devir kadranının ortasındaki dijital hız (saf, JVM'de sınanır): metin yalnız tam sayı değişince ve en çok
+ * [INTERVAL_MS]'de bir (~4 Hz) yenilenir; dururken "0", bilinmiyorsa "—". Değişmeyen değer için iş ve ayırma yok.
+ */
+class SpeedReadout {
+    private var shown = UNSET
+    private var at = 0L
+
+    /** [now] anında [kmh] için gösterilecek yeni metin; değişmediyse ya da aralık dolmadıysa null. */
+    fun next(now: Long, kmh: Int?): String? {
+        val v = kmh?.takeIf { it in 0..MAX_KMH } ?: UNKNOWN
+        if (v == shown) return null
+        if (shown != UNSET && now - at < INTERVAL_MS) return null
+        shown = v
+        at = now
+        return if (v == UNKNOWN) DASH else v.toString()
+    }
+
+    /** Görünüm yeniden açıldı: ilk değer beklemeden yazılır. */
+    fun reset() {
+        shown = UNSET
+    }
+
+    companion object {
+        const val INTERVAL_MS = 250L
+        const val MAX_KMH = 300
+        const val DASH = "—"
+        private const val UNSET = Int.MIN_VALUE
+        private const val UNKNOWN = -1
     }
 }
 

@@ -430,6 +430,38 @@ class SportLogicTest {
         assertNoOverlapAndInside(SportGeometry(1200, 1000, fourDials)) // çok uzun alanda da
     }
 
+    // --- Devir kadranındaki dijital hız ---
+
+    @Test fun speedReadoutWritesOnlyChangesAtMostFourTimesASecond() {
+        val r = SpeedReadout()
+        assertEquals("—", r.next(0, null))
+        assertEquals("0", r.next(300, 0))
+        assertNull(r.next(400, 0)) // aynı değer: iş yok
+        assertNull(r.next(450, 1)) // 250 ms dolmadı
+        assertEquals("1", r.next(550, 1))
+        assertNull(r.next(560, 1))
+        assertEquals("142", r.next(900, 142))
+        assertEquals("—", r.next(1_200, -1)) // aralık dışı bilinmiyor
+        assertNull(r.next(1_500, 400)) // hâlâ bilinmiyor: iş yok
+        r.reset()
+        assertEquals("88", r.next(1_510, 88)) // yeniden açılınca beklemeden
+    }
+
+    @Test fun speedSitsBetweenNeedleTailAndGearWindow() {
+        val tail = NeedleView.LENGTH * 0.16f // ibre kuyruğu (yüz yarıçapına oran)
+        val digitsTop = SportGeometry.SPEED_Y - SportGeometry.SPEED_SIZE * SportGeometry.CAP / 2f
+        val digitsBottom = SportGeometry.SPEED_Y + SportGeometry.SPEED_SIZE * SportGeometry.CAP / 2f
+        assertTrue(digitsTop > tail)
+        assertTrue(SportGeometry.SPEED_UNIT_Y - SportGeometry.SPEED_UNIT_SIZE / 2f > digitsBottom)
+        assertTrue(SportGeometry.GEAR_Y - SportGeometry.GEAR_HH > SportGeometry.SPEED_UNIT_Y + SportGeometry.SPEED_UNIT_SIZE / 2f)
+        assertTrue(SportGeometry.RPM_LABEL_Y > SportGeometry.GEAR_Y + SportGeometry.GEAR_HH)
+        assertTrue(SportGeometry.RPM_LABEL_Y < 0.95f)
+        // Alt boşluk: ibre 0'da 135°, 8 000'de 45°; hız bölgesi (aşağı, 90°) hiç süpürülmez.
+        assertTrue(SportMath.needleDeg(0f) >= 135f - 1e-3f && SportMath.needleDeg(SportMath.RPM_MAX.toFloat()) <= 405f + 1e-3f)
+        assertTrue(SportDial.SPEED in SportDials.offered(false))
+        assertEquals("km/sa", SportGeometry.unit(SportDial.SPEED))
+    }
+
     @Test fun mediaContentKeepsTiggo7ScaleAndShrinksOnlyWhenSmaller() {
         assertEquals(208f, SportGeometry.mediaContentRadius(208f, 210f), 0f)
         assertEquals(240f, SportGeometry.mediaContentRadius(240f, 210f), 0f)
