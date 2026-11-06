@@ -27,6 +27,12 @@ internal object TripHero {
         ConsumptionSmoother.Mode.CAP -> Live.CAP
     }
 
+    /**
+     * Sürüşteki öncü satırın alt satırına eklenecek yolculuk mesafesi: yalnız canlı içerikte ve km okunuyorsa (yoksa null).
+     * Parkta mesafe zaten öncü sayıdır; eklenmez.
+     */
+    fun liveSubDistance(content: Content, tripKm: Double?): Double? = if (content == Content.LIVE) tripKm else null
+
     /** İki içerik arasında çapraz geçiş gerekir mi: yalnızca TRIP ile LIVE arasında (veri yokluğu anında değişir). */
     fun crossfade(from: Content?, to: Content): Boolean =
         from != null && from != to && from != Content.NO_DATA && to != Content.NO_DATA

@@ -88,8 +88,19 @@ object SahneForm {
      */
     val TIGGO7_HIDDEN: Set<WidgetType> = setOf(WidgetType.REAR_SPEAKER)
 
-    /** Gizlenen şerit yuvasının yerine sırayla denenen türler (düzende olmayan ilki). */
-    val TIGGO7_REPLACEMENTS: List<WidgetType> = listOf(WidgetType.CONSUMPTION, WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER)
+    /**
+     * Gizlenen şerit yuvasının yerine sırayla denenen türler (düzende olmayan ilki). Anlık tüketim en sonda ve yolculuk
+     * paneli varken hiç seçilmez: yolculuk kartı sürüşte zaten canlı tüketimi gösterir (6 Kasım kararı; çift olmasın).
+     */
+    val TIGGO7_REPLACEMENTS: List<WidgetType> = listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER, WidgetType.CONSUMPTION)
+
+    /** Düzende yolculuk paneli var mı (sürüşte öncü satırı canlı tüketimdir; şeritteki tüketim kutucuğu onu yineler). */
+    fun hasTripPanel(layout: SahneLayout): Boolean =
+        listOf(layout.left, layout.right, layout.leftLower, layout.rightLower).any { it?.type == WidgetType.TRIP }
+
+    /** Şerit yuvasına [layout]'ta yedek olarak konabilir mi: yolculuk paneli varken anlık tüketim konmaz. */
+    fun stripFallbackOk(layout: SahneLayout, type: WidgetType): Boolean =
+        fitsStrip(type) && !(type == WidgetType.CONSUMPTION && hasTripPanel(layout))
 
     /** Bu biçimde ([quad] false = Tiggo 7) gösterilebilir mi. */
     fun available(type: WidgetType, quad: Boolean): Boolean = quad || type !in TIGGO7_HIDDEN
@@ -158,9 +169,10 @@ object SahneSlots {
 
     /**
      * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şeritte iki uçta koltuklar (sol direksiyonlu kabine
-     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), anlık tüketim
+     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), ekranı kapat
      * ([rearSpeaker] ise arka hoparlör: yalnız Tiggo 8; Tiggo 7'de DSP erişilemiyor), iki uygulama (yola çıkmadan
-     * müzik/harita) ve sürüş modu (kapı kilidi sahnenin sağ üstündeki hapta; şeritte çift olmasın).
+     * müzik/harita) ve sürüş modu (kapı kilidi sahnenin sağ üstündeki hapta; şeritte çift olmasın). Anlık tüketim şeritte
+     * yok: sağdaki yolculuk kartı sürüşte onu öncü satırında gösterir (6 Kasım kararı).
      */
     fun defaultPark(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
@@ -168,7 +180,7 @@ object SahneSlots {
         strip = listOf(
             SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
             SahneSlot("trunk", WidgetType.TRUNK),
-            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("consumption", WidgetType.CONSUMPTION),
+            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
             SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
             SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
             SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
@@ -197,7 +209,9 @@ object SahneSlots {
 
     /**
      * Tiggo 8 varsayılanı (Park ve Sürüş aynı panel dizilişi): sol üst medya, sol alt navigasyon, sağ üst yolculuk, sağ alt
-     * tüketim; şerit o modun Tiggo 7 şeridiyle aynı.
+     * tüketim; şerit o modun Tiggo 7 şeridiyle aynı. Sürüşte sağ alt tüketim paneli yolculuk kartının canlı satırıyla aynı
+     * sayıyı gösterir, yine de kalır: dördüncü yuva için başka izinli panel türü yok (medya, yolculuk, navigasyon dolu) ve
+     * boş yuva dört panelli biçimde soluk cam olarak durur. Tüketim paneli ayrıca dururken de anlıkta kalır.
      */
     fun defaultsQuad(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
         defaults(mode, appPackages, rearSpeaker = true).copy(
@@ -258,8 +272,14 @@ object SahneSlots {
     // ayraçları içermez (yalnızca harf, rakam, '.', '_'). Saf metin: JSON'a gerek yok, JVM'de sınanır.
     // Dört panelli biçim (Tiggo 8) sona iki alan ekler: "v1|<sol>|<sağ>|<şerit>|<sol alt>|<sağ alt>". İki panelli kayıt
     // aynen eski dört alanlı biçimdir; eski okuyucu altı alanlı kaydı çözemez ve varsayılana döner (yalnız Tiggo 8 dosyasında).
+    // v2 (6 Kasım): alanlar aynı; yalnız v1 kayıtları bir kez [migrateTripConsumption]'dan geçer. v2 kayıtlarına dokunulmaz
+    // (kullanıcı tüketimi bilerek geri eklemiş olabilir).
 
-    private const val VERSION = "v1"
+    private const val VERSION = "v2"
+    private const val VERSION_1 = "v1"
+
+    /** Kayıt eski (v1) biçimde mi: [decode] onu bir kez geçirir, çağıran v2 olarak yeniden yazar. */
+    fun isLegacy(raw: String?): Boolean = raw?.startsWith("$VERSION_1|") == true
 
     fun encode(layout: SahneLayout): String {
         fun slot(s: SahneSlot?): String = if (s == null) "" else listOf(s.type.key, s.id, s.extra ?: "").joinToString("~")
@@ -275,7 +295,8 @@ object SahneSlots {
     fun decode(raw: String?): SahneLayout? {
         if (raw.isNullOrEmpty()) return null
         val parts = raw.split("|")
-        if ((parts.size != 4 && parts.size != 6) || parts[0] != VERSION) return null
+        if ((parts.size != 4 && parts.size != 6) || (parts[0] != VERSION && parts[0] != VERSION_1)) return null
+        val v1 = parts[0] == VERSION_1
         fun slot(s: String): SahneSlot? {
             if (s.isEmpty()) return null
             val f = s.split("~")
@@ -287,7 +308,24 @@ object SahneSlots {
         val quad = parts.size == 6
         val raw = migratePhonePanel(migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip, quad,
             if (quad) slot(parts[4]) else null, if (quad) slot(parts[5]) else null)))
-        return fallbackPanels(raw, sanitize(raw))
+        val clean = fallbackPanels(raw, sanitize(raw))
+        return if (v1) migrateTripConsumption(clean) else clean
+    }
+
+    /**
+     * v1 → v2 bir kerelik geçiş: yolculuk kartı sürüşte canlı tüketimi öncü satırında gösterir, şeritteki "Anlık tüketim"
+     * kutucuğu onu yineler. Düzende yolculuk paneli varsa şeritteki tüketim yuvası ekranı kapata döner; ekranı kapat zaten
+     * düzendeyse mola hatırlatıcıya, o da varsa aynen kalır. Yolculuk paneli ya da şeritte tüketim yoksa düzen aynen döner.
+     */
+    fun migrateTripConsumption(layout: SahneLayout): SahneLayout {
+        if (!SahneForm.hasTripPanel(layout)) return layout
+        val i = layout.strip.indexOfFirst { it?.type == WidgetType.CONSUMPTION }
+        if (i < 0) return layout
+        val ref = SahneSlotRef(SahneSlotKind.STRIP, i)
+        val cleared = set(layout, ref, null)
+        val used = cleared.types()
+        val pick = listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER).firstOrNull { it !in used } ?: return layout
+        return set(cleared, ref, SahneSlot(newId(cleared, pick), pick))
     }
 
     /**
@@ -368,7 +406,7 @@ object SahneSlots {
             val ref = SahneSlotRef(SahneSlotKind.STRIP, i)
             val cleared = set(out, ref, null)
             val used = cleared.types()
-            val pick = SahneForm.TIGGO7_REPLACEMENTS.firstOrNull { it !in used && SahneForm.fitsStrip(it) }
+            val pick = SahneForm.TIGGO7_REPLACEMENTS.firstOrNull { it !in used && SahneForm.stripFallbackOk(cleared, it) }
             out = if (pick == null) cleared else set(cleared, ref, SahneSlot(newId(cleared, pick), pick))
         }
         return out
@@ -399,7 +437,13 @@ class SahneStore(
     /** Tiggo 8: her yanda üst üste iki panel (dört panelli biçim); Tiggo 7 iki panelli kalır. */
     val quad: Boolean = vehicle == VehicleProfile.TIGGO8
 
-    fun load(): SahneLayout = forVehicle(SahneSlots.decode(prefs.getString(key, null)) ?: defaults())
+    fun load(): SahneLayout {
+        val raw = prefs.getString(key, null)
+        val decoded = SahneSlots.decode(raw)
+        // v1 kaydı bir kez geçirilir ve v2 olarak yazılır: sonradan bilerek eklenen tüketim bir daha kaldırılmaz.
+        if (decoded != null && SahneSlots.isLegacy(raw)) save(decoded)
+        return forVehicle(decoded ?: defaults())
+    }
 
     fun save(layout: SahneLayout) = prefs.edit().putString(key, SahneSlots.encode(layout)).apply()
 

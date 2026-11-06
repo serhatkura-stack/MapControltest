@@ -321,7 +321,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
             data.avgSpeedKmh?.let { context.getString(R.string.launcher_trip_avg_speed_label) to context.getString(R.string.launcher_kmh_value, it) },
         )
         val rows = totalsRows()
-        val hero = if (content == TripHero.Content.LIVE) liveHero() else
+        val hero = if (content == TripHero.Content.LIVE) liveHero(km) else
             Hero(one(km!!), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_trip_since_reset), Sahne.NUMERAL)
         val key = Triple(hero, stats, rows)
         if (key == shown) return
@@ -355,8 +355,18 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         onStripChanged?.invoke()
     }
 
-    /** Canlı anlık tüketim: tüketim kutucuğuyla aynı metinler ve durumlar. */
-    private fun liveHero(): Hero {
+    /**
+     * Canlı anlık tüketim: tüketim kutucuğuyla aynı metinler ve durumlar. Yolculuk mesafesi kaybolmasın diye alt satırın
+     * sonuna küçük "· Yol 53,8 km" eklenir ([TripHero.liveSubDistance]); satır parktaki "Son sıfırlamadan beri" ile aynı
+     * yerde ve boyutta, yerleşim kaymaz.
+     */
+    private fun liveHero(km: Double?): Hero {
+        val h = liveHeroBase()
+        val distance = TripHero.liveSubDistance(TripHero.Content.LIVE, km)?.let { one(it) } ?: return h
+        return h.copy(sub = context.getString(R.string.launcher_trip_live_sub, h.sub, distance))
+    }
+
+    private fun liveHeroBase(): Hero {
         val label = context.getString(R.string.launcher_widget_consumption)
         val unit = context.getString(R.string.launcher_l100_unit)
         return when (TripHero.live(display)) {

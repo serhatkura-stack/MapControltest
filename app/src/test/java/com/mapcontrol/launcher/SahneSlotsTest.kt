@@ -50,20 +50,20 @@ class SahneSlotsTest {
     @Test
     fun disallowedPanelFallsBackToSideDefaultOrOtherFreeType() {
         // Sol: hava (artık yok) -> medya; sağ: sağlık -> yolculuk.
-        var d = SahneSlots.decode("v1|air~a~|health~h~|")!!
+        var d = SahneSlots.decode("v2|air~a~|health~h~|")!!
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         // Medya sağda kullanımda: sol yedek medya olamaz, kullanılmayan diğer panel türü (yolculuk) gelir.
-        d = SahneSlots.decode("v1|air~a~|media~m~|")!!
+        d = SahneSlots.decode("v2|air~a~|media~m~|")!!
         assertEquals(WidgetType.TRIP, d.left?.type)
         assertEquals(WidgetType.MEDIA, d.right?.type)
         // Tüketim şeritte kullanımda olsa da yedek olabilir türler arasından kullanılmayan alınır; sağ yedeği yolculuk, sol medya.
-        d = SahneSlots.decode("v1|clock~c~|health~h~|consumption~k~")!!
+        d = SahneSlots.decode("v2|clock~c~|health~h~|consumption~k~")!!
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(WidgetType.CONSUMPTION, d.strip[0]?.type)
         // Boş ya da bilinmeyen yuva yedek almaz.
-        d = SahneSlots.decode("v1||nope~x~|")!!
+        d = SahneSlots.decode("v2||nope~x~|")!!
         assertNull(d.left)
         assertNull(d.right)
     }
@@ -92,10 +92,12 @@ class SahneSlotsTest {
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.CONSUMPTION, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.SCREEN_OFF, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
         assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[3]?.extra))
+        // Yolculuk kartı sürüşte canlı tüketimi gösterir: şeritte anlık tüketim yinelenmez.
+        assertFalse(WidgetType.CONSUMPTION in d.strip.map { it?.type })
         // Tiggo 8 şeridinde arka hoparlör duruyor.
         assertEquals(WidgetType.REAR_SPEAKER, SahneSlots.defaultsQuad(LayoutMode.PARK, apps).strip[2]?.type)
     }
@@ -121,10 +123,11 @@ class SahneSlotsTest {
         assertFalse(SahneForm.canPlace(t7, SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
         assertTrue(SahneForm.canPlace(SahneSlots.defaultsQuad(LayoutMode.PARK, apps).let { SahneSlots.set(it, SahneSlotRef(SahneSlotKind.STRIP, 2), null) },
             SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
-        // Eski Park kaydı: arka hoparlör yuvası düzende olmayan ilk yedeğe (anlık tüketim) döner.
+        // Eski Park kaydı: arka hoparlör yuvası düzende olmayan ilk yedeğe (ekranı kapat) döner; yolculuk paneli varken tüketim gelmez.
         val oldPark = SahneSlots.defaultPark(apps, rearSpeaker = true)
         val park = SahneSlots.forTiggo7(SahneSlots.decode(SahneSlots.encode(oldPark))!!)
-        assertEquals(WidgetType.CONSUMPTION, park.strip[2]?.type)
+        assertEquals(WidgetType.SCREEN_OFF, park.strip[2]?.type)
+        assertFalse(WidgetType.CONSUMPTION in park.types())
         assertFalse(WidgetType.REAR_SPEAKER in park.types())
         // Eski Sürüş kaydı: tüketim panelde olduğundan ekranı kapat gelir.
         val drive = SahneSlots.forTiggo7(SahneSlots.defaultDrive(apps, rearSpeaker = true))
@@ -174,7 +177,7 @@ class SahneSlotsTest {
         assertNull(SahneSlots.decode("v9|media~media~||"))
         assertNull(SahneSlots.decode("garbage"))
         // Bilinmeyen tür yalnızca kendi yuvasını boşaltır; eksik şerit yuvaları boş tamamlanır.
-        val d = SahneSlots.decode("v1|nope~x~|trip~trip~|seat_heat_driver~s~")!!
+        val d = SahneSlots.decode("v2|nope~x~|trip~trip~|seat_heat_driver~s~")!!
         assertNull(d.left)
         assertEquals(WidgetType.TRIP, d.right?.type)
         assertEquals(STRIP_SLOTS, d.strip.size)
@@ -185,7 +188,7 @@ class SahneSlotsTest {
     @Test
     fun removedHeatsCardEmptiesItsSlotOnDecode() {
         // Tiggo 7'de direksiyon/ön cam ısıtma donanımı yok: eski "heats" yuvası boşalır, kalanlar korunur.
-        val d = SahneSlots.decode("v1|heats~h~|trip~trip~|")!!
+        val d = SahneSlots.decode("v2|heats~h~|trip~trip~|")!!
         assertNull(d.left)
         assertEquals(WidgetType.TRIP, d.right?.type)
     }
@@ -220,7 +223,7 @@ class SahneSlotsTest {
     @Test
     fun oldRecordMigratesSeatsAndDropsRemovedWidgets() {
         // Eski Park varsayılanı: ısıtma sürücü · perde · bagaj · buğu · uygulamalar · ısıtma yolcu (+ panelde soğutma yolcu).
-        val old = "v1|media~media~|seat_vent_passenger~vp~|seat_heat_driver~seat_heat_driver~,sunshade~sunshade~,trunk~trunk~," +
+        val old = "v2|media~media~|seat_vent_passenger~vp~|seat_heat_driver~seat_heat_driver~,sunshade~sunshade~,trunk~trunk~," +
             "defrost~defrost~,app~app_pair~a.b+c.d,seat_heat_passenger~seat_heat_passenger~"
         val d = SahneSlots.decode(old)!!
         assertEquals(WidgetType.MEDIA, d.left?.type)
@@ -234,7 +237,7 @@ class SahneSlotsTest {
 
     @Test
     fun heatAndVentOfOneSideKeepOnlyOneMergedSeat() {
-        val d = SahneSlots.decode("v1|||seat_heat_driver~h~,seat_vent_driver~v~,,,,")!!
+        val d = SahneSlots.decode("v2|||seat_heat_driver~h~,seat_vent_driver~v~,,,,")!!
         assertEquals(listOf("h" to WidgetType.SEAT_DRIVER), d.slots().map { it.id to it.type })
     }
 
@@ -267,11 +270,11 @@ class SahneSlotsTest {
     fun setGetAndNewIds() {
         val d = SahneSlots.defaultPark(apps)
         val ref = SahneSlotRef(SahneSlotKind.STRIP, 3)
-        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.SCREEN_OFF), WidgetType.SCREEN_OFF)
+        val slot = SahneSlot(SahneSlots.newId(d, WidgetType.BREAK_REMINDER), WidgetType.BREAK_REMINDER)
         val e = SahneSlots.set(d, ref, slot)
         assertEquals(slot, SahneSlots.get(e, ref))
         assertEquals(d.left, e.left)
-        assertEquals("screen_off", slot.id)
+        assertEquals("break_reminder", slot.id)
         assertEquals("drive_mode_2", SahneSlots.newId(d, WidgetType.DRIVE_MODE)) // sürüş modu zaten Park şeridinde
         assertEquals("app_2", SahneSlots.newId(SahneSlots.set(d, ref, SahneSlot("app", WidgetType.APP)), WidgetType.APP))
         assertNull(SahneSlots.get(SahneSlots.set(e, ref, null), ref))
@@ -280,7 +283,7 @@ class SahneSlotsTest {
     @Test
     fun oldLockSlotBecomesDriveModeWhenFree() {
         // Eski Park varsayılanı: kilit 5. yuvada, sürüş modu yok → kilit yerine sürüş modu.
-        val old = "v1|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,rear_speaker~rear_speaker~," +
+        val old = "v2|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,rear_speaker~rear_speaker~," +
             "app~app_pair~a.b+c.d,lock~lock~,seat_passenger~seat_passenger~"
         val d = SahneSlots.decode(old)!!
         assertEquals(
@@ -294,10 +297,10 @@ class SahneSlotsTest {
 
     @Test
     fun oldLockSlotEmptiesWhenDriveModeIsPlaced() {
-        val d = SahneSlots.decode("v1|||lock~lock~,drive_mode~drive_mode~,lock~lock2~,,,")!!
+        val d = SahneSlots.decode("v2|||lock~lock~,drive_mode~drive_mode~,lock~lock2~,,,")!!
         assertEquals(listOf(null, WidgetType.DRIVE_MODE, null, null, null, null), d.strip.map { it?.type })
         // Sürüş modu yoksa yalnızca ilk kilit döner, ikincisi boşalır.
-        val e = SahneSlots.decode("v1|||,lock~lock~,,lock~l2~,,")!!
+        val e = SahneSlots.decode("v2|||,lock~lock~,,lock~l2~,,")!!
         assertEquals(listOf(null, WidgetType.DRIVE_MODE, null, null, null, null), e.strip.map { it?.type })
     }
 
@@ -375,7 +378,7 @@ class SahneSlotsTest {
 
     @Test
     fun oldTwoPanelRecordUpgradesToQuad() {
-        val old = SahneSlots.decode("v1|media~media~|trip~trip~|seat_driver~seat_driver~,,,,,")!!
+        val old = SahneSlots.decode("v2|media~media~|trip~trip~|seat_driver~seat_driver~,,,,,")!!
         assertFalse(old.quad)
         val q = SahneSlots.toQuad(old)
         assertTrue(q.quad)
@@ -385,18 +388,18 @@ class SahneSlotsTest {
         assertEquals(WidgetType.CONSUMPTION, q.rightLower?.type)
         assertEquals(old.strip, q.strip)
         // Üstte navigasyon ve tüketim zaten varsa alt yuvalar kalan türleri alır.
-        val q2 = SahneSlots.toQuad(SahneSlots.decode("v1|nav_turn~n~|consumption~c~|")!!)
+        val q2 = SahneSlots.toQuad(SahneSlots.decode("v2|nav_turn~n~|consumption~c~|")!!)
         assertEquals(WidgetType.MEDIA, q2.leftLower?.type)
         assertEquals(WidgetType.TRIP, q2.rightLower?.type)
     }
 
     @Test
     fun quadDecodeDropsDuplicatesAndFallsBackPerSlot() {
-        val d = SahneSlots.decode("v1|media~m~|trip~t~||media~m2~|health~h~")!!
+        val d = SahneSlots.decode("v2|media~m~|trip~t~||media~m2~|health~h~")!!
         assertTrue(d.quad)
         assertNull(d.leftLower) // ikinci medya atılır
         assertEquals(WidgetType.CONSUMPTION, d.rightLower?.type) // izinsiz tür sağ alt yedeğe döner
-        assertNull(SahneSlots.decode("v1|media~m~|trip~t~||x"))
+        assertNull(SahneSlots.decode("v2|media~m~|trip~t~||x"))
     }
 
     @Test
@@ -417,5 +420,63 @@ class SahneSlotsTest {
         assertEquals(1f, PanelFit.scale(600, 567), 0f)
         assertEquals(1f, PanelFit.scale(300, 0), 0f) // kapalı
         assertEquals(469f / 567f, PanelFit.scale(469, 567), 1e-6f)
+    }
+    @Test
+    fun encodeWritesV2() {
+        assertTrue(SahneSlots.encode(SahneSlots.defaultPark(apps)).startsWith("v2|"))
+        assertTrue(SahneSlots.encode(SahneSlots.defaultsQuad(LayoutMode.PARK, apps)).startsWith("v2|"))
+        assertNull(SahneSlots.decode("v3|media~m~|trip~t~|"))
+    }
+
+    @Test
+    fun v1TripLayoutLosesStripConsumptionOnce() {
+        // Eski Park varsayılanı (v1): tüketim şeritte, sağda yolculuk → tüketim yuvası ekranı kapata döner.
+        val old = "v1|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,consumption~consumption~," +
+            "app~app_pair~a.b+c.d,drive_mode~drive_mode~,seat_passenger~seat_passenger~"
+        val d = SahneSlots.decode(old)!!
+        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d")), d)
+        // Yeniden yazılınca v2 olur ve bir daha dokunulmaz.
+        val again = SahneSlots.encode(d)
+        assertTrue(again.startsWith("v2|"))
+        assertEquals(d, SahneSlots.decode(again))
+    }
+
+    @Test
+    fun v1MigrationUsesBreakReminderWhenScreenOffIsTaken() {
+        val d = SahneSlots.decode("v1|media~m~|trip~t~|screen_off~s~,consumption~c~,,,,")!!
+        assertEquals(listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, null, null, null, null), d.strip.map { it?.type })
+        assertEquals("break_reminder", d.strip[1]?.id)
+        // İkisi de düzendeyse tüketim kalır.
+        val e = SahneSlots.decode("v1|media~m~|trip~t~|screen_off~s~,consumption~c~,break_reminder~b~,,,")!!
+        assertEquals(WidgetType.CONSUMPTION, e.strip[1]?.type)
+    }
+
+    @Test
+    fun v1MigrationNeedsTripPanelAndV2IsNeverTouched() {
+        // Yolculuk paneli yok (eski Sürüş varsayılanı: sağda tüketim paneli) → aynen.
+        val drive = SahneSlots.decode("v1|media~m~|nav_turn~n~|consumption~c~,,,,,")!!
+        assertEquals(WidgetType.CONSUMPTION, drive.strip[0]?.type)
+        // v2 kaydı: kullanıcı tüketimi bilerek geri eklemiş olabilir → dokunulmaz.
+        val v2 = SahneSlots.decode("v2|media~m~|trip~t~|consumption~c~,,,,,")!!
+        assertEquals(WidgetType.CONSUMPTION, v2.strip[0]?.type)
+        // Dört panelli v1: yolculuk sağ üstte; şeritteki tüketim ekranı kapata döner.
+        val quad = SahneSlots.decode("v1|media~m~|trip~t~|consumption~c~,,,,,|nav_turn~n~|")!!
+        assertEquals(WidgetType.SCREEN_OFF, quad.strip[0]?.type)
+        // Saf geçiş: yolculuk solda da sayılır.
+        val left = SahneSlots.decode("v2|trip~t~|media~m~|,,consumption~c~,,,")!!
+        assertEquals(WidgetType.SCREEN_OFF, SahneSlots.migrateTripConsumption(left).strip[2]?.type)
+    }
+
+    @Test
+    fun tiggo7ReplacementSkipsConsumptionWithTripPanel() {
+        // Yedeklerin ilk üçü düzende: tüketim sırası gelse de yolculuk paneli varken konmaz, yuva boşalır.
+        var d = SahneSlots.defaultPark(apps, rearSpeaker = true)
+        listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER).forEachIndexed { i, t ->
+            d = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.STRIP, listOf(0, 1, 4)[i]), SahneSlot(t.key, t))
+        }
+        assertNull(SahneSlots.forTiggo7(d).strip[2])
+        // Yolculuk paneli yoksa tüketim yedek olabilir.
+        val noTrip = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 1), SahneSlot("nav_turn", WidgetType.NAVIGATION))
+        assertEquals(WidgetType.CONSUMPTION, SahneSlots.forTiggo7(noTrip).strip[2]?.type)
     }
 }
