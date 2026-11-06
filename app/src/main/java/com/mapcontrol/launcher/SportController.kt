@@ -15,10 +15,13 @@ import android.widget.FrameLayout
  * ([HeaderBar.setSport]), bizim alt çubuk ([OurBottomBar.setSport], OEM çubuğunda yok) ve kök zemin (karbon) aynı anda
  * değişir. Değişim, ekranı kısa süre karartan tam ekran örtünün altında yapılır (tek kare ağır iş görünmez).
  *
- * Giriş (~1,2 sn): karartma (250 ms) · değişim · karartma kalkar, kadran çerçeveleri sırayla parlar, ibre sona süpürüp
- * iner, canlı değerler belirir. Çıkış (~1,5 sn, sakin): değerler söner, ibre iner, karartma (400 ms) · değişim · karartma
- * yavaşça kalkar; parlama yok. Yalnız görünüm alfası/dönmesi (donanım katmanı). Animasyonlar kapalıysa
- * (ANIMATOR_DURATION_SCALE 0) anında.
+ * Biçim [SportTransition.choose] ile seçilir (6 Kasım kararı):
+ *  - Araç duruyor: giriş (~2,2 sn) karartma (250 ms) · değişim · karartma kalkar, kadran çerçeveleri sırayla parlar, ibre
+ *    ağırca sona süpürür, tepede bekler, gerçek devire iner, canlı değerler belirir. Çıkış (~1,5 sn, sakin): değerler
+ *    söner, ibre iner, karartma (400 ms) · değişim · karartma yavaşça kalkar; parlama yok.
+ *  - Araç gidiyor: karartma ve süpürme yok; ~500 ms çapraz geçiş (orta alan, kök zemin), ibre doğrudan gerçek devirde,
+ *    medya ve uyarı şeridi geçiş boyunca ekranda. Çıkış da aynı sakin geçiş; sürüş özeti gösterilmez.
+ * Yalnız görünüm alfası/dönmesi (donanım katmanı). Animasyonlar kapalıysa (ANIMATOR_DURATION_SCALE 0) anında.
  */
 internal class SportController(
     private val activity: Activity,
@@ -26,6 +29,8 @@ internal class SportController(
     private val header: () -> HeaderBar,
     private val bar: () -> OurBottomBar?,
     private val root: () -> View?,
+    /** Araç gidiyor mu (hız > 0); bilinmiyorsa null (duruyor sayılır). */
+    private val moving: () -> Boolean? = { null },
 ) {
     /** Ekranda spor görünümü var mı (değişim yapıldı). */
     var shown = false
@@ -137,9 +142,15 @@ internal class SportController(
         true
     }
 
+    private fun kind(): SportTransition.Kind = SportTransition.choose(animationsOn(), moving())
+
     private fun enter() {
         val s = sahne() ?: return
-        if (!animationsOn()) { applyInstant(true); return }
+        when (kind()) {
+            SportTransition.Kind.INSTANT -> { applyInstant(true); return }
+            SportTransition.Kind.CALM -> { enterCalm(s); return }
+            SportTransition.Kind.SWEEP -> {}
+        }
         busy = true
         val my = ++gen
         val stage = s.sportStage()
@@ -165,6 +176,40 @@ internal class SportController(
         fade(0f, DIM_ALPHA, IN_DIM_MS, 0L) { dimmed = true; go() }
     }
 
+    /** Giderken giriş: durağan çizim hazır olunca karartmasız ~500 ms çapraz geçiş; ibre gerçek devirde başlar. */
+    private fun enterCalm(s: SahneScreen) {
+        busy = true
+        val my = ++gen
+        val stage = s.sportStage()
+        var done = false
+        stage.whenReady {
+            if (my != gen || done || !busy) return@whenReady
+            done = true
+            if (sahne() !== s || s.sportStage() !== stage || !swap(true, SportTransition.CALM_MS)) { busy = false; return@whenReady }
+            stage.showInstant()
+            stage.postDelayed({ if (my == gen) finish() }, SportTransition.CALM_MS)
+        }
+        // Çizim gecikirse Normal kalınır; çizim sonra biterse ve Spor hâlâ isteniyorsa yeniden denenir.
+        stage.postDelayed({
+            if (my != gen || done) return@postDelayed
+            done = true
+            busy = false
+            stage.whenReady { if (target && !shown && !busy && sahne() === s) request(true) }
+        }, READY_TIMEOUT_MS)
+    }
+
+    /** Giderken çıkış: ~500 ms çapraz geçiş, özet kartı yok. */
+    private fun exitCalm(s: SahneScreen) {
+        busy = true
+        val my = ++gen
+        swap(false, SportTransition.CALM_MS)
+        s.postDelayed({
+            if (my != gen) return@postDelayed
+            sahne()?.dropSport()
+            finish()
+        }, SportTransition.CALM_MS + CALM_SETTLE_MS)
+    }
+
     /** Giriş yapılamadı (çizim gecikti, düzenleme açıldı): karartma kalkar, Normal kalır. */
     private fun abortEnter(then: (() -> Unit)? = null) {
         val my = ++gen
@@ -179,9 +224,11 @@ internal class SportController(
     private fun exit() {
         val s = sahne()
         if (s == null || !s.sportShown) { swap(false); return }
-        // Sürüş özeti: spor ekranı bir süre açık kaldıysa çıkış bitince kısa süre gösterilir.
-        val summarize = SystemClock.elapsedRealtime() - shownAt >= MIN_STINT_MS
-        if (!animationsOn()) {
+        // Sürüş özeti: spor ekranı bir süre açık kaldıysa ve araç duruyorsa çıkış bitince kısa süre gösterilir.
+        val summarize = SportTransition.summaryOnExit(SystemClock.elapsedRealtime() - shownAt >= MIN_STINT_MS, moving())
+        val k = kind()
+        if (k == SportTransition.Kind.CALM) { exitCalm(s); return }
+        if (k == SportTransition.Kind.INSTANT) {
             applyInstant(false)
             if (summarize) SportSummaryCard.show(activity, SportSummaryCard.current(activity))
             return
@@ -209,12 +256,12 @@ internal class SportController(
     }
 
     /** Asıl değişim (örtünün altında, tek seferde). Orta alan spora geçemediyse (düzenleme) hiçbir şey değişmez: false. */
-    private fun swap(on: Boolean): Boolean {
+    private fun swap(on: Boolean, fadeMs: Long = 0L): Boolean {
         if (on) {
             val s = sahne() ?: return false
-            if (!s.showSport(true)) return false
+            if (!s.showSport(true, fadeMs)) return false
         } else {
-            sahne()?.showSport(false)
+            sahne()?.showSport(false, fadeMs)
         }
         shown = on
         rememberedSport = on
@@ -224,12 +271,24 @@ internal class SportController(
         bar()?.setSport(on)
         if (!on) ground = null
         val r = root() ?: return true
+        val from = r.background
+        val to: Drawable?
         if (on) {
-            savedGround = r.background
-            r.background = SportGround(activity).also { ground = it }
+            savedGround = from
+            to = SportGround(activity).also { ground = it }
         } else {
-            savedGround?.let { r.background = it }
+            to = savedGround
             savedGround = null
+        }
+        if (to == null) return true
+        if (fadeMs > 0L && from != null) {
+            // Kök zemin de çapraz geçer; bitince yalnız yeni zemin kalır (eski bitmap tutulmaz).
+            val t = android.graphics.drawable.TransitionDrawable(arrayOf(from, to)).apply { isCrossFadeEnabled = true }
+            r.background = t
+            t.startTransition(fadeMs.toInt())
+            r.postDelayed({ if (r.background === t) r.background = to }, fadeMs)
+        } else {
+            r.background = to
         }
         return true
     }
@@ -276,6 +335,8 @@ internal class SportController(
         const val OUT_DIM_MS = 420L
         const val OUT_REVEAL_MS = 650L
         const val READY_TIMEOUT_MS = 1_500L
+        /** Sakin çıkışta çapraz geçiş bittikten sonra spor görünümü bırakılmadan önceki kısa pay. */
+        const val CALM_SETTLE_MS = 50L
         /** Bundan kısa spor açıklığında çıkışta özet kartı gösterilmez (titreşim, deneme). */
         const val MIN_STINT_MS = 20_000L
 

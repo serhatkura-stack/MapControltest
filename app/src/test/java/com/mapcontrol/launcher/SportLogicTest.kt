@@ -435,4 +435,29 @@ class SportLogicTest {
         assertEquals(240f, SportGeometry.mediaContentRadius(240f, 210f), 0f)
         assertEquals(210f, SportGeometry.mediaContentRadius(180f, 210f), 0f)
     }
+
+    // --- Geçiş biçimi (6 Kasım) ---
+
+    @Test fun transitionKindFollowsMotionAndAnimationSetting() {
+        assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, false))
+        assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, null)) // hız bilinmiyor: duruyor sayılır
+        assertEquals(SportTransition.Kind.CALM, SportTransition.choose(true, true))
+        assertEquals(SportTransition.Kind.SWEEP, SportTransition.choose(true, true, inPark = true))
+        assertEquals(SportTransition.Kind.INSTANT, SportTransition.choose(false, true))
+        assertEquals(SportTransition.Kind.INSTANT, SportTransition.choose(false, false))
+    }
+
+    @Test fun summaryOnlyWhenStoppedAfterALongStint() {
+        assertTrue(SportTransition.summaryOnExit(true, false))
+        assertTrue(SportTransition.summaryOnExit(true, null))
+        assertFalse(SportTransition.summaryOnExit(true, true))
+        assertFalse(SportTransition.summaryOnExit(false, false))
+    }
+
+    @Test fun sweepTimingIsSlowAndGlowsSpanTheSweep() {
+        assertEquals(1_950L, SportTransition.SWEEP_TOTAL_MS) // + 250 ms karartma = ~2,2 sn
+        val end = SportTransition.glowEndMs(7)
+        assertTrue(end in 1_500L..SportTransition.SWEEP_TOTAL_MS)
+        assertEquals(500L, SportTransition.CALM_MS)
+    }
 }

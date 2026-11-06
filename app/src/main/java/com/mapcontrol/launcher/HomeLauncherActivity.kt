@@ -424,7 +424,8 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         }
         // En yüksek hız ve 0–100 süreç düzeyinde beslenir (ana ekran görünmezken de; yalnız okuma).
         SportSessionStore.start(this)
-        sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout })
+        sport = SportController(this, sahne = { sahne }, header = { header }, bar = { ourBar }, root = { rootLayout },
+            moving = { if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving })
         val keep = SportController.rememberedSport && sportAllowed() && observedSportMode() == DriveAccent.SPORT
         sportGate.reset(keep)
         if (keep) sport?.applyInstant(true) else SportController.rememberedSport = false

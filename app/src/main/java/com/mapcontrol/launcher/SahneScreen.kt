@@ -129,16 +129,30 @@ class SahneScreen(
      * (araç sahnesi açık kapı bilgisini spor araç modülüne verdiği için çalışmaya devam eder); geri gelince aynen sürer.
      * Düzenleme modunda spor açılmaz: false (çağıran çubukları da değiştirmez).
      */
-    fun showSport(on: Boolean): Boolean {
+    fun showSport(on: Boolean, fadeMs: Long = 0L): Boolean {
         if (on == sportShown) return true
         if (on && editMode) return false
         sportShown = on
         val v = if (on) sportStage() else sport ?: return true
-        val normal = if (on) View.INVISIBLE else View.VISIBLE
-        stage.visibility = normal
-        panels.forEach { it.visibility = normal }
-        strip.visibility = normal
-        v.visibility = if (on) View.VISIBLE else View.GONE
+        val normalViews = listOf<View>(stage) + panels + strip
+        if (fadeMs > 0L) {
+            // Sakin çapraz geçiş (araç giderken): iki görünüm de geçiş boyunca ekranda, yalnız alfa canlanır.
+            val incoming = if (on) listOf<View>(v) else normalViews
+            val outgoing = if (on) normalViews else listOf<View>(v)
+            incoming.forEach { it.animate().cancel(); it.alpha = 0f; it.visibility = View.VISIBLE; it.animate().alpha(restAlpha(it)).setDuration(fadeMs).start() }
+            outgoing.forEach { o ->
+                o.animate().cancel()
+                o.animate().alpha(0f).setDuration(fadeMs).withEndAction {
+                    o.alpha = restAlpha(o)
+                    if (sportShown == on) o.visibility = if (o === v) View.GONE else View.INVISIBLE
+                }.start()
+            }
+        } else {
+            (normalViews + v).forEach { it.animate().cancel(); it.alpha = restAlpha(it) }
+            val normal = if (on) View.INVISIBLE else View.VISIBLE
+            normalViews.forEach { it.visibility = normal }
+            v.visibility = if (on) View.VISIBLE else View.GONE
+        }
         if (!on) {
             // Düzenleme sürerken spor kapandıysa düzenleme Sahne yuvalarına döner.
             v.setEditing(false)
@@ -154,6 +168,13 @@ class SahneScreen(
             }
         }
         return true
+    }
+
+    /** Görünümün dinlenme alfası: boş panel soluk ([refreshEmpty]), diğerleri tam. */
+    private fun restAlpha(v: View): Float {
+        val i = panels.indexOf(v)
+        if (i < 0) return 1f
+        return if (SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, i)) == null && !editMode) EMPTY_ALPHA else 1f
     }
 
     /** Spor tamamen kapandıktan sonra: büyük bitmap ve görünüm bırakılır. */

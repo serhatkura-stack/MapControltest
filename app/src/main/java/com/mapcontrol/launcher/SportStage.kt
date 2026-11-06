@@ -578,7 +578,7 @@ internal class SportStageView(
 
     /**
      * Giriş: kadran çerçeveleri soldan sağa sırayla parlar, ibre bir kez sona süpürüp canlı değere iner, değerler belirir.
-     * Toplam [INTRO_MS] (karartma kalktıktan sonra). Yalnızca donanım katmanında alfa/dönme.
+     * Toplam [SportTransition.SWEEP_TOTAL_MS] (karartma kalktıktan sonra). Yalnızca donanım katmanında alfa/dönme.
      */
     fun playIntro() {
         val g = geometry
@@ -589,18 +589,23 @@ internal class SportStageView(
                 v.alpha = 0f
                 v.visibility = View.VISIBLE
                 // Tek çizim (gradyan halka): alfa doğrudan boyaya uygulanır, ara katman gerekmez.
-                v.animate().alpha(1f).setStartDelay(GLOW_DELAY_MS + i * GLOW_STAGGER_MS).setDuration(GLOW_UP_MS).withEndAction {
-                    v.animate().alpha(0f).setStartDelay(0).setDuration(GLOW_DOWN_MS).withEndAction { v.visibility = View.GONE }.start()
+                v.animate().alpha(1f).setStartDelay(SportTransition.GLOW_DELAY_MS + i * SportTransition.GLOW_STAGGER_MS)
+                    .setDuration(SportTransition.GLOW_UP_MS).withEndAction {
+                    v.animate().alpha(0f).setStartDelay(0).setDuration(SportTransition.GLOW_DOWN_MS).withEndAction { v.visibility = View.GONE }.start()
                 }.start()
             }
         }
-        moveNeedle(SportMath.RPM_MAX.toFloat(), SWEEP_UP_MS, delay = SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
-            sweeping = false
-            refresh()
-            moveNeedle(targetRpm(), SWEEP_DOWN_MS, interp = DECEL_SOFT)
+        // Gerçek spor araç ibresi gibi ağır: yavaş çıkış, tepede kısa bekleme, gerçek devire yumuşak iniş.
+        // İniş bitene dek canlı devir ibreyi sürmez (yoklama inişi kesmesin); sonra canlı değere bağlanır.
+        moveNeedle(SportMath.RPM_MAX.toFloat(), SportTransition.SWEEP_UP_MS, delay = SportTransition.SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
+            moveNeedle(targetRpm(), SportTransition.SWEEP_DOWN_MS, delay = SportTransition.SWEEP_HOLD_MS, interp = DECEL_SOFT) {
+                sweeping = false
+                refresh()
+            }
         }
         live.forEach { v ->
-            v.animate().alpha(1f).setStartDelay(LIVE_DELAY_MS).setDuration(LIVE_FADE_MS).apply { if (v === media) withLayer() }.start()
+            v.animate().alpha(1f).setStartDelay(SportTransition.LIVE_DELAY_MS).setDuration(SportTransition.LIVE_FADE_MS)
+                .apply { if (v === media) withLayer() }.start()
         }
     }
 
@@ -840,15 +845,6 @@ internal class SportStageView(
         const val DEMO_SUMMARY_MS = 2_500L
 
         // Giriş zamanlaması (karartma kalktıktan sonra): çerçeve parıltısı, ibre süpürmesi, değerler.
-        const val GLOW_DELAY_MS = 60L
-        const val GLOW_STAGGER_MS = 70L
-        const val GLOW_UP_MS = 160L
-        const val GLOW_DOWN_MS = 360L
-        const val SWEEP_DELAY_MS = 120L
-        const val SWEEP_UP_MS = 380L
-        const val SWEEP_DOWN_MS = 320L
-        const val LIVE_DELAY_MS = 720L
-        const val LIVE_FADE_MS = 230L
         const val OUTRO_FADE_MS = 300L
         const val OUTRO_MS = 480L
 

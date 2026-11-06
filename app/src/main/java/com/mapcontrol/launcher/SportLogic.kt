@@ -433,3 +433,48 @@ object SportFormat {
         return "$sign${a / 10},${a % 10}"
     }
 }
+
+/**
+ * Spor geçişinin biçimi (saf; JVM'de sınanır, 6 Kasım kararı):
+ *  - [SWEEP]: araç duruyor (hız 0, P ya da hız bilinmiyor): karartma ve ağır ibre süpürmesi (~2,2 sn).
+ *  - [CALM]: araç gidiyor (hız > 0, P değil): karartma ve süpürme yok, ~500 ms sakin çapraz geçiş; ibre doğrudan gerçek
+ *    devirde, medya ve uyarı şeridi hiç kaybolmaz.
+ *  - [INSTANT]: animasyonlar kapalı.
+ */
+internal object SportTransition {
+    enum class Kind { SWEEP, CALM, INSTANT }
+
+    fun choose(animationsOn: Boolean, moving: Boolean?, inPark: Boolean? = null): Kind = when {
+        !animationsOn -> Kind.INSTANT
+        moving == true && inPark != true -> Kind.CALM
+        else -> Kind.SWEEP
+    }
+
+    /** Çıkışta sürüş özeti yalnız araç dururken (gitmiyorken) ve spor yeterince uzun açık kaldıysa. */
+    fun summaryOnExit(longStint: Boolean, moving: Boolean?): Boolean = longStint && moving != true
+
+    /** Sakin çapraz geçiş süresi (giriş ve çıkış). */
+    const val CALM_MS = 500L
+
+    // Duran araçta giriş (karartma kalktıktan sonra): ibre gecikme · çıkış · tepede bekleme · gerçek devire iniş.
+    const val SWEEP_DELAY_MS = 150L
+    const val SWEEP_UP_MS = 900L
+    const val SWEEP_HOLD_MS = 150L
+    const val SWEEP_DOWN_MS = 750L
+
+    /** Süpürmenin toplamı (karartma hariç). */
+    const val SWEEP_TOTAL_MS = SWEEP_DELAY_MS + SWEEP_UP_MS + SWEEP_HOLD_MS + SWEEP_DOWN_MS
+
+    // Çerçeve parlaması süpürmeye yayılır: ilk kadran gecikmeyle, her biri arayla parlar, son parlama inişle biter.
+    const val GLOW_DELAY_MS = 150L
+    const val GLOW_STAGGER_MS = 130L
+    const val GLOW_UP_MS = 300L
+    const val GLOW_DOWN_MS = 650L
+
+    /** Canlı değerler ibre tepeden inmeye başlarken belirir. */
+    const val LIVE_DELAY_MS = SWEEP_DELAY_MS + SWEEP_UP_MS + SWEEP_HOLD_MS
+    const val LIVE_FADE_MS = 400L
+
+    /** [dials] kadranlı sahnede son parlamanın bittiği an (karartma kalktıktan sonra). */
+    fun glowEndMs(dials: Int): Long = GLOW_DELAY_MS + (dials - 1).coerceAtLeast(0) * GLOW_STAGGER_MS + GLOW_UP_MS + GLOW_DOWN_MS
+}
