@@ -101,7 +101,10 @@ internal object CarDetail {
 internal class CarDetailSheet(private val activity: Activity) {
 
     private val tireMap = TireMap(activity)
-    private val rows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+    /** İki sütun (araç ekranı 720 px: tek sütunda alt satırlar taşıyordu): solda gövde, sağda bakım / sağlık / hava. */
+    private val bodyRows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+    private val stateRows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+    private var rows = bodyRows
     var dialog: Dialog? = null
         private set
 
@@ -110,9 +113,14 @@ internal class CarDetailSheet(private val activity: Activity) {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(tireMap, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f))
-                addView(View(context), LinearLayout.LayoutParams(context.dp(32), 1))
-                addView(rows, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(tireMap, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(View(context), LinearLayout.LayoutParams(context.dp(28), 1))
+                addView(bodyRows, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(View(context).apply { setBackgroundColor(Sahne.STRIP_HAIR) },
+                    LinearLayout.LayoutParams(context.dp(1), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                        marginStart = context.dp(24); marginEnd = context.dp(24)
+                    })
+                addView(stateRows, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f))
             }, sheetFullWidth())
         }
         d.setOnDismissListener { dialog = null; onDismiss() }
@@ -126,7 +134,9 @@ internal class CarDetailSheet(private val activity: Activity) {
         if (bound == m to carParts) return
         bound = m to carParts
         tireMap.bind(m, carParts)
-        rows.removeAllViews()
+        bodyRows.removeAllViews()
+        stateRows.removeAllViews()
+        rows = bodyRows
         val dash = activity.getString(R.string.launcher_unavailable)
         fun s(id: Int) = activity.getString(id)
         fun openClosed(v: Boolean?) = when (v) { null -> dash; true -> s(R.string.launcher_detail_open); false -> s(R.string.launcher_detail_closed) }
@@ -144,7 +154,8 @@ internal class CarDetailSheet(private val activity: Activity) {
         val (windows, windowsOpen) = list(m.windows, WINDOW_NAMES)
         row(s(R.string.launcher_detail_windows), windows, windowsOpen)
         row(s(R.string.launcher_detail_sunroof), openClosed(m.sunroof), m.sunroof == true)
-        divider()
+        row(s(R.string.launcher_detail_outside), m.outsideC?.let { activity.getString(R.string.launcher_temp_c, Math.round(it).toInt()) } ?: dash, false)
+        rows = stateRows
         val number = java.text.NumberFormat.getIntegerInstance(java.util.Locale.getDefault())
         val service = listOfNotNull(
             m.serviceKm?.let { activity.getString(R.string.launcher_km_value, number.format(it)) },
@@ -162,7 +173,6 @@ internal class CarDetailSheet(private val activity: Activity) {
             m.health?.any { it == HealthMath.Issue.BATTERY_LOW || it == HealthMath.Issue.BATTERY_HIGH } == true)
         row(s(R.string.launcher_health_row_engine), m.coolantC?.let { activity.getString(R.string.launcher_temp_c, it) } ?: dash,
             m.health?.contains(HealthMath.Issue.ENGINE_HOT) == true)
-        row(s(R.string.launcher_detail_outside), m.outsideC?.let { activity.getString(R.string.launcher_temp_c, Math.round(it).toInt()) } ?: dash, false)
         val air = m.pm25In?.let { pm ->
             val grade = s(when (AirGrade.of(pm)) {
                 AirGrade.GOOD -> R.string.launcher_air_good
@@ -195,16 +205,9 @@ internal class CarDetailSheet(private val activity: Activity) {
                 text = value
                 gravity = Gravity.END
                 maxLines = 2
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f))
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.5f))
             contentDescription = "$label, $value"
         }, sheetFullWidth())
-    }
-
-    private fun divider() {
-        rows.addView(View(activity).apply { setBackgroundColor(Sahne.STRIP_HAIR) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
-                topMargin = activity.dp(8); bottomMargin = activity.dp(8)
-            })
     }
 
     /**
@@ -283,7 +286,7 @@ internal class CarDetailSheet(private val activity: Activity) {
     }
 
     private companion object {
-        const val SHEET_WIDTH_DP = 1180
+        const val SHEET_WIDTH_DP = 1440
         const val ROW_H_DP = 44
         const val CAR_FRACTION = 0.76f
         const val LABEL_GAP_DP = 10
