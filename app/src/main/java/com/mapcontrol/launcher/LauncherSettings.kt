@@ -110,8 +110,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(sportModeToggle(d), fullWidth())
 
-        addView(gap(activity, 12, vertical = true))
-        addView(sportCloseOemDialogToggle(d), fullWidth())
+        // Yalnız spor modu açıkken anlamlı; kapalıyken satır gösterilmez (değişimde pencere zaten kapanıp yeniden kurulur).
+        if (SportModePrefs.enabled(activity)) {
+            addView(gap(activity, 12, vertical = true))
+            addView(sportCloseOemDialogToggle(d), fullWidth())
+        }
 
         addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_bottom_bar) }, fullWidth())
