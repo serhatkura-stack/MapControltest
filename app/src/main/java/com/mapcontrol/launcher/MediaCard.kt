@@ -455,18 +455,21 @@ class MediaCard(
             Mode.IDLE -> resumePkg
             Mode.NO_ACCESS -> null
         }
-        val title = when (newMode) {
+        val rawTitle = when (newMode) {
             Mode.SESSION -> state.title
             Mode.IDLE -> context.getString(R.string.launcher_media_idle_title)
             Mode.NO_ACCESS -> context.getString(R.string.launcher_media_title_neutral)
         }
-        val artist = when (newMode) {
+        val rawArtist = when (newMode) {
             Mode.SESSION -> state.artist
             Mode.IDLE -> context.getString(
                 if (resumePkg != null) R.string.launcher_media_idle_resume else R.string.launcher_media_idle_hint,
             )
             Mode.NO_ACCESS -> context.getString(R.string.launcher_media_access_hint)
         }
+        // Bluetooth üstverisi sonda boşluk / satır sonu taşıyabiliyor: boş ikinci satır sanatçıyı aşağı itmesin.
+        val title = oneLine(rawTitle)
+        val artist = oneLine(rawArtist)
         val textChanged = modeChanged || source != lastSource || title != lastTitle || artist != lastArtist
         if (textChanged) {
             lastSource = source
@@ -474,13 +477,13 @@ class MediaCard(
             lastArtist = artist
             sourceLabel.text = if (source.isNullOrEmpty()) "" else appLabel(source)
             titleView.text = title ?: ""
-            fitSahneTitle()
             artistView.text = artist ?: ""
             compactTitle.text = title ?: ""
             compactArtist.text = artist ?: ""
             if (sahne) bindSourceIcon(source)
             // Sahne: izin açıklaması iki satıra kadar (kesilmesin); şarkı sanatçısı tek satır.
             if (sahne) artistView.maxLines = if (newMode == Mode.NO_ACCESS) 2 else 1
+            fitSahneTitle()
             stripNow = StripState(
                 if (source.isNullOrEmpty()) context.getString(R.string.launcher_widget_media) else appLabel(source),
                 title ?: "", R.drawable.ic_mdi_music_note,
@@ -634,6 +637,8 @@ class MediaCard(
     /**
      * Sahne başlığı: uzun şarkı adı iki satıra kelime bölmeden sığana kadar [SAHNE_TITLE_SP]'den
      * [SAHNE_TITLE_MIN_SP]'ye küçülür (araçta "İstanbul Benden Büy…" kesiliyordu); yine sığmazsa "…" kalır.
+     * Kaynak + başlık + sanatçı bloğu kapak yüksekliğini ([ART_DP]) geçmez: geçecekse başlık küçülür, en küçükte de
+     * sığmazsa tek satıra iner (araçta sanatçı satırı altta kesiliyordu).
      */
     private fun fitSahneTitle() {
         if (!sahne) return
@@ -642,20 +647,36 @@ class MediaCard(
         if (width <= 0 || text.isNullOrEmpty()) return
         val paint = TextPaint(titleView.paint)
         val metrics = context.resources.displayMetrics
+        // Başlığa kalan yükseklik: kapak − (üst boşluk + kaynak satırı + başlık üstü + sanatçı üstü + sanatçı satırı).
+        val sourceH = maxOf(sourceLabel.paint.getFontMetricsInt(null), context.dp(18))
+        val artistH = if (artistView.visibility == View.GONE || artistView.text.isNullOrEmpty()) 0
+            else artistView.paint.getFontMetricsInt(null) + artistView.paddingTop + artistView.paddingBottom + context.dp(1)
+        val room = context.dp(ART_DP) - context.dp(4) - sourceH - context.dp(5) - artistH
         var sp = SAHNE_TITLE_SP
-        while (sp > SAHNE_TITLE_MIN_SP) {
+        var lines = 2
+        while (true) {
             paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, metrics)
             val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
                 .setBreakStrategy(titleView.breakStrategy)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .setIncludePad(titleView.includeFontPadding)
                 .build()
-            if (layout.lineCount <= 2 && (0 until layout.lineCount - 1).none { splitsWord(text, layout.getLineEnd(it)) }) break
-            sp -= 2f
+            val n = minOf(layout.lineCount, 2)
+            val fitsLines = layout.lineCount <= 2 && (0 until layout.lineCount - 1).none { splitsWord(text, layout.getLineEnd(it)) }
+            val fitsHeight = layout.getLineBottom(n - 1) <= room
+            if (fitsLines && fitsHeight) break
+            if (sp - 2f >= SAHNE_TITLE_MIN_SP) { sp -= 2f; continue }
+            // En küçük boyda: iki satır yüksekliğe sığmıyorsa tek satır ("…").
+            if (!fitsHeight || layout.lineCount > 2) lines = if (n >= 2 && layout.getLineBottom(1) > room) 1 else 2
+            break
         }
+        if (titleView.maxLines != lines) titleView.maxLines = lines
         val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, metrics)
         if (titleView.textSize != px) titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
     }
+
+    /** Satır sonları ve art arda boşluklar tek boşluk, baş/son boşluk atılır; boş metin null. */
+    private fun oneLine(s: String?): String? = s?.replace(WHITESPACE, " ")?.trim()?.ifEmpty { null }
 
     private fun splitsWord(text: CharSequence, end: Int): Boolean =
         end in 1 until text.length && !text[end - 1].isWhitespace() && !text[end].isWhitespace() && text[end - 1] != '-'
@@ -820,6 +841,7 @@ class MediaCard(
         const val KNOB_DP = 14
         /** Sürelerin en geniş biçimi (dakika 3 haneye kadar): sabit genişlik bundan ölçülür. */
         const val TIME_WIDEST = "888:88"
+        val WHITESPACE = Regex("\\s+")
         /** Görüntü boyutu henüz bilinmiyorsa kapak kenarı üst sınırı (px). */
         const val ARTWORK_MAX_PX = 480
         /** Bu yüksekliğin altında kaynak ve sanatçı satırları gizlenir. */

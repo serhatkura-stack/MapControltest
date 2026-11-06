@@ -54,6 +54,8 @@ internal object LauncherDemo {
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
         if (enabled && intent.hasExtra(EXTRA_REAR_OFF)) rearOff = intent.getBooleanExtra(EXTRA_REAR_OFF, false)
         if (enabled && intent.hasExtra(EXTRA_TITLE)) title = intent.getStringExtra(EXTRA_TITLE)
+        if (enabled && intent.hasExtra(EXTRA_ARTIST)) artist = intent.getStringExtra(EXTRA_ARTIST)
+        if (enabled && intent.hasExtra(EXTRA_SOURCE)) source = intent.getStringExtra(EXTRA_SOURCE)
     }
 
     /**
@@ -92,6 +94,18 @@ internal object LauncherDemo {
 
     @Volatile
     var title: String? = null
+        private set
+
+    /** Demo sanatçı ve kaynak paketi (`--es launcher_demo_artist "..."`, `--es launcher_demo_source com.android.bluetooth`). */
+    const val EXTRA_ARTIST = "launcher_demo_artist"
+    const val EXTRA_SOURCE = "launcher_demo_source"
+
+    @Volatile
+    var artist: String? = null
+        private set
+
+    @Volatile
+    var source: String? = null
         private set
 
     /** Demo kablosuz şarj: varsayılan telefon pedde şarj oluyor; `--ez launcher_demo_charging false` pedi boş gösterir. */
@@ -435,7 +449,7 @@ internal object LauncherDemo {
     /** Ses çalıyormuş gibi; konum gerçek zamanla ilerlemesin diye her çağrıda aynı başlangıç. */
     fun media(): MediaState = MediaState(
         true, true, true,
-        title ?: "Yolun Sonu", "Demo Sanatçı", "com.google.android.apps.youtube.music",
+        title ?: "Yolun Sonu", artist ?: "Demo Sanatçı", source ?: "com.google.android.apps.youtube.music",
         72_000L, 215_000L, artwork,
     )
 }
