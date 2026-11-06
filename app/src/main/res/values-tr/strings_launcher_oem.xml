@@ -18,5 +18,6 @@
     <string name="launcher_totals_odometer">Toplam yol</string>
     <string name="launcher_rear_muted_detail">Ses sadece önden</string>
     <string name="launcher_rear_on_detail">Tüm hoparlörler</string>
+    <string name="launcher_rear_denied_detail">Sistem izni gerekiyor</string>
     <string name="launcher_rear_assumed_detail">Son komuta göre tahmin</string>
 </resources>

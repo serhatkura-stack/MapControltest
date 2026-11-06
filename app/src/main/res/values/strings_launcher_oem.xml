@@ -18,5 +18,6 @@
     <string name="launcher_totals_odometer">Odometer</string>
     <string name="launcher_rear_muted_detail">Sound from the front only</string>
     <string name="launcher_rear_on_detail">All speakers</string>
+    <string name="launcher_rear_denied_detail">System permission required</string>
     <string name="launcher_rear_assumed_detail">Estimated from last command</string>
 </resources>

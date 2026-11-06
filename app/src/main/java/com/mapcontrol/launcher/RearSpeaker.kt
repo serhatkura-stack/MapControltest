@@ -28,23 +28,42 @@ internal data class SoundFieldReading(val balance: Int? = null, val fade: Int? =
  * `"type"` = balance, `"value"` = fade yazar ve `VDBus.set(VDEvent(VDEventDsp.SOUND_FIELD, bundle))` gönderir; `getBalance()` /
  * `getFade()` düz `getOnce(SOUND_FIELD)` payload'ından `getInt("type")` / `getInt("value")` okur (yedek: sistem özellikleri,
  * varsayılan 10). Orta 10/10, OEM sıfırla (10,10), sürücü ön ayarı (7,7). Her yazma İKİ değeri birlikte taşır: dengeyi korumak için
- * okunan balance aynen geri yazılır. Ön uç değeri ([FRONT_EXTREME]) ARAÇTA DOĞRULANMADI.
+ * okunan balance aynen geri yazılır. Fader aralığı 0..20, orta 10; ARAÇTA ÖLÇÜLDÜ (2026-11-06): OEM ayarlarda sesi "tamamen ÖNE"
+ * almak fader'ı 10 → 20 yaptı, yani ön uç 20 ([FRONT_EXTREME]), 0 arka uçtur.
  * Gelecekte denenecek: `VDEventDsp.REAR_MUTE` (983045) doğrudan arka sessize alma olabilir; anlamı bilinmiyor, kullanılmıyor.
+ *
+ * TODO (OEM yolu, araştırılacak): OEM `SoundSettingModel` DSP HAL'e `Dsp setSoundField(balance, fader)` çağırıyor (araç günlüğü:
+ * `dsp_hal|Dsp setSoundField: balance index B, fader index F`). Normal uygulama (untrusted_app) DSP servisine SELinux yüzünden
+ * erişemiyor ([SoundFieldIo]); tam FrostNav derlemesi bu yola başka biçimde ulaşabilir.
  */
 internal object SoundFieldMath {
 
     /** Beyaz liste kimliği: SOUND_FIELD tek olaydır; kimlik yalnızca "fader yazması" kaydı için sabit 0'dır. */
     const val WRITE_ID = 0
 
-    /** Orta konum (HAL günlüğü: 10/10) ve olası üst sınır (`soundFieldMax` 20 olabilir; doğrulanmadı). */
+    /** Orta konum (HAL günlüğü ve araç: 10) ve üst sınır (araçta 0..20). */
     const val CENTER = 10
     const val MAX = 20
 
-    /**
-     * Arka hoparlörleri susturan uç değer: ön uç. TODO (araç testi): 0 mı 20 mi doğrulanmalı. OEM "sürücü" ön ayarı 7/7 olduğu için
-     * küçük değerin sol/ön olması bekleniyor ama kanıtlanmadı. Yanlışsa yalnızca bu sabit değişir.
-     */
-    const val FRONT_EXTREME = 0
+    /** Arka hoparlörleri susturan uç değer: ön uç = 20 (araçta ölçüldü: "tamamen öne" 10 → 20; 0 arka uçtur). */
+    const val FRONT_EXTREME = 20
+
+    /** DSP servisine erişim reddedildi mi (SELinux `avc: denied { find }` / SecurityException); zincirdeki nedenlere de bakılır. */
+    fun isDenied(e: Throwable?): Boolean {
+        var c = e
+        var depth = 0
+        while (c != null && depth < 5) {
+            if (c is SecurityException) return true
+            val m = c.message?.lowercase()
+            if (m != null && ("denied" in m || "permission" in m)) return true
+            c = c.cause
+            depth++
+        }
+        return false
+    }
+
+    /** Erişim reddedildiyse yeniden deneme aralığı (her 3 sn'de deneyip uyandırmasın). */
+    const val DENIED_RETRY_MS = 5 * 60_000L
 
     /** Aralık dışı ve geçersiz değerler null. */
     fun valid(v: Int?): Int? = v?.takeIf { it in 0..MAX }
@@ -72,30 +91,53 @@ internal object SoundFieldMath {
     }
 }
 
-/** DSP servisinden ses alanı okuma/yazma (VDBus, düz Bundle: "type" = balance, "value" = fade). Hatalarda null / sessiz; çökmez. */
+/**
+ * DSP servisinden ses alanı okuma/yazma (VDBus, düz Bundle: "type" = balance, "value" = fade). Hatalarda null; çökmez. Araçta normal
+ * uygulama (untrusted_app) DSP servisini SELinux yüzünden bulamıyor (`avc: denied { find } ... DspService`): ilk hata bir kez
+ * günlüğe yazılır ("RearSpeaker"), erişim reddiyse [denied] açılır ve okuma [SoundFieldMath.DENIED_RETRY_MS]'de bir denenir.
+ */
 internal object SoundFieldIo {
 
     private var lastLogged: Pair<Int?, Int?>? = null
     private var lastLoggedKeys: String? = null
     private const val NULL_PAYLOAD = "null-payload"
+    @Volatile private var loggedError = false
+    @Volatile private var retryAt = 0L
 
-    /** Güncel (balance, fade); DSP yoksa (emülatör) ya da payload boşsa null. */
-    fun read(): SoundFieldReading? = try {
-        val payload = VDBus.getDefault().getOnce(VDEventDsp.SOUND_FIELD)?.payload
-        val balance = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_BALANCE) }?.getInt(KEY_BALANCE))
-        val fade = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_FADE) }?.getInt(KEY_FADE))
-        if (lastLogged != balance to fade) {
-            lastLogged = balance to fade
-            Log.i("RearSpeaker", "SOUND_FIELD read balance=$balance fade=$fade")
+    /** DSP servisine erişim reddedildi (sistem izni gerekiyor); kutucuk "Kullanılamıyor · Sistem izni gerekiyor" der. */
+    @Volatile
+    var denied = false
+        private set
+
+    /** Güncel (balance, fade); DSP yoksa (emülatör), erişim reddedildiyse ya da payload boşsa null. */
+    fun read(): SoundFieldReading? {
+        if (denied && android.os.SystemClock.elapsedRealtime() < retryAt) return null
+        return try {
+            val payload = VDBus.getDefault().getOnce(VDEventDsp.SOUND_FIELD)?.payload
+            denied = false
+            val balance = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_BALANCE) }?.getInt(KEY_BALANCE))
+            val fade = SoundFieldMath.valid(payload?.takeIf { it.containsKey(KEY_FADE) }?.getInt(KEY_FADE))
+            if (lastLogged != balance to fade) {
+                lastLogged = balance to fade
+                Log.i("RearSpeaker", "SOUND_FIELD read balance=$balance fade=$fade")
+            }
+            if (balance == null && fade == null && lastLoggedKeys != (payload?.keySet()?.toString() ?: NULL_PAYLOAD)) {
+                // Teşhis: boş okumada payload anahtarları (anahtar adı farklıysa araç günlüğünden görülür).
+                lastLoggedKeys = payload?.keySet()?.toString() ?: NULL_PAYLOAD
+                Log.i("RearSpeaker", "SOUND_FIELD read empty, payload keys=$lastLoggedKeys")
+            }
+            if (balance == null && fade == null) null else SoundFieldReading(balance, fade)
+        } catch (e: RuntimeException) {
+            if (!loggedError) {
+                loggedError = true
+                Log.w("RearSpeaker", "DSP servisi erişilemiyor: $e")
+            }
+            if (SoundFieldMath.isDenied(e)) {
+                denied = true
+                retryAt = android.os.SystemClock.elapsedRealtime() + SoundFieldMath.DENIED_RETRY_MS
+            }
+            null
         }
-        if (balance == null && fade == null && lastLoggedKeys != (payload?.keySet()?.toString() ?: NULL_PAYLOAD)) {
-            // Teşhis: boş okumada payload anahtarları (anahtar adı farklıysa araç günlüğünden görülür).
-            lastLoggedKeys = payload?.keySet()?.toString() ?: NULL_PAYLOAD
-            Log.i("RearSpeaker", "SOUND_FIELD read empty, payload keys=$lastLoggedKeys")
-        }
-        if (balance == null && fade == null) null else SoundFieldReading(balance, fade)
-    } catch (e: RuntimeException) {
-        null
     }
 
     fun write(balance: Int, fade: Int) {
@@ -206,9 +248,14 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
     override fun readNow(): ComfortReading {
         val read = ComfortReader.readSound()
         if (read.sound != null || LauncherDemo.enabled) return read
+        // Erişim reddi: yazma da gidemez, son yazımızdan tahmin gösterilmez.
+        if (SoundFieldIo.denied) return read
         val guess = SoundFieldMath.assumed(store.lastBalance, store.lastFade) ?: return read
         return ComfortReading(connected = true, sound = guess)
     }
+
+    /** Erişim reddedildiyse seyrek dene (her 3 sn'de uyanmasın). */
+    override fun pollIntervalMs(): Long = if (SoundFieldIo.denied) SoundFieldMath.DENIED_RETRY_MS else super.pollIntervalMs()
 
     override fun applySpan(span: Span) {
         val c = span.h < 2
@@ -259,6 +306,7 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
         stateText.compoundDrawablePadding = context.dp(6)
         val assumed = reading.sound?.assumed == true && pendingMuted == null
         detail.text = when {
+            muted == null && SoundFieldIo.denied && !LauncherDemo.enabled -> context.getString(R.string.launcher_rear_denied_detail)
             muted == null -> null
             assumed -> context.getString(R.string.launcher_rear_assumed_detail)
             muted -> context.getString(R.string.launcher_rear_muted_detail)

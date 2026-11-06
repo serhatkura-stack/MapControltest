@@ -118,10 +118,14 @@ class OemWidgetsTest {
         assertNull(SoundFieldMath.rearMuted(null))
         assertNull(SoundFieldMath.rearMuted(-10000))
         assertNull(SoundFieldMath.rearMuted(99))
+        // Araçta ölçüldü: fader 0..20, orta 10, "tamamen öne" = 20 (0 arka uç, arka susmaz).
+        assertEquals(20, front)
+        assertEquals(false, SoundFieldMath.rearMuted(0))
+        assertEquals(false, SoundFieldMath.rearMuted(19))
         // Okuma boşken: son yazım, yoksa orta (Açık).
         assertNull(SoundFieldMath.assumed(null, null))
         assertNull(SoundFieldMath.assumed(7, 99))
-        assertEquals(SoundFieldReading(7, 0, assumed = true), SoundFieldMath.assumed(7, 0))
+        assertEquals(SoundFieldReading(7, 20, assumed = true), SoundFieldMath.assumed(7, 20))
         assertEquals(SoundFieldReading(10, 5, assumed = true), SoundFieldMath.assumed(99, 5))
         // Açıkken dokunuş: ön uç. Kapalıyken: saklanan değer; yoksa/geçersizse/uçla aynıysa orta.
         assertEquals(front, SoundFieldMath.targetFade(SoundFieldMath.CENTER, null))
@@ -130,6 +134,17 @@ class OemWidgetsTest {
         assertEquals(SoundFieldMath.CENTER, SoundFieldMath.targetFade(front, front))
         assertEquals(SoundFieldMath.CENTER, SoundFieldMath.targetFade(front, 99))
         assertNull(SoundFieldMath.targetFade(null, 7))
+        // Arka uçta (0) dururken dokunuş da ön uca götürür.
+        assertEquals(front, SoundFieldMath.targetFade(0, null))
+    }
+
+    @Test fun dspAccessDeniedIsRecognised() {
+        assertTrue(SoundFieldMath.isDenied(SecurityException("x")))
+        assertTrue(SoundFieldMath.isDenied(RuntimeException("avc: denied { find } for DspService")))
+        assertTrue(SoundFieldMath.isDenied(IllegalStateException("wrap", SecurityException("no"))))
+        assertFalse(SoundFieldMath.isDenied(IllegalStateException("not connected")))
+        assertFalse(SoundFieldMath.isDenied(null))
+        assertEquals(5 * 60_000L, SoundFieldMath.DENIED_RETRY_MS)
     }
 
     @Test fun soundFieldConstantsAreInRange() {
