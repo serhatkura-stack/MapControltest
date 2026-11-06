@@ -80,9 +80,9 @@ class ClimateMathTest {
     @Test fun shippedFlagIsOffAndWritersAreInert() {
         assertFalse(ClimateWriter.CLIMATE_WRITE_VERIFIED)
         assertFalse(ClimateWriter.enabled)
-        assertFalse(ClimateWriter.setTemperature(ClimateSide.DRIVER, 24.0))
-        assertFalse(ClimateWriter.setFan(3))
-        assertFalse(ClimateWriter.setFan(0))
-        assertFalse(ClimateWriter.setFan(-1))
+        assertFalse(ClimateWriter.setTemperature(ClimateSide.DRIVER, 24.0, quiet = true))
+        assertFalse(ClimateWriter.setFan(3, quiet = true))
+        assertFalse(ClimateWriter.setFan(0, quiet = true))
+        assertFalse(ClimateWriter.setFan(-1, quiet = true))
     }
 }

@@ -96,20 +96,33 @@ internal object ClimateWriter {
     /** Arayüzün "yazılacak mı / bilgi mesajı mı" kararı için. */
     val enabled: Boolean get() = canWrite(WidgetWritePolicy.gate(CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
 
+    /**
+     * Sıcaklık kimliği. [quiet] (ayar "fabrika paneli: Gizle"): OEM alt dock'unun kimlikleri, sürücü 76 / yolcu 78, aynı ham
+     * kodlama (`SVSystemUI/.../model/svhvac/model/HvacModel.java:774`, `:899`); aksi halde OEM panelinin 10 / 13 (`:764`, `:891`).
+     */
+    fun tempId(side: ClimateSide, quiet: Boolean): Int = when {
+        quiet && side == ClimateSide.DRIVER -> HvacID.ID_AC_DRIVER_SET_TEMPERATURE
+        quiet -> HvacID.ID_AC_PASSENGER_SET_TEMPERATURE
+        side == ClimateSide.DRIVER -> HvacID.ID_AC_TEMPERATURE_DRIVER
+        else -> HvacID.ID_AC_TEMPERATURE_COPILOT
+    }
+
+    /** Fan kimliği: [quiet] → OEM dock'u 77 (`HvacModel.java:1085`), aksi halde panelin 12. Ham değer ikisinde de kademe. */
+    fun fanId(quiet: Boolean): Int = if (quiet) HvacID.ID_AC_SET_BLOW_LEVEL else HvacID.ID_AC_BLOW_SPEED_LEVEL
+
     /** Sıcaklığı yazar. Kapalıyken false döner ve araca dokunmaz. */
-    fun setTemperature(side: ClimateSide, celsius: Double): Boolean {
+    fun setTemperature(side: ClimateSide, celsius: Double, quiet: Boolean): Boolean {
         if (!enabled) return false
-        val id = if (side == ClimateSide.DRIVER) HvacID.ID_AC_TEMPERATURE_DRIVER else HvacID.ID_AC_TEMPERATURE_COPILOT
         powerOnIfOff()
-        return send(id, ClimateMath.encodeTemp(celsius))
+        return send(tempId(side, quiet), ClimateMath.encodeTemp(celsius))
     }
 
     /** Fan kademesini (1..10) yazar. Kapalıyken ya da level < 1 iken (0 yazılmaz) false döner ve araca dokunmaz. */
-    fun setFan(level: Int): Boolean {
+    fun setFan(level: Int, quiet: Boolean): Boolean {
         if (!enabled) return false
         if (level < 1) return false
         powerOnIfOff()
-        return send(HvacID.ID_AC_BLOW_SPEED_LEVEL, ClimateMath.encodeFan(level))
+        return send(fanId(quiet), ClimateMath.encodeFan(level))
     }
 
     /** Klima kapalıysa önce aç (HVAC 18 ← 1), OEM gibi. Arka planda çağrılır. */

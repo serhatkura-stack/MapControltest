@@ -130,6 +130,18 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(sportAmbientToggle(d), fullWidth())
 
+        // Alt çubuktan klima değişince OEM paneli (varsayılan Gizle). Yukarı kaydırma paneli her durumda açar.
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_climate_oem_panel, ClimatePanelPrefs.showOnChange(activity),
+            R.string.launcher_toggle_show, R.string.launcher_toggle_hide) { value ->
+            d.dismiss()
+            ClimatePanelPrefs.setShowOnChange(activity, value)
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_climate_oem_panel_hint)
+        }, fullWidth())
+
         addView(gap(activity, 12, vertical = true))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(R.string.launcher_favorite_key) }, fullWidth())
         addView(gap(activity, 12, vertical = true))
@@ -235,7 +247,13 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         }
 
     /** Etiket (küçük, ikincil) + iki parçalı Açık | Kapalı; seçili olan vurgu renginde. Değişmeyen seçime dokunmak bir şey yapmaz. */
-    private fun onOffControl(@StringRes labelRes: Int, on: Boolean, onChange: (Boolean) -> Unit): View =
+    private fun onOffControl(
+        @StringRes labelRes: Int,
+        on: Boolean,
+        @StringRes onLabel: Int = R.string.launcher_toggle_on,
+        @StringRes offLabel: Int = R.string.launcher_toggle_off,
+        onChange: (Boolean) -> Unit,
+    ): View =
         LinearLayout(activity).apply {
             // Etiket solda, Açık | Kapalı sağda: iki satırlık sürüş ayarı panele kaydırmadan sığsın.
             orientation = LinearLayout.HORIZONTAL
@@ -247,7 +265,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                 background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
                 val p = activity.dp(6)
                 setPadding(p, p, p, p)
-                listOf(true to R.string.launcher_toggle_on, false to R.string.launcher_toggle_off).forEachIndexed { i, (value, label) ->
+                listOf(true to onLabel, false to offLabel).forEachIndexed { i, (value, label) ->
                     if (i > 0) addView(gap(activity, 6))
                     val selected = value == on
                     addView(text(activity, LauncherTheme.BODY_SP,

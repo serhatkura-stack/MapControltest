@@ -168,6 +168,10 @@
     <string name="launcher_sport_ambient_unverified">Spor modunda ambiyans rengi (henüz doğrulanmadı)</string>
     <string name="launcher_toggle_on">Açık</string>
     <string name="launcher_toggle_off">Kapalı</string>
+    <string name="launcher_toggle_show">Göster</string>
+    <string name="launcher_toggle_hide">Gizle</string>
+    <string name="launcher_climate_oem_panel">Klima değişince fabrika paneli</string>
+    <string name="launcher_climate_oem_panel_hint">Gizle: alt çubuktan sıcaklık/fan değişince OEM klima paneli açılmaz. Çubukta yukarı kaydırma paneli her zaman açar.</string>
     <string name="launcher_wifi_connected">Wi-Fi bağlı</string>
     <string name="launcher_phone_charging_icon">Telefon şarj oluyor</string>
     <string name="launcher_bt_off">Bluetooth kapalı</string>

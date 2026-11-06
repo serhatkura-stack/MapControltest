@@ -113,7 +113,19 @@ internal class ClimateControl(
     private fun commitTemp(side: ClimateSide, celsius: Double) {
         if (side == ClimateSide.DRIVER) pendingDriver = celsius else pendingPassenger = celsius
         afterCommit()
-        if (ClimateWriter.enabled) io.runSafely { ClimateWriter.setTemperature(side, celsius) }
+        if (!ClimateWriter.enabled) return
+        val quiet = quietWrite("temp_${side.name.lowercase()}")
+        io.runSafely { ClimateWriter.setTemperature(side, celsius, quiet) }
+    }
+
+    /**
+     * Ayar "Klima değişince fabrika paneli": Gizle (varsayılan) → OEM dock kimlikleri + panel koruması ([ClimatePanelGuard],
+     * yazmadan ÖNCE kurulur ki panelin önceki durumu bilinsin); Göster → panel kimlikleri, koruma yok.
+     */
+    private fun quietWrite(what: String): Boolean {
+        val quiet = !ClimatePanelPrefs.showOnChange(context)
+        if (quiet) ClimatePanelGuard.arm(context, what) else android.util.Log.i("ClimatePanel", "write what=$what mode=show ids=panel guard=off")
+        return quiet
     }
 
     private fun commitFan(level: Int) {
@@ -121,7 +133,9 @@ internal class ClimateControl(
         if (level > 0) lastOnFan = level
         afterCommit()
         // Fan 0 araca yazılmaz (HVAC 12 ← 0 OEM'de doğrulanmadı); arayüz 0/kapalı gösterebilir.
-        if (level > 0 && ClimateWriter.enabled) io.runSafely { ClimateWriter.setFan(level) }
+        if (level <= 0 || !ClimateWriter.enabled) return
+        val quiet = quietWrite("fan")
+        io.runSafely { ClimateWriter.setFan(level, quiet) }
     }
 
     /**
