@@ -147,10 +147,10 @@ internal object ClusterGrid {
     }
 
     private class GridView(context: Context) : View(context) {
-        private val minor = Paint().apply { color = Color.rgb(60, 60, 60); strokeWidth = 1f; style = Paint.Style.STROKE }
-        private val major = Paint().apply { color = Color.rgb(170, 170, 170); strokeWidth = 1f; style = Paint.Style.STROKE }
-        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 20f }
-        private val bg = Paint().apply { color = Color.rgb(0, 0, 0) }
+        private val minor = Paint().apply { color = Color.rgb(190, 190, 190); strokeWidth = 1f; style = Paint.Style.STROKE }
+        private val major = Paint().apply { color = Color.rgb(40, 40, 40); strokeWidth = 2f; style = Paint.Style.STROKE }
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 22f; isFakeBoldText = true }
+        private val bg = Paint().apply { color = Color.WHITE }
 
         override fun onDraw(c: Canvas) {
             val w = width
@@ -175,14 +175,14 @@ internal object ClusterGrid {
                 c.drawText(t, 3f, y - 4f, text)
                 c.drawText(t, cx + 3f, y - 4f, text)
             }
-            val cross = Paint().apply { color = Color.WHITE; strokeWidth = 2f }
+            val cross = Paint().apply { color = Color.BLACK; strokeWidth = 3f }
             c.drawLine(cx - 30f, cy, cx + 30f, cy, cross)
             c.drawLine(cx, cy - 30f, cx, cy + 30f, cross)
             c.drawText("${w}x$h @160 · grid 40px", cx + 40f, cy + 50f, text)
             fun sq(x: Float, y: Float, col: Int) = c.drawRect(x, y, x + 40f, y + 40f, Paint().apply { color = col })
             sq(0f, 0f, Color.RED); sq(w - 40f, 0f, Color.GREEN)
             sq(0f, h - 40f, Color.BLUE); sq(w - 40f, h - 40f, Color.YELLOW)
-            val border = Paint().apply { color = Color.WHITE; strokeWidth = 1f; style = Paint.Style.STROKE }
+            val border = Paint().apply { color = Color.BLACK; strokeWidth = 2f; style = Paint.Style.STROKE }
             c.drawRect(0.5f, 0.5f, w - 0.5f, h - 0.5f, border)
         }
     }
