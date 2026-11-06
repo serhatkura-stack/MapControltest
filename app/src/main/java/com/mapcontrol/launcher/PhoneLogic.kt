@@ -378,3 +378,88 @@ internal object PhoneBackendChooser {
 
     fun permissionNeeded(c: Caps): Boolean = !c.demo && !c.contactsPermission && !c.vdbusData
 }
+
+/**
+ * DTMF tuşu → VDBus DIAL (ctrl 4) number alanı. OEM servisi `Byte.parseByte(number)` ile ONDALIK okur ve o baytı
+ * HFP sendDTMF'e verir (SVVDSBluetooth m/m.java:376-384); OEM arayüzü tuşun ASCII baytını gönderir
+ * (SVBluetoothPhone PhoneCallActivity.java:796-797). Bu yüzden '5' → "53", '*' → "42", '#' → "35". Geçersizse null.
+ */
+internal object DtmfCode {
+    fun valid(c: Char): Boolean = c in '0'..'9' || c == '*' || c == '#'
+
+    fun vdNumber(c: Char): String? = if (valid(c)) c.code.toString() else null
+}
+
+/** DIAL_AUDIO_MODE durum değeri (m/m.java:211-219: SCO 0 kopuk → 2, 1 bağlanıyor → 3, 2 bağlı → 1). */
+internal object AudioModeMap {
+    const val CAR = 1
+    const val PHONE = 2
+    const val CONNECTING = 3
+
+    /** true = ses telefonda, false = araçta, null = bağlanıyor/bilinmiyor (önceki değer korunur). */
+    fun onPhone(status: Int): Boolean? = when (status) {
+        CAR -> false
+        PHONE -> true
+        else -> null
+    }
+}
+
+/**
+ * Konuşma sayacının başlangıcı. VDBTDialInfo.time = OEM'in arama başlangıcı (SVCallInfo.getCallStartMills,
+ * m/m.java:233); biz konuşmanın ortasında açılsak da OEM ile aynı süreyi göstermek için duvar saatinden
+ * elapsedRealtime'a çevrilir. Değer makul değilse (0, gelecekte ya da 12 saatten eski) null: çağıran
+ * [PhoneStateMap.nextCall]'ın kendi başlangıcını kullanır.
+ */
+internal object CallClock {
+    private const val MAX_AGE_MS = 12 * 60 * 60 * 1000L
+    private const val FUTURE_SLACK_MS = 5_000L
+
+    fun startElapsed(oemStartWallMs: Long, nowWallMs: Long, nowElapsedMs: Long): Long? {
+        if (oemStartWallMs <= 0L) return null
+        val age = nowWallMs - oemStartWallMs
+        if (age < -FUTURE_SLACK_MS || age > MAX_AGE_MS) return null
+        return nowElapsedMs - age.coerceAtLeast(0L)
+    }
+}
+
+/**
+ * Arama durumu yoklama yedeği: canlı DIAL_INFO_LIST yayını kaçarsa (6 Kasım araç: arama bitti, şerit ACTIVE kaldı)
+ * YALNIZCA arama sürerken [INTERVAL_MS]'de bir getOnce. Arama yokken hiç yoklama yok.
+ */
+internal object CallPoll {
+    const val INTERVAL_MS = 2_000L
+
+    fun shouldPoll(kind: CallKind, ownersOrLingering: Boolean): Boolean =
+        ownersOrLingering && (kind == CallKind.INCOMING || kind == CallKind.DIALING || kind == CallKind.ACTIVE)
+}
+
+/**
+ * Rehber/geçmiş yenileme kararı (saf). Bellekteki depo süreç boyunca tutulur; boş bir okuma dolu depoyu SİLMEZ
+ * (yalnızca farklı bir telefon bağlanınca depo sıfırlanır).
+ *
+ * OEM gerçeği (SVVDSBluetooth q/r.java, q/v.java): _CACHE haritası yalnızca bir PBAP indirmesi bitince dolar
+ * (v.java:23-40 → r.F/E) ve PBAP kopunca silinir (v.java:105-109 → r.a). SYNC_DB yüklemesi de _LIST_DB'ye aynı
+ * önbellek haritasını yayımlar (v.java:43-60), bu yüzden indirme olmadan ikisi de total=0 döner (6 Kasım araç).
+ * Çözüm: önbellek boşsa bağlantı başına EN ÇOK BİR KEZ PHONE_BOOK_SYNC (262346) ctrl 1 tür 50 (rehber+geçmiş
+ * indirmesi; r.java:95-110), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
+ * toplanır; PHONE_BOOK_SYNC durum yayını FINISHED (1) gelince önbellek yeniden istenir.
+ */
+internal object PhonebookRefresh {
+    enum class Step { NONE, CACHE, DOWNLOAD }
+
+    /** VDValueBT.SyncStatus: START 0, FINISHED 1, IDLE 20, WAITING 21 (r.java:416-452). */
+    fun downloading(syncStatus: Int?): Boolean = syncStatus == 0 || syncStatus == 21
+
+    /**
+     * [storeHasData]: bellekteki depo dolu. [cacheTotal]: son önbellek isteğinin toplamı (null = henüz sorulmadı).
+     * [syncStatus]: PHONE_BOOK_SYNC getOnce durumu (null = bilinmiyor). [downloadRequested]: bu bağlantıda indirme
+     * zaten istendi.
+     */
+    fun next(storeHasData: Boolean, cacheTotal: Int?, syncStatus: Int?, downloadRequested: Boolean): Step = when {
+        cacheTotal == null -> Step.CACHE
+        cacheTotal > 0 -> Step.NONE
+        storeHasData -> Step.NONE
+        downloadRequested || downloading(syncStatus) -> Step.NONE
+        else -> Step.DOWNLOAD
+    }
+}

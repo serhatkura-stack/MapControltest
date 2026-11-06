@@ -107,6 +107,10 @@ internal class DemoBackend : CallBackend, DataBackend, AssistantBackend {
 
     override fun setMute(on: Boolean): Boolean = true
 
+    override fun setAudioToPhone(toPhone: Boolean): Boolean = true
+
+    override fun sendDtmf(c: Char): Boolean = DtmfCode.vdNumber(c) != null
+
     override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
         onConnected(true, PhoneDemo.DEVICE_NAME)

@@ -71,6 +71,28 @@ internal interface CallBackend {
     fun hangUp(): Boolean
     /** false = desteklenmiyor. */
     fun setMute(on: Boolean): Boolean
+    /**
+     * Sesi telefona ([toPhone] true) ya da araca aktarır. false = desteklenmiyor/başarısız. VDBus: DIAL_AUDIO_MODE
+     * (262548) {"status": 1 araç / 2 telefon}; OEM servisi 1'de connectAudio, diğerinde disconnectAudio çağırır
+     * (SVVDSBluetooth m/m.java:321-346; OEM arayüzü aynı yolu kullanır: PhoneCallActivity.java:887-903).
+     */
+    fun setAudioToPhone(toPhone: Boolean): Boolean = false
+    /**
+     * Konuşma sırasında tek DTMF tuşu ('0'..'9', '*', '#'). false = desteklenmiyor/başarısız. VDBus: DIAL ctrl 4; OEM
+     * servisi number'ı Byte.parseByte ile ONDALIK sayı olarak okur (m/m.java:376-384), OEM arayüzü ASCII kodunu gönderir
+     * (PhoneCallActivity.java:796-797): '5' için number = "53" ([DtmfCode.vdNumber]).
+     */
+    fun sendDtmf(c: Char): Boolean = false
+    /**
+     * io: arama durumunu kaynaktan BİR KEZ yeniden okur ve [open]'daki onState'e bildirir (abonelik kaçırırsa yoklama
+     * yedeği; yalnızca arama sürerken 2 sn'de bir). Okuyamadıysa false.
+     */
+    fun refreshState(): Boolean = false
+    /**
+     * io: kaynak tarafında süren arama var mı (taze okuma). null = bilinmiyor. Kapat'ta "OEM'de arama yok" ise bizim
+     * durum temizlenir (6 Kasım araç: kapatma 'callList.size=0' aldı, şerit ACTIVE kaldı).
+     */
+    fun hasLiveCall(): Boolean? = null
     /** Arama durumu dinlemesini başlatır. Geri çağrılar herhangi bir iş parçacığında gelebilir. */
     fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit)
     fun close()
@@ -83,8 +105,12 @@ internal interface DataBackend {
     fun read(pinnedIds: List<String>): PhoneData?
 }
 
-/** Asistan isteğinin sonucu. BUSY: süren arama var (OEM de arama sırasında kendi asistanını kapatır). */
-internal enum class AssistantResult { STARTED, STOPPED, BUSY, FAILED }
+/**
+ * Asistan isteğinin sonucu. BUSY: süren arama var (OEM de arama sırasında kendi asistanını kapatır). UNCONFIRMED:
+ * istek telefona gitti (startVoiceRecognition true) ama telefon [HfpAssistant] süresinde +BVRA/SCO ile doğrulamadı;
+ * Siri yine de açılmış olabilir (6 Kasım araç): kullanıcıya hata GÖSTERİLMEZ, yalnızca günlüğe yazılır.
+ */
+internal enum class AssistantResult { STARTED, STOPPED, BUSY, FAILED, UNCONFIRMED }
 
 internal interface AssistantBackend {
     fun available(): Boolean
@@ -686,6 +712,27 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         }
     }
 
+    /** DIAL_AUDIO_MODE (262548): status 1 araç / 2 telefon; "value" (MAC) boşsa bağlı cihaz (m/m.java:321-346). */
+    override fun setAudioToPhone(toPhone: Boolean): Boolean {
+        val b = bus ?: return false
+        if (!available()) return false
+        return try {
+            b.set(VDEvent(VDEventBT.DIAL_AUDIO_MODE, Bundle().apply {
+                putInt(VDKey.STATUS, if (toPhone) VDValueBT.AudioMode.PHONE else VDValueBT.AudioMode.CAR)
+            }))
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "vdbus DIAL_AUDIO_MODE: ${t.javaClass.simpleName}")
+            false
+        }
+    }
+
+    /** DIAL ctrl 4: number = ASCII kodunun ondalık yazısı (bkz. [CallBackend.sendDtmf]). Günlüğe tuş yazılmaz. */
+    override fun sendDtmf(c: Char): Boolean {
+        val code = DtmfCode.vdNumber(c) ?: return false
+        return send(VDValueBT.DialCtrl.DTMF, code)
+    }
+
     override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
         subscribe()
@@ -1130,7 +1177,7 @@ internal class HfpAssistant(private val ctx: Context, private val io: Executor) 
         finishPending(AssistantResult.FAILED)
         if (!HfpClientApi.startVoiceRecognition(p, d)) return done(AssistantResult.FAILED)
         pending = done
-        val t = Runnable { io.execute { Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)"); finishPending(AssistantResult.FAILED) } }
+        val t = Runnable { io.execute { Log.i(TAG, "asistan adım: telefon ${CONFIRM_MS} ms içinde doğrulamadı (+BVRA/SCO yok)"); finishPending(AssistantResult.UNCONFIRMED) } }
         pendingTimeout = t
         main.postDelayed(t, CONFIRM_MS)
     }

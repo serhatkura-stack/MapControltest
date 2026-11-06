@@ -36,6 +36,11 @@ data class PhoneContact(
     val number: String,
     val starred: Boolean = false,
     val initials: String = PhoneText.initials(name),
+    /**
+     * Fotoğraf varsa [PhonePhotos] anahtarı (genelde [id]); yoksa null (UI baş harf gösterir). Görüntü yalnızca bellekte
+     * ([PhonePhotos]); diske yazılmaz.
+     */
+    val photoKey: String? = null,
 ) {
     override fun toString(): String = "PhoneContact(starred=$starred)"
 }
@@ -48,6 +53,10 @@ data class PhoneRecent(
     val name: String?,
     val number: String,
     val timeMs: Long,
+    /** Rehberde eşleşen kişinin kimliği (yoksa null). "Son arama" kartı fotoğrafı/ismi bununla bulur. */
+    val contactId: String? = null,
+    /** Eşleşen kişinin [PhonePhotos] anahtarı (yoksa null). */
+    val photoKey: String? = null,
 ) {
     override fun toString(): String = "PhoneRecent(type=$type)"
 }
@@ -64,9 +73,16 @@ data class CallState(
     val number: String? = null,
     val startedAtMs: Long = 0L,
     val muted: Boolean = false,
+    /**
+     * Ses telefonda (SCO kopuk; OEM "Sesi telefona aktar" seçili). VDBus DIAL_AUDIO_MODE (262548) yayını/getOnce:
+     * status 1 araç, 2 telefon, 3 bağlanıyor (SVVDSBluetooth m/m.java:211-219, m/n.java:93-96).
+     */
+    val audioOnPhone: Boolean = false,
+    /** Arayanın fotoğrafı için [PhonePhotos] anahtarı (VDBTDialInfo.portrait ya da eşleşen kişi); yoksa null. */
+    val photoKey: String? = null,
 ) {
     val inCall: Boolean get() = kind == CallKind.INCOMING || kind == CallKind.DIALING || kind == CallKind.ACTIVE
-    override fun toString(): String = "CallState(kind=$kind, muted=$muted)"
+    override fun toString(): String = "CallState(kind=$kind, muted=$muted, audioOnPhone=$audioOnPhone, photo=${photoKey != null})"
 
     companion object {
         val IDLE = CallState()
@@ -108,13 +124,25 @@ data class PhoneSnapshot(
     val canDial: Boolean = false,
     val canAssistant: Boolean = false,
     val canMute: Boolean = false,
+    /** Sesi telefona/araca aktarma yolu var (VDBus DIAL_AUDIO_MODE). Yoksa "Telefona aktar" gizlenir. */
+    val canAudioTransfer: Boolean = false,
+    /** Tuş takımı (DTMF) yolu var (VDBus DIAL ctrl 4). Yoksa "Tuş takımı" gizlenir. */
+    val canDtmf: Boolean = false,
     val favorites: List<PhoneContact> = emptyList(),
     val recents: List<PhoneRecent> = emptyList(),
     val call: CallState = CallState.IDLE,
+    /**
+     * Rehber/geçmiş listesindeki toplam sayılar (bellekteki tam depo; "Tümü" sayfası [PhoneSource.directory] ile okur).
+     * Snapshot'a tam liste konmaz: her durum değişiminde büyük liste kopyalanıp karşılaştırılmasın.
+     */
+    val contactCount: Int = 0,
+    val recentCount: Int = 0,
+    /** Depo sürümü: tam liste değişince artar (Tümü sayfası yalnız bu değişince yeniden kurar). */
+    val directoryVersion: Int = 0,
 ) {
     override fun toString(): String =
         "PhoneSnapshot(connected=$connected, backend=$backend, data=$dataBackend, perm=$permissionNeeded, loaded=$loaded, " +
-            "fav=${favorites.size}, recents=${recents.size}, call=$call)"
+            "fav=${favorites.size}, recents=${recents.size}, all=$contactCount/$recentCount v$directoryVersion, call=$call)"
 
     companion object {
         val EMPTY = PhoneSnapshot()
@@ -385,7 +413,13 @@ object PhoneSource {
     /** Gelen aramayı reddeder. */
     fun reject(): Boolean = act(PhoneAction.REJECT, { !it.inCall }) { it.reject() }
 
-    /** Aktif/çıkan aramayı kapatır. */
+    /**
+     * Aktif/çıkan aramayı kapatır.
+     *
+     * SÖZLEŞME (PHONE-BACKEND, sağlam kapatma): io'da önce durum kaynağından taze okuma ([CallBackend.hasLiveCall]);
+     * OEM tarafında arama YOKSA (false) bizim durum doğrudan ENDED→IDLE yapılır, hata gösterilmez, true döner. Arama
+     * varsa mevcut yol (uuid'li DIAL ctrl 3 → HFP → Telecom); onay süresi dolunca bir taze okuma daha, yine yoksa temizle.
+     */
     fun hangUp(): Boolean = act(PhoneAction.HANG_UP, { !it.inCall }) { it.hangUp() }
 
     /**
@@ -466,6 +500,71 @@ object PhoneSource {
         return true
     }
 
+    /**
+     * Sesi telefona ([toPhone] true) ya da araca aktarır (OEM "Sesi telefona aktar"). Yalnızca arama sürerken ve
+     * [PhoneSnapshot.canAudioTransfer] iken; sonuç [CallState.audioOnPhone] ile (DIAL_AUDIO_MODE yayını) gelir.
+     *
+     * SÖZLEŞME (PHONE-BACKEND): io'da [CallBackend.setAudioToPhone]; başarıda iyimser güncelleme, sonra yayın/getOnce
+     * doğrular; başarısızsa NOT_SUPPORTED.
+     */
+    fun setAudioToPhone(toPhone: Boolean): Boolean {
+        val s = snap
+        if (!s.call.inCall) return false
+        if (!s.canAudioTransfer) {
+            fail(PhoneError.NOT_SUPPORTED)
+            return false
+        }
+        io.execute {
+            val be = callBackendFor(PhoneBackendChooser.callBackend(caps))
+            val ok = be?.setAudioToPhone(toPhone) == true
+            if (ok) update { it.copy(call = it.call.copy(audioOnPhone = toPhone)) } else fail(PhoneError.NOT_SUPPORTED)
+            Log.i(TAG, "ses yönü: ${if (ok) (if (toPhone) "telefon" else "araç") else "başarısız"}")
+        }
+        return true
+    }
+
+    /** Ses yönünü tersine çevirir (tek düğme). */
+    fun toggleAudioTarget(): Boolean = setAudioToPhone(!snap.call.audioOnPhone)
+
+    /**
+     * Konuşma sırasında tek DTMF tuşu ('0'..'9', '*', '#'). Yalnızca ACTIVE ve [PhoneSnapshot.canDtmf] iken. Tuş günlüğe
+     * yazılmaz (kart/PIN girişi olabilir).
+     */
+    fun sendDtmf(c: Char): Boolean {
+        val s = snap
+        if (s.call.kind != CallKind.ACTIVE || !DtmfCode.valid(c)) return false
+        if (!s.canDtmf) {
+            fail(PhoneError.NOT_SUPPORTED)
+            return false
+        }
+        io.execute {
+            val ok = callBackendFor(PhoneBackendChooser.callBackend(caps))?.sendDtmf(c) == true
+            if (!ok) fail(PhoneError.FAILED)
+        }
+        return true
+    }
+
+    /**
+     * Bellekteki tam rehber/geçmiş ("Tümü" sayfası). Herhangi bir iş parçacığında; değişmez kopya. Diske yazılmaz.
+     * Sürüm [PhoneSnapshot.directoryVersion] ile aynıdır.
+     */
+    fun directory(): PhoneDirectory = directorySnap
+
+    /**
+     * Rehber/geçmişi kaynaktan yeniden ister (panel/Tümü açılınca, HFP bağlanınca). Bellekteki dolu depo boş yanıtla
+     * silinmez. SÖZLEŞME (PHONE-BACKEND): [PhonebookRefresh] kararına göre önbellek isteği ya da (yalnızca
+     * [RefreshReason.USER_OPENED] ile) bağlantı başına bir kez PBAP indirmesi.
+     */
+    fun refreshData(reason: RefreshReason) {
+        io.execute {
+            if (!started || !wantData) return@execute
+            Log.i(TAG, "veri yenile: ${reason.name.lowercase()}")
+            readData()
+        }
+    }
+
+    @Volatile private var directorySnap = PhoneDirectory.EMPTY
+
     @Volatile private var assistantAt = 0L
 
     private fun assistantRecently(): Boolean =
@@ -527,7 +626,8 @@ object PhoneSource {
             AssistantResult.STARTED -> "asistan başladı (telefon doğruladı)"
             AssistantResult.STOPPED -> "asistan kapatıldı"
             AssistantResult.BUSY -> "asistan: arama sürüyor, yok sayıldı"
-            AssistantResult.FAILED -> "asistan başlatılamadı/doğrulanmadı"
+            AssistantResult.FAILED -> "asistan başlatılamadı"
+            AssistantResult.UNCONFIRMED -> "asistan isteği gitti, telefon doğrulamadı (uyarı gösterilmez)"
         })
         if (r == AssistantResult.FAILED) fail(PhoneError.ASSISTANT_UNAVAILABLE)
         if (!started) {
@@ -701,6 +801,8 @@ object PhoneSource {
                 canDial = call != PhoneBackendName.NONE,
                 canAssistant = asst != PhoneBackendName.NONE,
                 canMute = canMute,
+                canAudioTransfer = c.demo || call == PhoneBackendName.VDBUS,
+                canDtmf = c.demo || call == PhoneBackendName.VDBUS,
             )
         }
         if (wantData && data != lastDataBackend) readData()
@@ -747,10 +849,17 @@ object PhoneSource {
         for (r in data.recents) r.name?.let { names.putIfAbsent(FavoritesRanker.normalizeNumber(r.number), it) }
         nameByNumber = names
         lastData = data
+        directorySnap = PhoneDirectory(data.contacts, data.recents, directorySnap.version + 1)
         val favorites = FavoritesRanker.rank(data.contacts, data.recents, pinned, MAX_FAVORITES, System.currentTimeMillis())
         val recents = RecentsShaper.shape(data.recents, 5)
         Log.d(TAG, "veri: $name kişi=${data.contacts.size} geçmiş=${data.recents.size} favori=${favorites.size}")
-        update { it.copy(loaded = true, favorites = favorites, recents = recents) }
+        val dir = directorySnap
+        update {
+            it.copy(
+                loaded = true, favorites = favorites, recents = recents,
+                contactCount = dir.contacts.size, recentCount = dir.recents.size, directoryVersion = dir.version,
+            )
+        }
     }
 
     /** Arka uçtan ham durum (herhangi bir iş parçacığı) → io. */
@@ -852,6 +961,90 @@ object PhoneSource {
         if (!observerRegistered) return
         observerRegistered = false
         runCatching { app.contentResolver.unregisterContentObserver(observer) }
+    }
+}
+
+/** [PhoneSource.refreshData] nedeni (yalnızca günlük ve indirme kararı için). */
+enum class RefreshReason { APP_START, HFP_CONNECTED, PANEL_OPENED, USER_OPENED, CALL_ENDED }
+
+/**
+ * Bellekteki tam rehber ve geçmiş (süreç ömrü; diske yazılmaz). [version] her yeni listede artar. toString isim/numara
+ * içermez.
+ */
+class PhoneDirectory(
+    val contacts: List<PhoneContact>,
+    val recents: List<PhoneRecent>,
+    val version: Int,
+) {
+    override fun toString(): String = "PhoneDirectory(contacts=${contacts.size}, recents=${recents.size}, v=$version)"
+
+    companion object {
+        val EMPTY = PhoneDirectory(emptyList(), emptyList(), 0)
+    }
+}
+
+/**
+ * Kişi fotoğrafları: YALNIZCA bellekte, anahtar → küçültülmüş Bitmap (en çok [MAX_PX] kenar, toplam [MAX_BYTES]).
+ * Diske, günlüğe, paylaşıma asla yazılmaz; farklı telefon bağlanınca ve süreç bitince gider.
+ *
+ * Anahtarlar: kişi için [PhoneContact.id] ("v:<OEM id>" / "c:<rehber id>"), arama için "call:<OEM uuid>".
+ * Kaynaklar: VDBTContacts.portrait (rehber parçaları; SVVDSBluetooth q/r.java:386-399), VDBTDialInfo.portrait
+ * (DIAL_INFO_LIST; m/m.java:234), PHONE_BOOK_CONTACT_INFO (262383) getOnce {number} → portrait (q/r.java:279-298).
+ * Kural: [PhoneContact.photoKey]/[CallState.photoKey] yalnızca görüntü önbelleğe girdikten SONRA atanır; UI
+ * [get] null dönerse baş harfe düşer (önbellekten atılmış olabilir).
+ */
+object PhonePhotos {
+    const val MAX_PX = 256
+    const val MAX_BYTES = 8 * 1024 * 1024
+
+    private val map = LinkedHashMap<String, android.graphics.Bitmap>(32, 0.75f, true)
+    private var bytes = 0
+
+    @Synchronized
+    fun get(key: String?): android.graphics.Bitmap? = if (key == null) null else map[key]
+
+    @Synchronized
+    fun contains(key: String?): Boolean = key != null && map.containsKey(key)
+
+    /**
+     * Kodlanmış görüntüyü (JPEG/PNG) çözüp küçültür ve saklar. Binder/io iş parçacığında çağrılır (ana iş parçacığında
+     * asla). Çözülemezse false. SÖZLEŞME (PHONE-BACKEND): inJustDecodeBounds + inSampleSize ile [MAX_PX]'e indir.
+     */
+    fun putEncoded(key: String, data: ByteArray?): Boolean {
+        if (data == null || data.isEmpty()) return false
+        val bmp = try {
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, o)
+            var sample = 1
+            while (o.outWidth / (sample * 2) >= MAX_PX && o.outHeight / (sample * 2) >= MAX_PX) sample *= 2
+            android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        } catch (t: Throwable) {
+            null
+        } ?: return false
+        put(key, bmp)
+        return true
+    }
+
+    @Synchronized
+    private fun put(key: String, bmp: android.graphics.Bitmap) {
+        map.remove(key)?.let { bytes -= it.byteCount }
+        map[key] = bmp
+        bytes += bmp.byteCount
+        val it = map.entries.iterator()
+        while (bytes > MAX_BYTES && it.hasNext()) {
+            val e = it.next()
+            if (e.key == key) continue
+            bytes -= e.value.byteCount
+            it.remove()
+        }
+    }
+
+    /** Farklı telefon bağlandı / süreç temizliği. */
+    @Synchronized
+    fun clear() {
+        map.clear()
+        bytes = 0
     }
 }
 
