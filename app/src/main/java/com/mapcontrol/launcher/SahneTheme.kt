@@ -96,6 +96,15 @@ object Sahne {
     /** Gece başlıktaki saat/tarih: tam ve %85 mürekkep (ince saat koyu zeminde silik kalmasın). */
     val HEADER_DATE: Int get() = if (n) 0xD9EEF2F7.toInt() else INK_2
 
+    /**
+     * Arama renkleri: yalnızca arama düğmeleri (Cevapla yeşil, Reddet/Kapat kırmızı) ve cevapsız arama satırı. Dolgunun
+     * üstünde ikon ve yazı [CALL_ON_INK] (beyaz).
+     */
+    val CALL_ACCEPT: Int get() = if (n) 0xFF2FBF71.toInt() else 0xFF17935A.toInt()
+    val CALL_REJECT: Int get() = if (n) 0xFFE5484D.toInt() else 0xFFD13438.toInt()
+    val CALL_MISSED: Int get() = if (n) 0xFFFF7A7A.toInt() else 0xFFC62828.toInt()
+    val CALL_ON_INK: Int get() = 0xFFFFFFFF.toInt()
+
     val SOFT_FILL: Int get() = if (n) 0x0DFFFFFF else 0x0B141A24
     val TRACK: Int get() = if (n) 0x1FFFFFFF else 0x26141A24
 

@@ -57,7 +57,14 @@ internal data class ClimateReadout(
  * Okuma 3 sn'de bir, yalnızca ekran görünürken.
 
  */
-class OurBottomBar(private val activity: Activity) : LauncherWidget {
+class OurBottomBar(
+    private val activity: Activity,
+    /**
+     * Telefon düğmesine dokunuş (ana ekran: telefon sayfası ya da paneli, bkz. HomeLauncherActivity.onPhoneButton); null ise
+     * eski davranış (OEM telefon uygulaması). Uzun basış her durumda bağlı telefonun sesli asistanıdır.
+     */
+    private val onPhoneTap: (() -> Unit)? = null,
+) : LauncherWidget {
 
     private val context: Context = activity
     private val io = LauncherIo.serial()
@@ -98,11 +105,21 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
         addView(climateControl.passengerView, LinearLayout.LayoutParams(0, context.dp(80), 1f))
         addView(sep(), sepLp())
         addView(sahneButton(R.drawable.ic_sahne_gear, R.string.launcher_bar_settings) { openAndroidSettings() }, btnLp(true))
-        addView(sahneButton(R.drawable.ic_sahne_phone, R.string.launcher_app_phone) { openPackage(PHONE_PACKAGE) }, btnLp(false))
+        addView(sahneButton(R.drawable.ic_sahne_phone, R.string.launcher_app_phone, onLongClick = ::startPhoneAssistant) {
+            onPhoneTap?.invoke() ?: openPackage(PHONE_PACKAGE)
+        }, btnLp(false))
     }
 
     /** Sahne düğmesi: 22dp köşeli; etkin olan birincil (CTA) gradyan zeminli ve gölgeli, diğerleri zeminsiz. */
-    private fun sahneButton(iconRes: Int, labelRes: Int, active: Boolean = false, iconDp: Int = 30, onClick: () -> Unit): View =
+    private fun sahneButton(
+        iconRes: Int,
+        labelRes: Int,
+        active: Boolean = false,
+        iconDp: Int = 30,
+        /** Uzun basış (yalnız telefon düğmesinde: sesli asistan); dokunsal geri bildirimle. */
+        onLongClick: (() -> Unit)? = null,
+        onClick: () -> Unit,
+    ): View =
         FrameLayout(context).also { barButtons += BarButton(it, active) }.apply {
             val radius = context.dpF(Sahne.SQUARE_RADIUS_DP)
             if (active) {
@@ -125,7 +142,17 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget {
             addView(icon(context, iconRes, iconDp, if (active) Sahne.HOME_INK else Sahne.CONTROL_ICON),
                 FrameLayout.LayoutParams(context.dp(iconDp), context.dp(iconDp), Gravity.CENTER))
             setOnClickListener { onClick() }
+            if (onLongClick != null) setOnLongClickListener { v ->
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                onLongClick()
+                true
+            }
         }
+
+    /** Telefon düğmesine uzun basış: bağlı telefonun sesli asistanı (Siri / Google); yol yoksa kısa uyarı (OEM uygulaması açılmaz). */
+    private fun startPhoneAssistant() {
+        if (!PhoneSource.startVoiceAssistant()) PhoneToast.show(context, R.string.launcher_phone_assistant_failed)
+    }
 
     // --- Spor modu ---
 

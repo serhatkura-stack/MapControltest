@@ -82,6 +82,10 @@ class SahneScreen(
         rebuildAll()
     }
 
+    /** Etkin düzende [type] türü bir panel yuvasında mı (alt çubuk telefon düğmesi: panel ekrandaysa sayfa açılmaz). */
+    fun hasPanel(type: WidgetType): Boolean =
+        panels.indices.any { SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type }
+
     /** Karşılama ([SahneWelcome]) için: araç sahnesi ve geri kalan orta alan (yan paneller, şerit). */
     internal fun welcomeParts(): Pair<SahneStage, List<View>> = stage to panels + strip
 

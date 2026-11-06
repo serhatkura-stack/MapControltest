@@ -133,6 +133,18 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
         addView(gap(activity, 12, vertical = true))
         addView(favoriteKeySegments(d), fullWidth())
 
+        // Ses (VR) tuşu: uzun basış bağlı telefonun asistanını açar; kısa basış aracın kendi sesli komutunda kalır.
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_phone_voice_key, PhonePrefs.assistantOnVoiceKey(activity)) { value ->
+            d.dismiss()
+            PhonePrefs.setAssistantOnVoiceKey(activity, value)
+            PhoneSource.syncVoiceKey(activity)
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_phone_voice_key_hint)
+        }, fullWidth())
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()

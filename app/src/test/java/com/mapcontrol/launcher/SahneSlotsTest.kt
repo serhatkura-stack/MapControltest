@@ -20,7 +20,7 @@ class SahneSlotsTest {
             WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
             WidgetType.CLUSTER_MIRROR,
         )
-        val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION)
+        val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION, WidgetType.PHONE)
         assertEquals(strip, SahneForm.STRIP_TYPES.toSet())
         assertEquals(panel, SahneForm.PANEL_TYPES.toSet())
         assertEquals(SahneForm.STRIP_TYPES.size, strip.size) // yinelenen yok
@@ -340,7 +340,8 @@ class SahneSlotsTest {
             assertEquals(4, d.panelCount)
             assertEquals(listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.NAVIGATION, WidgetType.CONSUMPTION),
                 (0..3).map { panel(d, it)?.type })
-            assertEquals(SahneForm.PANEL_TYPES.toSet(), (0..3).mapNotNull { panel(d, it)?.type }.toSet())
+            // Telefon varsayılanda yok (kullanıcı seçiciden ekler).
+            assertEquals(SahneForm.PANEL_TYPES.toSet() - WidgetType.PHONE, (0..3).mapNotNull { panel(d, it)?.type }.toSet())
             assertEquals(SahneSlots.defaults(mode, apps, rearSpeaker = true).strip, d.strip)
             assertEquals(d, SahneSlots.sanitize(d))
         }

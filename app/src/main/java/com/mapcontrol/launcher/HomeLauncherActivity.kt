@@ -82,6 +82,8 @@ class HomeLauncherActivity : Activity() {
     private lateinit var fixedWidgets: List<LauncherWidget>
     /** Tema değişiminde yeniden kurulan sabit parçalar (bkz. [applyThemeInPlace]). */
     private var ourBar: OurBottomBar? = null
+    /** Gelen/aktif arama şeridi (üst orta, tüm içeriğin üstünde); sabit widget'larla aynı ömür. */
+    private lateinit var callBanner: CallBanner
     private var rootLayout: View? = null
     private var mockBar: View? = null
 
@@ -140,9 +142,10 @@ class HomeLauncherActivity : Activity() {
         header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onWifi = ::toggleWifiPanel, onBluetooth = ::toggleBluetoothPanel)
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir; OEM çubuğu yokken "Orijinal" de
         // bizim çubuğa düşer. "Gizli"de çubuk yok.
-        ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), oemBar)) OurBottomBar(this) else null
+        ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), oemBar)) OurBottomBar(this, onPhoneTap = ::onPhoneButton) else null
         val ourBar = this.ourBar
-        fixedWidgets = listOfNotNull(header, ourBar)
+        callBanner = CallBanner(this)
+        fixedWidgets = listOfNotNull(header, ourBar, callBanner)
         editBar = buildEditBar()
         sahne = newSahneScreen()
 
@@ -179,18 +182,22 @@ class HomeLauncherActivity : Activity() {
                 insets
             }
         }
-        if (LauncherSafeArea.showsMockBar(this)) {
-            // Hata ayıklama: OEM çubuğunun taklidi ayrılan alt bandın içinde, uygulamaların üstünde durur.
-            val band = LauncherSafeArea.oemInsetPx(this)
-            setContentView(FrameLayout(this).apply {
-                addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        // İçerik her zaman bir FrameLayout: kök düzen, (hata ayıklamada) OEM çubuğu taklidi ve en üstte arama şeridi.
+        // Kök düzene bağlı her şey (rootLayout, tema geçişi, karşılama, iç boşluk dinleyicisi) `root`'u kullanır, içerik görünümünü değil.
+        setContentView(FrameLayout(this).apply {
+            clipChildren = false
+            addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            if (LauncherSafeArea.showsMockBar(this@HomeLauncherActivity)) {
+                // Hata ayıklama: OEM çubuğunun taklidi ayrılan alt bandın içinde, uygulamaların üstünde durur.
+                val band = LauncherSafeArea.oemInsetPx(this@HomeLauncherActivity)
                 addView(OemBarMock.build(this@HomeLauncherActivity).also { mockBar = it }, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, minOf(band, dp(OemBarMock.BODY_DP)), Gravity.BOTTOM
                 ).apply { setMargins(dp(OemBarMock.SIDE_DP), 0, dp(OemBarMock.SIDE_DP), dp(OemBarMock.BOTTOM_GAP_DP)) })
-            })
-        } else {
-            setContentView(root)
-        }
+            }
+            addView(callBanner.view, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply { topMargin = dp(CALL_BANNER_TOP_DP) })
+        })
         loadForMode()
         setupSport()
         setupWelcome(root)
@@ -201,6 +208,8 @@ class HomeLauncherActivity : Activity() {
         if (pendingEdit) openPendingEdit()
         // Favori tuşu: etkinlik ömrü boyunca dinlenir (HOME etkinliği başka uygulama öndeyken de yaşar, yalnızca durur).
         FavoriteKey.sync(this)
+        // Ses (VR) tuşu uzun basış → bağlı telefonun asistanı: ayara göre, aynı etkinlik ömrüyle.
+        PhoneSource.syncVoiceKey(this)
         DrawTrace.applyFrom(this, intent)
     }
 
@@ -294,7 +303,7 @@ class HomeLauncherActivity : Activity() {
         refreshEditLayoutUi()
         // Alt çubuk cam ve düğme renklerini kurulumda aldığı için yenisiyle değiştirilir.
         ourBar?.let { old ->
-            val fresh = OurBottomBar(this)
+            val fresh = OurBottomBar(this, onPhoneTap = ::onPhoneButton)
             swapView(old.view, fresh.view)
             if (started) old.onHidden()
             old.release()
@@ -302,7 +311,8 @@ class HomeLauncherActivity : Activity() {
             if (started) showWidget(fresh)
         }
         mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
-        fixedWidgets = listOfNotNull(header, ourBar)
+        callBanner.applyTheme()
+        fixedWidgets = listOfNotNull(header, ourBar, callBanner)
 
         // Orta alan yeni jetonlarla baştan kurulur (örtünün altında); düzen ve mod aynı kalır.
         rootLayout?.background = SahneGround()
@@ -587,6 +597,7 @@ class HomeLauncherActivity : Activity() {
         sahne.onVisible()
         // Ana ekrana dönüş: araç uykusunda düşmüş olabilecek favori tuşu aboneliği tazelenir.
         FavoriteKey.refresh()
+        PhoneSource.refreshVoiceKey()
     }
 
     override fun onResume() {
@@ -649,12 +660,18 @@ class HomeLauncherActivity : Activity() {
         dataCheckExtra?.release()
         dataCheckExtra = null
         FavoriteKey.stop(this)
+        PhoneSource.stopVoiceKey(this)
         super.onDestroy()
     }
 
     /** İzin sonuçları: depolama verilince açık fotoğraf seçici yenilenir. */
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Telefon izinleri (rehber, geçmiş, arama): kısmi verilse de sonuç yeniden okunur.
+        if (requestCode == PhoneSource.REQ_PERMISSIONS) {
+            PhoneSource.onPermissionsResult(this)
+            return
+        }
         val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!granted) return
         when (requestCode) {
@@ -785,6 +802,39 @@ class HomeLauncherActivity : Activity() {
 
     // --- Diğer ---
 
+    /**
+     * Alt çubuk telefon düğmesi ([PhoneUiLogic.phoneButtonAction]): telefon paneli ekrandaysa bir şey yapılmaz; bağlı
+     * telefon var ama arama yolu yoksa OEM telefon uygulaması; yoksa telefon sayfası (bağlı değilse Bluetooth düğmesiyle).
+     */
+    private fun onPhoneButton() {
+        if (editing || isFinishing || isDestroyed) return
+        val s = PhoneSource.snapshot()
+        val panelOnScreen = ::sahne.isInitialized && !sahne.sportShown && sahne.hasPanel(WidgetType.PHONE)
+        when (PhoneUiLogic.phoneButtonAction(panelOnScreen, s.connected, s.canDial || LauncherDemo.enabled)) {
+            PhoneUiLogic.PhoneButtonAction.NONE -> Unit
+            PhoneUiLogic.PhoneButtonAction.OEM_APP -> openOemPhoneApp(this)
+            PhoneUiLogic.PhoneButtonAction.SHEET -> openPhoneSheet()
+        }
+    }
+
+    /** Telefon sayfası: Sahne paneliyle aynı görünüm; arama başlayınca kapanır, kapanınca panel bırakılır. */
+    private fun openPhoneSheet() {
+        sheet?.dismiss()
+        var panel: PhonePanel? = null
+        val d = showLauncherSheet(this, R.string.launcher_phone_title, PHONE_SHEET_WIDTH_DP) { dialog ->
+            val p = PhonePanel(this@HomeLauncherActivity, sheet = true, onDialed = { dialog.dismiss() })
+            panel = p
+            addView(p.view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(PHONE_SHEET_HEIGHT_DP)))
+            p.onVisible()
+        }
+        d.setOnDismissListener {
+            panel?.release()
+            panel = null
+            if (sheet === d) sheet = null
+        }
+        sheet = d
+    }
+
     /** Wi-Fi simgesine dokunma: simgenin altında açılır panel (ikinci dokunuş kapatır). */
     private fun toggleWifiPanel(anchor: View) {
         if (editing) return
@@ -858,5 +908,9 @@ class HomeLauncherActivity : Activity() {
         /** Soğuk açılışta karşılama için güç sinyalinin en çok beklendiği süre (ekran bu sırada siyah). */
         const val WELCOME_ARM_MS = 1_500L
         const val RESET_SHEET_WIDTH_DP = 640
+        const val PHONE_SHEET_WIDTH_DP = 760
+        const val PHONE_SHEET_HEIGHT_DP = 500
+        /** Arama şeridinin üst kenardan payı (başlığın üstünde durur). */
+        const val CALL_BANNER_TOP_DP = 12
     }
 }

@@ -47,7 +47,10 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     CLUSTER_MIRROR("cluster_mirror", R.string.launcher_widget_cluster_mirror, R.drawable.ic_mdi_speedometer, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
     // Yandex bildiriminden sonraki dönüş ve varış ([NavigationPanel]). Anahtar "nav_turn": eski, kaldırılmış "navigation"
     // kutucuğunun kayıtları bu türe dönüşmesin (o anahtar yüklemede düşer).
-    NAVIGATION("nav_turn", R.string.launcher_widget_navigation, R.drawable.ic_sahne_nav, listOf(Span(4, 4)));
+    NAVIGATION("nav_turn", R.string.launcher_widget_navigation, R.drawable.ic_sahne_nav, listOf(Span(4, 4))),
+    // Telefon paneli ([PhonePanel]): sesli asistan, favoriler, son aramalar. Anahtar "phone_call": "phone_reminder" telefon
+    // hatırlatma kutucuğunundur ([PhoneTile]).
+    PHONE("phone_call", R.string.launcher_widget_phone_call, R.drawable.ic_sahne_phone, listOf(Span(4, 4)));
 
     companion object {
         /**
@@ -110,5 +113,6 @@ object WidgetFactory {
         WidgetType.SPLIT_SCREEN -> SplitScreenTile(activity)
         WidgetType.CLUSTER_MIRROR -> ClusterMirrorTile(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
+        WidgetType.PHONE -> PhonePanel(activity)
     }
 }

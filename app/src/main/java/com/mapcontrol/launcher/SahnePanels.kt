@@ -17,8 +17,8 @@ import android.widget.TextView
 import com.mapcontrol.R
 
 /**
- * Sahne yan panelindeki widget'ı kurar. Medya, yolculuk ve navigasyon kendi özel düzenleriyle ([MediaCard] Sahne kipi,
- * [SahneTripPanel], [NavigationPanel]); diğer her tür kendi kutucuğunun en büyük boyutuyla (büyük biçimi yoksa büyütülmüş kutucuk)
+ * Sahne yan panelindeki widget'ı kurar. Medya, yolculuk, navigasyon ve telefon kendi özel düzenleriyle ([MediaCard] Sahne kipi,
+ * [SahneTripPanel], [NavigationPanel], [PhonePanel]); diğer her tür kendi kutucuğunun en büyük boyutuyla (büyük biçimi yoksa büyütülmüş kutucuk)
  * cam panelin içine konur, kart zemini kaldırılır ve renkler Sahne jetonlarından gelir.
  */
 internal object SahnePanelFactory {
@@ -27,6 +27,7 @@ internal object SahnePanelFactory {
         WidgetType.MEDIA -> MediaCard(activity, sahne = true)
         WidgetType.TRIP -> SahneTripPanel(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
+        WidgetType.PHONE -> PhonePanel(activity)
         in VALUE_PANEL_TYPES -> {
             val tile = WidgetFactory.create(activity, PlacedWidget(slot.id, slot.type, SahneForm.panelSpan(slot.type), slot.extra))
             tile.applySpan(SahneForm.panelSpan(slot.type))
@@ -46,7 +47,7 @@ internal object SahnePanelFactory {
 
     /** Özel Sahne düzeni olan türler kendi iç boşluğunu verir; diğerlerine panel bir pay ekler. */
     fun panelPaddingDp(type: WidgetType): Int = when (type) {
-        WidgetType.MEDIA, WidgetType.TRIP, WidgetType.NAVIGATION -> 0
+        WidgetType.MEDIA, WidgetType.TRIP, WidgetType.NAVIGATION, WidgetType.PHONE -> 0
         in VALUE_PANEL_TYPES -> 0
         else -> 12
     }

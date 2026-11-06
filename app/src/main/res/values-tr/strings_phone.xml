@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Telefon paneli, arama şeridi ve ses tuşu ayarı. -->
+<resources>
+    <string name="launcher_widget_phone_call">Telefon</string>
+    <string name="launcher_phone_title">Telefon</string>
+    <string name="launcher_phone_label">TELEFON</string>
+    <string name="launcher_phone_assistant">Sesli asistan</string>
+    <string name="launcher_phone_assistant_failed">Sesli asistan başlatılamadı</string>
+    <string name="launcher_phone_not_connected">Bağlı telefon yok</string>
+    <string name="launcher_phone_not_connected_sub">Bluetooth ile bir telefon bağlayın</string>
+    <string name="launcher_phone_bluetooth">Bluetooth</string>
+    <string name="launcher_phone_permission">Rehbere erişim izni gerekiyor</string>
+    <string name="launcher_phone_grant">İzin ver</string>
+    <string name="launcher_phone_loading">Rehber yükleniyor…</string>
+    <string name="launcher_phone_empty">Henüz kişi ya da arama yok</string>
+    <string name="launcher_phone_empty_sub">Telefonunuzda rehber paylaşımına izin verin</string>
+    <string name="launcher_phone_favorites">Favoriler</string>
+    <string name="launcher_phone_recents">Son aramalar</string>
+    <string name="launcher_phone_pinned">Sabitlendi</string>
+    <string name="launcher_phone_unpinned">Sabitleme kaldırıldı</string>
+    <string name="launcher_phone_call_cd">%s ara</string>
+    <string name="launcher_phone_pin_hint">Sabitlemek için basılı tutun</string>
+    <string name="launcher_call_incoming">Gelen arama</string>
+    <string name="launcher_call_dialing">Aranıyor…</string>
+    <string name="launcher_call_ended">Arama bitti</string>
+    <string name="launcher_call_answer">Cevapla</string>
+    <string name="launcher_call_decline">Reddet</string>
+    <string name="launcher_call_hangup">Kapat</string>
+    <string name="launcher_call_mute">Sessiz</string>
+    <string name="launcher_call_failed">Arama işlemi yapılamadı</string>
+    <string name="launcher_call_no_phone">Bağlı telefon yok</string>
+    <string name="launcher_call_not_supported">Bu araçta desteklenmiyor</string>
+    <string name="launcher_phone_voice_key">Ses tuşu uzun basış: Telefon asistanı</string>
+    <string name="launcher_phone_voice_key_hint">Kısa basış aracın kendi sesli komutunu açar.</string>
+    <string name="launcher_time_yesterday">Dün</string>
+    <string name="launcher_time_minutes">%d dk</string>
+    <string name="launcher_time_hours">%d sa</string>
+    <string name="launcher_time_now">şimdi</string>
+</resources>
