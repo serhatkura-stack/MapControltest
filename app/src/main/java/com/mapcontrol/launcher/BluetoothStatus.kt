@@ -25,7 +25,7 @@ internal object BtStateMap {
 
 /**
  * Bluetooth durumunu olaylarla izler (zamanlayıcı yok): bağdaştırıcı açık/kapalı ve bağlantı yayınları (A2DP, HEADSET).
- * Telefon bağlı = A2DP ya da HEADSET profili bağlı. BLUETOOTH_CONNECT verilmemişse okuma SecurityException atar; kapalı sayılır.
+ * Telefon bağlı = [BtListShaper.PROFILES]'den biri bağlı (araçta A2DP_SINK/HEADSET_CLIENT, telefonda A2DP/HEADSET). BLUETOOTH_CONNECT verilmemişse okuma SecurityException atar; kapalı sayılır.
  * [start]/[stop] eşleşmelidir; her ikisi de ana iş parçacığında çağrılır.
  */
 internal class BluetoothStatus(context: Context, private val onChange: (BtUi) -> Unit) {
@@ -50,6 +50,9 @@ internal class BluetoothStatus(context: Context, private val onChange: (BtUi) ->
             addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
             addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+            // Araç ünitesi telefona alıcı olarak bağlanır (A2DP_SINK, HEADSET_CLIENT; gizli sabitler).
+            addAction(ACTION_A2DP_SINK_STATE)
+            addAction(ACTION_HFP_CLIENT_STATE)
         })
         onChange(read())
     }
@@ -66,7 +69,7 @@ internal class BluetoothStatus(context: Context, private val onChange: (BtUi) ->
         val adapter = BluetoothAdapter.getDefaultAdapter()
         return try {
             val enabled = adapter?.isEnabled == true
-            val phone = enabled && (connected(adapter, BluetoothProfile.A2DP) || connected(adapter, BluetoothProfile.HEADSET))
+            val phone = enabled && BtListShaper.PROFILES.any { connected(adapter, it) }
             BtStateMap.map(adapter != null, enabled, phone)
         } catch (e: SecurityException) {
             BtUi.OFF
@@ -80,5 +83,7 @@ internal class BluetoothStatus(context: Context, private val onChange: (BtUi) ->
 
     private companion object {
         const val SETTLE_MS = 300L
+        const val ACTION_A2DP_SINK_STATE = "android.bluetooth.a2dp-sink.profile.action.CONNECTION_STATE_CHANGED"
+        const val ACTION_HFP_CLIENT_STATE = "android.bluetooth.headsetclient.profile.action.CONNECTION_STATE_CHANGED"
     }
 }

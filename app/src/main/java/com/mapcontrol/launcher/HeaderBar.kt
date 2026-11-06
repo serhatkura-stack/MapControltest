@@ -28,6 +28,8 @@ class HeaderBar(
     private val onEditHome: () -> Unit,
     private val onProfile: () -> Unit = {},
     private val onWifi: (View) -> Unit = {},
+    /** Bluetooth yarısına dokunma: launcher içindeki Bluetooth paneli (simgenin altında); verilmezse eski yol (OEM uygulaması). */
+    private val onBluetooth: ((View) -> Unit)? = null,
 ) : LauncherWidget, Themeable {
 
     private val time = text(context, LauncherTheme.TIME_SP, medium = true)
@@ -94,7 +96,7 @@ class HeaderBar(
         pressFeedback()
     }
 
-    /** Bluetooth durumu (kapalı, açık, telefon bağlı); dokununca OEM telefon uygulaması ya da sistem Bluetooth ayarları. Olaylarla güncellenir. */
+    /** Bluetooth durumu (kapalı, açık, telefon bağlı); dokununca launcher'dan çıkmadan Bluetooth paneli açılır. Olaylarla güncellenir. */
     private var btUi = BtUi.OFF
     private val btImage = icon(context, R.drawable.ic_mdi_bluetooth_off, LauncherTheme.ICON_M_DP + 4)
     private val btStatus = BluetoothStatus(context) { bindBluetooth(it) }
@@ -111,7 +113,7 @@ class HeaderBar(
         gravity = Gravity.CENTER
         isClickable = true
         isFocusable = true
-        setOnClickListener { openBluetooth() }
+        setOnClickListener { v -> onBluetooth?.invoke(v) ?: openOemBluetooth(context) }
         pressFeedback()
     }
 
@@ -391,19 +393,6 @@ class HeaderBar(
         chargeDivider.visibility = v
     }
 
-    /** OEM Bluetooth telefon uygulaması varsa onu, yoksa sistem Bluetooth ayarlarını açar; ikisi de yoksa bir şey yapmaz. */
-    private fun openBluetooth() {
-        val pm = context.packageManager
-        val intent = pm.getLaunchIntentForPackage(OEM_PHONE_PACKAGE)
-            ?: Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).takeIf { it.resolveActivity(pm) != null }
-            ?: return
-        try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: RuntimeException) {
-            // Açılamadı: sessizce vazgeçilir.
-        }
-    }
-
     private var lastWeather: OpenMeteoWeatherSnapshot? = null
 
     /** Tema değişti: metin renkleri, hap, hava ikonu ve düğmeler yeni renkle; etkinlik yeniden kurulmaz. */
@@ -601,7 +590,6 @@ class HeaderBar(
  */
 private const val SHOW_PROFILE_IN_HEADER = false
 
-private const val OEM_PHONE_PACKAGE = "com.desaysv.bluetooth.phone"
 private const val NOTICE_RESTORE_FADE_MS = 250L
 private const val CLUSTER_ICON_DP = 28
 private const val CLUSTER_TEXT_SP = 24f

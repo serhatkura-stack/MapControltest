@@ -107,8 +107,15 @@ internal object LauncherDemo {
     @Volatile
     private var wifi = false
 
-    /** Demo Bluetooth durumu: `launcher_demo_wifi` açıkken telefon bağlı görünür (emülatörde bağdaştırıcı yok); aksi halde null (gerçek durum). */
-    internal fun bluetooth(): BtUi? = if (enabled && wifi) BtUi.CONNECTED else null
+    /** Demo Bluetooth durumu: demo açıkken telefon bağlı görünür (Bluetooth panelindeki demo listesiyle aynı); aksi halde null (gerçek durum). */
+    internal fun bluetooth(): BtUi? = if (enabled) BtUi.CONNECTED else null
+
+    /** Bluetooth paneli önizlemesi: demo açıkken ve gerçek eşleşmiş cihaz yokken gösterilen örnek liste (adresler geçersiz, bağlanma denenmez). */
+    internal fun bluetoothDevices(): List<BtDevice> = if (!enabled) emptyList() else listOf(
+        BtDevice("DEMO-1", "Serhat'ın iPhone'u", BtKind.PHONE, phone = true, audio = true),
+        BtDevice("DEMO-2", "AirPods", BtKind.AUDIO),
+        BtDevice("DEMO-3", "Galaxy S23", BtKind.PHONE),
+    )
 
     internal fun wifiScans(): List<WifiScan> = if (!enabled || !wifi) emptyList() else listOf(
         WifiScan("Ev_5G", 4, "[WPA2-PSK-CCMP][ESS]"),

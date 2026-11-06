@@ -55,6 +55,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
     /** Park/Sürüş düzeni: etkin düzen, geçiş kararı ve başlıktaki düzenleme başlığı. */
     private var activeMode = LayoutMode.PARK
     private var wifiPanel: WifiPanel? = null
+    private var bluetoothPanel: BluetoothPanel? = null
     private val layoutPolicy = DriveLayoutPolicy()
     /** Tercihler her turda SharedPreferences'tan okunmasın diye alanlarda tutulur; onCreate/onStart/ayar değişiminde tazelenir. */
     private var driveAccentOn = true
@@ -146,7 +147,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         hideSystemBars()
 
-        header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onWifi = ::toggleWifiPanel)
+        header = HeaderBar(this, onSettings = ::openSettings, onEditHome = ::enterEditMode, onProfile = ::openProfiles, onWifi = ::toggleWifiPanel, onBluetooth = ::toggleBluetoothPanel)
         // OEM alt çubuğu varsa (Desay) eski klima+dock kartı kaldırılır: ikisi üst üste ekranın üçte birini yer, hücreler sıkışır.
         // "Alt çubuk: Bizimki" seçiliyse OEM çubuğu gizlenir ve yerine OurBottomBar gelir (eski kart de çizilmez).
         // Sahne'de OEM çubuğu yokken "Orijinal" de bizim çubuğa düşer (eski klima + uygulama kartı Sahne'de çizilmez).
@@ -295,6 +296,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet?.dismiss()
         sheet = null
         wifiPanel?.dismiss()
+        bluetoothPanel?.dismiss()
         if (!keepEdit) exitEditMode()
         // Karşılama eski görünümlere bağlı: önce son haline çekilir (kök zemin geri verilir), sahne yenilenince yeni
         // parçalarla yeniden kurulur (siyah tutma yeniden kurulmaz).
@@ -503,7 +505,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             welcomeArmUntil = 0L
             return
         }
-        val ready = resumed && !editing && sheet == null && wifiPanel == null
+        val ready = resumed && !editing && sheet == null && wifiPanel == null && bluetoothPanel?.isShowing != true
         if (LauncherDemo.enabled && LauncherDemo.welcomeRequested && ready) {
             LauncherDemo.welcomeRequested = false
             WelcomeCycle.gate.replay()
@@ -694,6 +696,7 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         sheet?.dismiss()
         sheet = null
         wifiPanel?.dismiss()
+        bluetoothPanel?.dismiss()
         exitEditMode()
         metrics.removeListener(metricsListener)
         fixedWidgets.forEach { it.onHidden() }
@@ -972,6 +975,14 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
             features = LauncherEdition.frostNav(this),
             onWebState = { header.setWebRunning(it) },
         ).also { wifiPanel = it }
+        panel.show(anchor)
+    }
+
+    /** Bluetooth simgesine dokunma: launcher'dan çıkmadan simgenin altında Bluetooth paneli (ikinci dokunuş kapatır). */
+    private fun toggleBluetoothPanel(anchor: View) {
+        if (editing) return
+        val panel = bluetoothPanel ?: BluetoothPanel(this, AndroidBluetoothBackend(this), onSettings = { openOemBluetooth(this) })
+            .also { bluetoothPanel = it }
         panel.show(anchor)
     }
 
