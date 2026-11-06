@@ -26,7 +26,9 @@ import android.util.Log
 import com.desaysv.ivi.vdb.IVDBusNotify
 import com.desaysv.ivi.vdb.client.VDBus
 import com.desaysv.ivi.vdb.client.bind.VDServiceDef
+import com.desaysv.ivi.vdb.client.bind.VDThreadType
 import com.desaysv.ivi.vdb.client.listener.VDBindListener
+import com.desaysv.ivi.vdb.client.listener.VDNotifyListener
 import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.base.VDKey
 import com.desaysv.ivi.vdb.event.id.bt.VDEventBT
@@ -40,10 +42,11 @@ import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTRecord
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /*
@@ -736,17 +739,81 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 }
 
 /**
- * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan). OEM servisinde PHONE_BOOK_*_LIST* için
- * onGet yok (SVVDSBluetooth q/v.java:197-243): getOnce hep boş döner. Gerçek yol (OEM'in kendi önbellek yolu):
+ * VDBus BT yayınlarına OEM'in kullandığı STANDART abonelik: addSubscribe + subscribeCommit + registerVDNotifyListener
+ * (SVBluetoothPhone manager/j.java:277-297). `VDBus.subscribe(VDEvent, stub)` "özel olay" aboneliğidir
+ * (IVDBus.subscribeCustomizedEvent); BT servisi onSubscribeCustomizedEvent'i ezmiyor (VDBTService.java; yalnızca
+ * VDService.java:156 boş gövde), yayınlar yalnızca standart abonelere gider (VDBinder.publish → mEventMap). Bu yüzden
+ * rehber/geçmiş yanıtları bize hiç ulaşmıyordu ("vdbus veri: yanıt yok").
  *
- * 1. ..._LIST_CACHE yayınına abone ol, PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber /
- *    6 geçmiş, adres null = bağlı cihaz, key = bizim etiketimiz} gönder.
- * 2. Yanıt 10'arlık parçalar: {"data": liste, "status": VDBTListProgress(index = parçanın son sırası, total, key)};
- *    index == total-1 ya da total 0 olunca biter (v/o.java:52-110). Başkalarının istekleri key ile ayıklanır.
- * 3. Önbellek boşsa PHONE_BOOK_SYNC_DB (262378) ile servis kendi veritabanından okur; ..._LIST_DB key=null yayımlanır.
+ * Abonelikler süreç boyunca açık kalır (sunucu her commit'te bu istemcinin tüm listesini değiştirir; servis yeniden
+ * bağlanınca VDConnector.onVDBusConnected aynı listeyi yeniden gönderir). Dağıtım VDBus_DISPATCH iş parçacığında.
+ */
+internal object VdbusBtNotify {
+    private val handlers = ConcurrentHashMap<Int, CopyOnWriteArrayList<(VDEvent) -> Unit>>()
+    private val subscribed = HashSet<Int>()
+    private var registered = false
+
+    private val listener = VDNotifyListener { e, _ ->
+        if (e == null) return@VDNotifyListener
+        val list = handlers[e.id] ?: return@VDNotifyListener
+        for (h in list) {
+            try {
+                h(e)
+            } catch (t: Throwable) {
+                Log.w(TAG, "vdbus yayın(${e.id}): ${t.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** io: [ids] standart aboneliğe eklenir (zaten varsa bir şey yapmaz). Başarısızsa false. */
+    @Synchronized
+    fun ensure(bus: VDBus, ids: IntArray): Boolean = try {
+        if (!registered) {
+            bus.registerVDNotifyListener(listener)
+            registered = true
+        }
+        var changed = false
+        for (id in ids) {
+            if (subscribed.add(id)) {
+                bus.addSubscribe(id, VDThreadType.CHILD_THREAD)
+                changed = true
+            }
+        }
+        if (changed) bus.subscribeCommit()
+        if (changed) PhoneDataProbe.log("standart abonelik: ${ids.size} olay")
+        true
+    } catch (t: Throwable) {
+        Log.w(TAG, "vdbus standart abonelik: ${t.javaClass.simpleName}")
+        false
+    }
+
+    fun add(id: Int, h: (VDEvent) -> Unit) {
+        handlers.getOrPut(id) { CopyOnWriteArrayList() }.add(h)
+    }
+
+    fun remove(id: Int, h: (VDEvent) -> Unit) {
+        handlers[id]?.remove(h)
+    }
+}
+
+/**
+ * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan).
+ *
+ * OEM telefon uygulaması (SVBluetoothPhone) rehberi VDBus'tan DEĞİL, BT servisinin AndLinker arayüzünden alır
+ * (sdk/bluetooth/manager/AndLinkerManager.java:36 → IPBAPManager.loadContact/loadCallLog, PBAPManager.java:414-530).
+ * O servis exported=false (SVVDSBluetooth manifesti, AndLinkerService); biz bağlanamayız. Aynı veri BT servisinin
+ * VDBus PBAP dağıtıcısında da var (SVVDSBluetooth q/v.java = VDPBAPManager, q/r.java = VDPBAPDataParse):
+ *
+ * 1. ..._LIST_CACHE (262376 rehber / 262377 geçmiş) ve ..._LIST_DB (262379/262380) STANDART aboneliği ([VdbusBtNotify]).
+ * 2. set PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber / 6 geçmiş, adres null = bağlı
+ *    cihaz, key = bizim etiketimiz} (q/v.java:230, q/r.java:95-171). Sunucu önbellek haritasını (yoksa boş liste)
+ *    10'arlık parçalarla yayar: {"data": liste, "status": VDBTListProgress(adres, index, total, key)} (q/r.java:538-560,
+ *    v/o.java:52-110). Get yok: bu olayların onGet'i null (q/v.java:197-215).
+ * 3. Önbellek boşsa set PHONE_BOOK_SYNC_DB (262378): servis kaydedilmiş listeyi yükler (q/q.java:393-440), bitince
+ *    ..._LIST_DB key=null yayımlanır (q/v.java:56-96).
  *
  * PHONE_BOOK_SYNC (262346) KULLANILMAZ: telefondan baştan PBAP indirmesi başlatır. Hiç yanıt gelmezse null döner
- * (boş rehber gibi görünmesin).
+ * (boş rehber gibi görünmesin). Sonda ([PhoneDataProbe]) açıksa her adım yalnızca sayılarla günlüğe yazılır.
  */
 internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBackend {
     override val name: String = PhoneBackendName.VDBUS
@@ -760,57 +827,47 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             putSyncType(syncType)
             if (key != null) putSyncKey(key)
         }))
+        PhoneDataProbe.log("istek gönderildi olay=$eventId tür=$syncType etiket=${if (key != null) "var" else "yok"}")
     }
 
     /**
-     * io: [listId] parçalarını toplar ([key] eşleşenler). Bitti, [IDLE_MS] boyunca yeni parça yok ya da [HARD_MS]
-     * doldu. Hiç parça gelmediyse null.
+     * io: [listId] parçalarını toplar ([key] eşleşenler). Bitti, [VdListWait.IDLE_MS] boyunca yeni parça yok ya da
+     * [VdListWait.HARD_MS] doldu. Hiç parça gelmediyse null.
      */
     private fun <T> collect(listId: Int, key: String?, trigger: (VDBus) -> Unit, parse: (VDEvent) -> List<*>?, cls: Class<T>): List<T>? {
         val b = call.bus ?: return null
-        val out = ArrayList<T>()
+        if (!VdbusBtNotify.ensure(b, LIST_IDS)) return null
+        val acc = VdListCollector<T>(key)
         val finished = CountDownLatch(1)
-        val any = AtomicBoolean(false)
-        val lastAt = AtomicLong(SystemClock.uptimeMillis())
-        val notify = object : IVDBusNotify.Stub() {
-            override fun onVDBusNotify(e: VDEvent?) {
-                if (e == null || e.id != listId) return
-                try {
-                    val progress = VDBTListProgress.getValue(e)
-                    if (progress?.key != key) return
-                    val items = parse(e)?.filterIsInstance(cls).orEmpty()
-                    synchronized(out) { out.addAll(items) }
-                    any.set(true)
-                    lastAt.set(SystemClock.uptimeMillis())
-                    if (progress == null || progress.total <= 0 || progress.index >= progress.total - 1) finished.countDown()
-                } catch (t: Throwable) {
-                    Log.w(TAG, "vdbus liste($listId): ${t.javaClass.simpleName}")
-                }
-            }
+        val startedAt = SystemClock.uptimeMillis()
+        val lastAt = AtomicLong(startedAt)
+        val handler: (VDEvent) -> Unit = handler@{ e ->
+            val progress = VDBTListProgress.getValue(e)
+            val items = parse(e)?.filterIsInstance(cls).orEmpty()
+            val offer = acc.offer(progress?.key, progress?.index ?: 0, progress?.total ?: 0, items)
+            PhoneDataProbe.log(
+                "parça olay=$listId index=${progress?.index} toplam=${progress?.total} adet=${items.size} " +
+                    "durum=${offer.name.lowercase()}",
+            )
+            if (offer != VdListCollector.Offer.ACCEPTED) return@handler
+            lastAt.set(SystemClock.uptimeMillis())
+            if (acc.finished || acc.failed) finished.countDown()
         }
-        val ev = VDEvent(listId, Bundle())
-        try {
-            b.subscribe(ev, notify)
-        } catch (t: Throwable) {
-            Log.w(TAG, "vdbus subscribe($listId): ${t.javaClass.simpleName}")
-            return null
-        }
+        VdbusBtNotify.add(listId, handler)
         try {
             trigger(b)
-            val hardEnd = SystemClock.uptimeMillis() + HARD_MS
             while (true) {
-                val now = SystemClock.uptimeMillis()
-                val left = minOf(lastAt.get() + IDLE_MS, hardEnd) - now
+                val left = VdListWait.remaining(SystemClock.uptimeMillis(), lastAt.get(), startedAt)
                 if (left <= 0) break
                 if (finished.await(left, TimeUnit.MILLISECONDS)) break
             }
         } catch (t: Throwable) {
             Log.w(TAG, "vdbus istek($listId): ${t.javaClass.simpleName}")
         } finally {
-            runCatching { b.unsubscribe(ev, notify) }
+            VdbusBtNotify.remove(listId, handler)
         }
-        if (!any.get()) return null
-        return synchronized(out) { ArrayList(out) }
+        PhoneDataProbe.log("bitti olay=$listId ${acc.summary()} süre=${SystemClock.uptimeMillis() - startedAt}ms")
+        return acc.result()
     }
 
     /** Önbellek, boşsa veritabanı. Önbellek hiç yanıt vermezse veritabanı denenmez (servis bu yolu bilmiyor). */
@@ -823,7 +880,10 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
     }
 
     override fun read(pinnedIds: List<String>): PhoneData? {
-        if (!available()) return null
+        if (!available()) {
+            PhoneDataProbe.log("BT VDBus bağlı değil")
+            return null
+        }
         return try {
             val records = load(
                 VDValueBT.PhoneBookSyncType.CALLLOG_SYNC, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
@@ -859,6 +919,10 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
                     ?: continue
                 contacts.add(PhoneContact(id, name, keep))
             }
+            PhoneDataProbe.log(
+                "sonuç geçmiş ham=${records?.size ?: -1} geçerli=${recents.size} rehber ham=${raw?.size ?: -1} " +
+                    "eşleşen=${contacts.size}",
+            )
             PhoneData(contacts, joinNames(recents, contacts))
         } catch (e: RuntimeException) {
             Log.w(TAG, "vdbus veri: ${e.javaClass.simpleName}")
@@ -867,8 +931,10 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
     }
 
     private companion object {
-        const val IDLE_MS = 1_500L
-        const val HARD_MS = 5_000L
+        val LIST_IDS = intArrayOf(
+            VDEventBT.PHONE_BOOK_CONTACTS_LIST_CACHE, VDEventBT.PHONE_BOOK_RECORD_LIST_CACHE,
+            VDEventBT.PHONE_BOOK_CONTACTS_LIST_DB, VDEventBT.PHONE_BOOK_RECORD_LIST_DB,
+        )
     }
 }
 

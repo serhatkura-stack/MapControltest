@@ -117,6 +117,7 @@ class HomeLauncherActivity : Activity() {
         LauncherDemo.applyPreview(intent)
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
+        PhoneDataProbe.applyFrom(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
@@ -227,6 +228,7 @@ class HomeLauncherActivity : Activity() {
         consumeEditExtra(intent)
         // Debug: launcher açıkken gelen --ei launcher_nav_area (ekstra işlenince silinir, tekrarlanmaz).
         LauncherProbe.applyFrom(this, intent)
+        PhoneDataProbe.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)

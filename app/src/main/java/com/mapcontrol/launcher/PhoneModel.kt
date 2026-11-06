@@ -151,6 +151,7 @@ object PhoneSource {
     private const val REREAD_DEBOUNCE_MS = 1_000L
     private const val SETTLE_MS = 300L
     private const val VDBUS_WAIT_MS = 3_000L
+    private const val PROBE_BIND_WAIT_MS = 3_000L
     private const val ASSISTANT_IDLE_CLOSE_MS = 10_000L
     private const val MAX_FAVORITES = 6
     /** Bir veri sahibi geri geldiğinde bu süreden eski veri yeniden okunur (gözlemci yokken kaçan değişiklikler için). */
@@ -587,6 +588,41 @@ object PhoneSource {
             val data = lastData ?: return@execute readData()
             val favorites = FavoritesRanker.rank(data.contacts, data.recents, PhonePrefs.pinnedIds(app), MAX_FAVORITES, System.currentTimeMillis())
             update { it.copy(favorites = favorites) }
+        }
+    }
+
+    /**
+     * Debug sondası ([PhoneDataProbe]): rehber sağlayıcısı dolu olsa bile VDBus rehber/geçmiş yolunu bir kez dener.
+     * Ana iş parçacığında çağrılır; okuma io'da. Sonuç yalnızca sayılarla günlüğe yazılır, panele uygulanmaz.
+     */
+    fun probeVdbusData(context: Context) {
+        val app = context.applicationContext
+        if (appContext == null) appContext = app
+        ensureBackends(app)
+        val vd = vdbus ?: return
+        if (vd.bus == null) vd.prepare(app)
+        io.execute {
+            vd.connect()
+            val until = SystemClock.elapsedRealtime() + PROBE_BIND_WAIT_MS
+            while (!vd.available() && SystemClock.elapsedRealtime() < until) {
+                try {
+                    Thread.sleep(100)
+                } catch (e: InterruptedException) {
+                    break
+                }
+            }
+            PhoneDataProbe.log("BT VDBus bağlı=${vd.available()}")
+            val started = SystemClock.elapsedRealtime()
+            val data = try {
+                vdbusData?.read(emptyList())
+            } catch (t: Throwable) {
+                Log.w(TAG, "sonda: ${t.javaClass.simpleName}")
+                null
+            }
+            PhoneDataProbe.log(
+                "okuma bitti kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1} " +
+                    "süre=${SystemClock.elapsedRealtime() - started}ms",
+            )
         }
     }
 
