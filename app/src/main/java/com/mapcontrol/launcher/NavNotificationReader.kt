@@ -61,6 +61,60 @@ internal object NavNotificationReader {
         return input
     }
 
+    /**
+     * Ucuz içerik imzası ([NavParseGate] için): extras metinleri, `when`, küçük simge ve RemoteViews eylemlerinin ham
+     * değerleri (metin/tamsayı). Kaynak adına çevirme, dize kurma ve günlük yok; aynı sınırlar (derinlik, 400 eylem).
+     */
+    fun contentSignature(sbn: StatusBarNotification): Int {
+        val n = sbn.notification
+        val extras: Bundle? = n.extras
+        var h = sbn.packageName.hashCode()
+        for (k in SIGNATURE_EXTRAS) h = 31 * h + (extras?.getCharSequence(k)?.toString()?.hashCode() ?: 0)
+        h = 31 * h + n.`when`.hashCode()
+        h = 31 * h + (try { n.smallIcon?.let { if (it.type == Icon.TYPE_RESOURCE) it.resId else 0 } ?: 0 } catch (e: Exception) { 0 })
+        val walk = Walk()
+        @Suppress("DEPRECATION")
+        listOfNotNull(n.contentView, n.bigContentView, n.headsUpContentView).forEach { rv ->
+            h = 31 * h + rawHash(rv, 0, walk)
+        }
+        return h
+    }
+
+    private val SIGNATURE_EXTRAS = arrayOf(
+        Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT,
+        Notification.EXTRA_BIG_TEXT, Notification.EXTRA_INFO_TEXT,
+    )
+
+    private fun rawHash(rv: RemoteViews, depth: Int, walk: Walk): Int {
+        if (depth > 4 || !walk.seen.add(rv)) return 0
+        val actions = try {
+            field(RemoteViews::class.java, "mActions")?.get(rv) as? List<*>
+        } catch (e: Exception) {
+            null
+        } ?: return 0
+        var h = actions.size
+        for (action in actions) {
+            if (action == null) continue
+            if (++walk.actions > MAX_ACTIONS) return h
+            try {
+                val cls = action.javaClass
+                h = 31 * h + ((field(cls, "viewId")?.get(action) as? Int) ?: 0)
+                h = 31 * h + when (val v = field(cls, "value")?.get(action)) {
+                    is CharSequence -> v.toString().hashCode()
+                    is Int -> v
+                    is Icon -> try { if (v.type == Icon.TYPE_RESOURCE) v.resId else 1 } catch (e: Exception) { 1 }
+                    null -> 0
+                    else -> v.javaClass.hashCode()
+                }
+                nestedFields(cls).forEach { f ->
+                    (f.get(action) as? RemoteViews)?.let { if (it !== rv) h = 31 * h + rawHash(it, depth + 1, walk) }
+                }
+            } catch (e: Exception) {
+            }
+        }
+        return h
+    }
+
     /** Yandex'in kaynakları (paket başına bir kez yüklenir). */
     private fun resources(context: Context, pkg: String): Resources? = resourcesCache[pkg] ?: try {
         context.packageManager.getResourcesForApplication(pkg).also { resourcesCache[pkg] = it }
