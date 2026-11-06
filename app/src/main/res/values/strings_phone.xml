@@ -32,6 +32,8 @@
     <string name="launcher_call_not_supported">Not supported on this car</string>
     <string name="launcher_phone_voice_key">Long-press voice key opens phone assistant</string>
     <string name="launcher_phone_voice_key_hint">Short press opens the car\'s own voice control. Touching and holding the phone button in the bottom bar also opens the phone assistant.</string>
+    <string name="launcher_phone_assistant_button">Voice assistant button</string>
+    <string name="launcher_phone_assistant_button_hint">When off, the phone card has no voice assistant button: a larger last call and up to 5 favourites instead.</string>
     <string name="launcher_time_yesterday">Yesterday</string>
     <string name="launcher_time_minutes">%d min</string>
     <string name="launcher_time_hours">%d h</string>

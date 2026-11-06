@@ -32,6 +32,8 @@
     <string name="launcher_call_not_supported">Bu araçta desteklenmiyor</string>
     <string name="launcher_phone_voice_key">Ses tuşuna uzun basınca telefon asistanı açılsın</string>
     <string name="launcher_phone_voice_key_hint">Kısa basış aracın kendi sesli komutunu açar. Alt çubuktaki telefon düğmesine basılı tutmak da telefon asistanını açar.</string>
+    <string name="launcher_phone_assistant_button">Sesli asistan düğmesi</string>
+    <string name="launcher_phone_assistant_button_hint">Kapalıyken telefon kartında sesli asistan düğmesi olmaz; son arama büyür, en çok 5 favori görünür.</string>
     <string name="launcher_time_yesterday">Dün</string>
     <string name="launcher_time_minutes">%d dk</string>
     <string name="launcher_time_hours">%d sa</string>

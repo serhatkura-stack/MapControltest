@@ -146,6 +146,8 @@ class HomeLauncherActivity : Activity() {
         LauncherDemo.applyMoving(intent)
         LauncherProbe.applyFrom(this, intent)
         PhoneDataProbe.applyFrom(this, intent)
+        // Debug: telefon panelinde asistan düğmesi (yeniden kurulumda eski istek ayarın üstüne yazmasın).
+        if (savedInstanceState == null) PhonePrefs.applyShowAssistantExtra(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
         com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
@@ -264,6 +266,7 @@ class HomeLauncherActivity : Activity() {
         // Debug: launcher açıkken gelen --ei launcher_nav_area (ekstra işlenince silinir, tekrarlanmaz).
         LauncherProbe.applyFrom(this, intent)
         PhoneDataProbe.applyFrom(this, intent)
+        PhonePrefs.applyShowAssistantExtra(this, intent)
         com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)

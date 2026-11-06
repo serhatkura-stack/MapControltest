@@ -176,6 +176,74 @@ class PhoneUiLogicTest {
         assertTrue(PhoneUiLogic.favoriteCells(listOf(bare, blank)).isEmpty())
     }
 
+    // --- Asistansız düzen (Sesli asistan düğmesi: Kapalı) ---
+
+    private fun people(n: Int) = (1..n).map { PhoneContact("c:$it", "Kişi $it", "0555 000 00 %02d".format(it)) }
+
+    private fun shape(grid: List<List<PhoneUiLogic.FavCell>>): List<String> = grid.map { row ->
+        row.joinToString("") {
+            when (it) {
+                is PhoneUiLogic.FavCell.Contact -> "K"
+                PhoneUiLogic.FavCell.Empty -> "_"
+                PhoneUiLogic.FavCell.All -> "T"
+            }
+        }
+    }
+
+    @Test
+    fun assistantLayoutGridIsTodaysSingleRow() {
+        assertEquals(listOf("KKKT"), shape(PhoneUiLogic.favoriteGrid(people(6), showAssistant = true)))
+        assertEquals(listOf("K__T"), shape(PhoneUiLogic.favoriteGrid(people(1), showAssistant = true)))
+        assertEquals(listOf("___T"), shape(PhoneUiLogic.favoriteGrid(emptyList(), showAssistant = true)))
+        // Aynı kişiler, aynı sıra: favoriteCells ile.
+        val cells = PhoneUiLogic.favoriteGrid(people(6), true)[0].filterIsInstance<PhoneUiLogic.FavCell.Contact>().map { it.contact }
+        assertEquals(PhoneUiLogic.favoriteCells(people(6)), cells)
+    }
+
+    @Test
+    fun compactGridHasUpToFiveFavoritesAndAllLast() {
+        assertEquals(listOf("KKK", "KKT"), shape(PhoneUiLogic.favoriteGrid(people(6), showAssistant = false)))
+        assertEquals(listOf("KKK", "KKT"), shape(PhoneUiLogic.favoriteGrid(people(5), showAssistant = false)))
+        assertEquals(listOf("KKK", "K_T"), shape(PhoneUiLogic.favoriteGrid(people(4), showAssistant = false)))
+        assertEquals(listOf("KKK", "__T"), shape(PhoneUiLogic.favoriteGrid(people(3), showAssistant = false)))
+        // İki ya da daha az kişi: tek satır, boş ikinci satır yok.
+        assertEquals(listOf("KKT"), shape(PhoneUiLogic.favoriteGrid(people(2), showAssistant = false)))
+        assertEquals(listOf("K_T"), shape(PhoneUiLogic.favoriteGrid(people(1), showAssistant = false)))
+        assertEquals(listOf("__T"), shape(PhoneUiLogic.favoriteGrid(emptyList(), showAssistant = false)))
+    }
+
+    @Test
+    fun compactGridSkipsUnnamedAndKeepsOrder() {
+        val bare = PhoneContact("n:1", "0555 000 00 09", "0555 000 00 09")
+        val grid = PhoneUiLogic.favoriteGrid(listOf(bare) + people(6), showAssistant = false)
+        val names = grid.flatten().filterIsInstance<PhoneUiLogic.FavCell.Contact>().map { it.contact.name }
+        assertEquals(listOf("Kişi 1", "Kişi 2", "Kişi 3", "Kişi 4", "Kişi 5"), names)
+    }
+
+    @Test
+    fun compactSizesFillTheBodyWithLargeTouchTargets() {
+        // Kart yüzü (378 - 18 - 16 - 28 - 10 = 306dp) ve alt çubuk sayfası (440 - 28 - 10 = 402dp).
+        val face = PhoneUiLogic.PANEL_H_DP - PhoneUiLogic.PANEL_PAD_TOP_DP - PhoneUiLogic.PANEL_PAD_BOTTOM_DP -
+            PhoneUiLogic.PANEL_HEADER_DP - PhoneUiLogic.PANEL_GAP_DP
+        for (body in listOf(face, 402)) for (rows in 1..2) for (hasLast in listOf(true, false)) {
+            val z = PhoneUiLogic.compactSizes(body, rows, hasLast)
+            val gaps = PhoneUiLogic.PANEL_GAP_DP * (if (hasLast) rows else rows - 1)
+            val used = z.lastDp + rows * z.rowDp + gaps
+            // Boşluk kalmaz (tam bölünmeden gelen en çok satır sayısı kadar dp).
+            assertTrue("body=$body rows=$rows last=$hasLast used=$used", used in (body - rows)..body)
+            assertTrue(z.rowDp >= PhoneUiLogic.TOUCH_MIN_DP)
+            assertTrue(z.favAvatarDp + PhoneUiLogic.COMPACT_NAME_ROW_DP + PhoneUiLogic.COMPACT_NAME_GAP_DP <= z.rowDp)
+            if (hasLast) {
+                // Büyük kart: bugünkü 96dp karttan küçük değil, avatar karta sığar, Geri ara ≥ 64dp.
+                assertTrue(z.lastDp >= PhoneUiLogic.COMPACT_LAST_MIN_DP && z.lastDp >= PhoneUiLogic.PANEL_LAST_CALL_DP)
+                assertTrue(z.lastAvatarDp + 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP <= z.lastDp)
+                assertTrue(z.lastDp - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP >= PhoneUiLogic.TOUCH_MIN_DP)
+            } else {
+                assertEquals(0, z.lastDp)
+            }
+        }
+    }
+
     @Test
     fun recentPhotoKeyFallsBackToMatchingContact() {
         val withPhoto = PhoneContact("v:7", "Mehmet", "+90 555 000 00 02", photoKey = "v:7")

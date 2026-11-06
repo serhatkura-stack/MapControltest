@@ -165,6 +165,17 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setText(R.string.launcher_phone_voice_key_hint)
         }, fullWidth())
 
+        // Telefon kartında "Sesli asistan" düğmesi: kapalıyken son arama ve favoriler büyür (açık paneller hemen değişir).
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_phone_assistant_button, PhonePrefs.showAssistant(activity)) { value ->
+            d.dismiss()
+            PhonePrefs.setShowAssistant(activity, value)
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_phone_assistant_button_hint)
+        }, fullWidth())
+
         // Arama ekranı: Launcher (arama başlayınca ana ekran öne gelir, bizim arama sayfası) / Fabrika. Varsayılan Launcher.
         addView(gap(activity, 12, vertical = true))
         addView(onOffControl(R.string.pref_call_screen, CallScreenPrefs.launcher(activity),

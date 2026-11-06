@@ -1458,6 +1458,7 @@ object PhonePrefs {
     private const val PREFS_NAME = "launcher_settings"
     private const val KEY_ASSISTANT = "phone_voice_key_assistant"
     private const val KEY_PINNED = "phone_pinned_ids"
+    private const val KEY_SHOW_ASSISTANT = "phone_show_assistant"
 
     /**
      * "Ses tuşu uzun basış: Telefon asistanı" (varsayılan KAPALI: 6 Kasım araç testinde OEM uzun basışta kendi
@@ -1469,6 +1470,37 @@ object PhonePrefs {
     fun setAssistantOnVoiceKey(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean(Profiles.key(context, KEY_ASSISTANT), on).apply()
     }
+
+    /**
+     * "Sesli asistan düğmesi" (varsayılan AÇIK = bugünkü düzen). Kapalıyken telefon paneli/sayfası asistan şeridi olmadan
+     * büyük "Son arama" kartı ve 2×3 favori ızgarasıyla kurulur. Değişim açık panellere [addShowAssistantListener] ile gider.
+     */
+    fun showAssistant(context: Context): Boolean =
+        prefs(context).getBoolean(Profiles.key(context, KEY_SHOW_ASSISTANT), true)
+
+    fun setShowAssistant(context: Context, on: Boolean) {
+        if (showAssistant(context) == on) return
+        prefs(context).edit().putBoolean(Profiles.key(context, KEY_SHOW_ASSISTANT), on).apply()
+        showAssistantListeners.forEach { it() }
+    }
+
+    /** Ana iş parçacığında çağrılır (ayar satırı ve adb ekstrası ana iş parçacığında yazar). */
+    fun addShowAssistantListener(l: () -> Unit) { showAssistantListeners.add(l) }
+
+    fun removeShowAssistantListener(l: () -> Unit) { showAssistantListeners.remove(l) }
+
+    /**
+     * Araç testinde adb ile çevirmek için (yalnız debug derlemede, demo gerekmez):
+     * `am start -n <paket>/com.mapcontrol.launcher.HomeLauncherActivity --ez launcher_phone_assistant false`. Kalıcı yazar.
+     */
+    const val EXTRA_SHOW_ASSISTANT = "launcher_phone_assistant"
+
+    fun applyShowAssistantExtra(context: Context, intent: android.content.Intent?) {
+        if (intent?.hasExtra(EXTRA_SHOW_ASSISTANT) != true || !LauncherCrashGuard.isDebuggable(context)) return
+        setShowAssistant(context, intent.getBooleanExtra(EXTRA_SHOW_ASSISTANT, true))
+    }
+
+    private val showAssistantListeners = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
 
     /** Sabitlenmiş favori kişi kimlikleri, sırayla. */
     fun pinnedIds(context: Context): List<String> =

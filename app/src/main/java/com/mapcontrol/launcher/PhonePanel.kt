@@ -30,6 +30,9 @@ import java.text.DateFormatSymbols
  *  3. Favoriler (112dp): yalnız isimli 3 kişi (76dp fotoğraf ya da baş harf + ad; dokun: ara, basılı tut: sabitle) ve
  *     dördüncü hücrede **Tümü** (Son aramalar / Kişiler sayfası, [PhoneAllSheet]).
  *  4. "Sesli asistan" şeridi (76dp, tam genişlik).
+ * "Sesli asistan düğmesi: Kapalı" ([PhonePrefs.showAssistant]; adb: `--ez launcher_phone_assistant false`): şerit kalkar,
+ * "Son arama" kartı büyür (büyük avatar/ad, geniş **Geri ara**) ve favoriler 3 sütunlu ızgara olur (en çok 5 kişi + Tümü,
+ * [PhoneUiLogic.favoriteGrid]); yükseklik [PhoneUiLogic.compactSizes] ile boşluksuz paylaşılır. Açıkken düzen değişmez.
  * Son aramalar listesi panelde yok; "Tümü"de. Veri yalnızca [PhoneSource]'tan, olay güdümlü; görünmezken dinleme yok.
  * Bölümler yalnız verisi değişince yeniden kurulur; tek zamanlayıcı "Son arama" zamanının dakikalık tazelemesidir.
  *
@@ -60,6 +63,15 @@ internal class PhonePanel(
     private var shownLastPhoto: String? = null
     private var shownDirVersion = -1
     private var lastNumber: String? = null
+
+    /** "Sesli asistan düğmesi" ayarı ([PhonePrefs.showAssistant]); kapalıyken asistansız düzen ([compactCol]). */
+    private var showAssistant = PhonePrefs.showAssistant(context)
+    /** Asistansız düzende gövdenin yüksekliği (dp; ölçülünce). */
+    private var compactBodyDp = 0
+    /** Asistansız düzenin son kurulduğu veri + ölçü (değişmedikçe yeniden kurulmaz). */
+    private var compactKey: Any? = null
+    private var cLast: CompactLast? = null
+    private val showAssistantListener: () -> Unit = { applyMode() }
 
     // --- Başlık ---
     private val headIcon = ImageView(context).apply {
@@ -196,8 +208,25 @@ internal class PhonePanel(
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
     }
 
-    private val body = FrameLayout(context).apply {
+    // --- Asistansız düzen: büyük "Son arama" kartı + 2×3 favori ızgarası, gövdeyi boşluksuz doldurur ---
+    private val compactCol = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        clipChildren = false
+        visibility = View.GONE
+    }
+
+    private val body = object : FrameLayout(context) {
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            val dp = (h / resources.displayMetrics.density + 0.5f).toInt()
+            if (dp == compactBodyDp) return
+            compactBodyDp = dp
+            // Yerleşim sırasında görünüm ağacı değiştirilmez: bir sonraki karede kurulur.
+            if (!showAssistant) post { rebuildCompact() }
+        }
+    }.apply {
         addView(contentCol, FrameLayout.LayoutParams(MATCH, WRAP))
+        addView(compactCol, FrameLayout.LayoutParams(MATCH, MATCH))
         addView(message, FrameLayout.LayoutParams(MATCH, MATCH))
     }
 
@@ -247,7 +276,10 @@ internal class PhonePanel(
         main.postDelayed(minuteTick, MINUTE_MS - (System.currentTimeMillis() % MINUTE_MS))
     }
 
-    init { bind(PhoneSnapshot.EMPTY) }
+    init {
+        bind(PhoneSnapshot.EMPTY)
+        applyClip()
+    }
 
     override val view: View get() = root
     override fun applySpan(span: Span) = Unit
@@ -255,6 +287,8 @@ internal class PhonePanel(
     override fun onVisible() {
         if (visible) return
         visible = true
+        PhonePrefs.addShowAssistantListener(showAssistantListener)
+        applyMode()
         PhoneSource.start(activity, this)
         PhoneSource.addListener(this)
         // Sayfa (alt çubuk telefon düğmesi) kullanıcının açık eylemi; panel ekranda durması değil.
@@ -266,6 +300,7 @@ internal class PhonePanel(
     override fun onHidden() {
         if (!visible) return
         visible = false
+        PhonePrefs.removeShowAssistantListener(showAssistantListener)
         main.removeCallbacks(minuteTick)
         PhoneSource.removeListener(this)
         PhoneSource.stop(this)
@@ -295,7 +330,7 @@ internal class PhonePanel(
         // Bağlı telefon yokken asistan şeridi kalkar: gövdedeki tek Bluetooth düğmesi panelin tek eylemi olur.
         // Bağlı ama asistan yolu yoksa soluk ve dokunulamaz.
         val canAssist = s.connected && s.canAssistant
-        assistant.visibility = if (s.connected) View.VISIBLE else View.INVISIBLE
+        assistant.visibility = assistantVisibility(s)
         assistant.alpha = if (canAssist) 1f else DISABLED_ALPHA
         assistant.isEnabled = canAssist
         assistant.contentDescription = listOfNotNull(context.getString(R.string.phone_assistant_strip), device).joinToString(", ")
@@ -310,19 +345,54 @@ internal class PhonePanel(
             val favs = PhoneUiLogic.favoriteCells(s.favorites)
             if (favs != shownFavorites) bindFavorites(favs)
             bindLast(s)
+            rebuildCompact()
         }
+    }
+
+    /** Asistansız düzende şerit hiç yer tutmaz; asistanlı düzende bugünkü gibi (bağlı değilken yeri boş kalır). */
+    private fun assistantVisibility(s: PhoneSnapshot): Int =
+        if (!showAssistant) View.GONE else if (s.connected) View.VISIBLE else View.INVISIBLE
+
+    /** Asistansız düzende avatar gölgeleri gövde ve panel sınırında kesilmesin; asistanlı düzen bugünkü gibi. */
+    private fun applyClip() {
+        body.clipChildren = showAssistant
+        root.clipChildren = showAssistant
+        root.clipToPadding = showAssistant
+    }
+
+    /** Ayar değişti (ya da panel yeniden göründü): düzen seçilir; asistanlı düzen bugünküyle aynıdır. */
+    private fun applyMode() {
+        val show = PhonePrefs.showAssistant(context)
+        if (show == showAssistant) return
+        showAssistant = show
+        applyClip()
+        compactKey = null
+        compactCol.removeAllViews()
+        cLast = null
+        state?.let { applyContentVisibility(it) }
+        snap?.let { assistant.visibility = assistantVisibility(it) }
+        rebuildCompact()
+    }
+
+    private fun applyContentVisibility(st: PhoneUiLogic.PanelState) {
+        val content = st == PhoneUiLogic.PanelState.CONTENT
+        contentCol.visibility = if (content && showAssistant) View.VISIBLE else View.GONE
+        compactCol.visibility = if (content && !showAssistant) View.VISIBLE else View.GONE
+        message.visibility = if (content) View.GONE else View.VISIBLE
     }
 
     private fun applyState(st: PhoneUiLogic.PanelState) {
         val content = st == PhoneUiLogic.PanelState.CONTENT
-        contentCol.visibility = if (content) View.VISIBLE else View.GONE
-        message.visibility = if (content) View.GONE else View.VISIBLE
+        applyContentVisibility(st)
         if (content) return
         // Gövde gizlenince bir sonraki içerik hâlinde baştan kurulur.
         shownFavorites = null
         shownLast = null
         shownLastPhoto = null
         lastCard.tag = null
+        compactKey = null
+        compactCol.removeAllViews()
+        cLast = null
         main.removeCallbacks(minuteTick)
         when (st) {
             PhoneUiLogic.PanelState.NO_PHONE -> showMessage(R.string.launcher_phone_not_connected, R.string.launcher_phone_not_connected_sub,
@@ -390,6 +460,151 @@ internal class PhonePanel(
         val t = shownLast?.timeMs ?: 0L
         setTextIfChanged(lastTime, phoneTimeText(context, t, ago = true))
         lastTime.visibility = if (t > 0L) View.VISIBLE else View.GONE
+        cLast?.let {
+            setTextIfChanged(it.time, lastTime.text)
+            it.time.visibility = lastTime.visibility
+        }
+    }
+
+    // --- Asistansız düzen ---
+
+    /** Büyük "Son arama" kartı ve dakikalık tazelenen zaman yazısı (her yeniden kurulumda yenilenir). */
+    private class CompactLast(val card: View, val time: TextView)
+
+    /**
+     * Asistansız düzeni kurar: kart ve ızgara gövdenin yüksekliğini [PhoneUiLogic.compactSizes] ile boşluksuz paylaşır,
+     * hücreler [PhoneUiLogic.favoriteGrid]'den. Veri ya da ölçü değişmedikçe hiçbir şey yapmaz.
+     */
+    private fun rebuildCompact() {
+        if (showAssistant || state != PhoneUiLogic.PanelState.CONTENT || compactBodyDp <= 0) return
+        val s = snap ?: return
+        val grid = PhoneUiLogic.favoriteGrid(s.favorites, showAssistant = false)
+        val last = shownLast
+        val sizes = PhoneUiLogic.compactSizes(compactBodyDp, grid.size, last != null)
+        val key = listOf(grid, sizes, last, shownLastPhoto, shownDirVersion)
+        if (key == compactKey) return
+        compactKey = key
+        compactCol.removeAllViews()
+        cLast = null
+        if (last != null) {
+            val c = compactLastCard(last, sizes)
+            cLast = c
+            compactCol.addView(c.card, LinearLayout.LayoutParams(MATCH, context.dp(sizes.lastDp)))
+            refreshTime()
+        }
+        grid.forEachIndexed { i, row ->
+            val rowView = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                row.forEach { cell -> addView(compactCell(cell, sizes.favAvatarDp), LinearLayout.LayoutParams(0, MATCH, 1f)) }
+            }
+            compactCol.addView(rowView, LinearLayout.LayoutParams(MATCH, context.dp(sizes.rowDp)).apply {
+                if (last != null || i > 0) topMargin = context.dp(PhoneUiLogic.PANEL_GAP_DP)
+            })
+        }
+    }
+
+    /** Büyük kart: büyük avatar ve ad, sağda geniş **Geri ara** (tek dokunuşluk ana eylem). */
+    private fun compactLastCard(r: PhoneRecent, sizes: PhoneUiLogic.CompactSizes): CompactLast {
+        val name = r.name.orEmpty().trim()
+        val pad = context.dp(PhoneUiLogic.COMPACT_CARD_PAD_DP)
+        val time = sahneText(context, C_CAPTION_SP, Sahne.INK_3, 400).apply { maxLines = 1 }
+        val callH = (sizes.lastDp - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP).coerceAtLeast(PhoneUiLogic.TOUCH_MIN_DP)
+        val call = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = ctaBackground()
+            setPadding(context.dp(16), 0, context.dp(20), 0)
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_sahne_call)
+                imageTintList = ColorStateList.valueOf(Sahne.CALL_ACCEPT)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(context.dp(32), context.dp(32)))
+            addView(sahneText(context, C_CALLBACK_SP, Sahne.CTA_INK, 600).apply {
+                setText(R.string.phone_call_back)
+                maxLines = 1
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+            contentDescription = context.getString(R.string.phone_call_back) + ", " + name
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { lastNumber?.let { dial(it) } }
+            pressFeedback()
+        }
+        val card = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(context, Sahne.SOFT_FILL, Sahne.SQUARE_RADIUS_DP, Sahne.HAIR_2)
+            setPadding(pad, pad, pad, pad)
+            // Avatar gölgesi kendi sınırından taşar: kartın iç payına çizilebilsin (iç pay da kırpmasın).
+            clipChildren = false
+            clipToPadding = false
+            addView(PhoneAvatarView(context, sizes.lastAvatarDp, C_LAST_INITIALS_SP).apply { bind(shownLastPhoto, PhoneText.initials(name)) },
+                LinearLayout.LayoutParams(context.dp(sizes.lastAvatarDp), context.dp(sizes.lastAvatarDp)))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(sahneText(context, C_CAPTION_SP, Sahne.INK_3, 500).apply {
+                    setText(R.string.phone_last_call)
+                    maxLines = 1
+                })
+                addView(sahneText(context, C_LAST_NAME_SP, Sahne.INK, 600).apply {
+                    text = name
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(2) })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(ImageView(context).apply {
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        setImageResource(recentGlyph(r.type))
+                        // Cevapsız: yalnız işaret yanar (rozet/halka yok); ad sakin kalır.
+                        imageTintList = ColorStateList.valueOf(if (r.type == RecentType.MISSED) Sahne.ALERT else Sahne.INK_3)
+                    }, LinearLayout.LayoutParams(context.dp(20), context.dp(20)))
+                    addView(time, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(6) })
+                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(3) })
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = context.dp(16); marginEnd = context.dp(12) })
+            addView(call, LinearLayout.LayoutParams(WRAP, context.dp(callH)))
+        }
+        return CompactLast(card, time)
+    }
+
+    /** Izgara hücresi: kişi (dokun: ara, basılı tut: sabitle) · boş · "Tümü". İçerik hücrede ortalı. */
+    private fun compactCell(cell: PhoneUiLogic.FavCell, avatarDp: Int): View = when (cell) {
+        PhoneUiLogic.FavCell.Empty -> View(context)
+        PhoneUiLogic.FavCell.All -> compactCellFrame(context.getString(R.string.phone_all), FrameLayout(context).apply {
+            background = GlassDrawable(context, avatarDp / 2f, shadow = 0.4f, control = true)
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_sahne_grid)
+                imageTintList = ColorStateList.valueOf(Sahne.INK_2)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(context.dp(30), context.dp(30), Gravity.CENTER))
+        }, avatarDp).apply {
+            contentDescription = context.getString(R.string.phone_all)
+            setOnClickListener { openAll() }
+        }
+        is PhoneUiLogic.FavCell.Contact -> {
+            val c = cell.contact
+            compactCellFrame(c.name, PhoneAvatarView(context, avatarDp, C_FAV_INITIALS_SP).apply { bind(c.photoKey, c.initials) }, avatarDp).apply {
+                contentDescription = context.getString(R.string.launcher_phone_call_cd, c.name)
+                setOnClickListener { dial(c.number) }
+                if (PhoneUiLogic.canPin(c.id)) setOnLongClickListener { togglePin(c); true }
+            }
+        }
+    }
+
+    private fun compactCellFrame(label: String, avatar: View, avatarDp: Int): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        // Avatar gölgesi kırpılmasın.
+        clipChildren = false
+        addView(avatar, LinearLayout.LayoutParams(context.dp(avatarDp), context.dp(avatarDp)))
+        addView(nameText(label, C_NAME_SP), LinearLayout.LayoutParams(MATCH, WRAP).apply {
+            topMargin = context.dp(PhoneUiLogic.COMPACT_NAME_GAP_DP)
+        })
+        isClickable = true
+        isFocusable = true
+        pressFeedback()
     }
 
     /** Favori hücreleri: en çok 3 isimli kişi; eksik hücreler boş kalır, dördüncü hücre hep "Tümü". */
@@ -418,7 +633,7 @@ internal class PhonePanel(
         pressFeedback()
     }
 
-    private fun nameText(value: String): TextView = sahneText(context, NAME_SP, Sahne.INK_2, 500).apply {
+    private fun nameText(value: String, sizeSp: Float = NAME_SP): TextView = sahneText(context, sizeSp, Sahne.INK_2, 500).apply {
         text = value
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
@@ -491,6 +706,13 @@ internal class PhonePanel(
         const val MSG_SUB_SP = 18f
         const val BUTTON_SP = 20f
         const val DISABLED_ALPHA = 0.4f
+        // Asistansız düzen.
+        const val C_CAPTION_SP = 16f
+        const val C_LAST_NAME_SP = 22f
+        const val C_LAST_INITIALS_SP = 28f
+        const val C_CALLBACK_SP = 19f
+        const val C_FAV_INITIALS_SP = 24f
+        const val C_NAME_SP = 17f
         const val MINUTE_MS = 60_000L
     }
 }

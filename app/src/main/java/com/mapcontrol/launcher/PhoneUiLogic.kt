@@ -132,6 +132,66 @@ internal object PhoneUiLogic {
     fun panelContentDp(): Int = PANEL_PAD_TOP_DP + PANEL_HEADER_DP + PANEL_GAP_DP + PANEL_LAST_CALL_DP + PANEL_GAP_DP +
         PANEL_FAVORITES_DP + PANEL_GAP_DP + PANEL_ASSIST_DP + PANEL_PAD_BOTTOM_DP
 
+    // --- Asistansız düzen ("Sesli asistan düğmesi: Kapalı"): son arama kartı büyür, favoriler 2×3 ızgara. ---
+
+    /** Asistansız düzende ızgara sütunu. */
+    const val COMPACT_COLUMNS = 3
+    /** Asistansız düzende en çok favori (altıncı hücre hep "Tümü"). */
+    const val COMPACT_FAVORITES = 5
+    /** Favori hücresinde adın satırı ve avatarla arası (dp). */
+    const val COMPACT_NAME_ROW_DP = 24
+    const val COMPACT_NAME_GAP_DP = 4
+    /** Son arama kartının iç payı (dp). */
+    const val COMPACT_CARD_PAD_DP = 10
+    /** Büyük kartın en küçük yüksekliği (dp): "Son arama" + ad + zaman satırı payla birlikte sığar. */
+    const val COMPACT_LAST_MIN_DP = 100
+    /** Dokunma hedefi alt sınırı (dp): sürüşte de dokunulur. */
+    const val TOUCH_MIN_DP = 64
+
+    /** Favori ızgarasının bir hücresi: kişi · boş (hizayı korur) · "Tümü". */
+    sealed class FavCell {
+        data class Contact(val contact: PhoneContact) : FavCell()
+        object Empty : FavCell()
+        object All : FavCell()
+    }
+
+    /**
+     * Favori hücreleri satır satır. Asistanlı düzen: tek satır, en çok [PANEL_FAVORITES] kişi, eksikler boş, dördüncü
+     * hücre "Tümü" (bugünkü görünüm). Asistansız düzen: 3 sütun; en çok [COMPACT_FAVORITES] isimli kişi; 2 ya da daha az
+     * kişi varsa tek satır, yoksa iki satır. "Tümü" hep son satırın son hücresi (sürücü yerini ezberler); kişiler baştan
+     * dolar, aradaki eksikler boş hücre.
+     */
+    fun favoriteGrid(favorites: List<PhoneContact>, showAssistant: Boolean): List<List<FavCell>> {
+        if (showAssistant) {
+            val named = favoriteCells(favorites, PANEL_FAVORITES)
+            val row = named.map { FavCell.Contact(it) } + List(PANEL_FAVORITES - named.size) { FavCell.Empty } + FavCell.All
+            return listOf(row)
+        }
+        val named = favoriteCells(favorites, COMPACT_FAVORITES)
+        val rows = if (named.size + 1 <= COMPACT_COLUMNS) 1 else 2
+        val total = rows * COMPACT_COLUMNS
+        val cells = named.map<PhoneContact, FavCell> { FavCell.Contact(it) } + List(total - 1 - named.size) { FavCell.Empty } + FavCell.All
+        return cells.chunked(COMPACT_COLUMNS)
+    }
+
+    /** Asistansız düzenin ölçüleri (dp): son arama kartı ve avatarı, favori satırı ve avatarı. */
+    data class CompactSizes(val lastDp: Int, val lastAvatarDp: Int, val rowDp: Int, val favAvatarDp: Int)
+
+    /**
+     * Asistansız gövdenin [bodyDp] yüksekliğini boşluksuz paylaştırır: son arama kartı (varsa) iki satırlı ızgarada
+     * ~%36, tek satırda yarısı; kalan satırlara eşit. Avatarlar satıra sığacak kadar büyür (sınırlı).
+     */
+    fun compactSizes(bodyDp: Int, rows: Int, hasLast: Boolean): CompactSizes {
+        val r = rows.coerceAtLeast(1)
+        val gaps = PANEL_GAP_DP * (if (hasLast) r else r - 1)
+        val avail = (bodyDp - gaps).coerceAtLeast(0)
+        val last = if (!hasLast) 0 else (avail * (if (r >= 2) 36 else 50) / 100).coerceIn(COMPACT_LAST_MIN_DP, 160)
+        val row = (avail - last) / r
+        val lastAvatar = (last - 2 * COMPACT_CARD_PAD_DP).coerceIn(56, 88)
+        val favAvatar = (row - COMPACT_NAME_ROW_DP - COMPACT_NAME_GAP_DP).coerceIn(48, 96)
+        return CompactSizes(last, if (hasLast) lastAvatar else 0, row, favAvatar)
+    }
+
     /** Gösterilebilir bir isim: boş değil ve en az bir harf içerir (yalın numara isim sayılmaz). */
     fun hasName(name: String?): Boolean = name?.trim()?.any { it.isLetter() } == true
 
