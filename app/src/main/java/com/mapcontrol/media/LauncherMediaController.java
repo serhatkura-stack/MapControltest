@@ -207,6 +207,7 @@ public final class LauncherMediaController {
         started = true;
         LauncherMediaNotificationListener.addListener(notificationListener);
         OemAudioSource.INSTANCE.watchSource(appContext, oemSourceListener);
+        selfGrantNotificationAccessOnce();
         requestListenerRebindOnce();
         sessionManager = (MediaSessionManager) appContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         registerSessionsListener();
@@ -407,6 +408,46 @@ public final class LauncherMediaController {
      * verildikten sonra dinleyici, uygulama güncellemesi ya da süreç ölümü sonrası bağsız kalabilir; sistemden yeniden bağlanması
      * istenir (zaten bağlıysa etkisizdir). Bağlanınca {@code onListenerConnected} kartları tazeler.
      */
+    private boolean selfGrantTried;
+
+    /**
+     * Araçta "Bildirim erişimi" ayar ekranı yok (T1E24 Ayarlar'ı NOTIFICATION_LISTENER_SETTINGS'i çözmüyor; 6 Kasım dökümü):
+     * kullanıcı bu izni ekrandan veremez. Kurulum aracı WRITE_SECURE_SETTINGS verdiyse dinleyicimizi listeye kendimiz ekleriz
+     * (yalnız ekleme; diğer dinleyiciler korunur). İzin yoksa sessizce geçer, kart "izin gerekli" durumunda kalır.
+     */
+    private void selfGrantNotificationAccessOnce() {
+        if (selfGrantTried || isNotificationAccessGranted()) {
+            return;
+        }
+        selfGrantTried = true;
+        if (appContext.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        String self = new ComponentName(appContext, LauncherMediaNotificationListener.class).flattenToString();
+        try {
+            String current = Settings.Secure.getString(appContext.getContentResolver(), "enabled_notification_listeners");
+            Settings.Secure.putString(appContext.getContentResolver(), "enabled_notification_listeners",
+                    withListener(current, self));
+            android.util.Log.i("MediaAccess", "bildirim erişimi kendiliğinden açıldı (WRITE_SECURE_SETTINGS)");
+        } catch (RuntimeException e) {
+            android.util.Log.w("MediaAccess", "bildirim erişimi açılamadı: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /** ':' ile ayrılmış dinleyici listesine [component]'i ekler; zaten varsa listeyi aynen döner. */
+    public static String withListener(@Nullable String current, String component) {
+        if (current == null || current.trim().isEmpty() || "null".equals(current.trim())) {
+            return component;
+        }
+        for (String raw : current.split(":")) {
+            if (raw.trim().equals(component)) {
+                return current;
+            }
+        }
+        return current + ":" + component;
+    }
+
     private void requestListenerRebindOnce() {
         if (rebindRequested || !isNotificationAccessGranted()) {
             return;
