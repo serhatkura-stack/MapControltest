@@ -120,7 +120,7 @@ internal object TrunkMath {
 
 /**
  * Konfor widget'larının (bagaj, arka hoparlör) yazma noktası. [COMFORT_WRITE_VERIFIED] ve ilgili
- * özellik bayrağı true olmadıkça (ve test sürümünde anahtar kapalıyken) araca HİÇBİR ŞEY gitmez. Araca ulaşan tek yol `LauncherEdition.sendItemValue` (test sürümünde boş).
+ * özellik bayrağı ya da [LauncherEdition.WRITES_ON] (hep true) kapıyı açar. Araca ulaşan tek yol `LauncherEdition.sendItemValue` → [WidgetWriter].
  * Kapı [ClimateWriter.canWrite] ile aynıdır.
  */
 internal object ComfortWriter {
@@ -139,8 +139,7 @@ internal object ComfortWriter {
 
     /**
      * OEM komutlarından türetilen yeni kutucukların yazması (arka hoparlör) araçta DOĞRULANMADI:
-     * gerçek sürümde kapalı (dokunuş bilgi mesajı gösterir), test sürümünde yalnızca "widget'lardan yaz" anahtarı açıkken
-     * beyaz listeden geçerek ([WidgetWritePolicy]) gider.
+     * yazmalar her zaman açık olduğundan beyaz listeden geçerek ([WidgetWritePolicy]) gider.
      */
     const val REAR_SPEAKER_WRITE_VERIFIED = false
 
@@ -148,8 +147,8 @@ internal object ComfortWriter {
     fun canWrite(master: Boolean, feature: Boolean, readOnly: Boolean): Boolean =
         ClimateWriter.canWrite(master && feature, readOnly)
 
-    val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(TRUNK_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
-    val rearSpeakerEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(REAR_SPEAKER_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
+    val trunkEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(TRUNK_WRITE_VERIFIED, LauncherEdition.WRITES_ON), LauncherEdition.READ_ONLY)
+    val rearSpeakerEnabled: Boolean get() = canWrite(COMFORT_WRITE_VERIFIED, WidgetWritePolicy.gate(REAR_SPEAKER_WRITE_VERIFIED, LauncherEdition.WRITES_ON), LauncherEdition.READ_ONLY)
 
     /**
      * Kapılı yazma (birim testli): [allowed] false ise [send] hiç çağrılmaz ve false döner.

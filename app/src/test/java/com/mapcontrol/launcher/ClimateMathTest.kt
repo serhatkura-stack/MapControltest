@@ -77,11 +77,10 @@ class ClimateMathTest {
         assertTrue(ClimateWriter.canWrite(verified = true, readOnly = false))
     }
 
-    @Test fun shippedFlagIsOffAndWritersAreInert() {
+    @Test fun writesAlwaysOnButFanZeroNeverSent() {
+        // Yazmalar her zaman açık (test anahtarı kaldırıldı); fan 0 ya da negatif hiçbir zaman gönderilmez.
         assertFalse(ClimateWriter.CLIMATE_WRITE_VERIFIED)
-        assertFalse(ClimateWriter.enabled)
-        assertFalse(ClimateWriter.setTemperature(ClimateSide.DRIVER, 24.0, quiet = true))
-        assertFalse(ClimateWriter.setFan(3, quiet = true))
+        assertTrue(ClimateWriter.enabled)
         assertFalse(ClimateWriter.setFan(0, quiet = true))
         assertFalse(ClimateWriter.setFan(-1, quiet = true))
     }

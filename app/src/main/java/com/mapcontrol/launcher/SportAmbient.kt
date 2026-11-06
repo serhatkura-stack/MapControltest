@@ -100,7 +100,7 @@ internal object SportAmbient {
 
     val enabled: Boolean
         get() = ComfortWriter.canWrite(ComfortWriter.COMFORT_WRITE_VERIFIED,
-            WidgetWritePolicy.gate(AMBIENT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
+            WidgetWritePolicy.gate(AMBIENT_WRITE_VERIFIED, LauncherEdition.WRITES_ON), LauncherEdition.READ_ONLY)
 
     fun isOn(context: Context): Boolean =
         prefs(context).getBoolean(Profiles.key(context, KEY_ENABLED), false)

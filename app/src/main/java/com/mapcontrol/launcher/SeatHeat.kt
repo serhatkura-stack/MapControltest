@@ -67,7 +67,7 @@ internal class SeatHeatModel(
     /** Bu model şu an araca yazabilir mi (test sürümü değil; soğutmada yazma doğrulanmış ya da test anahtarı açık). */
     val writable: Boolean
         get() = !LauncherEdition.READ_ONLY &&
-            (!vent || WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITE_TEST))
+            (!vent || WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITES_ON))
 
     /**
      * Seviyeyi (0..3) doğrudan yazar: ekran hemen güncellenir, komut sıralı kuyrukta gider, kısa süre sonra gerçek durum okunur.

@@ -81,9 +81,8 @@ internal object ClimateMath {
 }
 
 /**
- * Klima yazma noktası. Kodlama araçta DOĞRULANMADI; [CLIMATE_WRITE_VERIFIED] true olana kadar (ve test
- * sürümünde hiçbir zaman) araca HİÇBİR ŞEY gitmez. Yazma gövdesi bayrağın arkasında; araca ulaşan tek yol
- * `LauncherEdition.sendItemValue` (test sürümünde boş).
+ * Klima yazma noktası. Yazmalar her zaman açık ([LauncherEdition.WRITES_ON]); araca ulaşan tek yol
+ * `LauncherEdition.sendItemValue` → [WidgetWriter] (beyaz liste + `WidgetWrite` günlüğü).
  */
 internal object ClimateWriter {
 
@@ -94,7 +93,7 @@ internal object ClimateWriter {
     fun canWrite(verified: Boolean, readOnly: Boolean): Boolean = verified && !readOnly
 
     /** Arayüzün "yazılacak mı / bilgi mesajı mı" kararı için. */
-    val enabled: Boolean get() = canWrite(WidgetWritePolicy.gate(CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITE_TEST), LauncherEdition.READ_ONLY)
+    val enabled: Boolean get() = canWrite(WidgetWritePolicy.gate(CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITES_ON), LauncherEdition.READ_ONLY)
 
     /**
      * Sıcaklık kimliği. [quiet] (ayar "fabrika paneli: Gizle"): OEM alt dock'unun kimlikleri, sürücü 76 / yolcu 78, aynı ham

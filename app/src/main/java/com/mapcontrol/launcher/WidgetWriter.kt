@@ -10,7 +10,7 @@ import com.mapcontrol.vehicle.VehicleQuickControls
 import java.util.concurrent.Executors
 
 /**
- * Test sürümünde launcher widget'larının araca yazdığı TEK yer (yalnızca [LauncherEdition]'dan, anahtar açıkken).
+ * Launcher widget'larının araca yazdığı TEK yer (iki derlemede de, yalnızca [LauncherEdition]'dan, kullanıcı dokunuşuyla).
  * Her deneme: beyaz liste ([WidgetWritePolicy.evaluate]; sürüş kilidi yok, hareket halinde de gider) →
  * `Log.i("WidgetWrite", ...)` tek satır → gönderilirse 3 sn'lik geri okuma (ilgili sinyallerin değişimleri günlüğe).
  */

@@ -85,18 +85,19 @@ class WidgetWritePolicyTest {
         assertEquals("refused-not-whitelisted", WidgetWritePolicy.resultText(WidgetWritePolicy.evaluate(cs, 10, 1)))
     }
 
-    @Test fun gateOpensWithVerifiedOrTestSwitch() {
+    @Test fun gateOpensWithVerifiedOrWritesOn() {
         assertFalse(WidgetWritePolicy.gate(false, false))
         assertTrue(WidgetWritePolicy.gate(true, false))
         assertTrue(WidgetWritePolicy.gate(false, true))
-        // Test anahtarı açık + salt-okur değil: doğrulanmamış özellikler yazılır; salt-okurken hiçbir şey.
         assertTrue(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(false, true), readOnly = false))
         assertFalse(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(false, true), readOnly = true))
         assertFalse(ClimateWriter.canWrite(WidgetWritePolicy.gate(false, false), readOnly = false))
-        // Gerçek sürümde anahtar sabit false: doğrulanmamış özellikler kapalı kalır.
-        assertFalse(LauncherEdition.WRITE_TEST)
-        assertFalse(ComfortWriter.trunkEnabled)
-        assertFalse(ClimateWriter.enabled)
+        // Yazmalar her zaman açık (test anahtarı kaldırıldı): doğrulanmamış özellikler de beyaz listeden geçerek gider.
+        assertTrue(LauncherEdition.WRITES_ON)
+        assertFalse(LauncherEdition.READ_ONLY)
+        assertTrue(ComfortWriter.trunkEnabled)
+        assertTrue(ComfortWriter.rearSpeakerEnabled)
+        assertTrue(ClimateWriter.enabled)
     }
 
     @Test fun logLineFormat() {

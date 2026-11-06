@@ -20,8 +20,7 @@ class OemWidgetsTest {
 
     @Test fun newWritesStayGatedAndRefuseOtherValues() {
         assertFalse(ComfortWriter.REAR_SPEAKER_WRITE_VERIFIED)
-        assertFalse(ComfortWriter.rearSpeakerEnabled)
-        assertFalse(ComfortWriter.setFader(10, 0))
+        assertTrue(ComfortWriter.rearSpeakerEnabled)  // yazmalar her zaman açık; beyaz liste yine geçerli
         assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, SoundFieldMath.MAX + 1))
         assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, -1))
         assertNotNull(WidgetWritePolicy.find(hv, 18, 1))

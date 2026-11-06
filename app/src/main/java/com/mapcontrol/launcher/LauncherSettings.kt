@@ -192,10 +192,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             d.dismiss()
             dataCheck = (dataCheck ?: DataCheckSheet(activity)).also { it.show() }
         }, fullWidth())
-        if (LauncherEdition.HAS_WRITE_TEST) {
-            addView(gap(activity, 12, vertical = true))
-            addView(writeTestToggle(d), fullWidth())
-        }
         if (LauncherEdition.HAS_SETTINGS) {
             addView(gap(activity, 12, vertical = true))
             addView(row(R.drawable.ic_mdi_cog, R.string.launcher_mapcontrol_settings) {
@@ -371,16 +367,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                 }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
             }
         }, fullWidth())
-    }
-
-    /** Yalnızca test sürümü: widget'lardan araca yazma anahtarı. Değişince ekran yeniden kurulur (kapılar yeniden okunur). */
-    private fun writeTestToggle(d: Dialog): View {
-        val on = LauncherEdition.WRITE_TEST
-        return rowText(R.drawable.ic_mdi_cog, LauncherEdition.writeTestTitle(on), LauncherEdition.writeTestHint()) {
-            d.dismiss()
-            LauncherEdition.setWriteTest(activity, !on)
-            ThemeTransition.recreate(activity)
-        }
     }
 
     /**

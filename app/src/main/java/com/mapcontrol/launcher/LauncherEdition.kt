@@ -14,7 +14,6 @@ import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.ui.activity.MainActivity
 import com.mapcontrol.util.WifiController
-import com.mapcontrol.vehicle.VehicleQuickControls
 
 /**
  * Launcher'ın araca komut gönderen ve MapControl'e bağlanan tek noktası.
@@ -27,23 +26,17 @@ internal object LauncherEdition {
     /** true: araç verisi yalnızca okunur, dokunuşlar komut göndermez. */
     const val READ_ONLY = false
 
-    /** Widget'lardan araca yazma testi anahtarı yalnızca test sürümünde var; bu derlemede hep kapalı. */
-    const val WRITE_TEST = false
-    const val HAS_WRITE_TEST = false
+    /**
+     * Widget yazmaları her zaman açık (test anahtarı kaldırıldı): doğrulanmamış özellikler de gider. Her komut yine
+     * [WidgetWriter] üzerinden beyaz listeden ([WidgetWritePolicy]) geçer ve `WidgetWrite` etiketiyle günlüğe yazılır.
+     */
+    const val WRITES_ON = true
 
     @Suppress("UNUSED_PARAMETER")
     fun init(context: Context) = Unit
 
     /** Launcher (ana ekran / Mini gösterge) öndeyken yüzen FrostNav geri okunu gizler; başka uygulama önde iken eskisi gibi. */
     fun setHomeForeground(front: Boolean) = com.mapcontrol.manager.FloatingBackButtonManager.setSuppressed(front)
-
-    @Suppress("UNUSED_PARAMETER")
-    fun setWriteTest(context: Context, on: Boolean) = Unit
-
-    @Suppress("UNUSED_PARAMETER")
-    fun writeTestTitle(on: Boolean): String = ""
-
-    fun writeTestHint(): String = ""
 
     /** Ayarlar (MapControl ana ekranı) bu derlemede var mı. */
     const val HAS_SETTINGS = true
@@ -59,20 +52,21 @@ internal object LauncherEdition {
         if (!SEAT_VENT_WRITE_VERIFIED) return
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION
         // Kodlama ısıtmayla aynı (SeatHeatModel.encode: 0 kapalı → 1, 1..3 → 2..4), ClimateAutomationEngine.wireSeatLevel gibi.
-        proxy.sendItemValue(VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
+        WidgetWriter.send(proxy, VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
     }
 
+    /** Beyaz liste + `WidgetWrite` günlüğü ([WidgetWriter]). */
     fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
-        proxy.sendItemValue(module, id, value)
+        WidgetWriter.send(proxy, module, id, value)
     }
 
     /** Ses alanı (arka hoparlör): [balance] sol-sağ, [fade] ön-arka, 0..20. Çağıran kapıyı ([ComfortWriter.rearSpeakerEnabled]) zaten denetledi. */
     fun sendSoundField(balance: Int, fade: Int) {
-        SoundFieldIo.write(balance, fade)
+        WidgetWriter.sendSoundField(balance, fade)
     }
 
     fun setCentralLock(context: Context, locked: Boolean) {
-        VehicleQuickControls.getInstance(context).setCentralLock(locked)
+        WidgetWriter.sendLock(context, locked)
     }
 
     /**

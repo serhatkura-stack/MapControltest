@@ -80,9 +80,9 @@ class ComfortMathTest {
     }
 
     @Test fun trunkWriteIsOffUntilVerifiedNoDrivingLock() {
-        // Doğrulanmadı: kutucuk salt-okur, araca hiçbir şey gitmez.
+        // Doğrulanmadı ama yazmalar her zaman açık: beyaz listeden geçerek gider; durdurma değeri bilinmiyor.
         assertFalse(ComfortWriter.TRUNK_WRITE_VERIFIED)
-        assertFalse(ComfortWriter.trunkEnabled)
+        assertTrue(ComfortWriter.trunkEnabled)
         assertFalse(ComfortWriter.trunkStopKnown)
         assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.stopTrunk())
         val sent = ArrayList<ComfortCmd>()

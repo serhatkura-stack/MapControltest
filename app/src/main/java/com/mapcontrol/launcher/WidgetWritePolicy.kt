@@ -10,8 +10,7 @@ import com.mapcontrol.comfort.ComfortPlan
 /**
  * Launcher widget'larından araca yazma testinin SAF kuralları (JVM'de sınanır): beyaz liste, kapı birleşimi ve günlük
  * satırı. Sürüş kilidi yoktur: her widget sürerken de park halinde de kullanılır; aracın kendisi bir komutu reddederse geri
- * okuma bunu gösterir (widget eski duruma döner). Yalnızca test sürümü (`launchertest`, LauncherEdition) kullanır; gerçek `app` sürümünde
- * hiçbir çağıran yoktur. Liste, widget'ların GÖNDEREBİLECEĞİ (modül, kimlik, değer) çiftlerinden türetildi (bkz. denetim).
+ * okuma bunu gösterir (widget eski duruma döner). İki derleme de ([WidgetWriter] üzerinden) kullanır. Liste, widget'ların GÖNDEREBİLECEĞİ (modül, kimlik, değer) çiftlerinden türetildi (bkz. denetim).
  */
 internal object WidgetWritePolicy {
 
@@ -100,8 +99,8 @@ internal object WidgetWritePolicy {
     fun evaluate(module: Int, id: Int, value: Int): Verdict =
         find(module, id, value)?.let { Verdict.Allowed(it) } ?: Verdict.NotWhitelisted
 
-    /** Özellik kapısı: doğrulanmış ya da test anahtarı açık. Gerçek sürümde test anahtarı hep false'tur. */
-    fun gate(verified: Boolean, writeTest: Boolean): Boolean = verified || writeTest
+    /** Özellik kapısı: doğrulanmış ya da yazmalar açık ([LauncherEdition.WRITES_ON], iki derlemede de hep true). */
+    fun gate(verified: Boolean, writesOn: Boolean): Boolean = verified || writesOn
 
     /** Günlük sonucu metni. */
     fun resultText(v: Verdict): String = when (v) {
