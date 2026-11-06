@@ -18,7 +18,10 @@ import java.util.Locale
  *
  * GİZLİLİK:
  * - Dosya yalnızca `noBackupFilesDir` içinde (uygulamaya özel, otomatik yedeğe girmez); başka yere kopyalanmaz.
- * - Bağlı telefona bağlıdır: başlıkta adresin tuzlu SHA-256 özeti ([deviceHash]) durur, ham MAC hiçbir yerde yazılmaz.
+ * - Bağlı telefona bağlıdır: başlıkta adresin tuzlu SHA-256 özeti ([deviceHash]) durur, ham MAC düz metin yazılmaz.
+ *   Özet yalnız göz gezdirerek okumayı önler: tuz APK içinde sabit ve özet 64 bit, APK'yı elinde tutan biri bilinen
+ *   üretici önekleri üzerinden kaba kuvvetle adresi bulabilir. Etkisi düşük: dosya zaten uygulamaya özel depoda ve
+ *   rehberi düz metin taşıyor.
  *   Farklı telefon bağlanınca dosya silinir; yüklenirken özet tutmazsa da silinir.
  * - Fotoğraf yazılmaz ([PhoneContact.photoKey] / [PhoneRecent.photoKey] boş kaydedilir; fotoğraflar yalnız bellekte).
  * - Günlüğe yalnız sayılar ve istisna sınıf adı yazılır.
@@ -39,7 +42,10 @@ internal object PhoneCache {
         override fun toString(): String = "PhoneCache.Decoded(contacts=${contacts.size}, recents=${recents.size})"
     }
 
-    /** Cihaz adresinin özeti (büyük/küçük harf duyarsız, tuzlu SHA-256, ilk 16 hex). Ham adres geri çıkarılamaz. */
+    /**
+     * Cihaz adresinin özeti (büyük/küçük harf duyarsız, tuzlu SHA-256, ilk 16 hex). Yalnız gelişigüzel okumayı önler;
+     * tuz sabit olduğundan bilinen üretici önekiyle kaba kuvvete dayanıklı değildir (sınıf notuna bakın).
+     */
     fun deviceHash(address: String): String {
         val d = MessageDigest.getInstance("SHA-256").digest((SALT + address.trim().uppercase(Locale.ROOT)).toByteArray(Charsets.UTF_8))
         return d.take(8).joinToString("") { "%02x".format(it.toInt() and 0xFF) }

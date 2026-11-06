@@ -52,6 +52,21 @@ class PhoneCacheTest {
         assertEquals("v:1", s.recents.single().contactId)
     }
 
+    @Test fun savedRecentsAreRawNotAnnotated() {
+        val s = DirectoryStore()
+        s.merge(listOf(PhoneContact("v:1", "Ayşe", "0555 000 00 01")),
+            listOf(PhoneRecent(RecentType.INCOMING, null, "05550000001", 5L)))
+        assertEquals("Ayşe", s.recents.single().name)
+        // Diske telefonun gönderdiği hâl gider: rehberden eşlenen ad geri yüklemede "telefondan gelmiş" sayılmaz.
+        val saved = PhoneCache.decode(PhoneCache.encode("h", 0L, s.contacts, s.rawRecentsForSave))!!
+        assertNull(saved.recents.single().name)
+        // Kişi yeniden adlandırılınca geri yüklenen geçmiş yeni adı alır, eskisi kalmaz.
+        val r = DirectoryStore()
+        r.merge(saved.contacts, saved.recents)
+        r.merge(listOf(PhoneContact("v:1", "Ayşe Y.", "0555 000 00 01")), null)
+        assertEquals("Ayşe Y.", r.recents.single().name)
+    }
+
     @Test fun corruptOrForeignDataIsRejected() {
         val good = PhoneCache.encode(PhoneCache.deviceHash(mac), 0L, listOf(PhoneContact("v:1", "A", "1")), emptyList())
         assertNull(PhoneCache.decode(ByteArray(0)))

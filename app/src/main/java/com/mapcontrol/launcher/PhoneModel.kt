@@ -1177,7 +1177,7 @@ object PhoneSource {
         val h = deviceHash ?: return
         if (!store.hasData || store.version == savedVersion) return
         val v = store.version
-        if (PhoneCache.save(app, h, store.contacts, store.recents)) savedVersion = v
+        if (PhoneCache.save(app, h, store.contacts, store.rawRecentsForSave)) savedVersion = v
     }
 
     // ---- Edilgen rehber/geçmiş (io; VdbusDataBackend.watch) ----

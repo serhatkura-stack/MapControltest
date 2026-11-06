@@ -580,6 +580,13 @@ internal class DirectoryStore {
     /** Eşleştirilmemiş geçmiş: kişiler sonradan gelince yeniden eşleştirmek için. */
     private var rawRecents: List<PhoneRecent> = emptyList()
 
+    /**
+     * Disk önbelleğine yazılacak geçmiş: telefonun gönderdiği hâli (rehberden eşlenmiş ad/kimlik/fotoğraf yok).
+     * [recents] yazılsaydı eşleşen kişi adı geri yüklemede telefondan gelmiş gibi kalır, kişi silinse/yeniden
+     * adlandırılsa da eski ad diskte yaşardı.
+     */
+    internal val rawRecentsForSave: List<PhoneRecent> get() = rawRecents
+
     val hasData: Boolean get() = contacts.isNotEmpty() || recents.isNotEmpty()
 
     /**
