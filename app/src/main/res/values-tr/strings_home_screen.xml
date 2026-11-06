@@ -22,6 +22,8 @@
     <string name="home_screen_reset_drive">Sürüş düzenini varsayılana döndür</string>
     <string name="home_screen_reset_park_confirm">Park düzeni varsayılana döndürülsün mü? Yaptığın değişiklikler kaybolur.</string>
     <string name="home_screen_reset_drive_confirm">Sürüş düzeni varsayılana döndürülsün mü? Yaptığın değişiklikler kaybolur.</string>
+    <string name="home_screen_reset_home">Ana ekranı varsayılana döndür</string>
+    <string name="home_screen_reset_home_confirm">Ana ekran varsayılana döndürülsün mü? Yaptığın değişiklikler kaybolur.</string>
     <string name="home_screen_reset_done">Düzen varsayılana döndürüldü.</string>
     <string name="home_screen_about_title">Hakkında</string>
     <string name="home_screen_version_line">Ana ekran sürümü %1$s (%2$s)</string>

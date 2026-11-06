@@ -22,6 +22,8 @@
     <string name="home_screen_reset_drive">Reset Drive layout to default</string>
     <string name="home_screen_reset_park_confirm">Reset the Park layout to the default? Your changes to it will be lost.</string>
     <string name="home_screen_reset_drive_confirm">Reset the Drive layout to the default? Your changes to it will be lost.</string>
+    <string name="home_screen_reset_home">Reset home screen to default</string>
+    <string name="home_screen_reset_home_confirm">Reset the home screen to the default? Your changes to it will be lost.</string>
     <string name="home_screen_reset_done">Layout reset to default.</string>
     <string name="home_screen_about_title">About</string>
     <string name="home_screen_version_line">Home screen version %1$s (%2$s)</string>

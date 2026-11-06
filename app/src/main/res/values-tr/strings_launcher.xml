@@ -37,6 +37,7 @@
     <string name="launcher_edit_title">Ana ekranı düzenle</string>
     <string name="launcher_edit_reset_confirm_park">Park ekranı varsayılana dönsün mü?</string>
     <string name="launcher_edit_reset_confirm_drive">Sürüş ekranı varsayılana dönsün mü?</string>
+    <string name="launcher_edit_reset_confirm_home">Ana ekran varsayılana dönsün mü?</string>
     <string name="launcher_edit_reset">Varsayılan</string>
     <string name="launcher_edit_done">Bitti</string>
     <string name="launcher_edit_remove">Kaldır</string>

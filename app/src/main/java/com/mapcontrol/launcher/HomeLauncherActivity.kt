@@ -65,6 +65,8 @@ class HomeLauncherActivity : Activity() {
     private var closeOemDialogOn = true
     private val oemDialogCloser = OemDriveDialogCloser()
     private var autoLayoutOn = DriveLayoutPrefs.DEFAULT_ON
+    /** Son onStop zamanı (0: görünür); dönüşte bayat sürüş durumunu temizlemek için. */
+    private var stoppedAt = 0L
     private lateinit var editHelper: android.widget.TextView
     private val driveModePolicy = DriveModePolicy(DRIVE_STABLE_MS)
     /** Spor modu: sürüş modu Spor ~1 sn kararlı kalınca orta alan ve çubuklar kronograf diline geçer. */
@@ -166,7 +168,9 @@ class HomeLauncherActivity : Activity() {
         // Spor ambiyansı: seçenek açıksa ya da geri yazma bekliyorsa sürüş modunu izler (açılışta bekleyen renk geri yazılır).
         SportAmbient.sync(this)
         // Tema geçişiyle yeniden kurulunca etkin düzen korunur (statik); otomatik seçenek kapalıysa Park.
-        activeMode = if (autoLayoutOn) rememberedMode else LayoutMode.PARK
+        // Seçenek kapalıyken hatırlanan düzen de Park'a çekilir: yeniden açılınca bir an Sürüş düzeni görünmesin.
+        if (!autoLayoutOn) rememberedMode = LayoutMode.PARK
+        activeMode = rememberedMode
         LauncherMotion.driveLayout = activeMode == LayoutMode.DRIVE
         layoutPolicy.reset(activeMode)
         // Yeniden kurulumda (tema) sürüş durumu korunur: kart 5 sn yolculuğa dönüp geri gelmesin.
@@ -670,6 +674,12 @@ class HomeLauncherActivity : Activity() {
         started = true
         deferredVisible.clear() // aşağıda zaten hepsine onVisible gider
         refreshDrivePrefs()
+        // Uzun süre arkadayken (tam ekran navigasyon) sürüş durumu bayatlar: duruş yedeği kadar geçtiyse Park'tan başlanır.
+        if (stoppedAt != 0L && System.currentTimeMillis() - stoppedAt >= DriveLayoutPolicy.STILL_FALLBACK_MS) {
+            motionPolicy.reset(LayoutMode.PARK)
+            DriveMotion.set(false)
+        }
+        stoppedAt = 0L
         driveHandler.removeCallbacks(driveTick)
         driveHandler.postDelayed(driveTick, DRIVE_TICK_MS)
         metrics.addListener(metricsListener)
@@ -717,6 +727,7 @@ class HomeLauncherActivity : Activity() {
 
     override fun onStop() {
         started = false
+        stoppedAt = System.currentTimeMillis()
         themeDefer = false
         deferredVisible.clear()
         driveHandler.removeCallbacks(driveTick)
@@ -869,7 +880,11 @@ class HomeLauncherActivity : Activity() {
         sheet?.dismiss()
         sheet = showLauncherSheet(this, R.string.launcher_edit_reset, RESET_SHEET_WIDTH_DP) { d ->
             addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply {
-                setText(if (activeMode == LayoutMode.DRIVE) R.string.launcher_edit_reset_confirm_drive else R.string.launcher_edit_reset_confirm_park)
+                setText(when {
+                    !autoLayoutOn -> R.string.launcher_edit_reset_confirm_home
+                    activeMode == LayoutMode.DRIVE -> R.string.launcher_edit_reset_confirm_drive
+                    else -> R.string.launcher_edit_reset_confirm_park
+                })
             }, sheetFullWidth())
             addView(gap(context, 32, vertical = true))
             addView(LinearLayout(context).apply {

@@ -221,6 +221,8 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     /** Öncü sayı ve alt satırı: yolculuk ile canlı tüketim arasında birlikte solar. */
     private val heroBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
+        // Satırın eksi kenar boşlukları kutunun dışına taşabilsin (ç/ş/y kuyrukları kesilmesin).
+        clipChildren = false
         // Taslakta satır yüksekliği 1: doğal satırdan ~10dp kısa, üst ve alttan kırpılır.
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL

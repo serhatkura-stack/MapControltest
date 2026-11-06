@@ -37,6 +37,7 @@
     <string name="launcher_edit_title">Edit home screen</string>
     <string name="launcher_edit_reset_confirm_park">Restore the Park screen to its default?</string>
     <string name="launcher_edit_reset_confirm_drive">Restore the Drive screen to its default?</string>
+    <string name="launcher_edit_reset_confirm_home">Restore the home screen to its default?</string>
     <string name="launcher_edit_reset">Default</string>
     <string name="launcher_edit_done">Done</string>
     <string name="launcher_edit_remove">Remove</string>

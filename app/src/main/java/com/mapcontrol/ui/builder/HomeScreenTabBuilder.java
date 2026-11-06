@@ -318,6 +318,7 @@ public class HomeScreenTabBuilder {
                 on -> {
                     HomeScreenPrefs.setAutoDriveLayout(context, on);
                     callback.log("Ana ekran otomatik düzen: " + on);
+                    rebuild(); // sıfırlama düğmeleri tek/çift düzene göre yeniden kurulur
                 });
     }
 
@@ -333,15 +334,21 @@ public class HomeScreenTabBuilder {
                 v -> HomeScreenPrefs.openEditor(context));
 
         LinearLayout resetCard = createCard(grid);
-        addButton(resetCard, R.string.home_screen_reset_park, R.color.buttonSecondaryMuted,
-                v -> confirmReset(false));
-        addButton(resetCard, R.string.home_screen_reset_drive, R.color.buttonSecondaryMuted,
-                v -> confirmReset(true));
+        // Tek düzende (ayrı sürüş düzeni kapalı) yalnızca ana ekranı (Park) sıfırlayan tek düğme gösterilir.
+        boolean twoLayouts = HomeScreenPrefs.autoDriveLayout(context);
+        addButton(resetCard, twoLayouts ? R.string.home_screen_reset_park : R.string.home_screen_reset_home,
+                R.color.buttonSecondaryMuted, v -> confirmReset(false));
+        if (twoLayouts) {
+            addButton(resetCard, R.string.home_screen_reset_drive, R.color.buttonSecondaryMuted,
+                    v -> confirmReset(true));
+        }
     }
 
     private void confirmReset(boolean drive) {
         AlertDialog dialog = new AlertDialog.Builder(context)
-                .setMessage(drive ? R.string.home_screen_reset_drive_confirm : R.string.home_screen_reset_park_confirm)
+                .setMessage(drive ? R.string.home_screen_reset_drive_confirm
+                        : HomeScreenPrefs.autoDriveLayout(context) ? R.string.home_screen_reset_park_confirm
+                        : R.string.home_screen_reset_home_confirm)
                 .setPositiveButton(R.string.home_screen_reset_button, (d, w) -> {
                     HomeScreenPrefs.resetLayout(context, drive);
                     callback.log("Ana ekran " + (drive ? "Sürüş" : "Park") + " düzeni sıfırlandı");
