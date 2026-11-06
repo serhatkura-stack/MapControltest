@@ -717,7 +717,10 @@ internal class SportStageView(
             ensureArt()
         }
         val m = g.media
-        media.measure(exactly((m.r * 2).toInt()), exactly((m.r * 2).toInt()))
+        val mr = SportGeometry.mediaContentRadius(m.r, activity.dpF(MEDIA_NATURAL_R_DP))
+        media.measure(exactly((mr * 2).toInt()), exactly((mr * 2).toInt()))
+        media.scaleX = m.r / mr
+        media.scaleY = m.r / mr
         val carLen = g.carLength().toInt()
         car.measure(exactly(CarStageView.widthFor(carLen)), exactly(CarStageView.heightFor(carLen)))
         val nr = (g.rpmFace * NeedleView.LENGTH * 2).toInt() + 8
@@ -769,6 +772,8 @@ internal class SportStageView(
             v.layout(left, top, left + v.measuredWidth, top + v.measuredHeight)
         }
         centerAt(media, g.media.cx, g.media.cy)
+        media.pivotX = media.measuredWidth / 2f
+        media.pivotY = media.measuredHeight / 2f
         // Araç: gövde kadranın ortasında, burun yukarı (görünüm -90° döner; eksen gövdenin ortası).
         val carLen = g.carLength().toInt()
         val bodyCx = CarStageView.carLeft(carLen) + carLen / 2f
@@ -819,6 +824,8 @@ internal class SportStageView(
         private const val STATUS_BEST = "En iyi"
         private const val PARK = 1
         const val TICK_MS = 100L
+        /** Medya kadranı içeriğinin tasarım yarıçapı (Tiggo 7'deki kadran). */
+        const val MEDIA_NATURAL_R_DP = 210f
         const val NEEDLE_MS = 110L
         const val G_UI_MS = 100L
         /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */

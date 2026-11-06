@@ -363,28 +363,42 @@ internal object SportArt {
     }
 }
 
-/** Spor orta alanının kadran yerleşimi (taslak 1872 × 488; ölçek ve ortalama gerçek boyuta göre). */
+/**
+ * Spor orta alanının kadran yerleşimi (taslak 1872 × 488; ölçek ve ortalama gerçek boyuta göre). Uzun alanda (Tiggo 8,
+ * [isTall]) ikinci taslak 1872 × 740: devir kadranı büyür, küçük kadranlar onun çaprazlarına (üst/alt) açılır, medya ve
+ * araç kadranları yanlarda dikey ortada; böylece yükseklik kullanılır ve hiçbir kadran çakışmaz (SportLogicTest).
+ */
 internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>) {
     /** [slot] küçük kadran yuvası (0 sol üst, 1 sol alt, 2 sağ üst, 3 sağ alt); büyük kadranlarda -1. */
     class Dial(val cx: Float, val cy: Float, val r: Float, val kind: SportDial? = null, val slot: Int = -1)
 
-    val s: Float = min(w / DW, h / DH).coerceAtLeast(0.1f)
+    val tall: Boolean = isTall(w, h)
+    private val dh = if (tall) DH_TALL else DH
+    val s: Float = min(w / DW, h / dh).coerceAtLeast(0.1f)
     private val ox = (w - DW * s) / 2f
-    private val oy = (h - DH * s) / 2f
+    private val oy = (h - dh * s) / 2f
 
     fun x(d: Float) = ox + d * s
     fun y(d: Float) = oy + d * s
     fun r(d: Float) = d * s
 
-    val media = Dial(x(212f), y(244f), r(210f))
-    val car = Dial(x(1660f), y(244f), r(210f))
-    val rpm = Dial(x(936f), y(244f), r(236f))
-    val subs: List<Dial> = listOf(
+    val media = if (tall) Dial(x(225f), y(370f), r(215f)) else Dial(x(212f), y(244f), r(210f))
+    val car = if (tall) Dial(x(1647f), y(370f), r(215f)) else Dial(x(1660f), y(244f), r(210f))
+    val rpm = if (tall) Dial(x(936f), y(370f), r(318f)) else Dial(x(936f), y(244f), r(236f))
+    val subs: List<Dial> = if (tall) listOf(
+        Dial(x(565f), y(122f), r(112f), dials[0], 0),
+        Dial(x(565f), y(618f), r(112f), dials[1], 1),
+        Dial(x(1307f), y(122f), r(112f), dials[2], 2),
+        Dial(x(1307f), y(618f), r(112f), dials[3], 3),
+    ) else listOf(
         Dial(x(590f), y(128f), r(104f), dials[0], 0),
         Dial(x(590f), y(360f), r(104f), dials[1], 1),
         Dial(x(1282f), y(128f), r(104f), dials[2], 2),
         Dial(x(1282f), y(360f), r(104f), dials[3], 3),
     )
+
+    /** Tüm kadranlar (çakışma denetimi için). */
+    val all: List<Dial> get() = listOf(media, car, rpm) + subs
 
     /** Kadranlar soldan sağa (geçişteki parıltı sırası). */
     val inOrder: List<Dial> get() = (listOf(media, rpm, car) + subs).sortedBy { it.cx }
@@ -458,6 +472,18 @@ internal class SportGeometry(val w: Int, val h: Int, val dials: List<SportDial>)
 
         const val DW = 1872f
         const val DH = 488f
+        /** Uzun alan taslağının yüksekliği ve uzun sayılma oranı (yükseklik / genişlik; Tiggo 7 ~0,28, Tiggo 8 ~0,45). */
+        const val DH_TALL = 740f
+        const val TALL_RATIO = 0.36f
+
+        fun isTall(w: Int, h: Int): Boolean = w > 0 && h > w * TALL_RATIO
+
+        /**
+         * Medya kadranının içeriği hangi yarıçapta kurulsun: kadran tasarım ölçüsüne ([naturalPx], Tiggo 7) yakın ya da
+         * büyükse kendi yarıçapı (ölçek 1, Tiggo 7 aynı); küçükse tasarım ölçüsünde kurulup küçültülür, böylece yazı ve
+         * düğmeler aynı oranda kalır ve sanatçı satırı düğmelere binmez.
+         */
+        fun mediaContentRadius(rPx: Float, naturalPx: Float): Float = if (rPx >= naturalPx * 0.95f) rPx else naturalPx
         /** Medya kadranında ilerleme halkası yarıçapı ve kalınlığı (dış yarıçapa oran). */
         const val PROGRESS_R = 0.82f
         const val PROGRESS_W = 0.016f

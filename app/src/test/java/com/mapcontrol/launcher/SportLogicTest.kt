@@ -388,4 +388,51 @@ class SportLogicTest {
         assertFalse(SportSummary(null, null, null, null).hasData)
         assertTrue(SportSummary(null, 120, null, null).hasData)
     }
+
+    // --- Uzun alan kadran yerleşimi (Tiggo 8) ---
+
+    private val fourDials = listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX)
+
+    private fun assertNoOverlapAndInside(g: SportGeometry) {
+        val all = g.all
+        all.forEach { d ->
+            assertTrue(d.cx - d.r >= -0.5f && d.cx + d.r <= g.w + 0.5f)
+            assertTrue(d.cy - d.r >= -0.5f && d.cy + d.r <= g.h + 0.5f)
+        }
+        for (i in all.indices) for (j in i + 1 until all.size) {
+            val a = all[i]; val b = all[j]
+            val dist = Math.hypot((a.cx - b.cx).toDouble(), (a.cy - b.cy).toDouble())
+            assertTrue("kadran $i ile $j çakışıyor", dist >= a.r + b.r)
+        }
+    }
+
+    @Test fun tallLayoutOnlyOnTheTallArea() {
+        assertFalse(SportGeometry(1872, 520, fourDials).tall) // Tiggo 7
+        assertTrue(SportGeometry(1650, 750, fourDials).tall) // Tiggo 8
+    }
+
+    @Test fun normalLayoutIsUnchanged() {
+        val g = SportGeometry(1872, 488, fourDials)
+        assertEquals(1f, g.s, 1e-6f)
+        assertEquals(236f, g.rpm.r, 1e-3f)
+        assertEquals(210f, g.media.r, 1e-3f)
+        assertEquals(104f, g.subs[0].r, 1e-3f)
+        assertNoOverlapAndInside(g)
+    }
+
+    @Test fun tallLayoutGrowsTheRpmDialWithoutOverlap() {
+        val t8 = SportGeometry(1650, 750, fourDials)
+        val flat = SportGeometry(1650, 430, fourDials) // aynı genişlikte eski taslak
+        assertTrue(t8.rpm.r > flat.rpm.r * 1.3f)
+        assertTrue(t8.subs[0].r > flat.subs[0].r)
+        assertTrue(t8.media.r >= flat.media.r)
+        assertNoOverlapAndInside(t8)
+        assertNoOverlapAndInside(SportGeometry(1200, 1000, fourDials)) // çok uzun alanda da
+    }
+
+    @Test fun mediaContentKeepsTiggo7ScaleAndShrinksOnlyWhenSmaller() {
+        assertEquals(208f, SportGeometry.mediaContentRadius(208f, 210f), 0f)
+        assertEquals(240f, SportGeometry.mediaContentRadius(240f, 210f), 0f)
+        assertEquals(210f, SportGeometry.mediaContentRadius(180f, 210f), 0f)
+    }
 }
