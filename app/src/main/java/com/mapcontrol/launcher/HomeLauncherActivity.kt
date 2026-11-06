@@ -453,7 +453,9 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         // Süzgeç sayarken durağan çizim şimdiden hazırlanır; mod geri dönerse bırakılır.
         if (observed == DriveAccent.SPORT && !editing) ctl.prepare() else ctl.idle()
         // Monoton saat: ana ünitenin saati eşitlenince (araç saati yanlış) süzgeç sıçramasın ya da takılmasın.
-        val to = sportGate.update(android.os.SystemClock.elapsedRealtime(), observed, !editing && sheet == null) ?: return
+        // Pencere odakta değilken (aracın kendi sürüş modu penceresi üstte) geçiş bekler: iki animasyon üst üste binmez,
+        // pencere kapanıp odak dönünce geçiş başlar.
+        val to = sportGate.update(android.os.SystemClock.elapsedRealtime(), observed, !editing && sheet == null && windowFocused) ?: return
         ctl.request(to)
     }
 
@@ -737,9 +739,13 @@ class HomeLauncherActivity : Activity(), LauncherGrid.Listener {
         if (editing) exitEditMode()
     }
 
+    /** Etkinlik penceresi odakta mı; aracın sürüş modu penceresi gibi sistem pencereleri açıkken false. */
+    private var windowFocused = true
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemBars()
+        windowFocused = hasFocus
+        if (hasFocus) { hideSystemBars(); sportTick() }
     }
 
     // --- Izgara ---
