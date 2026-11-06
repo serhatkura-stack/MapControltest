@@ -347,7 +347,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     /** Arabada yanan parçalar (§10 genel kural): yakıt kapağı açıkken kapak, motor suyu / akü uyarısında kaput. */
     private fun bindPartAlerts() {
         val s = vehicle.summary
-        val health = if (waiting || s == null) emptyList() else HealthMath.issues(trip.batteryV, trip.coolantC, null, null, null)
+        val health = if (waiting || s == null) emptyList() else HealthMath.issues(trip.batteryV, trip.coolantC, null, null, null, trip.batteryHighHeld)
         car.setPartAlerts(
             fuelCapOpen = !waiting && s?.fuelCapOpen == true,
             engine = health.any { it == HealthMath.Issue.ENGINE_HOT || it == HealthMath.Issue.BATTERY_LOW || it == HealthMath.Issue.BATTERY_HIGH },
@@ -360,7 +360,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         val list = if (waiting || s == null) emptyList() else MiniAlerts.build(
             tireAlert = s.tireAlert, tireLow = s.tireLow, lowFuel = s.lowFuel,
             serviceKm = trip.serviceKm, serviceDays = trip.serviceDays, pm25In = trip.pm25In,
-            batteryV = trip.batteryV, coolantC = trip.coolantC, fuelCapOpen = s.fuelCapOpen,
+            batteryV = trip.batteryV, batteryHighHeld = trip.batteryHighHeld, coolantC = trip.coolantC, fuelCapOpen = s.fuelCapOpen,
         )
         strip.bind(list) { stripText(activity, it) }
         strip.setDriving(if (LauncherDemo.enabled) LauncherDemo.moving == true else trip.moving == true)

@@ -243,7 +243,7 @@ class MiniDashActivity : Activity() {
         alertRow.setDriving(if (LauncherDemo.enabled) LauncherDemo.moving == true else trip.moving == true)
         val all = MiniAlerts.build(
             extra.tires, trip.lowFuel, trip.serviceKm, trip.serviceDays, trip.pm25In,
-            batteryV = trip.batteryV, coolantC = trip.coolantC, fuelCapOpen = extra.parts[BodyPart.FUEL_CAP] == true,
+            batteryV = trip.batteryV, batteryHighHeld = trip.batteryHighHeld, coolantC = trip.coolantC, fuelCapOpen = extra.parts[BodyPart.FUEL_CAP] == true,
         )
         if (all == lastAlerts) return
         lastAlerts = all

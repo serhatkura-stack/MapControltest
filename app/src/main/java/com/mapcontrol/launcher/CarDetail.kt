@@ -80,7 +80,7 @@ internal object CarDetail {
             windows = WINDOWS.map { w -> if (o != null && w in o.windows) true else extra.parts[w] },
             serviceKm = trip.serviceKm,
             serviceDays = trip.serviceDays,
-            health = if (!hasHealth) null else HealthMath.issues(trip.batteryV, trip.coolantC, lowFuel, trip.serviceKm, trip.serviceDays),
+            health = if (!hasHealth) null else HealthMath.issues(trip.batteryV, trip.coolantC, lowFuel, trip.serviceKm, trip.serviceDays, trip.batteryHighHeld),
             batteryV = trip.batteryV,
             coolantC = trip.coolantC,
             pm25In = trip.pm25In,

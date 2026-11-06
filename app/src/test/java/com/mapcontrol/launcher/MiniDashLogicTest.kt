@@ -62,7 +62,10 @@ class MiniDashLogicTest {
 
     @Test fun healthUsesHealthMathThresholds() {
         assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 12.6, coolantC = HealthMath.COOLANT_MAX_C).isEmpty())
-        assertEquals(listOf(MiniAlerts.Kind.BATTERY_HIGH), MiniAlerts.build(null, null, null, null, null, batteryV = 15.4).map { it.kind })
+        assertEquals(listOf(MiniAlerts.Kind.BATTERY_HIGH), MiniAlerts.build(null, null, null, null, null, batteryV = 15.4, batteryHighHeld = true).map { it.kind })
+        // 30 sn sürmeyen aşırı gerilim şeride çıkmaz; 14,5 V (çalışan motor) hiç çıkmaz.
+        assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 15.4).isEmpty())
+        assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 14.5, batteryHighHeld = true).isEmpty())
         assertEquals(listOf(MiniAlerts.Kind.ENGINE_HOT), MiniAlerts.build(null, null, null, null, null, coolantC = 111).map { it.kind })
         assertEquals(listOf(MiniAlerts.Kind.FUEL_CAP), MiniAlerts.build(null, null, null, null, null, fuelCapOpen = true).map { it.kind })
     }

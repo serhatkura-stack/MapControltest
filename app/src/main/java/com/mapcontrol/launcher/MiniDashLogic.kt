@@ -41,9 +41,10 @@ internal object MiniAlerts {
         batteryV: Double? = null,
         coolantC: Int? = null,
         fuelCapOpen: Boolean = false,
+        batteryHighHeld: Boolean = false,
     ): List<Item> {
         val low = TireDecode.low(tires)
-        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In, batteryV, coolantC, fuelCapOpen)
+        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In, batteryV, coolantC, fuelCapOpen, batteryHighHeld)
     }
 
     /**
@@ -61,8 +62,10 @@ internal object MiniAlerts {
         batteryV: Double? = null,
         coolantC: Int? = null,
         fuelCapOpen: Boolean = false,
+        /** Aşırı gerilim 30 sn sürdü mü ([TripData.batteryHighHeld]); değilse "Akü yüksek" çıkmaz. */
+        batteryHighHeld: Boolean = false,
     ): List<Item> = buildList {
-        val health = HealthMath.issues(batteryV, coolantC, null, null, null)
+        val health = HealthMath.issues(batteryV, coolantC, null, null, null, batteryHighHeld)
         if (HealthMath.Issue.ENGINE_HOT in health) add(Item(Kind.ENGINE_HOT, coolantC = coolantC))
         if (HealthMath.Issue.BATTERY_LOW in health) add(Item(Kind.BATTERY_LOW, batteryV = batteryV))
         if (HealthMath.Issue.BATTERY_HIGH in health) add(Item(Kind.BATTERY_HIGH, batteryV = batteryV))

@@ -128,6 +128,8 @@ internal data class TripData(
     val avgL100: Double? = null,
     val avgSpeedKmh: Int? = null,
     val batteryV: Double? = null,
+    /** Aşırı gerilim 30 sn sürdü ([OverVoltageGate]); yalnızca o zaman "Akü yüksek" uyarısı çıkar. */
+    val batteryHighHeld: Boolean = false,
     val coolantC: Int? = null,
     val lowFuel: Boolean? = null,
     /** Servise kalan km / gün (ICMT). Araçta 2026-10-29'da okundu, gösterge menüsüyle henüz karşılaştırılmadı. */
@@ -183,6 +185,7 @@ internal object TripSource {
     private val tiers = PollTiers(longArrayOf(POLL_MS, TRIP_MS, SLOW_MS))
     @Volatile private var rpmRaw: Int? = null
     private var engineOnMs = 0L
+    private val overVoltage = OverVoltageGate()
     private var lastLiveAt = 0L
 
     @Volatile
@@ -263,6 +266,7 @@ internal object TripSource {
                 lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
                 outsideC = TripDecode.outsideC(hvac(HvacID.ID_AC_TEMPERATURE_CELSIUS_OUTSIDE)),
             )
+            d = d.copy(batteryHighHeld = overVoltage.update(d.batteryV, now))
         }
         if (mask and T_SLOW != 0) {
             d = d.copy(
@@ -773,7 +777,7 @@ internal class HealthTile(context: Context) :
             showMissing()
             return
         }
-        val issues = HealthMath.issues(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays)
+        val issues = HealthMath.issues(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays, d.batteryHighHeld)
         val bad = issues.isNotEmpty()
         setIcon(if (bad) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
             if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)

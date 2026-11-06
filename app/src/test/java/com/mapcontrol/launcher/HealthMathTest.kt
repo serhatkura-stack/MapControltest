@@ -8,8 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HealthMathTest {
-    private fun issues(v: Double? = 13.8, c: Int? = 90, fuel: Boolean? = false, km: Int? = 4000, days: Int? = 150) =
-        HealthMath.issues(v, c, fuel, km, days)
+    private fun issues(v: Double? = 13.8, c: Int? = 90, fuel: Boolean? = false, km: Int? = 4000, days: Int? = 150, held: Boolean = true) =
+        HealthMath.issues(v, c, fuel, km, days, held)
 
     @Test fun allNormalHasNoIssues() = assertTrue(issues().isEmpty())
 
@@ -23,7 +23,31 @@ class HealthMathTest {
         assertEquals(listOf(Issue.BATTERY_LOW), issues(v = 11.4))
         assertEquals(listOf(Issue.BATTERY_HIGH), issues(v = 15.6))
         assertTrue(issues(v = 12.0).isEmpty())
-        assertTrue(issues(v = 15.0).isEmpty())
+        // Motor çalışırken 14,5 V normal (araçta); eşik 15,3 V.
+        assertTrue(issues(v = 14.5).isEmpty())
+        assertTrue(issues(v = 15.3).isEmpty())
+        // Aşırı gerilim 30 sn sürmediyse sorun değil; düşük gerilim beklemez.
+        assertTrue(issues(v = 15.6, held = false).isEmpty())
+        assertEquals(listOf(Issue.BATTERY_LOW), issues(v = 11.4, held = false))
+    }
+
+    @Test fun overVoltageMustPersist30Seconds() {
+        val g = OverVoltageGate()
+        assertFalse(g.update(15.6, 0L))
+        assertFalse(g.update(15.7, 29_999L))
+        assertTrue(g.update(15.6, 30_000L))
+        assertTrue(g.update(15.4, 60_000L))
+        // Eşiğe inen ya da okunamayan değer sayacı sıfırlar.
+        assertFalse(g.update(15.3, 61_000L))
+        assertFalse(g.update(15.6, 62_000L))
+        assertFalse(g.update(null, 70_000L))
+        assertFalse(g.update(15.6, 80_000L))
+        assertFalse(g.update(15.6, 109_999L))
+        assertTrue(g.update(15.6, 110_000L))
+        // Normal şarj gerilimi hiç tetiklemez.
+        val n = OverVoltageGate()
+        assertFalse(n.update(14.5, 0L))
+        assertFalse(n.update(14.6, 100_000L))
     }
 
     @Test fun serviceSoonAndOverdue() {
