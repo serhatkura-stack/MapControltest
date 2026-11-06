@@ -163,13 +163,16 @@ object SportModePrefs {
  * Yayın BÜTÜN OEM pencerelerini kapatır; bu yüzden yalnız gözlenen bir sürüş modu değişiminden sonra, değişim başına en çok
  * bir kez ve yalnız spor geçişi başlayacaksa: yeni mod Spor, ya da eski mod Spor ve spor ekranı açık (çıkış). İlk gözlem
  * değişim sayılmaz; veri kesintisi (null) son modu korur. Pencere önce açılabilsin diye değişimden [delayMs] sonra.
+ * Pencere odağı alır: süre dolunca yalnız odak bizden gitmişse (`focusLost`) gönderilir; odak [FOCUS_WAIT_MS] içinde
+ * gitmezse pencere hiç açılmamıştır (OEM bazı durumlarda göstermez) ve yayın düşer. Arka planda geçen değişimler için
+ * yayın olmasın diye çağıran görünmez olunca / demo sürerken [reset] eder (dönüşteki ilk gözlem değişim sayılmaz).
  */
 class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
     private var last: Int? = null
     private var dueAt: Long? = null
 
     /** true: yayını şimdi gönder (bu değişim için bir daha true dönmez). */
-    fun update(now: Long, mode: Int?, allowed: Boolean, sportShown: Boolean): Boolean {
+    fun update(now: Long, mode: Int?, allowed: Boolean, sportShown: Boolean, focusLost: Boolean = true): Boolean {
         if (mode != null) {
             val prev = last
             last = mode
@@ -182,12 +185,25 @@ class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
         val at = dueAt ?: return false
         if (!allowed) { dueAt = null; return false }
         if (now < at) return false
+        if (!focusLost) {
+            // Odak bizde: pencere (henüz) açık değil. Biraz bekle; açılmazsa kapatılacak bir şey yok.
+            if (now >= at + FOCUS_WAIT_MS) dueAt = null
+            return false
+        }
         dueAt = null
         return true
+    }
+
+    /** Son modu ve bekleyeni unutur: sonraki gözlem "ilk gözlem" sayılır (görünmezken/demo sırasında geçen değişim yayın üretmez). */
+    fun reset() {
+        last = null
+        dueAt = null
     }
 
     companion object {
         /** Dökümdeki öneri: mod değişiminden ~300 ms sonra (pencere açılmış olsun). */
         const val DELAY_MS = 300L
+        /** Süre dolduktan sonra pencerenin odağı almasını bekleme payı. */
+        const val FOCUS_WAIT_MS = 1_500L
     }
 }

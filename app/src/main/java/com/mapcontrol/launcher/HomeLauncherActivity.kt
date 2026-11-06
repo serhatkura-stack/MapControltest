@@ -438,9 +438,11 @@ class HomeLauncherActivity : Activity() {
     private fun sportTick() {
         val ctl = sport ?: return
         // Spor geçişi başlayacaksa aracın sürüş modu penceresi kapatılır (odak döner, geçiş beklemez). Yalnız gerçek araç
-        // verisinde (demo değil), gözlenen değişim başına en çok bir kez.
-        if (!LauncherDemo.enabled && oemDialogCloser.update(android.os.SystemClock.elapsedRealtime(), observedDriveMode,
-                sportModeOn && closeOemDialogOn, ctl.shown)) closeOemDriveDialog()
+        // verisinde (demo değil), gözlenen değişim başına en çok bir kez; geçiş ertelenmiyorsa (sportGate ile aynı koşul)
+        // ve pencere odağı bizden almışsa (açılmamışsa kapatılacak bir şey yok, yayın başka OEM pencerelerini kapatmasın).
+        if (LauncherDemo.enabled) oemDialogCloser.reset()
+        else if (oemDialogCloser.update(android.os.SystemClock.elapsedRealtime(), observedDriveMode,
+                sportModeOn && closeOemDialogOn && !editing && sheet == null, ctl.shown, focusLost = !windowFocused)) closeOemDriveDialog()
         val observed = if (sportAllowed()) observedSportMode() else DriveAccent.NORMAL
         // Süzgeç sayarken durağan çizim şimdiden hazırlanır; mod geri dönerse bırakılır.
         if (observed == DriveAccent.SPORT && !editing) ctl.prepare() else ctl.idle()
@@ -704,6 +706,8 @@ class HomeLauncherActivity : Activity() {
         themeDefer = false
         deferredVisible.clear()
         driveHandler.removeCallbacks(driveTick)
+        // Görünmezken geçen mod değişimi dönüşte geç yayın üretmesin (o an açık başka bir OEM penceresini kapatırdı).
+        oemDialogCloser.reset()
         sheet?.dismiss()
         sheet = null
         wifiPanel?.dismiss()

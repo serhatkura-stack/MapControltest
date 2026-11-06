@@ -77,6 +77,48 @@ class SportOemDialogTest {
         assertTrue(c.update(1_800, null, true, false))
     }
 
+    @Test fun resetMakesNextObservationFirst() {
+        val c = OemDriveDialogCloser(300)
+        c.update(0, N, true, false)
+        // Arka plandayken (tick yok) Spor'a geçildi; dönüşte reset sonrası ilk gözlem değişim sayılmaz.
+        c.reset()
+        assertFalse(c.update(600_000, S, true, false))
+        assertFalse(c.update(601_000, S, true, false))
+        // Bekleyen varken reset (onStop/demo) onu da iptal eder.
+        c.update(602_000, N, true, true)
+        c.reset()
+        assertFalse(c.update(603_000, N, true, true))
+    }
+
+    @Test fun sendsOnlyAfterFocusLost() {
+        val c = OemDriveDialogCloser(300)
+        c.update(0, N, true, false)
+        c.update(1_000, S, true, false, focusLost = false)
+        // Süre doldu ama odak bizde: pencere henüz açılmadı, bekle.
+        assertFalse(c.update(1_300, S, true, false, focusLost = false))
+        assertTrue(c.update(1_500, S, true, false, focusLost = true))
+        assertFalse(c.update(1_600, S, true, false, focusLost = true))
+    }
+
+    @Test fun neverShownDialogDropsAfterFocusWait() {
+        val c = OemDriveDialogCloser(300)
+        c.update(0, N, true, false)
+        c.update(1_000, S, true, false, focusLost = false)
+        assertFalse(c.update(1_300, S, true, false, focusLost = false))
+        assertFalse(c.update(1_300 + OemDriveDialogCloser.FOCUS_WAIT_MS, S, true, false, focusLost = false))
+        // Sonradan odak gitse de (başka bir pencere) bu değişim için yayın yok.
+        assertFalse(c.update(4_000, S, true, false, focusLost = true))
+    }
+
+    @Test fun deferredTransitionDoesNotSend() {
+        // Düzenleme/sayfa açıkken çağıran allowed=false verir: geçiş ertelenir, yayın da gitmez.
+        val c = OemDriveDialogCloser(300)
+        c.update(0, N, true, false)
+        c.update(1_000, S, false, false, focusLost = true)
+        assertFalse(c.update(1_300, S, false, false, focusLost = true))
+        assertFalse(c.update(2_000, S, true, false, focusLost = true))
+    }
+
     // --- Dış sıcaklık kadranı ---
 
     @Test fun outsideDialFormatAndChoice() {
