@@ -434,7 +434,7 @@ class SportLogicTest {
 
     @Test fun speedReadoutWritesOnlyChangesAtMostFourTimesASecond() {
         val r = SpeedReadout()
-        assertEquals("—", r.next(0, null))
+        assertEquals("—", r.next(0, -1))
         assertEquals("0", r.next(300, 0))
         assertNull(r.next(400, 0)) // aynı değer: iş yok
         assertNull(r.next(450, 1)) // 250 ms dolmadı
@@ -445,6 +445,15 @@ class SportLogicTest {
         assertNull(r.next(1_500, 400)) // hâlâ bilinmiyor: iş yok
         r.reset()
         assertEquals("88", r.next(1_510, 88)) // yeniden açılınca beklemeden
+    }
+
+    @Test fun needleDeadbandOnlyAtRest() {
+        // Dururken rölanti kıpırtısı (< 50) oynatmaz, büyük fark oynatır.
+        assertFalse(SportMath.needleShouldMove(false, 800f, 800f, 830f, 50f))
+        assertTrue(SportMath.needleShouldMove(false, 800f, 800f, 1_400f, 50f))
+        // Hareket sürerken küçük düzeltme de hemen yeni hedef olur; aynı hedef yeniden başlatılmaz.
+        assertTrue(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_020f, 50f))
+        assertFalse(SportMath.needleShouldMove(true, 3_000f, 2_000f, 3_000f, 50f))
     }
 
     @Test fun speedSitsBetweenNeedleTailAndGearWindow() {

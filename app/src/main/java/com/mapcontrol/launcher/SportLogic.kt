@@ -58,9 +58,16 @@ object SportMath {
      */
     fun rpm(raw: Int?): Int? = raw?.takeIf { it in 0..RAW_MAX }?.let { it * com.mapcontrol.vehicle.VehicleMetricsSnapshot.RPM_FACTOR }
 
-    private const val RAW_MAX = 3_000 // 12 000 dev/dk; üstü bozuk okuma
+    const val RAW_MAX = 3_000 // 12 000 dev/dk; üstü bozuk okuma
 
     /** İbre açısı (tuval derecesi): devir 0..[RPM_MAX] aralığına kırpılır. */
+    /**
+     * İbre yeni devre gitsin mi: dururken yalnız [deadband]'den büyük farkta (rölanti kıpırtısı çizdirmez); hareket
+     * sürerken her yeni hedefe hemen döner (hızlı gaz/bırakma kaçmaz), aynı hedef yeniden başlatılmaz.
+     */
+    fun needleShouldMove(moving: Boolean, target: Float, shown: Float, rpm: Float, deadband: Float): Boolean =
+        if (moving) rpm != target else kotlin.math.abs(rpm - shown) >= deadband
+
     fun needleDeg(rpm: Float): Float = START_DEG + SWEEP_DEG * (rpm.coerceIn(0f, RPM_MAX.toFloat()) / RPM_MAX)
 
     /**
@@ -425,9 +432,9 @@ class SpeedReadout {
     private var shown = UNSET
     private var at = 0L
 
-    /** [now] anında [kmh] için gösterilecek yeni metin; değişmediyse ya da aralık dolmadıysa null. */
-    fun next(now: Long, kmh: Int?): String? {
-        val v = kmh?.takeIf { it in 0..MAX_KMH } ?: UNKNOWN
+    /** [now] anında [kmh] (eksi: bilinmiyor) için gösterilecek yeni metin; değişmediyse ya da aralık dolmadıysa null. */
+    fun next(now: Long, kmh: Int): String? {
+        val v = if (kmh in 0..MAX_KMH) kmh else UNKNOWN
         if (v == shown) return null
         if (shown != UNSET && now - at < INTERVAL_MS) return null
         shown = v
