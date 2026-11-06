@@ -287,7 +287,7 @@ internal class BluetoothPanel(
             setText(res)
             gravity = Gravity.CENTER
             minimumHeight = activity.dp(56)
-            background = rounded(activity, LauncherTheme.CONTROL, 999f)
+            background = rounded(activity, LauncherTheme.PANEL_PILL, 999f)
             setPadding(activity.dp(20), 0, activity.dp(20), 0)
             alpha = if (busy) 0.5f else 1f
             clickable(this) { if (!busy) onClick() }

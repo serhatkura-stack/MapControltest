@@ -410,7 +410,7 @@ internal class WifiPanel(
             setText(res)
             gravity = Gravity.CENTER
             minimumHeight = activity.dp(56)
-            background = rounded(activity, LauncherTheme.CONTROL, 999f)
+            background = rounded(activity, LauncherTheme.PANEL_PILL, 999f)
             setPadding(activity.dp(20), 0, activity.dp(20), 0)
             clickable(this, onClick)
         }

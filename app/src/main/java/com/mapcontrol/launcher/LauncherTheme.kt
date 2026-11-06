@@ -95,6 +95,8 @@ object LauncherTheme {
 
     val GROUND: Int get() = if (sahne) Sahne.GROUND else if (night) NIGHT_GROUND else DAY_GROUND
     val CARD: Int get() = if (sahne) (if (night) 0xFF13171E.toInt() else 0xFFF9F8F7.toInt()) else if (night) NIGHT_CARD else DAY_CARD
+    /** Açılır panellerde (Wi-Fi, Bluetooth) hap düğmesi zemini: panel zemininden belirgin açık (gece CONTROL panelle neredeyse aynıydı). */
+    val PANEL_PILL: Int get() = if (sahne && night) 0xFF2E3542.toInt() else CONTROL
     val CONTROL: Int get() = if (sahne) (if (night) 0xFF1D2128.toInt() else 0xFFEDECEA.toInt()) else if (night) NIGHT_CONTROL else DAY_CONTROL
     /** Kart kenar çizgisi rengi; gecede 0 (çizgi yok). */
     val CARD_BORDER: Int get() = if (sahne) (if (night) 0 else 0x17181E28) else if (night) 0 else DAY_BORDER
