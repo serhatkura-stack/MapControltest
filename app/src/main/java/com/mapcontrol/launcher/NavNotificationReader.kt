@@ -38,9 +38,12 @@ internal object NavNotificationReader {
         val texts = ArrayList<Pair<String?, String>>()
         val images = ArrayList<Pair<String?, String>>()
         val actionsLog = if (BuildConfig.DEBUG) ArrayList<String>() else null
+        // Aynı RemoteViews'e bir kez girilir, toplam eylem sınırlı (6 Kasım araç ANR'si: eylemlerin dış sınıf
+        // bağlantısı this$0 iç içe görünüm sanılıyor, aynı ağaç katlanarak ana iş parçacığında taranıyordu).
+        val walk = Walk()
         @Suppress("DEPRECATION")
         listOfNotNull(n.contentView, n.bigContentView, n.headsUpContentView).forEach { rv ->
-            collect(rv, res, texts, images, actionsLog, depth = 0)
+            collect(rv, res, texts, images, actionsLog, depth = 0, walk = walk)
         }
         val smallIcon = n.smallIcon?.let { icon -> iconResName(icon, res) }
         val input = NavNotificationInput(
@@ -70,8 +73,19 @@ internal object NavNotificationReader {
         resourcesCache.remove(pkg)
     }
 
+    /** Tek okumada gezilen RemoteViews'ler (kimlik) ve sayılan eylemler. */
+    private class Walk {
+        val seen: MutableSet<RemoteViews> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+        var actions = 0
+    }
+
+    private const val MAX_ACTIONS = 400
+
+    /** Kaynak numarası gibi görünen değer mi (paket kimliği 0x01..0x7f): küçük tamsayılar (8, 120…) sorulmaz. */
+    internal fun looksLikeResId(id: Int): Boolean = (id ushr 24) in 0x01..0x7f
+
     private fun name(res: Resources?, id: Int): String? {
-        if (res == null || id == 0 || id == -1) return null
+        if (res == null || !looksLikeResId(id)) return null
         return try {
             res.getResourceEntryName(id)
         } catch (e: Resources.NotFoundException) {
@@ -93,8 +107,9 @@ internal object NavNotificationReader {
         images: MutableList<Pair<String?, String>>,
         log: MutableList<String>?,
         depth: Int,
+        walk: Walk,
     ) {
-        if (depth > 4) return
+        if (depth > 4 || !walk.seen.add(rv)) return
         val actions = try {
             field(RemoteViews::class.java, "mActions")?.get(rv) as? List<*>
         } catch (e: Exception) {
@@ -102,6 +117,7 @@ internal object NavNotificationReader {
         } ?: return
         for (action in actions) {
             if (action == null) continue
+            if (++walk.actions > MAX_ACTIONS) return
             try {
                 val cls = action.javaClass
                 val viewId = (field(cls, "viewId")?.get(action) as? Int) ?: 0
@@ -115,8 +131,9 @@ internal object NavNotificationReader {
                 }
                 log?.add("${cls.simpleName} view=$viewName method=$method value=${describe(value, res)}")
                 // İç içe RemoteViews (ViewGroupActionAdd.mNestedViews vb.).
-                allFields(cls).filter { RemoteViews::class.java.isAssignableFrom(it.type) }.forEach { f ->
-                    (f.get(action) as? RemoteViews)?.let { collect(it, res, texts, images, log, depth + 1) }
+                // Dış sınıf bağlantısı (this$0, sentetik) üst RemoteViews'in kendisidir: atlanır.
+                nestedFields(cls).forEach { f ->
+                    (f.get(action) as? RemoteViews)?.let { if (it !== rv) collect(it, res, texts, images, log, depth + 1, walk) }
                 }
             } catch (e: Exception) {
                 // Bir eylem okunamazsa diğerlerine devam.
@@ -147,6 +164,13 @@ internal object NavNotificationReader {
             c = c.superclass
         }
         found
+    }
+
+    private val nestedCache = HashMap<Class<*>, List<Field>>()
+
+    /** Eylem sınıfının iç içe RemoteViews alanları (sınıf başına bir kez; sentetik dış bağlantı hariç). */
+    private fun nestedFields(cls: Class<*>): List<Field> = nestedCache.getOrPut(cls) {
+        allFields(cls).filter { !it.isSynthetic && it.name != "this\$0" && RemoteViews::class.java.isAssignableFrom(it.type) }
     }
 
     private fun allFields(cls: Class<*>): List<Field> {
