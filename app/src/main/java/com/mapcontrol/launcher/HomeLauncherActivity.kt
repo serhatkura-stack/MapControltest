@@ -122,6 +122,9 @@ class HomeLauncherActivity : Activity() {
         LauncherSafeArea.applyFrom(this, intent)
         LauncherBottomBar.applyFrom(this, intent)
         LauncherTheme.applyFrom(resources.configuration, ThemeMode.read(this))
+        // Gösterge haritası (deneysel): debug ekstraları; açıksa Otomatik çerçeve yeni gündüz/gece durumuna geçer.
+        com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterMap.refreshStyle(this)
         // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
@@ -224,6 +227,7 @@ class HomeLauncherActivity : Activity() {
         consumeEditExtra(intent)
         // Debug: launcher açıkken gelen --ei launcher_nav_area (ekstra işlenince silinir, tekrarlanmaz).
         LauncherProbe.applyFrom(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
