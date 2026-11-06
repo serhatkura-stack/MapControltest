@@ -1,5 +1,6 @@
 package com.mapcontrol.launcher
 
+import com.mapcontrol.launcher.cluster.OverlayWindows
 import android.app.Activity
 import android.app.Presentation
 import android.content.Context
@@ -118,7 +119,7 @@ internal object ClusterGrid {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE,
             )
-            wm.addView(view, lp)
+            OverlayWindows.add("ClusterGrid", wm, view, lp)
             overlayView = view
             overlayWm = wm
             Log.i(TAG, "Overlay gösterildi: ekran ${display.displayId}")

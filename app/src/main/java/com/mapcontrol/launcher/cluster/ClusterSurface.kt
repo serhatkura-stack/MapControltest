@@ -201,8 +201,8 @@ class ClusterSurface(context: Context) {
                 title = "ClusterCard"
             }
             applyPosition(lp)
-            Log.i(TAG, "addView display=$displayId pos=${lp.x},${lp.y} size=${lp.width}x${lp.height} flags=0x${Integer.toHexString(lp.flags)} type=${lp.type}")
-            wm.addView(frame, lp)
+            LLog.i(TAG, "addView display=$displayId pos=${lp.x},${lp.y} size=${lp.width}x${lp.height} flags=0x${Integer.toHexString(lp.flags)} type=${lp.type}")
+            OverlayWindows.add("ClusterCard", wm, frame, lp)
             windowManager = wm
             root = frame
             cardLp = lp
@@ -272,7 +272,7 @@ class ClusterSurface(context: Context) {
                 x = 0; y = 0
                 title = "ClusterGrid"
             }
-            wm.addView(v, lp)
+            OverlayWindows.add("ClusterCardGrid", wm, v, lp)
             gridView = v
             gridWm = wm
             Log.i(TAG, "grid attached ${size.x}x${size.y}")

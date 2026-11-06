@@ -198,7 +198,7 @@ internal object ClusterMap {
             val dctx = c.createDisplayContext(display)
             val wm = dctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val view = ClusterFrameView(dctx, currentFrame(c), hole)
-            wm.addView(view, overlayParams("ClusterMapFrame"))
+            OverlayWindows.add("ClusterMapFrame", wm, view, overlayParams("ClusterMapFrame"))
             frameView = view
             frameWm = wm
             displayId = display.displayId
@@ -320,7 +320,7 @@ internal object ClusterMap {
         if (Settings.canDrawOverlays(c)) {
             try {
                 val wm = dctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                wm.addView(view, overlayParams("ClusterMapImage").apply { format = PixelFormat.OPAQUE })
+                OverlayWindows.add("ClusterMapImage", wm, view, overlayParams("ClusterMapImage").apply { format = PixelFormat.OPAQUE })
                 imageView = view
                 imageWm = wm
                 Log.i(TAG, "görsel gösterildi (overlay): $path ekran=${display.displayId}")

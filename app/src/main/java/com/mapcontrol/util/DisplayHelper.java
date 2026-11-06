@@ -101,7 +101,7 @@ public final class DisplayHelper {
             );
 
             preparingMessageView = overlay;
-            preparingWindowManager.addView(preparingMessageView, preparingParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("Preparing", preparingWindowManager, preparingMessageView, preparingParams);
 
             startPreparingAnimations(overlay);
         } catch (Exception ignored) {
@@ -286,33 +286,15 @@ public final class DisplayHelper {
     }
 
     public static void hidePreparingMessage() {
+        // Eski sürümde finally alanları hemen null'luyordu; solma sonundaki removeView null görüp hiçbir şey
+        // kaldırmıyordu: her "Göstergeye yansıt" display 2'de bir overlay sızdırıyordu. Görünüm yerel olarak
+        // tutulup alanlar hemen boşaltılır; solma biten görünümü kendisi kaldırır.
+        final View view = preparingMessageView;
+        final android.view.WindowManager wm = preparingWindowManager;
         try {
             cancelPreparingAnimations();
-            if (preparingMessageView != null && preparingWindowManager != null) {
-                try {
-                    preparingMessageView.animate()
-                            .alpha(0f)
-                            .setDuration(180)
-                            .withEndAction(() -> {
-                                try {
-                                    if (preparingWindowManager != null && preparingMessageView != null) {
-                                        preparingWindowManager.removeView(preparingMessageView);
-                                    }
-                                } catch (Exception ignored) {
-                                } finally {
-                                    preparingMessageView = null;
-                                    preparingWindowManager = null;
-                                    preparingParams = null;
-                                    displayContext = null;
-                                }
-                            })
-                            .start();
-                    return;
-                } catch (Exception ignored) {
-                }
-
-                preparingWindowManager.removeView(preparingMessageView);
-                preparingMessageView = null;
+            if (view != null && wm != null) {
+                fadeAndRemove(view, wm, 180, "Preparing");
             }
         } catch (Exception ignored) {
         } finally {
@@ -322,6 +304,32 @@ public final class DisplayHelper {
             preparingParams = null;
             displayContext = null;
         }
+    }
+
+    /**
+     * Görünümü soldurup kaldırır; solma sonu çalışmazsa (iptal, görünür değil) süre + 150 ms sonra yine kaldırılır.
+     * Amaç kaydı hemen "çıkıyor" olarak işaretlenir; aynı amaçla yeni pencere bu arada eklenebilir.
+     */
+    private static void fadeAndRemove(final View view, final android.view.WindowManager wm, long ms, String purpose) {
+        com.mapcontrol.launcher.cluster.OverlayWindows.retire(purpose, view);
+        final boolean[] done = {false};
+        final Runnable remove = () -> {
+            if (done[0]) {
+                return;
+            }
+            done[0] = true;
+            try {
+                wm.removeViewImmediate(view);
+            } catch (Exception ignored) {
+            }
+        };
+        try {
+            view.animate().alpha(0f).setDuration(ms).withEndAction(remove).start();
+        } catch (Exception e) {
+            remove.run();
+            return;
+        }
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(remove, ms + 150);
     }
 
     private static void cancelPreparingAnimations() {
@@ -390,7 +398,7 @@ public final class DisplayHelper {
             );
 
             bootSplashView = overlay;
-            bootSplashWindowManager.addView(bootSplashView, bootSplashParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("BootSplash", bootSplashWindowManager, bootSplashView, bootSplashParams);
 
             startBootSplashAnimations(overlay, bootSplashAnimators);
         } catch (Exception ignored) {
@@ -401,29 +409,9 @@ public final class DisplayHelper {
         try {
             cancelBootSplashAnimations();
             if (bootSplashView != null && bootSplashWindowManager != null) {
-                try {
-                    bootSplashView.animate()
-                            .alpha(0f)
-                            .setDuration(260)
-                            .withEndAction(() -> {
-                                try {
-                                    if (bootSplashWindowManager != null && bootSplashView != null) {
-                                        bootSplashWindowManager.removeView(bootSplashView);
-                                    }
-                                } catch (Exception ignored) {
-                                } finally {
-                                    bootSplashView = null;
-                                    bootSplashWindowManager = null;
-                                    bootSplashParams = null;
-                                    bootSplashDisplayContext = null;
-                                    bootSplashDisplayId = Display.INVALID_DISPLAY;
-                                }
-                            })
-                            .start();
-                    return;
-                } catch (Exception ignored) {
-                }
-                bootSplashWindowManager.removeView(bootSplashView);
+                // Görünüm yerelde soluyup kaldırılır; alanlar hemen boşalır (solma sırasında yeniden gösterme
+                // erken dönmesin, solma sonu yeni splash'i kaldırmasın).
+                fadeAndRemove(bootSplashView, bootSplashWindowManager, 260, "BootSplash");
                 bootSplashView = null;
                 bootSplashWindowManager = null;
                 bootSplashParams = null;
@@ -489,7 +477,7 @@ public final class DisplayHelper {
 
             View overlay = buildBootSplashOverlay(bootSplashDisplayContext);
             bootSplashView = overlay;
-            bootSplashWindowManager.addView(bootSplashView, bootSplashParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("BootSplash", bootSplashWindowManager, bootSplashView, bootSplashParams);
             startBootSplashAnimations(overlay, bootSplashAnimators);
         } catch (Exception ignored) {
             bootSplashDisplayId = Display.INVALID_DISPLAY;
