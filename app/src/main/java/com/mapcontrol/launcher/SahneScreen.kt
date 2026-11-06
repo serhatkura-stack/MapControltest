@@ -414,8 +414,8 @@ class SahneScreen(
     }
 
     /**
-     * Düzenleme örtüsü: yuvanın içeriği hafifçe karartılır, çevresinde ince düz bir buz mavisi çizgi; sağ üst köşede küçük
-     * "Değiştir" hapı (şeritte yalnızca kalem ikonlu yuvarlak düğme) içeriği örtmez. Boş yuvada ortada sessiz bir "+".
+     * Düzenleme örtüsü: yuvanın içeriği hafifçe karartılır, çevresinde ince düz bir buz mavisi çizgi; panelde içerik daha
+     * çok karartılıp ortada "Değiştir" hapı durur (altındaki yazıyla karışmaz); şeritte sağ üstte yalnızca kalem ikonlu yuvarlak düğme. Boş yuvada ortada sessiz bir "+".
      * Dokunuş (her yerinde) seçiciyi açar; altındaki widget dokunuş almaz.
      */
     private inner class SlotOverlay(private val ref: SahneSlotRef) : FrameLayout(activity) {
@@ -446,7 +446,8 @@ class SahneScreen(
 
         fun bind(filled: Boolean) {
             frame.color = (Sahne.ICE and 0x00FFFFFF) or 0x8C000000.toInt()
-            fill.color = if (filled) (Sahne.GROUND and 0x00FFFFFF) or 0x73000000 else 0
+            // Panelde düğme ortada ve içeriğin üstünde durur: içerik daha çok karartılır ki "Değiştir" altındaki yazıyla karışmasın.
+            fill.color = if (filled) (Sahne.GROUND and 0x00FFFFFF) or (if (panel) 0xB8000000.toInt() else 0x73000000) else 0
             val lp = chip.layoutParams as LayoutParams
             if (filled) {
                 chipIcon.setImageResource(R.drawable.ic_sahne_pen)
@@ -464,9 +465,14 @@ class SahneScreen(
                     lp.width = context.dp(CHIP_STRIP_DP)
                     lp.height = context.dp(CHIP_STRIP_DP)
                 }
-                lp.gravity = Gravity.TOP or Gravity.END
-                val inset = context.dp(if (panel) 16 else 4)
-                lp.setMargins(0, inset, inset, 0)
+                if (panel) {
+                    lp.gravity = Gravity.CENTER
+                    lp.setMargins(0, 0, 0, 0)
+                } else {
+                    lp.gravity = Gravity.TOP or Gravity.END
+                    val inset = context.dp(4)
+                    lp.setMargins(0, inset, inset, 0)
+                }
             } else {
                 chipIcon.setImageResource(R.drawable.ic_sahne_plus)
                 chipText.visibility = View.GONE
