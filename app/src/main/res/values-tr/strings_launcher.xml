@@ -217,4 +217,18 @@
     <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
     <string name="launcher_favorite_key_yandex_maps">Yandex Haritalar</string>
     <string name="launcher_favorite_key_missing">%1$s kurulu değil</string>
+    <string name="launcher_cluster_map">Gösterge haritası (deneysel)</string>
+    <string name="launcher_cluster_map_hint">Yandex haritası göstergede küçük, çerçeveli bir pencerede. Açılmazsa eski tam ekran yansıtma kullanılır.</string>
+    <string name="launcher_cluster_frame">Gösterge çerçevesi</string>
+    <string name="launcher_cluster_frame_auto">Otomatik</string>
+    <string name="launcher_cluster_frame_night">Gece</string>
+    <string name="launcher_cluster_frame_day">Gündüz</string>
+    <string name="launcher_cluster_frame_satellite">Uydu</string>
+    <string name="launcher_cluster_map_app">Harita uygulaması</string>
+    <string name="launcher_cluster_map_navi">Yandex Navigator</string>
+    <string name="launcher_cluster_map_maps">Yandex Haritalar</string>
+    <string name="launcher_cluster_window">Harita penceresi</string>
+    <string name="launcher_cluster_window_mid">Orta</string>
+    <string name="launcher_cluster_window_wide">Geniş</string>
+    <string name="launcher_cluster_map_failed">Gösterge haritası açılamadı; ayrıntı günlükte (ClusterMap)</string>
 </resources>

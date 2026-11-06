@@ -217,4 +217,18 @@
     <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
     <string name="launcher_favorite_key_yandex_maps">Yandex Maps</string>
     <string name="launcher_favorite_key_missing">%1$s is not installed</string>
+    <string name="launcher_cluster_map">Cluster map (experimental)</string>
+    <string name="launcher_cluster_map_hint">Yandex map in a small framed window on the instrument cluster. If it cannot open, the old full-screen projection is used.</string>
+    <string name="launcher_cluster_frame">Cluster frame</string>
+    <string name="launcher_cluster_frame_auto">Auto</string>
+    <string name="launcher_cluster_frame_night">Night</string>
+    <string name="launcher_cluster_frame_day">Day</string>
+    <string name="launcher_cluster_frame_satellite">Satellite</string>
+    <string name="launcher_cluster_map_app">Map app</string>
+    <string name="launcher_cluster_map_navi">Yandex Navigator</string>
+    <string name="launcher_cluster_map_maps">Yandex Maps</string>
+    <string name="launcher_cluster_window">Map window</string>
+    <string name="launcher_cluster_window_mid">Center</string>
+    <string name="launcher_cluster_window_wide">Wide</string>
+    <string name="launcher_cluster_map_failed">Cluster map could not open; see log (ClusterMap)</string>
 </resources>
