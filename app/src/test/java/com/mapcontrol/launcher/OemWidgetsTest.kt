@@ -30,39 +30,50 @@ class OemWidgetsTest {
     // --- Lastik basıncı ---
 
     @Test fun tireValuesDecodeToBar() {
-        assertEquals(2.4, TireDecode.bar(240)!!, 1e-9)    // kPa
-        assertEquals(2.4, TireDecode.bar(24)!!, 1e-9)     // 0,1 bar
-        assertEquals(0.5, TireDecode.bar(50)!!, 1e-9)
+        // Araçta (2026-11-06): ham 154 / 152 / 153 iken gösterge 31 / 30 / 30 psi; birim 1,373 kPa/bit.
+        assertEquals(2.11442, TireDecode.bar(154)!!, 1e-9)
+        assertEquals(31, TireDecode.psi(TireDecode.bar(154)!!))
+        assertEquals(30, TireDecode.psi(TireDecode.bar(152)!!))
+        assertEquals(30, TireDecode.psi(TireDecode.bar(153)!!))
+        assertEquals(0.01373, TireDecode.bar(1)!!, 1e-9)
+        assertEquals(3.48742, TireDecode.bar(254)!!, 1e-9)
         assertNull(TireDecode.bar(0))
-        assertNull(TireDecode.bar(255 * 255))
-        assertNull(TireDecode.bar(1000))
+        assertNull(TireDecode.bar(255))
+        assertNull(TireDecode.bar(0xFFFF))
         assertNull(TireDecode.bar(-1))
     }
 
     @Test fun tireParseHandlesFourOneAndGarbage() {
-        val four = TireDecode.parse(intArrayOf(240, 238, 230, 0), warningRaw = 0)!!
-        assertTrue(four.perWheel)
-        assertEquals(listOf(2.4, 2.38, 2.3, null), four.values)
-        assertEquals(false, four.warning)
-        val one = TireDecode.parse(intArrayOf(235))!!
+        // Gerçek okuma: eleman 0 ön sol (31 psi), sonra ön sağ, arka sol, arka sağ (30 psi).
+        val car = TireDecode.parse(intArrayOf(154, 152, 153, 153), warningRaw = 0)!!
+        assertTrue(car.perWheel)
+        assertEquals(listOf(31, 30, 30, 30), car.values.map { TireDecode.psi(it!!) })
+        assertEquals(false, car.warning)
+        val four = TireDecode.parse(intArrayOf(154, 152, 153, 0))!!
+        assertNull(four.values[3])
+        val one = TireDecode.parse(intArrayOf(153))!!
         assertFalse(one.perWheel)
-        assertEquals(listOf(2.35), one.values)
+        assertEquals(30, TireDecode.psi(one.values[0]!!))
         assertNull(one.warning)
         assertNull(TireDecode.parse(null))
         assertNull(TireDecode.parse(intArrayOf()))
         assertNull(TireDecode.parse(intArrayOf(0, 0, 0, 0)))   // hiç sensör
-        assertNull(TireDecode.parse(intArrayOf(240, 240)))      // 2 elemanlı: bilinmeyen düzen
-        assertEquals(true, TireDecode.parse(intArrayOf(240, 240, 240, 240), warningRaw = 1)!!.warning)
+        assertNull(TireDecode.parse(intArrayOf(255, 255, 255, 255)))
+        assertNull(TireDecode.parse(intArrayOf(154, 154)))      // 2 elemanlı: bilinmeyen düzen
+        assertEquals(true, TireDecode.parse(intArrayOf(154, 154, 154, 154), warningRaw = 1)!!.warning)
         assertTrue(TireDecode.isLow(1.5))
         assertFalse(TireDecode.isLow(2.2))
         assertFalse(TireDecode.isLow(null))
     }
 
     @Test fun tireLowFindsFirstLowWheelAndShowsOnlyWhenLow() {
-        val t = TireDecode.parse(intArrayOf(240, 160, 230, 220))!!   // 2,4 · 1,6 · 2,3 · 2,2 bar
-        assertEquals(TireLow(1, 1.6), TireDecode.low(t))
+        // 26 psi eşiği: ham 130 = 178,5 kPa = 25,9 psi (düşük), 131 = 179,9 kPa = 26,1 psi (normal).
+        assertTrue(TireDecode.isLow(TireDecode.bar(130)))
+        assertFalse(TireDecode.isLow(TireDecode.bar(131)))
+        val t = TireDecode.parse(intArrayOf(154, 120, 153, 153))!!
+        assertEquals(TireLow(1, TireDecode.bar(120)), TireDecode.low(t))
         assertEquals(TireLow(null, 1.5), TireDecode.low(TireReading(listOf(1.5))))
-        assertNull(TireDecode.low(TireDecode.parse(intArrayOf(240, 240, 240, 240))))
+        assertNull(TireDecode.low(TireDecode.parse(intArrayOf(154, 152, 153, 153))))
         assertNull(TireDecode.low(null))
         // Araç kartında uyarı yalnızca uyarı sinyali açıkken ya da bir değer düşükken görünür.
         assertFalse(TireDecode.alertShown(false, null))
