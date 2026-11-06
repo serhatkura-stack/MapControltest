@@ -68,6 +68,12 @@ class ClimateMathTest {
         assertTrue(ClimateMath.needsPowerOn(0))
         assertFalse(ClimateMath.needsPowerOn(1))
         assertFalse(ClimateMath.needsPowerOn(null))   // okunamıyorsa 18'e dokunulmaz
+        // Dock yolu (76/78/77): OEM dock'u gibi güç hiç gönderilmez (18 ← 1 OEM panelini açıyordu).
+        assertFalse(ClimateMath.powerOnBeforeWrite(quiet = true, powerRaw = 2))
+        assertFalse(ClimateMath.powerOnBeforeWrite(quiet = true, powerRaw = 0))
+        assertTrue(ClimateMath.powerOnBeforeWrite(quiet = false, powerRaw = 2))
+        assertFalse(ClimateMath.powerOnBeforeWrite(quiet = false, powerRaw = 1))
+        assertFalse(ClimateMath.powerOnBeforeWrite(quiet = false, powerRaw = null))
     }
 
     @Test fun neverWritesUnlessVerifiedAndNotReadOnly() {

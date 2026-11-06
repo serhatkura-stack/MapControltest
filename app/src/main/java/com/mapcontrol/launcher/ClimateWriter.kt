@@ -76,6 +76,15 @@ internal object ClimateMath {
      */
     fun needsPowerOn(powerRaw: Int?): Boolean = powerRaw != null && powerRaw != POWER_ON
 
+    /**
+     * Sıcaklık/fan yazmadan önce güç (18 ← 1) gönderilsin mi. [quiet] (OEM dock kimlikleri 76/78/77): HAYIR. OEM alt dock'u
+     * klima kapalıyken de yalnızca dock kimliğini yazar, güç göndermez (SVSystemUI `svhvac/viewmodel/MainViewModel.java:815-870`
+     * leftTempAdd/Down/Set/Up, `:633-648` addDockWindSpeed; tek kapı kontak: `car_power_on_tips`). 18 ← 1 panel yoludur
+     * (`HvacModel.java:953-956` onPowerClick; panelin fan +/− kapalıyken yalnızca güç gönderir, `MainViewModel.java:1248-1267`)
+     * ve 6 Kasım araçta klima kapalıyken OEM panelini açtı. Panel kimlikleri (10/13/12) ile eski yol (sesli komut gibi) korunur.
+     */
+    fun powerOnBeforeWrite(quiet: Boolean, powerRaw: Int?): Boolean = !quiet && needsPowerOn(powerRaw)
+
     /** Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. 0 (HVAC 12 ← 0) OEM'de doğrulanmadı, hiç yazılmaz. */
     fun encodeFan(level: Int): Int = level.coerceIn(1, FAN_MAX)
 }
@@ -112,7 +121,7 @@ internal object ClimateWriter {
     /** Sıcaklığı yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setTemperature(side: ClimateSide, celsius: Double, quiet: Boolean): Boolean {
         if (!enabled) return false
-        powerOnIfOff()
+        powerOnIfOff(quiet)
         return send(tempId(side, quiet), ClimateMath.encodeTemp(celsius))
     }
 
@@ -120,13 +129,21 @@ internal object ClimateWriter {
     fun setFan(level: Int, quiet: Boolean): Boolean {
         if (!enabled) return false
         if (level < 1) return false
-        powerOnIfOff()
+        powerOnIfOff(quiet)
         return send(fanId(quiet), ClimateMath.encodeFan(level))
     }
 
-    /** Klima kapalıysa önce aç (HVAC 18 ← 1), OEM gibi. Arka planda çağrılır. */
-    private fun powerOnIfOff() {
-        if (ClimateMath.needsPowerOn(CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_WORKING))) send(HvacID.ID_AC_WORKING, ClimateMath.POWER_ON)
+    /**
+     * Panel yolunda klima kapalıysa önce aç (HVAC 18 ← 1, sesli komut gibi). Dock yolunda ([quiet]) güç gönderilmez, OEM dock'u
+     * gibi yalnızca 76/78/77 gider ([ClimateMath.powerOnBeforeWrite]); karar `WidgetWrite` günlüğüne yazılır. Arka planda çağrılır.
+     */
+    private fun powerOnIfOff(quiet: Boolean) {
+        val power = CarSignals.readInt(VDEventCarInfo.MODULE_HVAC, HvacID.ID_AC_WORKING)
+        if (ClimateMath.powerOnBeforeWrite(quiet, power)) {
+            send(HvacID.ID_AC_WORKING, ClimateMath.POWER_ON)
+        } else if (quiet && ClimateMath.needsPowerOn(power)) {
+            android.util.Log.i(WidgetWritePolicy.LOG_TAG, "widget=Climate power=$power dock-path: no power write (OEM dock)")
+        }
     }
 
     private fun send(id: Int, raw: Int): Boolean {

@@ -57,7 +57,7 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac10_temp_driver", HV, HvacID.ID_AC_TEMPERATURE_DRIVER), PANEL_ACTIVE)),
         Entry("ClimateTempPassenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT, TEMP_VALUES,
             listOf(sig("hvac13_temp_passenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT), PANEL_ACTIVE)),
-        // Klima gücü (HVAC 18): 1 aç / 2 kapat. Sıcaklık/fan yazmadan önce otomatik 1 de buradan geçer.
+        // Klima gücü (HVAC 18): 1 aç / 2 kapat. Panel yolunda sıcaklık/fan yazmadan önce otomatik 1 de buradan geçer (dock yolunda gönderilmez).
         Entry("ClimatePower", HV, HvacID.ID_AC_WORKING, setOf(ClimateMath.POWER_ON, ClimateMath.POWER_OFF),
             listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (1..10).toSet(),
