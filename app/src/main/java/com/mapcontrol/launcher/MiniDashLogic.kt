@@ -136,7 +136,7 @@ internal object MiniNav {
 }
 
 /**
- * Pencere boyutuna göre ölçüler (dp). Hedef bir yarı: ~960 × 610 (fabrika çubuğu altta ~110 px alabilir). Daha dar ya da
+ * Pencere boyutuna göre ölçüler (dp). Hedef bir yarı: ~960 × 540 (durum çubuğu 70 px ile fabrika çubuğu 110 px arası; serbest pencere başlığı durum çubuğunun altına itilir). Daha dar ya da
  * kısa pencerede (ör. üçte bir bölme) düğmeler küçülür ama sürüşte dokunma alanı [MIN_TOUCH_DP] altına inmez.
  */
 internal data class MiniLayout(

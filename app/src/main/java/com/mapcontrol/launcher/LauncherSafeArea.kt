@@ -55,11 +55,24 @@ object LauncherSafeArea {
     @Suppress("UNUSED_PARAMETER")
     fun oemInsetPx(context: Context): Int = if (LauncherBottomBar.hidesOemBar(context)) 0 else debugOverridePx ?: 0
 
-    /** Alt güvenli alan = max(sistem gezinme çubuğu inset'i, debug OEM simülasyonu). */
-    fun bottomInsetPx(context: Context, insets: WindowInsets?): Int {
+    /**
+     * Sistem OEM çubuğunu zorla gösteriyor mu (serbest pencere/bölünmüş ekran açıkken; bkz. [BottomBarMode.oemBarForced]).
+     * Android 10'da inset görünürlüğü okunamaz: false.
+     */
+    fun oemBarForced(context: Context, insets: WindowInsets?): Boolean {
+        if (insets == null || Build.VERSION.SDK_INT < 30) return false
+        val nav = WindowInsets.Type.navigationBars()
+        return BottomBarMode.oemBarForced(LauncherBottomBar.mode(context), insets.isVisible(nav), insets.getInsets(nav).bottom)
+    }
+
+    /**
+     * Alt güvenli alan = max(sistem gezinme çubuğu inset'i, debug OEM simülasyonu). [oemBarForced] true ise (sistem OEM çubuğunu
+     * zorla açtı) Bizimki/Gizli'de de çubuğun inset'i uygulanır; içerik onun altında kalmasın.
+     */
+    fun bottomInsetPx(context: Context, insets: WindowInsets?, oemBarForced: Boolean = false): Int {
         val system = when {
             // Bizimki/Gizli: gezinme çubuğu gizli; geçici gösterim içeriği itmesin, ana ekran 720 px'in tamamını alır.
-            LauncherBottomBar.hidesOemBar(context) -> 0
+            LauncherBottomBar.hidesOemBar(context) && !oemBarForced -> 0
             insets == null -> 0
             Build.VERSION.SDK_INT >= 30 -> insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             else -> @Suppress("DEPRECATION") insets.systemWindowInsetBottom

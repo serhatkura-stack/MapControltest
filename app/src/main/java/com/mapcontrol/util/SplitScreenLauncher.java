@@ -233,6 +233,12 @@ public final class SplitScreenLauncher {
             return Result.BAD_BOUNDS;
         }
         Rect[] parts = split(usable, ratio);
+        // Serbest pencere başlığı (küçült/kapat, ~42 px) pencerenin içinde çizilir; üst kenarı kullanılabilir alanın üstüne
+        // değen yarılar başlık kadar yukarı alınır ki başlık durum çubuğunun altında kalsın ve içerik tam yarıyı alsın.
+        int caption = captionHeightPx(app);
+        for (Rect part : parts) {
+            part.top = tuckedTop(part.top, usable.top, caption);
+        }
         boolean first = launchFreeform(app, pkg1, parts[0]);
         boolean second = launchFreeform(app, pkg2, parts[1]);
         Log.d(TAG, "first=" + first + " second=" + second + " usable=" + usable);
@@ -343,6 +349,29 @@ public final class SplitScreenLauncher {
             Log.w(TAG, "recycle failed for " + packageName, e);
             return false;
         }
+    }
+
+    /**
+     * Android 11 serbest pencere başlığının yüksekliği (dp): {@code decor_caption.xml} 32 dp düğme + 2 × 5 dp kenar.
+     * Araçta (160 dpi) 42 px; ekran görüntüsünde simgeler pencere üstünden ~21 px aşağıda ortalanıyor.
+     */
+    static final int CAPTION_HEIGHT_DP = 42;
+
+    static int captionHeightPx(@NonNull Context context) {
+        return Math.round(CAPTION_HEIGHT_DP * context.getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * Saf kural (birim testlenir): üst kenarı kullanılabilir alanın üstüne ({@code usableTop}, durum çubuğunun altı)
+     * denk gelen pencere başlık kadar yukarı başlar; başlık durum çubuğunun altında kalır (durum çubuğu uygulama
+     * pencerelerinin üstünde çizilir). Üstte başlığı saklayacak kadar alan yoksa ya da yarı aşağıdaysa (üst/alt bölmede
+     * alttaki) değişmez: alttaki yarının başlığı üsttekinin içeriğini örtmesin. Pencere boyutu değiştirme kenarları aynen kalır.
+     */
+    static int tuckedTop(int partTop, int usableTop, int captionPx) {
+        if (captionPx <= 0 || partTop != usableTop || usableTop < captionPx) {
+            return partTop;
+        }
+        return partTop - captionPx;
     }
 
     /** Sistem çubukları ve kesim düşülmüş kullanılabilir alan (MyCar {@code o()}). */

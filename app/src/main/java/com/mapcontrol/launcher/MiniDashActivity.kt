@@ -34,7 +34,7 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
 import java.util.Date
 
 /**
- * Mini gösterge: bölünmüş ekranın bir yarısında (960 × ~610) açılan, boyutu değişebilen ayrı etkinlik (karar §5). Ana ekran
+ * Mini gösterge: bölünmüş ekranın bir yarısında (960 × ~540; başlık durum çubuğunun altında, bkz. [FreeformCaption]) açılan, boyutu değişebilen ayrı etkinlik (karar §5). Ana ekran
  * (launcher) kendisi bölünemediği için bu etkinlik FrostNav'ın serbest pencere bölmesinde ya da uygulama listesinden açılır.
  *
  * Yukarıdan aşağı: saat + menzil + yakıt ("Tam ekran" düğmesiyle), kısa medya (başlık/sanatçı, önceki/oynat/sonraki),
@@ -122,6 +122,8 @@ class MiniDashActivity : Activity() {
         window.setBackgroundDrawable(ColorDrawable(Sahne.GROUND))
         setContentView(build())
         LauncherStartup.attach(window.decorView)
+        // Serbest pencere başlığı görünür kaldıysa (sistem bölme sınırlarını kırptı) gizlenir; içerik yarının tamamını alır.
+        window.decorView.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> v.post { FreeformCaption.apply(this) } }
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -194,6 +196,8 @@ class MiniDashActivity : Activity() {
         super.onConfigurationChanged(newConfig)
         // Pencere boyutu değişti (serbest pencere): ölçüler yerleşim dinleyicisinde yeniden seçilir.
         root.requestLayout()
+        // DecorCaptionView yapılandırma değişince başlığı yeniden gösterebilir.
+        window.decorView.post { FreeformCaption.apply(this) }
     }
 
     /**

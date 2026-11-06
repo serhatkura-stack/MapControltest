@@ -3,6 +3,7 @@ package com.mapcontrol.launcher
 import android.app.Activity
 import android.os.Bundle
 import android.view.Gravity
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -82,6 +83,14 @@ class HomeLauncherActivity : Activity() {
     private lateinit var fixedWidgets: List<LauncherWidget>
     /** Tema değişiminde yeniden kurulan sabit parçalar (bkz. [applyThemeInPlace]). */
     private var ourBar: OurBottomBar? = null
+    /** Orta alan ile [ourBar] arasındaki boşluk; çubukla birlikte gizlenir. */
+    private var ourBarGap: View? = null
+    /**
+     * Sistem OEM çubuğunu zorla gösteriyor (FrostNav bölünmüş ekranı/serbest pencere açık): bizim çubuğumuz gizlenir, alt kenar
+     * OEM çubuğunundur; bölme bitince geri gelir. Bkz. [BottomBarMode.oemBarForced].
+     */
+    private var oemBarForced = false
+    private val applyOemBarForced = Runnable { setOemBarForced(true) }
     /** Gelen/aktif arama şeridi (üst orta, tüm içeriğin üstünde); sabit widget'larla aynı ömür. */
     private lateinit var callBanner: CallBanner
     /** Tam ekran arama sayfası (içerik FrameLayout'una eklenen örtü; karar §15). */
@@ -187,17 +196,19 @@ class HomeLauncherActivity : Activity() {
             addView(gap(context, 16, vertical = true))
             addView(sahne, weightLp(1f, vertical = true))
             if (ourBar != null) {
-                addView(gap(context, 16, vertical = true))
+                addView(gap(context, 16, vertical = true).also { ourBarGap = it })
                 addView(ourBar.view, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(OurBottomBar.heightDp(this@HomeLauncherActivity))))
             }
 
             // OEM alt çubuğu üstüne çizilir; alt çubuk ve orta alan onun üstünde kalsın. Bizimki'nde en altta
             // dar bir boşluk kalır: alttan kaydırma hareketi (OEM çubuğunu geçici çağırır) çubuğumuza takılmaz.
-            val baseBottom = dp(if (ourBar != null) OurBottomBar.BOTTOM_GAP_DP else 20)
-            setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom, LauncherSafeArea.oemInsetPx(context)))
+            // Sistem OEM çubuğunu zorla açınca (bölünmüş ekran) bizimki gizlenir ve alt pay OEM çubuğunun inset'i olur.
+            val baseBottom = { dp(if (ourBar != null && !oemBarForced) OurBottomBar.BOTTOM_GAP_DP else 20) }
+            setPadding(paddingLeft, paddingTop, paddingRight, maxOf(baseBottom(), LauncherSafeArea.oemInsetPx(context)))
             setOnApplyWindowInsetsListener { v, insets ->
-                val bottom = maxOf(baseBottom, LauncherSafeArea.bottomInsetPx(context, insets))
+                onOemBarForced(LauncherSafeArea.oemBarForced(context, insets))
+                val bottom = maxOf(baseBottom(), LauncherSafeArea.bottomInsetPx(context, insets, oemBarForced))
                 if (v.paddingBottom != bottom) v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottom)
                 insets
             }
@@ -338,6 +349,7 @@ class HomeLauncherActivity : Activity() {
             if (started) old.onHidden()
             old.release()
             ourBar = fresh
+            if (oemBarForced) fresh.view.visibility = View.GONE
             if (started) showWidget(fresh)
         }
         mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
@@ -1043,6 +1055,28 @@ class HomeLauncherActivity : Activity() {
         if (LauncherEdition.HAS_SETTINGS) LauncherEdition.openSettings(this) else settings.show()
     }
 
+    /**
+     * Inset dinleyicisinden: sistem OEM çubuğunu zorla gösteriyor mu. Gizleme kısa bir bekleme sonra uygulanır (açılışta gizleme
+     * isteği işlenene dek çubuk bir an görünür bildirilebilir, çubuğumuz titremesin); geri gelme hemen.
+     */
+    private fun onOemBarForced(forced: Boolean) {
+        val root = rootLayout ?: return
+        root.removeCallbacks(applyOemBarForced)
+        if (forced == oemBarForced) return
+        if (forced) root.postDelayed(applyOemBarForced, OEM_BAR_SETTLE_MS) else setOemBarForced(false)
+    }
+
+    private fun setOemBarForced(forced: Boolean) {
+        if (oemBarForced == forced) return
+        oemBarForced = forced
+        val visibility = if (forced) View.GONE else View.VISIBLE
+        ourBar?.view?.visibility = visibility
+        ourBarGap?.visibility = visibility
+        Log.i(TAG, "OEM çubuğu sistemce zorlandı=$forced (bizim çubuk ${if (forced) "gizli" else "görünür"})")
+        // Alt pay yeni duruma göre yeniden hesaplansın.
+        rootLayout?.requestApplyInsets()
+    }
+
     private fun hideSystemBars() {
         // minSdk 29: WindowInsetsController API 30'da geldi; Android 10'da (ya da denetleyici yoksa) eski bayrak yolu.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && hideSystemBarsR()) return
@@ -1093,5 +1127,8 @@ class HomeLauncherActivity : Activity() {
         /** OEM arama ekranı açıldıktan sonra launcher'ın öne alınma gecikmesi. */
         const val BRING_TO_FRONT_DELAY_MS = 700L
         const val CALL_TAG = "PhoneUi"
+        /** Sistem OEM çubuğunu zorla açtı bilgisinin kalıcı sayılması için bekleme (açılıştaki geçici durumu eler). */
+        const val OEM_BAR_SETTLE_MS = 300L
+        const val TAG = "HomeLauncher"
     }
 }

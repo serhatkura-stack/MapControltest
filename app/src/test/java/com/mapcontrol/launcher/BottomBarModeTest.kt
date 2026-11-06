@@ -56,4 +56,16 @@ class BottomBarModeTest {
         assertEquals(3, OurBottomBar.decodeFan(3))
         assertNull(OurBottomBar.decodeFan(200))
     }
+
+    @Test fun oemBarForcedOnlyWhenHiddenModeAndSystemShowsIt() {
+        // Bölünmüş ekran: Bizimki/Gizli'de gizlediğimiz OEM çubuğu sistemce görünür (110 px) → bizimki çizilmez.
+        assertTrue(BottomBarMode.oemBarForced(BottomBarMode.OURS, navBarVisible = true, navBarBottomPx = 110))
+        assertTrue(BottomBarMode.oemBarForced(BottomBarMode.HIDDEN, navBarVisible = true, navBarBottomPx = 110))
+        // Normal: gizli kaldı.
+        assertFalse(BottomBarMode.oemBarForced(BottomBarMode.OURS, navBarVisible = false, navBarBottomPx = 110))
+        // Görünür ama yer kaplamıyor.
+        assertFalse(BottomBarMode.oemBarForced(BottomBarMode.OURS, navBarVisible = true, navBarBottomPx = 0))
+        // Orijinal'de OEM çubuğu zaten görünür; zorlama sayılmaz (emülatörde bizim çubuk kalır).
+        assertFalse(BottomBarMode.oemBarForced(BottomBarMode.ORIGINAL, navBarVisible = true, navBarBottomPx = 110))
+    }
 }

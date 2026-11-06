@@ -12,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.service.notification.NotificationListenerService;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
@@ -89,6 +90,8 @@ public final class LauncherMediaController {
 
     private static final String PREFS = "launcher_media";
     private static final String KEY_LAST_SOURCE = "last_source";
+    /** Süreç başına bir kez: izin açık ama dinleyici bağlı değilse sistemden yeniden bağlama istenir. */
+    private static volatile boolean rebindRequested;
 
     @Nullable
     private String lastSource;
@@ -200,6 +203,7 @@ public final class LauncherMediaController {
         }
         started = true;
         LauncherMediaNotificationListener.addListener(notificationListener);
+        requestListenerRebindOnce();
         sessionManager = (MediaSessionManager) appContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         registerSessionsListener();
         refreshActiveController();
@@ -374,6 +378,24 @@ public final class LauncherMediaController {
             Intent fallback = new Intent(Settings.ACTION_SETTINGS);
             fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             appContext.startActivity(fallback);
+        }
+    }
+
+    /**
+     * İzin kurulum betiğiyle ({@code cmd notification allow_listener com.mapcontrol/com.mapcontrol.media.LauncherMediaNotificationListener})
+     * verildikten sonra dinleyici, uygulama güncellemesi ya da süreç ölümü sonrası bağsız kalabilir; sistemden yeniden bağlanması
+     * istenir (zaten bağlıysa etkisizdir). Bağlanınca {@code onListenerConnected} kartları tazeler.
+     */
+    private void requestListenerRebindOnce() {
+        if (rebindRequested || !isNotificationAccessGranted()) {
+            return;
+        }
+        rebindRequested = true;
+        try {
+            NotificationListenerService.requestRebind(
+                    new ComponentName(appContext, LauncherMediaNotificationListener.class));
+        } catch (RuntimeException ignored) {
+            // izin yok / sistem reddetti: kart "izin gerekli" durumunda kalır
         }
     }
 
