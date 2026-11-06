@@ -12,7 +12,7 @@
     <string name="launcher_phone_permission">Contacts access is needed</string>
     <string name="launcher_phone_grant">Allow</string>
     <string name="launcher_phone_loading">Loading contacts…</string>
-    <string name="launcher_phone_empty">No contacts or calls yet</string>
+    <string name="launcher_phone_empty">No recent calls or favorites</string>
     <string name="launcher_phone_empty_sub">Allow contact sharing on your phone</string>
     <string name="launcher_phone_favorites">Favorites</string>
     <string name="launcher_phone_recents">Recent calls</string>
@@ -30,10 +30,12 @@
     <string name="launcher_call_failed">Couldn\'t complete the call action</string>
     <string name="launcher_call_no_phone">No phone connected</string>
     <string name="launcher_call_not_supported">Not supported on this car</string>
-    <string name="launcher_phone_voice_key">Voice key long press: phone assistant</string>
-    <string name="launcher_phone_voice_key_hint">Short press opens the car\'s own voice control.</string>
+    <string name="launcher_phone_voice_key">Long-press voice key opens phone assistant</string>
+    <string name="launcher_phone_voice_key_hint">Short press opens the car\'s own voice control. Touching and holding the phone button in the bottom bar also opens the phone assistant.</string>
     <string name="launcher_time_yesterday">Yesterday</string>
     <string name="launcher_time_minutes">%d min</string>
     <string name="launcher_time_hours">%d h</string>
-    <string name="launcher_time_now">now</string>
+    <string name="launcher_time_now">Now</string>
+    <string name="launcher_phone_permission_settings_sub">Turn it on in Settings &gt; Apps &gt; permissions</string>
+    <string name="launcher_phone_open_settings">Open settings</string>
 </resources>

@@ -112,6 +112,35 @@ class PhoneLogicTest {
         assertEquals("0555 000 00 02", b.number)
     }
 
+    @Test fun nextCallAfterEndedUnknownCallerIsFresh() {
+        val ended = CallState(CallKind.ENDED, "Ayşe", "0555 000 00 01")
+        val hidden = PhoneStateMap.nextCall(ended, CallKind.INCOMING, null, null, 0)
+        assertNull(hidden.name)
+        assertNull(hidden.number)
+        val other = PhoneStateMap.nextCall(ended, CallKind.INCOMING, null, "0555 000 00 09", 0)
+        assertNull(other.name)
+        assertEquals("0555 000 00 09", other.number)
+    }
+
+    @Test fun nextCallWaitingCallIsFreshAndKeepsTimer() {
+        val active = CallState(CallKind.ACTIVE, "Ayşe", "0555 000 00 01", startedAtMs = 5_000)
+        val waiting = PhoneStateMap.nextCall(active, CallKind.INCOMING, null, null, 20_000)
+        assertNull(waiting.name)
+        assertNull(waiting.number)
+        // Bekleyen reddedildi: konuşmaya dönüş, sayaç sürer.
+        val back = PhoneStateMap.nextCall(waiting, CallKind.ACTIVE, "Ayşe", "0555 000 00 01", 30_000)
+        assertEquals(5_000L, back.startedAtMs)
+        assertEquals("Ayşe", back.name)
+    }
+
+    @Test fun nextCallSameCallDifferentNumberIsNotMerged() {
+        val incoming = CallState(CallKind.INCOMING, "Ayşe", "0555 000 00 01")
+        val active = PhoneStateMap.nextCall(incoming, CallKind.ACTIVE, null, "+90 555 000 00 01", 1_000)
+        assertEquals("Ayşe", active.name)
+        val other = PhoneStateMap.nextCall(incoming, CallKind.ACTIVE, null, "0555 000 00 07", 1_000)
+        assertNull(other.name)
+    }
+
     // ---- numara ----
 
     @Test fun normalizeNumberVariantsMatch() {
@@ -130,6 +159,9 @@ class PhoneLogicTest {
         assertEquals(1_762_353_000_000L, PhoneStateMap.parseVdDateTime("2025-11-05 14:30:00", utc))
         assertEquals(1_762_353_000_000L, PhoneStateMap.parseVdDateTime("1762353000000", utc))
         assertEquals(1_762_353_000_000L, PhoneStateMap.parseVdDateTime("1762353000", utc))
+        assertEquals(1_762_353_000_000L, PhoneStateMap.parseVdDateTime("20251105143000", utc))
+        assertEquals(1_762_300_800_000L, PhoneStateMap.parseVdDateTime("20251105", utc))
+        assertNull(PhoneStateMap.parseVdDateTime("20251399999999", utc))
         assertNull(PhoneStateMap.parseVdDateTime("dün", utc))
         assertNull(PhoneStateMap.parseVdDateTime(null, utc))
     }

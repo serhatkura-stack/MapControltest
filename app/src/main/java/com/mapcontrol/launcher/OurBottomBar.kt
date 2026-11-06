@@ -151,7 +151,10 @@ class OurBottomBar(
 
     /** Telefon düğmesine uzun basış: bağlı telefonun sesli asistanı (Siri / Google); yol yoksa kısa uyarı (OEM uygulaması açılmaz). */
     private fun startPhoneAssistant() {
-        if (!PhoneSource.startVoiceAssistant()) PhoneToast.show(context, R.string.launcher_phone_assistant_failed)
+        if (PhoneSource.startVoiceAssistant()) return
+        // Neden (bağlı telefon yok vb.) dinleyen panel/şerit varsa onPhoneError ile zaten gösterilir; yoksa tek genel
+        // uyarı. Hata bildirimi ana kuyruğa önce girdiği için sonrasında bakılır.
+        view.post { if (!PhoneToast.shownWithin(ERROR_TOAST_WINDOW_MS)) PhoneToast.show(context, R.string.launcher_phone_assistant_failed) }
     }
 
     // --- Spor modu ---
@@ -380,6 +383,7 @@ class OurBottomBar(
 
         private const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
         private const val PHONE_PACKAGE = "com.desaysv.bluetooth.phone"
+        private const val ERROR_TOAST_WINDOW_MS = 500L
         private const val POLL_MS = 3_000L
         private const val DASH = "—"
 

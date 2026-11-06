@@ -87,15 +87,31 @@ internal object PhoneStateMap {
     }
 
     /**
-     * Yeni arama durumu: ACTIVE'e ilk girişte sayaç başlar ([nowElapsed]), ACTIVE sürerken korunur, diğerlerinde 0.
-     * Sessiz yalnızca görüşme sürerken korunur. Aynı görüşmede yeni isim/numara gelmezse öncekiler korunur.
+     * Yeni arama durumu: ACTIVE'e ilk girişte sayaç başlar ([nowElapsed]), ACTIVE sürerken korunur. Konuşma sırasında
+     * bekleyen arama gelirse (ACTIVE → INCOMING) sayaç başlangıcı saklanır; bekleyen reddedilip konuşmaya dönülünce
+     * sayaç 0:00'dan başlamaz. Diğer durumlarda 0. Sessiz yalnızca görüşme sürerken korunur.
+     *
+     * İsim/numara yalnızca AYNI görüşmede eksik gelirse öncekinden alınır: önceki durum gelen/aranıyor/konuşma ve
+     * görüşme ileri gidiyor (gelen/aranıyor → konuşma, herhangi biri → bitti, aynı durum) ve yeni numara yok ya da
+     * öncekiyle aynı. "Bitti" sonrası gelen yeni arama ve konuşma sırasında bekleyen arama yeni görüşmedir: gizli
+     * numaralı arayan önceki kişinin adıyla gösterilmez.
      */
     fun nextCall(prev: CallState, kind: CallKind, name: String?, number: String?, nowElapsed: Long): CallState {
-        val sameCall = prev.kind != CallKind.NONE && kind != CallKind.NONE
+        val forward = when (prev.kind) {
+            CallKind.INCOMING -> kind == CallKind.INCOMING || kind == CallKind.ACTIVE || kind == CallKind.ENDED
+            CallKind.DIALING -> kind == CallKind.DIALING || kind == CallKind.ACTIVE || kind == CallKind.ENDED
+            CallKind.ACTIVE -> kind == CallKind.ACTIVE || kind == CallKind.ENDED
+            else -> false
+        }
+        val sameNumber = number == null || prev.number == null ||
+            FavoritesRanker.normalizeNumber(number) == FavoritesRanker.normalizeNumber(prev.number)
+        val sameCall = forward && sameNumber
         val started = when {
-            kind != CallKind.ACTIVE -> 0L
-            prev.kind == CallKind.ACTIVE && prev.startedAtMs != 0L -> prev.startedAtMs
-            else -> nowElapsed
+            kind == CallKind.ACTIVE && (prev.kind == CallKind.ACTIVE || prev.kind == CallKind.INCOMING) && prev.startedAtMs != 0L -> prev.startedAtMs
+            kind == CallKind.ACTIVE -> nowElapsed
+            kind == CallKind.INCOMING && prev.kind == CallKind.ACTIVE -> prev.startedAtMs
+            kind == CallKind.INCOMING && prev.kind == CallKind.INCOMING -> prev.startedAtMs
+            else -> 0L
         }
         val inCall = kind == CallKind.INCOMING || kind == CallKind.DIALING || kind == CallKind.ACTIVE
         return CallState(
@@ -108,15 +124,20 @@ internal object PhoneStateMap {
     }
 
     private val VD_FORMATS = listOf("yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss")
+    /** Yalnız rakamdan oluşan sıkışık tarihler (Desay/PBAP): 14 hane tarih-saat, 8 hane yalnız tarih. */
+    private val COMPACT_FORMATS = mapOf(14 to "yyyyMMddHHmmss", 8 to "yyyyMMdd")
 
     /**
-     * VDBTRecord tarih metni → duvar saati ms. Biçim araçta doğrulanmadı: sayıysa ms (ya da sn), değilse PBAP
-     * "20261105T143000" ve yaygın tarih biçimleri denenir. Çözülemezse null.
+     * VDBTRecord tarih metni → duvar saati ms. Biçim araçta doğrulanmadı: 14/8 haneli sıkışık tarih ("20261105143000",
+     * "20261105"), 9–13 haneli sayıysa ms (ya da sn), değilse PBAP "20261105T143000" ve yaygın tarih biçimleri
+     * denenir. Çözülemezse null.
      */
     fun parseVdDateTime(raw: String?, zone: TimeZone = TimeZone.getDefault()): Long? {
         val s = raw?.trim()?.removeSuffix("Z").orEmpty()
         if (s.isEmpty()) return null
-        if (s.all { it.isDigit() } && s.length in 9..13) {
+        val digits = s.all { it.isDigit() }
+        if (digits) COMPACT_FORMATS[s.length]?.let { f -> return parseWith(f, s, zone) }
+        if (digits && s.length in 9..13) {
             val v = s.toLongOrNull() ?: return null
             return if (s.length >= 12) v else v * 1000L
         }
@@ -129,6 +150,12 @@ internal object PhoneStateMap {
             }
         }
         return null
+    }
+
+    private fun parseWith(format: String, s: String, zone: TimeZone): Long? = try {
+        SimpleDateFormat(format, Locale.US).apply { timeZone = zone; isLenient = false }.parse(s)?.time
+    } catch (e: ParseException) {
+        null
     }
 }
 

@@ -144,7 +144,7 @@ class HomeLauncherActivity : Activity() {
         // bizim çubuğa düşer. "Gizli"de çubuk yok.
         ourBar = if (BottomBarMode.drawsOurBar(LauncherBottomBar.mode(this), oemBar)) OurBottomBar(this, onPhoneTap = ::onPhoneButton) else null
         val ourBar = this.ourBar
-        callBanner = CallBanner(this)
+        callBanner = CallBanner(this, onIncoming = ::onIncomingCall)
         fixedWidgets = listOfNotNull(header, ourBar, callBanner)
         editBar = buildEditBar()
         sahne = newSahneScreen()
@@ -811,10 +811,22 @@ class HomeLauncherActivity : Activity() {
         val s = PhoneSource.snapshot()
         val panelOnScreen = ::sahne.isInitialized && !sahne.sportShown && sahne.hasPanel(WidgetType.PHONE)
         when (PhoneUiLogic.phoneButtonAction(panelOnScreen, s.connected, s.canDial || LauncherDemo.enabled)) {
-            PhoneUiLogic.PhoneButtonAction.NONE -> Unit
+            // Panel zaten ekranda: dokunuş boşa gitmiş gibi görünmesin (titreşim + panel kısa bir nabız atar).
+            PhoneUiLogic.PhoneButtonAction.NONE -> {
+                window.decorView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                sahne.flashPanel(WidgetType.PHONE)
+            }
             PhoneUiLogic.PhoneButtonAction.OEM_APP -> openOemPhoneApp(this)
             PhoneUiLogic.PhoneButtonAction.SHEET -> openPhoneSheet()
         }
+    }
+
+    /** Gelen arama şeridi göründü: üstteki sayfa ve Wi-Fi/Bluetooth panelleri kapanır (Cevapla/Reddet örtülmesin). */
+    private fun onIncomingCall() {
+        sheet?.dismiss()
+        sheet = null
+        wifiPanel?.dismiss()
+        bluetoothPanel?.dismiss()
     }
 
     /** Telefon sayfası: Sahne paneliyle aynı görünüm; arama başlayınca kapanır, kapanınca panel bırakılır. */

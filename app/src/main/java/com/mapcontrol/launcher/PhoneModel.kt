@@ -56,7 +56,7 @@ enum class CallKind { NONE, INCOMING, DIALING, ACTIVE, ENDED }
 
 /**
  * Şu anki arama. [startedAtMs] arama ACTIVE olduğu andaki SystemClock.elapsedRealtime() (sayaç bundan hesaplanır;
- * ACTIVE değilse 0). [muted]: mikrofon kapalı. ENDED kısa süre (arka uç ~2 sn) gösterilip NONE'a döner.
+ * ACTIVE değilse 0; konuşma sırasında bekleyen arama gelince alttaki konuşmanınki saklanır). [muted]: mikrofon kapalı. ENDED kısa süre (arka uç ~2 sn) gösterilip NONE'a döner.
  */
 data class CallState(
     val kind: CallKind = CallKind.NONE,
@@ -91,6 +91,7 @@ object PhoneBackendName {
  * - [deviceName]: bağlı telefonun adı (yoksa null).
  * - [backend]: arama/durum için seçilen arka uç ([PhoneBackendName]); veri arka ucu [dataBackend].
  * - [permissionNeeded]: rehber/geçmiş için izin eksik ve başka veri yolu da yok (UI "İzin ver" düğmesi gösterir).
+ * - [permissionBlocked]: izin reddedildi ve sistem yeniden sormuyor (UI "Ayarları aç" gösterir).
  * - [loaded]: veri en az bir kez okundu (false iken UI "yükleniyor"/boş durum ayırt eder).
  * - [canDial]: arama başlatabilen bir yol var (yoksa UI telefon düğmesinde OEM uygulamasını açar).
  * - [canAssistant]: sesli asistan yolu var. [canMute]: mikrofon kapatma yolu var (yoksa "Sessiz" gizlenir).
@@ -101,6 +102,8 @@ data class PhoneSnapshot(
     val backend: String = PhoneBackendName.NONE,
     val dataBackend: String = PhoneBackendName.NONE,
     val permissionNeeded: Boolean = false,
+    /** İzin istendi, verilmedi ve sistem artık sormuyor: UI uygulama ayarlarını açmayı önerir. */
+    val permissionBlocked: Boolean = false,
     val loaded: Boolean = false,
     val canDial: Boolean = false,
     val canAssistant: Boolean = false,
@@ -150,12 +153,19 @@ object PhoneSource {
     private const val VDBUS_WAIT_MS = 3_000L
     private const val ASSISTANT_IDLE_CLOSE_MS = 10_000L
     private const val MAX_FAVORITES = 6
+    /** Bir veri sahibi geri geldiğinde bu süreden eski veri yeniden okunur (gözlemci yokken kaçan değişiklikler için). */
+    private const val DATA_STALE_MS = 120_000L
+    /** VDBus isteği ateşle-unut: bu süre içinde arama durumu beklenen yöne gitmezse sıradaki yol bir kez denenir. */
+    private const val CONFIRM_MS = 1_500L
+    private const val CONFIRM_DIAL_MS = 2_500L
 
     private val io = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
 
     // Yalnızca ana iş parçacığında.
     private val owners = ArrayList<WeakReference<Any>>()
+    /** Rehber/geçmiş isteyen sahipler ([start] wantsData). */
+    private val dataOwners = ArrayList<WeakReference<Any>>()
     private val listeners = ArrayList<PhoneListener>()
     private var receiverRegistered = false
     private var observerRegistered = false
@@ -164,6 +174,10 @@ object PhoneSource {
     @Volatile private var started = false
     @Volatile private var appContext: Context? = null
     @Volatile private var caps = PhoneBackendChooser.Caps()
+    /** En az bir sahip rehber/geçmiş istiyor (yoksa veri okunmaz). */
+    @Volatile private var wantData = false
+    /** Sahip kalmadı ama sessizdeki görüşme bitene kadar durum kaynağı açık (bkz. [stop]). */
+    @Volatile private var lingering = false
 
     // Arka uçlar (ilk kullanımda kurulur; durumları yalnızca io kuyruğunda değişir).
     private val demo = DemoBackend()
@@ -177,6 +191,9 @@ object PhoneSource {
     // Yalnızca io kuyruğunda.
     private var stateSource: CallBackend? = null
     private var lastDataBackend: String? = null
+    private var lastReadAt = 0L
+    /** Son okunan veri (yalnızca bellekte; sabitleme değişince yeniden sıralamak için). Diske yazılmaz. */
+    private var lastData: PhoneData? = null
     private var mutedByMic = false
     /** Bellekte: numara → isim (HFP durumunda isim yok; ekranda göstermek için). Diske yazılmaz. */
     private var nameByNumber: Map<String, String> = emptyMap()
@@ -198,7 +215,7 @@ object PhoneSource {
             reprobe()
         }
     }
-    private val idleClose = Runnable { if (!started) HfpLink.close() }
+    private val idleClose = Runnable { if (!started && !lingering) HfpLink.close() }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, intent: Intent?) {
@@ -244,62 +261,100 @@ object PhoneSource {
         else -> null
     }
 
-    /** Görünür sahip ekler; ilk sahipte arka uçlar seçilir ve okuma başlar. [owner] genelde Activity ya da panel. */
-    fun start(context: Context, owner: Any = context) {
+    /**
+     * Görünür sahip ekler; ilk sahipte arka uçlar seçilir. [owner] genelde Activity ya da panel. [wantsData]: rehber ve
+     * geçmiş de gerekir (Telefon paneli/sayfası). Yalnız arama durumu isteyen sahipler (arama şeridi) false verir: o
+     * zaman veri okunmaz, içerik gözlemcisi kurulmaz. Veri bellekte tutulur; yeni bir veri sahibi geldiğinde yalnızca
+     * hiç okunmadıysa, arka uç değiştiyse ya da [DATA_STALE_MS]'den eskiyse yeniden okunur.
+     */
+    fun start(context: Context, owner: Any = context, wantsData: Boolean = true) {
         val app = context.applicationContext
         appContext = app
         owners.removeAll { it.get() == null }
-        if (owners.any { it.get() === owner }) return
-        owners.add(WeakReference(owner))
-        if (started) return
-        started = true
-        ensureBackends(app)
-        main.removeCallbacks(idleClose)
-        val vd = vdbus!!
-        if (vd.bus == null) vd.prepare(app)
-        registerReceiver(app)
-        registerObservers(app)
-        HfpLink.onProxyChanged = { io.execute { if (started) reprobe() } }
-        HfpLink.open(app)
-        io.execute {
-            if (!started) return@execute
-            vd.connect()
-            reprobe()
-            applyDemoCall()
+        dataOwners.removeAll { it.get() == null }
+        if (owners.none { it.get() === owner }) owners.add(WeakReference(owner))
+        if (wantsData && dataOwners.none { it.get() === owner }) dataOwners.add(WeakReference(owner))
+        val firstStart = !started
+        if (firstStart) {
+            started = true
+            ensureBackends(app)
+            main.removeCallbacks(idleClose)
+            val vd = vdbus!!
+            if (vd.bus == null) vd.prepare(app)
+            registerReceiver(app)
+            HfpLink.onProxyChanged = { io.execute { if (started) reprobe() } }
+            HfpLink.open(app)
+            io.execute {
+                if (!started) return@execute
+                // Arka planda sessizde kalmış bir görüşme izleniyorduysa (bkz. [stop]) artık normal sahiplik sürer.
+                lingering = false
+                vd.connect()
+                reprobe()
+                applyDemoCall()
+                // Sessiz açıkken görüşme biz yokken bittiyse: ilk durum okuması görüşme göstermiyorsa mikrofon açılır.
+                if (!snap.call.inCall) unmuteIfNeeded()
+            }
+            main.postDelayed(vdbusCheck, VDBUS_WAIT_MS)
         }
-        main.postDelayed(vdbusCheck, VDBUS_WAIT_MS)
+        if (dataOwners.isNotEmpty() && !wantData) {
+            wantData = true
+            registerObservers(app)
+            io.execute {
+                if (!started || !wantData) return@execute
+                val stale = lastReadAt == 0L || SystemClock.elapsedRealtime() - lastReadAt > DATA_STALE_MS
+                if (stale || PhoneBackendChooser.dataBackend(caps) != lastDataBackend) readData()
+            }
+        }
     }
 
-    /** Sahibi çıkarır; sahip kalmazsa dinleme/okuma durur. */
+    /**
+     * Sahibi çıkarır; sahip kalmazsa dinleme/okuma durur. Sessiz açıkken görüşme sürüyorsa yalnızca arama durumu
+     * kaynağı açık kalır ([lingering]): görüşme bitince mikrofon açılır ve kaynak kapanır (kullanıcı sessiz sanırken
+     * mikrofon kendiliğinden açılmasın, görüşme bitince de kapalı kalmasın).
+     */
     fun stop(owner: Any) {
         owners.removeAll { it.get() == null || it.get() === owner }
+        dataOwners.removeAll { it.get() == null || it.get() === owner }
+        val app = appContext
+        if (dataOwners.isEmpty() && wantData) {
+            wantData = false
+            if (app != null) unregisterObservers(app)
+        }
         if (owners.isNotEmpty() || !started) return
         started = false
         main.removeCallbacks(vdbusCheck)
         main.removeCallbacks(rereadTask)
         main.removeCallbacks(reprobeTask)
         main.removeCallbacks(endedTask)
-        val app = appContext
-        if (app != null) {
-            unregisterReceiver(app)
-            unregisterObservers(app)
-        }
+        if (app != null) unregisterReceiver(app)
         HfpLink.onProxyChanged = null
-        // Asistan az önce kullanıldıysa vekil biraz daha açık kalır.
-        main.removeCallbacks(idleClose)
-        main.postDelayed(idleClose, if (assistantRecently()) ASSISTANT_IDLE_CLOSE_MS else 0L)
         io.execute {
             if (started) return@execute
-            stateSource?.close()
-            stateSource = null
-            vdbus?.disconnect()
-            unmuteIfNeeded()
-            caps = PhoneBackendChooser.Caps()
-            lastDataBackend = null
-            // Son veri bellekte kalır (diske yazılmaz); arama durumu sıfırlanır.
-            update { it.copy(call = CallState.IDLE) }
-            Log.i(TAG, "durdu")
+            if (mutedByMic && snap.call.inCall && stateSource != null) {
+                lingering = true
+                Log.i(TAG, "durdu; sessiz görüşme bitene kadar durum izleniyor")
+                return@execute
+            }
+            teardown()
         }
+    }
+
+    /** io: durum kaynağını ve VDBus aboneliğini bırakır. Son veri bellekte kalır (diske yazılmaz). */
+    private fun teardown() {
+        lingering = false
+        stateSource?.close()
+        stateSource = null
+        vdbus?.disconnect()
+        unmuteIfNeeded()
+        caps = PhoneBackendChooser.Caps()
+        update { it.copy(call = CallState.IDLE) }
+        // Asistan az önce kullanıldıysa HFP vekili biraz daha açık kalır.
+        main.post {
+            if (started) return@post
+            main.removeCallbacks(idleClose)
+            main.postDelayed(idleClose, if (assistantRecently()) ASSISTANT_IDLE_CLOSE_MS else 0L)
+        }
+        Log.i(TAG, "durdu")
     }
 
     fun snapshot(): PhoneSnapshot = snap
@@ -319,23 +374,26 @@ object PhoneSource {
     fun dial(number: String): Boolean {
         val n = number.filterNot { it.isWhitespace() }
         if (n.isEmpty()) return false
-        return act(PhoneAction.DIAL) { it.dial(n) }
+        // Herhangi bir arama durumu (aranıyor/konuşma) isteğin alındığını gösterir.
+        return act(PhoneAction.DIAL, { it.kind != CallKind.NONE && it.kind != CallKind.ENDED }) { it.dial(n) }
     }
 
     /** Gelen aramayı cevaplar. */
-    fun answer(): Boolean = act(PhoneAction.ANSWER) { it.answer() }
+    fun answer(): Boolean = act(PhoneAction.ANSWER, { it.kind != CallKind.INCOMING }) { it.answer() }
 
     /** Gelen aramayı reddeder. */
-    fun reject(): Boolean = act(PhoneAction.REJECT) { it.reject() }
+    fun reject(): Boolean = act(PhoneAction.REJECT, { !it.inCall }) { it.reject() }
 
     /** Aktif/çıkan aramayı kapatır. */
-    fun hangUp(): Boolean = act(PhoneAction.HANG_UP) { it.hangUp() }
+    fun hangUp(): Boolean = act(PhoneAction.HANG_UP, { !it.inCall }) { it.hangUp() }
 
     /**
      * Ortak eylem yolu: bağlı telefon yoksa NO_PHONE, yol yoksa NOT_SUPPORTED (false). Varsa io'da sırayla denenir;
-     * ilki başarısızsa bir sonraki bir kez; hepsi başarısızsa FAILED.
+     * ilki başarısızsa bir sonraki bir kez; hepsi başarısızsa FAILED. VDBus isteği ateşle-unut olduğu için kabul
+     * edilmesi yetmez: [done] arama durumunda kısa süre içinde görülmezse sıradaki yol bir kez denenir (durum kaynağı
+     * varsa; yoksa doğrulanamaz).
      */
-    private fun act(action: PhoneAction, op: (CallBackend) -> Boolean): Boolean {
+    private fun act(action: PhoneAction, done: (CallState) -> Boolean, op: (CallBackend) -> Boolean): Boolean {
         if (!snap.connected) {
             fail(PhoneError.NO_PHONE)
             return false
@@ -346,25 +404,42 @@ object PhoneSource {
             return false
         }
         val label = action.name.lowercase()
-        io.execute {
-            for ((i, name) in order.withIndex()) {
-                val ok = try {
-                    callBackendFor(name)?.let(op) == true
-                } catch (t: Throwable) {
-                    Log.w(TAG, "$label: $name ${t.javaClass.simpleName}")
-                    false
-                }
-                if (ok) {
-                    Log.i(TAG, "$label: $name")
-                    return@execute
-                }
-                val next = order.getOrNull(i + 1)
-                if (next != null) Log.i(TAG, "$label: $name başarısız, $next deneniyor")
-            }
-            Log.i(TAG, "$label: başarısız")
-            fail(PhoneError.FAILED)
-        }
+        io.execute { runFrom(order, 0, label, action, done, op) }
         return true
+    }
+
+    /** io: [order]'ı [from] sırasından dener; doğrulanması gereken bir yol kabul ederse sonucu sonra denetler. */
+    private fun runFrom(
+        order: List<String>, from: Int, label: String, action: PhoneAction,
+        done: (CallState) -> Boolean, op: (CallBackend) -> Boolean,
+    ) {
+        for (i in from until order.size) {
+            val name = order[i]
+            val ok = try {
+                callBackendFor(name)?.let(op) == true
+            } catch (t: Throwable) {
+                Log.w(TAG, "$label: $name ${t.javaClass.simpleName}")
+                false
+            }
+            if (ok) {
+                Log.i(TAG, "$label: $name")
+                val next = i + 1
+                if (name == PhoneBackendName.VDBUS && next < order.size && stateSource != null) {
+                    val wait = if (action == PhoneAction.DIAL) CONFIRM_DIAL_MS else CONFIRM_MS
+                    main.postDelayed({
+                        io.execute {
+                            if (!started || done(snap.call)) return@execute
+                            Log.i(TAG, "$label: $name yanıt vermedi, ${order[next]} deneniyor")
+                            runFrom(order, next, label, action, done, op)
+                        }
+                    }, wait)
+                }
+                return
+            }
+            order.getOrNull(i + 1)?.let { Log.i(TAG, "$label: $name başarısız, $it deneniyor") }
+        }
+        Log.i(TAG, "$label: başarısız")
+        fail(PhoneError.FAILED)
     }
 
     /** Mikrofonu kapatır/açar ([CallState.muted] değişir). */
@@ -453,17 +528,36 @@ object PhoneSource {
         }
     }
 
-    /** İzin sonucu geldi: veri yeniden okunur. */
+    /**
+     * İzin sonucu geldi: veri yeniden okunur. Rehber izni hâlâ yoksa ve sistem artık sormuyorsa ("Bir daha sorma" ya da
+     * araçta pencere yok) [permissionBlocked] olur; UI uygulama ayarlarını açmayı önerir.
+     */
     fun onPermissionsResult(context: Context) {
         val app = context.applicationContext
         appContext = app
+        val denied = app.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        val blocked = denied && (context as? Activity)?.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS) != true
+        io.execute { update { it.copy(permissionBlocked = blocked) } }
         if (!started) return
-        unregisterObservers(app)
-        registerObservers(app)
+        if (wantData) {
+            unregisterObservers(app)
+            registerObservers(app)
+        }
         io.execute {
             if (!started) return@execute
             reprobe()
             readData()
+        }
+    }
+
+    /** Sabitlenen kişiler değişti: bellekteki veri yeniden sıralanır (okuma yok; veri yoksa bir kez okunur). */
+    fun reloadFavorites() {
+        io.execute {
+            if (!started || !wantData) return@execute
+            val app = appContext ?: return@execute
+            val data = lastData ?: return@execute readData()
+            val favorites = FavoritesRanker.rank(data.contacts, data.recents, PhonePrefs.pinnedIds(app), MAX_FAVORITES, System.currentTimeMillis())
+            update { it.copy(favorites = favorites) }
         }
     }
 
@@ -543,17 +637,21 @@ object PhoneSource {
                 canMute = canMute,
             )
         }
-        if (data != lastDataBackend) readData()
+        if (wantData && data != lastDataBackend) readData()
     }
 
     /** Veri arka ucundan bir kez okur; favorileri sıralar, son aramaları biçimler. */
     private fun readData() {
+        // Yalnız arama şeridi görünürken rehber/geçmiş okunmaz.
+        if (!wantData) return
         val app = appContext ?: return
         val name = PhoneBackendChooser.dataBackend(caps)
         lastDataBackend = name
+        lastReadAt = SystemClock.elapsedRealtime()
         val backend = dataBackendFor(name)
         if (backend == null) {
             nameByNumber = emptyMap()
+            lastData = null
             update { it.copy(loaded = false, favorites = emptyList(), recents = emptyList()) }
             return
         }
@@ -572,6 +670,7 @@ object PhoneSource {
         for (c in data.contacts) names.putIfAbsent(FavoritesRanker.normalizeNumber(c.number), c.name)
         for (r in data.recents) r.name?.let { names.putIfAbsent(FavoritesRanker.normalizeNumber(r.number), it) }
         nameByNumber = names
+        lastData = data
         val favorites = FavoritesRanker.rank(data.contacts, data.recents, pinned, MAX_FAVORITES, System.currentTimeMillis())
         val recents = RecentsShaper.shape(data.recents, 5)
         Log.d(TAG, "veri: $name kişi=${data.contacts.size} geçmiş=${data.recents.size} favori=${favorites.size}")
@@ -584,12 +683,17 @@ object PhoneSource {
     }
 
     private fun applyState(raw: CallKind, name: String?, number: String?) {
-        if (!started) return
+        if (!started && !lingering) return
         val prev = snap.call
         val kind = PhoneStateMap.effectiveKind(prev.kind, raw)
         val shownName = name ?: number?.let { nameByNumber[FavoritesRanker.normalizeNumber(it)] }
         val next = PhoneStateMap.nextCall(prev, kind, shownName, number, SystemClock.elapsedRealtime())
         if (!next.inCall) unmuteIfNeeded()
+        if (!started) {
+            // Sahipsiz izleme: sessizdeki görüşme bitti → mikrofon açıldı, kaynak kapanır.
+            if (!next.inCall) teardown() else update { it.copy(call = next) }
+            return
+        }
         if (next.kind != prev.kind) Log.i(TAG, "arama: ${prev.kind} → ${next.kind}")
         update { it.copy(call = next) }
         if (kind == CallKind.ENDED && prev.kind != CallKind.ENDED) {

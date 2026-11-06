@@ -86,6 +86,20 @@ class SahneScreen(
     fun hasPanel(type: WidgetType): Boolean =
         panels.indices.any { SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type }
 
+    /**
+     * Verilen türü taşıyan paneli kısa bir nabızla gösterir (ör. alt çubuk telefon düğmesi, panel zaten ekrandayken):
+     * 120 ms'de %97'ye küçülüp geri döner; başka kare işi yok.
+     */
+    fun flashPanel(type: WidgetType) {
+        if (sportShown) return
+        val i = panels.indices.firstOrNull { SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type } ?: return
+        val v = panels[i]
+        v.animate().cancel()
+        v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(FLASH_MS).withEndAction {
+            v.animate().scaleX(1f).scaleY(1f).setDuration(FLASH_MS).start()
+        }.start()
+    }
+
     /** Karşılama ([SahneWelcome]) için: araç sahnesi ve geri kalan orta alan (yan paneller, şerit). */
     internal fun welcomeParts(): Pair<SahneStage, List<View>> = stage to panels + strip
 
@@ -620,6 +634,7 @@ class SahneScreen(
 
     private companion object {
         const val DESIGN_W = 1872f
+        const val FLASH_MS = 120L
         const val PANEL_W = 440f
         const val GAP_H = 16f
         const val STRIP_H_DP = 92

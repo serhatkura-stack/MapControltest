@@ -135,6 +135,8 @@ internal object HfpLink {
         private set
 
     @Volatile private var requested = false
+    /** [open] istedi, [close] bıraktı: geç gelen vekil istenmiyorsa hemen kapatılır. */
+    @Volatile private var wanted = false
 
     /** Vekil bağlanınca/kopunca (ana iş parçacığında). */
     @Volatile var onProxyChanged: (() -> Unit)? = null
@@ -148,7 +150,21 @@ internal object HfpLink {
     private val listener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, p: BluetoothProfile?) {
             if (profile != PROFILE_HEADSET_CLIENT) return
-            proxy = p
+            val keep = synchronized(this@HfpLink) {
+                val old = proxy
+                when {
+                    // Bekleyen istek iptal edildi (görünmezken vekil bağlı kalmasın).
+                    !wanted -> false
+                    // İkinci bir istekten gelen fazla vekil.
+                    old != null && old !== p -> false
+                    else -> { proxy = p; true }
+                }
+            }
+            if (!keep) {
+                if (p != null) runCatching { adapter()?.closeProfileProxy(PROFILE_HEADSET_CLIENT, p) }
+                if (!wanted) flush(null)
+                return
+            }
             Log.i(TAG, "HFP istemci vekili bağlandı")
             flush(p)
             onProxyChanged?.invoke()
@@ -171,7 +187,9 @@ internal object HfpLink {
     }
 
     /** Vekili ister (zaten açıksa/isteniyorsa bir şey yapmaz). Bağdaştırıcı yoksa false. */
+    @Synchronized
     fun open(context: Context): Boolean {
+        wanted = true
         if (proxy != null || requested) return true
         val a = adapter() ?: return false
         requested = try {
@@ -183,7 +201,9 @@ internal object HfpLink {
         return requested
     }
 
+    @Synchronized
     fun close() {
+        wanted = false
         val p = proxy
         proxy = null
         requested = false
@@ -281,6 +301,10 @@ internal object HfpClientApi {
         return invoke(proxy, "terminateCall", arrayOf(DEV, cc), device, null).getOrNull() == true
     }
 
+    /** Şu anki aramalar (BluetoothHeadsetClientCall listesi); çağrı başarısızsa null. */
+    fun currentCalls(proxy: Any, device: BluetoothDevice): List<Any>? =
+        (invoke(proxy, "getCurrentCalls", arrayOf(DEV), device).getOrNull() as? List<*>)?.filterNotNull()
+
     fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean =
         invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device).getOrNull() == true
 
@@ -340,14 +364,28 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
 
     override fun open(onState: (CallKind, String?, String?) -> Unit, onConnected: (Boolean, String?) -> Unit) {
         this.onState = onState
-        if (registered) return
-        registered = try {
-            ctx.registerReceiver(receiver, IntentFilter(HfpLink.ACTION_CALL))
-            true
-        } catch (t: Throwable) {
-            Log.w(TAG, "hfp alıcı: ${t.javaClass.simpleName}")
-            false
+        if (!registered) {
+            registered = try {
+                ctx.registerReceiver(receiver, IntentFilter(HfpLink.ACTION_CALL))
+                true
+            } catch (t: Throwable) {
+                Log.w(TAG, "hfp alıcı: ${t.javaClass.simpleName}")
+                false
+            }
         }
+        // Şu anki aramalar (yayın yalnızca değişiklikleri getirir): ana ekrana dönüşte süren görüşme de görünsün.
+        io.execute { readCurrent() }
+    }
+
+    /** io: getCurrentCalls ile listeyi baştan kurar; liste boşsa NONE bildirir. */
+    private fun readCurrent() {
+        val cb = onState ?: return
+        val p = HfpLink.proxy ?: return
+        val d = HfpLink.connectedDevice() ?: return
+        val list = HfpClientApi.currentCalls(p, d) ?: return
+        calls.clear()
+        for (c in list) HfpClientApi.callInfo(c)?.let { calls[it.id] = it }
+        if (calls.isEmpty()) cb(CallKind.NONE, null, null) else emit()
     }
 
     override fun close() {
@@ -360,6 +398,10 @@ internal class HfpClientCallBackend(private val ctx: Context, private val io: Ex
     private fun onCall(call: Any) {
         val info = HfpClientApi.callInfo(call) ?: return
         calls[info.id] = info
+        emit()
+    }
+
+    private fun emit() {
         val list = calls.values.toList()
         val lite = list.map { DialInfoLite(it.state, it.outgoing) }
         val kind = PhoneStateMap.fromVdDialInfos(lite)
@@ -488,8 +530,14 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         val b = bus ?: return false
         if (!available()) return false
         return try {
-            // Adres (MAC) boş bırakılır: araç testinde boş adresle çalıştığı doğrulanmalı (gerekirse HFP cihaz adresi).
+            // Adres (MAC): HFP vekili açıksa bağlı telefonun adresi (araç testinde boş adres doğrulanmadı). Günlüğe yazılmaz.
+            val address = try {
+                HfpLink.connectedDevice()?.address
+            } catch (t: Throwable) {
+                null
+            }
             b.set(VDBTDial.createEvent(VDEventBT.DIAL, VDBTDial().apply {
+                if (address != null) putAddress(address)
                 if (number != null) putNumber(number)
                 putDialCtrl(ctrl)
             }))
@@ -590,6 +638,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             val recents = records.mapNotNull { r ->
                 val type = PhoneStateMap.recentTypeFromVd(r.recordType) ?: return@mapNotNull null
                 val number = r.number?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                // Tarih çözülemezse 0: favori sıklığına girmez, panel zaman yazısı göstermez (1970 tarihi görünmesin).
                 PhoneRecent(type, r.name?.takeIf { it.isNotBlank() }, number, PhoneStateMap.parseVdDateTime(r.dateTime) ?: 0L)
             }
             val wanted = recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
@@ -670,10 +719,13 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
             ContactsContract.CommonDataKinds.Phone.NUMBER,
             ContactsContract.CommonDataKinds.Phone.STARRED,
         )
-        fun query(selection: String?, args: Array<String>?): List<PhoneContact>? = try {
+        /** Süzülmüş kişiler ve süzmeden önce görülen satır sayısı; sorgu çalışmazsa null. */
+        fun query(selection: String?, args: Array<String>?): Pair<List<PhoneContact>, Int>? = try {
             val out = ArrayList<PhoneContact>()
+            var rows = 0
             ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, selection, args, null)?.use { c ->
                 while (c.moveToNext()) {
+                    rows++
                     val id = "c:" + c.getLong(0)
                     val starred = c.getInt(3) != 0
                     val number = c.getString(2)?.takeIf { it.isNotBlank() } ?: continue
@@ -683,14 +735,16 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
                     out.add(PhoneContact(id, name, number, starred))
                 }
             }
-            out
+            out to rows
         } catch (t: Throwable) {
             Log.w(TAG, "rehber: ${t.javaClass.simpleName}")
             null
         }
         val pbap = query(ContactsContract.RawContacts.ACCOUNT_TYPE_AND_DATA_SET + " LIKE ?", arrayOf("$PBAP_ACCOUNT%"))
-        // Sütun/seçim desteklenmiyorsa ya da hesap türü farklıysa (boş sonuç) seçimsiz denenir.
-        return if (pbap.isNullOrEmpty()) query(null, null) ?: pbap else pbap
+        // Seçimsiz tarama yalnızca PBAP sorgusu çalışmadıysa ya da hiç satır görmediyse (hesap türü farklı): süzme sonrası
+        // boş liste geçerli bir yanıttır, tüm tablo yeniden taranmaz.
+        if (pbap != null && pbap.second > 0) return pbap.first
+        return query(null, null)?.first ?: pbap?.first
     }
 
     private companion object {

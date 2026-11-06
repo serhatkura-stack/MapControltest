@@ -103,10 +103,15 @@ internal object PhoneKeys {
         }
     }
 
+    /**
+     * 30 sn'lik yenileme yalnızca ayar açıkken döner (kapalıyken kendini yeniden kurmaz) ve yalnızca io'da aboneliği
+     * tazeler (tuş arka planda da çalışmalı). Bağlanamadıysa ana iş parçacığındaki VDBus init'i burada denenmez:
+     * yeniden deneme ana ekrana dönüşte ([refresh]) yapılır.
+     */
     private val refreshTick = object : Runnable {
         override fun run() {
-            if (listening) io.execute { if (listening) resubscribe(force = true) }
-            else if (enabled) appContext?.let { connect(it) }
+            if (!enabled) return
+            io.execute { if (listening) resubscribe(force = true) }
             main.postDelayed(this, REFRESH_MS)
         }
     }
@@ -120,6 +125,7 @@ internal object PhoneKeys {
     }
 
     fun refresh() {
+        if (enabled && !listening) appContext?.let { connect(it) }
         io.execute { if (listening) resubscribe(force = false) }
     }
 
@@ -148,7 +154,7 @@ internal object PhoneKeys {
         connect(context)
     }
 
-    /** Ana iş parçacığında: VDBus init'i ana iş parçacığında (FavoriteKey gibi); başarısızsa 30 sn'lik tik yeniden dener. */
+    /** Ana iş parçacığında: VDBus init'i ana iş parçacığında (FavoriteKey gibi); başarısızsa ana ekrana dönüşte yeniden denenir. */
     private fun connect(context: Context) {
         val b = try {
             VDBus.getDefault().also { it.init(context) }

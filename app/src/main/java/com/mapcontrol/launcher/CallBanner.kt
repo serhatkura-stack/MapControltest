@@ -25,12 +25,19 @@ import com.mapcontrol.R
  *  - Aranıyor: ad/numara, "Aranıyor…" ve kırmızı **Kapat**.
  *  - Konuşma: ad, süre (mm:ss), **Sessiz** (yol yoksa gizli) ve **Kapat**.
  *  - Bitti: "Arama bitti" (arka uç ~2 sn sonra NONE yapar, şerit kapanır).
+ * Aranıyor ve konuşma kipinde şerit kompakt bir hapa küçülür (başlık bandı yüksekliğinde, en çok [COMPACT_MAX_W_DP]
+ * genişliğinde, düğmeler 76dp): dakikalarca süren konuşmada başlığı, Sahne panellerini ya da spor göstergelerini
+ * örtmesin. Yalnızca gelen arama büyük düzeni kullanır.
  * Tek zamanlayıcı konuşma süresidir: yalnızca konuşma sürerken ve şerit görünürken saniyede bir, yazı değişince.
  * OEM telefon uygulaması kendi ekranını da gösterebilir; bu şerit onu bastırmaz, tamamlar.
  *
  * Yalnızca ana ekran görünürken dinler ([onVisible]/[onHidden]). İsim/numara günlüğe yazılmaz.
  */
-internal class CallBanner(private val activity: Activity) : LauncherWidget, PhoneListener {
+internal class CallBanner(
+    private val activity: Activity,
+    /** Gelen arama şeridi göründüğünde (ana iş parçacığı): etkinlik üstteki sayfaları kapatır ki düğmeler örtülmesin. */
+    private val onIncoming: (() -> Unit)? = null,
+) : LauncherWidget, PhoneListener {
 
     private val context: Context = activity
     private val main = Handler(Looper.getMainLooper())
@@ -41,6 +48,7 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
     /** Kurulu düğme dizisi (kip ya da Sessiz görünürlüğü değişince yeniden kurulur). */
     private var builtFor: Pair<PhoneUiLogic.BannerMode, Boolean>? = null
     private var muteButton: LinearLayout? = null
+    private var compact = false
     private val actionButtons = ArrayList<View>()
 
     private val title = sahneText(context, TITLE_SP, Sahne.INK, 600).apply {
@@ -77,7 +85,7 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
     private val frame = object : FrameLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val parentW = MeasureSpec.getSize(widthMeasureSpec)
-            val w = minOf(context.dp(MAX_W_DP), parentW - context.dp(2 * SIDE_DP)).coerceAtLeast(0)
+            val w = minOf(context.dp(if (compact) COMPACT_MAX_W_DP else MAX_W_DP), parentW - context.dp(2 * SIDE_DP)).coerceAtLeast(0)
             super.onMeasure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), heightMeasureSpec)
         }
     }.apply {
@@ -110,7 +118,8 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
     override fun onVisible() {
         if (visible) return
         visible = true
-        PhoneSource.start(activity, this)
+        // Şerit yalnızca arama durumunu ister: rehber/geçmiş okunmaz.
+        PhoneSource.start(activity, this, wantsData = false)
         PhoneSource.addListener(this)
     }
 
@@ -121,6 +130,9 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
         PhoneSource.stop(this)
         main.removeCallbacks(timer)
         main.removeCallbacks(unlock)
+        // Kilit kalkar ve düğmeler yeniden kurulur: dönüşte aynı kipteki Cevapla/Reddet/Kapat ölü kalmasın.
+        setLocked(false)
+        builtFor = null
         frame.animate().cancel()
         frame.visibility = View.GONE
         mode = PhoneUiLogic.BannerMode.HIDDEN
@@ -161,6 +173,7 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
         val key = next to (next == PhoneUiLogic.BannerMode.ACTIVE && canMute)
         if (key != builtFor) {
             builtFor = key
+            applyCompact(next == PhoneUiLogic.BannerMode.ACTIVE || next == PhoneUiLogic.BannerMode.DIALING)
             buildButtons(next)
         }
         when (next) {
@@ -175,6 +188,18 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
         muteButton?.let { bindMute(it) }
         card.contentDescription = listOf(title.text, sub.text).filter { it.isNotEmpty() }.joinToString(", ")
         if (was == PhoneUiLogic.BannerMode.HIDDEN) show()
+        if (next == PhoneUiLogic.BannerMode.INCOMING && was != PhoneUiLogic.BannerMode.INCOMING) onIncoming?.invoke()
+    }
+
+    /** Kompakt hap (aranıyor/konuşma) ya da büyük gelen arama düzeni. */
+    private fun applyCompact(on: Boolean) {
+        if (on == compact) return
+        compact = on
+        val v = context.dp(if (on) COMPACT_PAD_DP else 14)
+        card.setPadding(context.dp(if (on) 24 else 28), v, v, v)
+        title.textSize = if (on) COMPACT_TITLE_SP else TITLE_SP
+        sub.textSize = if (on) COMPACT_SUB_SP else SUB_SP
+        frame.requestLayout()
     }
 
     private fun buildButtons(m: PhoneUiLogic.BannerMode) {
@@ -186,7 +211,7 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
         val w = context.dp(if (big) BIG_DP else COMPACT_W_DP)
         val h = context.dp(if (big) BIG_DP else COMPACT_H_DP)
         fun add(v: View, first: Boolean) =
-            buttons.addView(v, LinearLayout.LayoutParams(w, h).apply { if (!first) marginStart = context.dp(14) })
+            buttons.addView(v, LinearLayout.LayoutParams(w, h).apply { if (!first) marginStart = context.dp(if (big) 14 else 8) })
         when (m) {
             PhoneUiLogic.BannerMode.INCOMING -> {
                 // Reddet solda (kırmızı), Cevapla sağda (yeşil): telefonlardaki alışılmış yerleşim.
@@ -303,9 +328,14 @@ internal class CallBanner(private val activity: Activity) : LauncherWidget, Phon
         const val ICON_DP = 32
         /** Gelen aramada Reddet/Cevapla kare düğmeleri (≥ 96dp). */
         const val BIG_DP = 104
-        /** Aranıyor/konuşma şeridindeki düğmeler (≥ 76dp dokunma alanı). */
-        const val COMPACT_W_DP = 112
-        const val COMPACT_H_DP = 88
+        /** Aranıyor/konuşma hapındaki düğmeler (≥ 76dp dokunma alanı). */
+        const val COMPACT_W_DP = 104
+        const val COMPACT_H_DP = 76
+        /** Kompakt hap: 4 + 76 + 4 = 84dp (başlık bandı 72dp + üst pay 12dp). */
+        const val COMPACT_PAD_DP = 4
+        const val COMPACT_MAX_W_DP = 640
+        const val COMPACT_TITLE_SP = 20f
+        const val COMPACT_SUB_SP = 16f
         const val BUTTON_RADIUS_DP = 28f
         const val LOCK_MS = 1_500L
         const val LOCKED_ALPHA = 0.6f
