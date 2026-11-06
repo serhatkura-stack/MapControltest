@@ -331,7 +331,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
         }
         val win = ClusterMap.windowSize(activity)
-        addLabeledSegments(R.string.launcher_cluster_window, listOf(R.string.launcher_cluster_window_mid, R.string.launcher_cluster_window_wide),
+        addLabeledSegments(R.string.launcher_cluster_window, listOf(R.string.launcher_cluster_window_mid, R.string.launcher_cluster_window_wide, R.string.launcher_cluster_window_full),
             ClusterMapMath.WindowSize.values().indexOf(win)) { i ->
             d.dismiss()
             ClusterMap.setWindowSize(activity, ClusterMapMath.WindowSize.values()[i])

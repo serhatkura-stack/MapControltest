@@ -16,9 +16,11 @@ internal object ClusterMapMath {
      */
     const val CAPTION_PX = 40
 
-    /** Pencere köşe yarıçapı (maske), iç gölge genişliği. */
-    const val CORNER_PX = 20f
-    const val INNER_SHADOW_PX = 22
+    /**
+     * Gerçek pencerenin (başlık payı dahil) en üst sınırı. "Tam" pencerede başlık çubuğu y 80–120'de, QNX üst şeridinin
+     * içinde durur; tek katman o şeridi opak örter (delik başlığın altında başlar), başlık görünmez.
+     */
+    const val CAPTION_MIN_TOP = 80
 
     /** Basit dikdörtgen (sol, üst, sağ, alt; sağ/alt hariç). */
     data class Box(val left: Int, val top: Int, val right: Int, val bottom: Int) {
@@ -36,10 +38,18 @@ internal object ClusterMapMath {
         ORTA("orta", Box(510, 180, 1310, 600)),
 
         /** Sağdaki boşluğu da kullanan geniş şerit: sağ alt geçici yazı (y 530) üstünde biter. */
-        GENIS("genis", Box(510, 180, 1870, 515));
+        GENIS("genis", Box(510, 180, 1870, 515)),
+
+        /**
+         * Ölçülen güvenli alanın tamamı (varsayılan): 1380x480. Solda hız bloğunun (x 200–490) sağında, altta alt şeridin
+         * (y 620) üstünde biter; üstte QNX simge sırasının hemen altından başlar, başlık çubuğu (y 80–120) şeridin içinde
+         * katmanın altında kalır. Hız limiti tabelası (x≈750, y≈265) ve sağ alttaki geçici yazı haritanın üstünde süzülür
+         * (bilerek); katman o köşeyi koyulaştırır.
+         */
+        TAM("tam", Box(500, 120, 1880, 600));
 
         companion object {
-            fun of(key: String?): WindowSize = values().firstOrNull { it.key == key } ?: ORTA
+            fun of(key: String?): WindowSize = values().firstOrNull { it.key == key } ?: TAM
         }
     }
 
@@ -64,20 +74,20 @@ internal object ClusterMapMath {
     fun resolveFrame(choice: FrameChoice, night: Boolean): Frame = choice.fixed ?: if (night) Frame.GECE else Frame.GUNDUZ
 
     /**
-     * Pencere QNX öğelerine çakışmıyor mu: sol hız bloğu (x<500), üst simgeler (y<140), alt şerit (y>610) dışında;
-     * orta güvenli alanı (x≤1320) aşarsa sağ alttaki geçici yazıya (y≥530) inmemeli. En az 320x200.
+     * Görünür pencere QNX öğelerine çakışmıyor mu: sol hız bloğu (x<500), üst simge sırası (y<120), alt şerit (y>610)
+     * ve ekran dışı yasak. Hız limiti tabelası ve sağ alttaki geçici yazı haritanın üstünde kalabilir (bilerek; katman
+     * yazının köşesini koyulaştırır). En az 320x200.
      */
     fun isSafe(b: Box): Boolean {
-        if (b.left < 500 || b.top < 140 || b.right > 1880 || b.bottom > 610) return false
-        if (b.right > 1320 && (b.bottom > 525 || b.top < 140)) return false
+        if (b.left < 500 || b.top < 120 || b.right > 1880 || b.bottom > 610) return false
         return b.width >= 320 && b.height >= 200
     }
 
     /**
-     * Görünür pencere VE gerçek pencere (üstte başlık payıyla, [launchBounds]) QNX alanına girmiyor mu. Çerçeve
-     * penceresi süreçle birlikte ölürse harita penceresi kalır; onun da güvenli olması gerekir.
+     * Görünür pencere güvenli VE gerçek pencerenin başlık çubuğu ([launchBounds]) QNX üst şeridinin içinde kalıyor
+     * (y ≥ [CAPTION_MIN_TOP]); orada tek katmanın opak kısmının altında görünmez.
      */
-    fun isSafeWindow(hole: Box): Boolean = isSafe(hole) && isSafe(launchBounds(hole))
+    fun isSafeWindow(hole: Box): Boolean = isSafe(hole) && launchBounds(hole).top >= CAPTION_MIN_TOP
 
     /** "l,t,r,b" (debug ekstrası) → kutu; biçim bozuksa null. */
     fun parseBox(text: String?): Box? {
@@ -167,50 +177,67 @@ internal object ClusterMapMath {
         return TaskCheck.UNKNOWN
     }
 
-    /** Çerçevenin renkleri (ARGB). Kenarlar her stilde siyaha düşer: QNX yazıları okunaklı kalsın. */
-    data class Palette(
-        val base: Int,
-        /** Pencerenin çevresindeki ışık (haritanın yanındaki en açık ton). */
-        val aura: Int,
-        val headerTop: Int,
-        val headerBottom: Int,
-        val plateTop: Int,
-        /** Kenar ışıklı ince çizgiler (orta parlak, uçlar söner). */
-        val hairline: Int,
-        val bezelTop: Int,
-        val bezelBottom: Int,
-        val glow: Int,
-        /** Tek sıcak vurgu: alt plakanın ortasında. */
-        val accent: Int,
-        /** İç gölgenin en koyu alfası (0..255). */
-        val innerShadowAlpha: Int,
-    )
 
-    fun palette(frame: Frame): Palette = when (frame) {
-        Frame.GECE -> Palette(
-            base = 0xFF040506.toInt(), aura = 0xFF0E1115.toInt(),
-            headerTop = 0xFF07080A.toInt(), headerBottom = 0xFF15181C.toInt(), plateTop = 0xFF101317.toInt(),
-            hairline = 0xFFC4CDD8.toInt(), bezelTop = 0x8CD8DFE8.toInt(), bezelBottom = 0x26D8DFE8,
-            glow = 0x2EBFCAD6, accent = 0xFFF2A33A.toInt(), innerShadowAlpha = 150,
-        )
-        Frame.GUNDUZ -> Palette(
-            base = 0xFF0B0D0F.toInt(), aura = 0xFF2B3036.toInt(),
-            headerTop = 0xFF0B0D0F.toInt(), headerBottom = 0xFF22262B.toInt(), plateTop = 0xFF1A1D21.toInt(),
-            hairline = 0xFFE6EBF0.toInt(), bezelTop = 0xB8EEF2F6.toInt(), bezelBottom = 0x40C9D0D8,
-            glow = 0x38E8EEF4, accent = 0xFFF0A040.toInt(), innerShadowAlpha = 120,
-        )
-        Frame.UYDU -> Palette(
-            base = 0xFF050708.toInt(), aura = 0xFF131A20.toInt(),
-            headerTop = 0xFF070A0C.toInt(), headerBottom = 0xFF151C22.toInt(), plateTop = 0xFF0F1519.toInt(),
-            hairline = 0xFFAFC7D8.toInt(), bezelTop = 0x8CBCD0DE.toInt(), bezelBottom = 0x2696B4C8,
-            glow = 0x2E8FB2CA, accent = 0xFFD8B27A.toInt(), innerShadowAlpha = 165,
-        )
+    // --- Tek katman ---
+
+    /** Kenar erime genişlikleri (px): harita bu mesafede zemine (siyah / gündüz grafit) erir. */
+    const val FEATHER_LEFT = 90
+    const val FEATHER_TOP = 70
+    const val FEATHER_RIGHT = 90
+    const val FEATHER_BOTTOM = 80
+
+    /** Üst QNX sırasının altındaki ek koyulaşma: y [TOP_ROW_Y] .. [TOP_ROW_Y]+[TOP_ROW_FADE]. */
+    const val TOP_ROW_Y = 120
+    const val TOP_ROW_FADE = 110
+
+    /** Sağ alt geçici yazının (x 1340–1790, y 530–590) koyu köşesi: yatay elips. */
+    const val HINT_CX = 1590f
+    const val HINT_CY = 600f
+    const val HINT_RX = 380f
+    const val HINT_RY = 140f
+
+    /**
+     * Tek katmanın rengi ve güçleri. Katman yalnızca yumuşak geçişler çizer (çizgi, kutu, ışık yok): pencere dışı opak
+     * [base]; pencerenin içinde kenarlardan [base]'e erime, gece oval vinyeti ([oval]), sağ alt yazı köşesi ([hint]) ve
+     * üst QNX sırasının altında hafif koyulaşma ([topRow]). Güçler 0..1 (o etkinin en fazla örtmesi).
+     */
+    data class Veil(val base: Int, val oval: Float, val hint: Float, val topRow: Float)
+
+    /**
+     * Gece/uydu: siyah zemin (gece QNX'in kendi oval vinyetiyle aynı dil). Gündüz: açık grafit, daha hafif etkiler;
+     * QNX gündüz bunun üstüne açık tül serip koyu yazı çizer, siyah kutu soluk/puslu görünürdü.
+     */
+    fun veil(frame: Frame): Veil = when (frame) {
+        Frame.GECE -> Veil(base = 0xFF000000.toInt(), oval = 0.55f, hint = 0.80f, topRow = 0.55f)
+        Frame.UYDU -> Veil(base = 0xFF020406.toInt(), oval = 0.62f, hint = 0.82f, topRow = 0.60f)
+        Frame.GUNDUZ -> Veil(base = 0xFF4A5058.toInt(), oval = 0.30f, hint = 0.55f, topRow = 0.35f)
     }
 
-    /** İç gölgenin i. halkasının alfası (kenarda en koyu, içeri doğru karesel söner). */
-    fun innerShadowAlpha(maxAlpha: Int, ring: Int, rings: Int = INNER_SHADOW_PX): Int {
-        if (ring < 0 || ring >= rings) return 0
-        val t = 1f - ring.toFloat() / rings
-        return Math.round(maxAlpha * t * t).coerceIn(0, 255)
+    fun smoothstep(e0: Float, e1: Float, x: Float): Float {
+        val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
+    /**
+     * Katmanın (x, y) noktasındaki örtmesi 0..1 (1 = opak zemin, 0 = harita olduğu gibi). Pencere dışı (başlık
+     * çubuğu dahil) her zaman 1. İçeride dört kenarın yumuşak çarpımı köşeleri kendiliğinden yuvarlar.
+     */
+    fun veilCover(x: Float, y: Float, hole: Box, v: Veil): Float {
+        if (x < hole.left || x >= hole.right || y < hole.top || y >= hole.bottom) return 1f
+        var see = smoothstep(0f, FEATHER_LEFT.toFloat(), x - hole.left) *
+            smoothstep(0f, FEATHER_RIGHT.toFloat(), hole.right - x) *
+            smoothstep(0f, FEATHER_TOP.toFloat(), y - hole.top) *
+            smoothstep(0f, FEATHER_BOTTOM.toFloat(), hole.bottom - y)
+        // Gece QNX'in oval vinyeti: merkez parlak elips, kenar/köşe koyu.
+        val dx = (x - (hole.left + hole.right) / 2f) / (hole.width / 2f)
+        val dy = (y - (hole.top + hole.bottom) / 2f) / (hole.height / 2f)
+        see *= 1f - v.oval * smoothstep(0.45f, 1.15f, Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat())
+        // Sağ alt yazı köşesi.
+        val hx = (x - HINT_CX) / HINT_RX
+        val hy = (y - HINT_CY) / HINT_RY
+        see *= 1f - v.hint * (1f - smoothstep(0.5f, 1f, Math.sqrt((hx * hx + hy * hy).toDouble()).toFloat()))
+        // Üst QNX sırası (saat, P, sıcaklık, (A) simgeleri) okunaklı kalsın.
+        see *= 1f - v.topRow * (1f - smoothstep(TOP_ROW_Y.toFloat(), (TOP_ROW_Y + TOP_ROW_FADE).toFloat(), y))
+        return (1f - see).coerceIn(0f, 1f)
     }
 }

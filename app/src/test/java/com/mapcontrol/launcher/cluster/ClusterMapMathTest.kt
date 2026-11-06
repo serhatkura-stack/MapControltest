@@ -16,21 +16,44 @@ class ClusterMapMathTest {
     @Test fun defaultWindowsAvoidQnx() {
         WindowSize.values().forEach {
             assertTrue(it.name, ClusterMapMath.isSafe(it.hole))
-            // Gerçek pencere (başlık payıyla) da güvenli: çerçeve ölse bile başlık QNX simgelerine (y<140) girmez.
+            // Gerçek pencerenin başlık çubuğu QNX üst şeridinin içinde, ekranda kalır.
             assertTrue(it.name, ClusterMapMath.isSafeWindow(it.hole))
-            assertTrue(it.name, ClusterMapMath.launchBounds(it.hole).top >= 140)
+            assertTrue(it.name, ClusterMapMath.launchBounds(it.hole).top >= ClusterMapMath.CAPTION_MIN_TOP)
         }
         assertEquals(800, WindowSize.ORTA.hole.width)
         assertEquals(420, WindowSize.ORTA.hole.height)
+    }
+
+    @Test fun tamFillsMeasuredSafeZone() {
+        val tam = WindowSize.TAM.hole
+        assertEquals(Box(500, 120, 1880, 600), tam)
+        assertEquals(1380, tam.width)
+        assertEquals(480, tam.height)
+        assertEquals(WindowSize.TAM, WindowSize.of(null))
+        assertEquals(WindowSize.TAM, WindowSize.of("bilinmez"))
+        assertEquals(WindowSize.ORTA, WindowSize.of("orta"))
+        // Başlık çubuğu içeriğin üstünde y 80–120: QNX üst şeridinde, katmanın opak kısmında.
+        val launch = ClusterMapMath.launchBounds(tam)
+        assertEquals(Box(500, 80, 1880, 600), launch)
+        // Sol hız bloğu (x 200–490) ve alt şerit (y ≥ 620) dışında.
+        assertTrue(tam.left >= 490 && tam.bottom <= 620)
+        // Hız limiti tabelası (x 710–790, y 225–305) haritanın üstünde süzülebilir: bilerek içeride.
+        assertTrue(tam.left < 710 && tam.right > 790 && tam.top < 225 && tam.bottom > 305)
+        // Bir piksel bile taşan pencere reddedilir.
+        assertFalse(ClusterMapMath.isSafeWindow(Box(499, 120, 1880, 600)))
+        assertFalse(ClusterMapMath.isSafeWindow(Box(500, 119, 1880, 600)))
+        assertFalse(ClusterMapMath.isSafeWindow(Box(500, 120, 1881, 600)))
+        assertFalse(ClusterMapMath.isSafeWindow(Box(500, 120, 1880, 611)))
     }
 
     @Test fun rejectsQnxZones() {
         assertFalse("hız bloğu", ClusterMapMath.isSafe(Box(400, 150, 1300, 600)))
         assertFalse("üst simgeler", ClusterMapMath.isSafe(Box(510, 100, 1300, 600)))
         assertFalse("alt şerit", ClusterMapMath.isSafe(Box(510, 150, 1300, 650)))
-        assertFalse("sağ alt yazı", ClusterMapMath.isSafe(Box(510, 150, 1870, 600)))
         assertFalse("ekran dışı", ClusterMapMath.isSafe(Box(510, 150, 1900, 500)))
         assertFalse("çok küçük", ClusterMapMath.isSafe(Box(600, 200, 800, 300)))
+        // Sağ alt geçici yazı artık haritanın üstünde kalabilir (katman köşeyi koyulaştırır).
+        assertTrue("sağ alt yazı", ClusterMapMath.isSafe(Box(510, 150, 1870, 600)))
     }
 
     @Test fun parseBox() {
@@ -48,9 +71,9 @@ class ClusterMapMathTest {
     }
 
     @Test fun safeWindowCountsCaption() {
-        // Görünür kısım güvenli ama başlık çubuğu (40 px yukarı) QNX simge şeridine giriyor.
-        assertTrue(ClusterMapMath.isSafe(Box(510, 150, 1310, 600)))
-        assertFalse(ClusterMapMath.isSafeWindow(Box(510, 150, 1310, 600)))
+        assertTrue(ClusterMapMath.isSafeWindow(Box(510, 150, 1310, 600)))
+        // Başlık payı ekranın en üstüne (y < 80) çıkarsa reddedilir; tek başına y 120 sınırı bunu zaten önler.
+        assertEquals(ClusterMapMath.CAPTION_MIN_TOP, 120 - ClusterMapMath.CAPTION_PX)
     }
 
     @Test fun onlyYandexIsFramed() {
@@ -95,7 +118,6 @@ class ClusterMapMathTest {
         assertEquals(Frame.UYDU, ClusterMapMath.resolveFrame(FrameChoice.UYDU, night = false))
         assertEquals(FrameChoice.GUNDUZ, FrameChoice.of(" Gunduz"))
         assertEquals(FrameChoice.OTOMATIK, FrameChoice.of("bilinmez"))
-        assertEquals(WindowSize.ORTA, WindowSize.of(null))
     }
 
     @Test fun choosePackage() {
@@ -109,19 +131,55 @@ class ClusterMapMathTest {
         assertEquals(ClusterMapMath.GOOGLE_MAPS, ClusterMapMath.choosePackage(MapApp.NAVI, google::contains, debug = true))
     }
 
-    @Test fun innerShadowFades() {
-        assertEquals(150, ClusterMapMath.innerShadowAlpha(150, 0))
-        assertTrue(ClusterMapMath.innerShadowAlpha(150, 10) < ClusterMapMath.innerShadowAlpha(150, 5))
-        assertEquals(0, ClusterMapMath.innerShadowAlpha(150, ClusterMapMath.INNER_SHADOW_PX))
+    private val tam = WindowSize.TAM.hole
+    private fun cover(x: Int, y: Int, f: Frame = Frame.GECE) =
+        ClusterMapMath.veilCover(x + 0.5f, y + 0.5f, tam, ClusterMapMath.veil(f))
+    private fun lum(c: Int) = ((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)
+
+    @Test fun veilOpaqueOutsideMapAndOverCaption() {
+        Frame.values().forEach { f ->
+            assertEquals(1f, cover(300, 500, f), 0f) // hız bloğu
+            assertEquals(1f, cover(1000, 650, f), 0f) // alt şerit
+            for (x in listOf(500, 900, 1500, 1879)) assertEquals("başlık $x", 1f, cover(x, 100, f), 0f)
+        }
     }
 
-    @Test fun edgesStayDarkForQnxText() {
+    @Test fun veilClearCenterAndSoftEdges() {
         Frame.values().forEach { f ->
-            val p = ClusterMapMath.palette(f)
-            listOf(p.base, p.headerTop).forEach { c ->
-                val lum = ((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)
-                assertTrue("${f.key} kenar koyu", lum < 3 * 0x20)
+            val cx = (tam.left + tam.right) / 2
+            assertTrue("${f.key} merkez açık", cover(cx, 380, f) < 0.05f)
+            // Kenarlarda zemine erir (opak kutu sınırı yok: kenarda ~1, içeri doğru düzgün azalır).
+            assertTrue(cover(tam.left, 380, f) > 0.98f)
+            assertTrue(cover(tam.right - 1, 380, f) > 0.98f)
+            assertTrue(cover(cx, tam.bottom - 1, f) > 0.98f)
+            var prev = 1.01f
+            for (x in tam.left until cx step 5) {
+                val c = cover(x, 380, f)
+                assertTrue("${f.key} x=$x sönüyor", c <= prev + 1e-4f)
+                prev = c
             }
+            // Erime genişliği: kenardan ~feather kadar içeride hâlâ belirgin örtme, sonrasında hafif.
+            assertTrue(cover(tam.left + ClusterMapMath.FEATHER_LEFT / 3, 380, f) > 0.5f)
         }
+    }
+
+    @Test fun veilDarkensHintCornerAndTopRow() {
+        val v = Frame.GECE
+        // Sağ alt geçici yazı (x 1340–1790, y 530–590) sol alttaki aynı yükseklikten belirgin koyu.
+        assertTrue(cover(1560, 545, v) > cover(820, 545, v) + 0.3f)
+        assertTrue(cover(1560, 545, v) > 0.85f)
+        // Üst QNX sırasının altı (y 150) aynı x'te ortadan koyu.
+        assertTrue(cover(1250, 160, v) > cover(1250, 330, v) + 0.3f)
+        // Oval vinyet: köşeye yakın nokta, kenar ortasından koyu.
+        assertTrue(cover(640, 230, v) > cover(1190, 230, v))
+    }
+
+    @Test fun dayVeilIsLighterGraphite() {
+        val day = ClusterMapMath.veil(Frame.GUNDUZ)
+        val night = ClusterMapMath.veil(Frame.GECE)
+        assertTrue(lum(day.base) > lum(night.base) + 3 * 0x30)
+        assertTrue(lum(day.base) < 3 * 0x80) // hâlâ grafit, beyaz değil
+        assertTrue(day.oval < night.oval && day.hint < night.hint && day.topRow < night.topRow)
+        Frame.values().forEach { assertEquals(0xFF, (ClusterMapMath.veil(it).base ushr 24) and 0xFF) }
     }
 }

@@ -32,13 +32,14 @@ import com.mapcontrol.launcher.cluster.ClusterMapMath.MapApp
 import com.mapcontrol.launcher.cluster.ClusterMapMath.WindowSize
 
 /**
- * "Gösterge haritası (deneysel)", varsayılan KAPALI. Gerçek Yandex haritası göstergede küçültülmüş bir pencerede,
- * tasarlanmış bir çerçevenin içinde görünür:
+ * "Gösterge haritası (deneysel)", varsayılan KAPALI. Gerçek Yandex haritası göstergede serbest pencerede, QNX'in sabit
+ * öğeleriyle TEK KATMAN gibi görünür (varsayılan "Tam" pencere: x 500–1880, y 120–600):
  *  1) Gösterge ekranına tam ekran, dokunulmaz bir TYPE_APPLICATION_OVERLAY penceresi eklenir ([ClusterFrameView]):
- *     çerçeve + haritanın göründüğü şeffaf delik + delik kenarında iç gölge/kıl çizgi (maske). Overlay uygulama
- *     pencerelerinin ÜSTÜNDE olduğu için aynı pencere hem zemin hem maske olur.
+ *     pencere dışı opak zemin, içeride haritanın kenarlardan zemine eridiği yumuşak geçişler (çizgi/kutu/ışık yok).
+ *     Overlay uygulama pencerelerinin ÜSTÜNDE olduğu için aynı pencere hem zemin hem maske olur.
  *  2) Harita uygulaması aynı ekranda serbest pencerede (freeform, windowingMode=5) deliğin sınırlarıyla açılır;
- *     uygulama kendini o boyuta göre düzenler (kırpılmaz). Başlık çubuğu çerçevenin altında kalır.
+ *     uygulama kendini o boyuta göre düzenler (kırpılmaz). Başlık çubuğu (40 px) deliğin üstünde, QNX üst şeridinde
+ *     katmanın opak kısmının altında kalır.
  * Herhangi bir adım olmazsa (ekran yok, SYSTEM_ALERT_WINDOW yok, freeform kapalı, başlatma hatası) her şey geri alınır,
  * sebep "ClusterMap" etiketiyle loga yazılır ve çağıran ESKİ davranışı uygular. Araca hiçbir şey yazmaz (VDBus yok).
  * Kapalıyken hiçbir şey çalışmaz; açıkken de çerçeve bir kez çizilir.
@@ -51,7 +52,7 @@ import com.mapcontrol.launcher.cluster.ClusterMapMath.WindowSize
  * Debug ekstraları (yalnızca debug yapı; HomeLauncherActivity, launcher açıkken de):
  *   --ez launcher_cluster_map true|false          çerçeveli haritayı aç/kapat (ayarı değiştirmez)
  *   --es launcher_cluster_frame gece|gunduz|uydu|otomatik   çerçeve stili (ayara yazılır)
- *   --es launcher_cluster_rect 510,180,1310,600   pencere (oturumluk; QNX alanına giriyorsa reddedilir)
+ *   --es launcher_cluster_rect 500,120,1880,600   pencere (oturumluk; QNX alanına giriyorsa reddedilir)
  *   --ei launcher_cluster_map_display <id>        gösterge ekran numarasını zorla
  *   --es launcher_cluster_image /sdcard/Download/x.png   görseli göstergede tam ekran göster (1920x720'ye ölçeklenir)
  *   --ez launcher_cluster_image_off true          görseli kaldır
