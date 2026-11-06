@@ -125,7 +125,7 @@ internal class StageStrip(
 }
 
 /**
- * Şerit maddesinin kısa metni (Sahne ve mini gösterge ortak): "Motor suyu 118°C", "Akü zayıf 11,4 V", "Arka sol 23 psi",
+ * Şerit maddesinin kısa metni (Sahne ve mini gösterge ortak): "Akü zayıf 11,4 V", "Arka sol 23 psi",
  * "Yakıt kapağı açık", "Bakıma 800 km", "Yakıt az" (şeritte sonunda ok: dokununca benzinlik), "Hava kalitesi kötü". Lastikte teker bilinmiyorsa yalnızca psi, psi de yoksa genel metin.
  */
 internal fun stripText(context: Context, a: MiniAlerts.Item): String = when (a.kind) {
@@ -138,8 +138,7 @@ internal fun stripText(context: Context, a: MiniAlerts.Item): String = when (a.k
             else -> context.getString(R.string.launcher_mini_alert_tire)
         }
     }
-    MiniAlerts.Kind.ENGINE_HOT -> a.coolantC?.let { context.getString(R.string.launcher_strip_coolant_hot, it) }
-        ?: context.getString(R.string.launcher_health_hot)
+    MiniAlerts.Kind.ENGINE_HOT -> context.getString(R.string.launcher_health_hot)
     MiniAlerts.Kind.BATTERY_LOW -> a.batteryV?.let { context.getString(R.string.launcher_strip_battery_low, it) }
         ?: context.getString(R.string.launcher_health_battery_low)
     MiniAlerts.Kind.BATTERY_HIGH -> a.batteryV?.let { context.getString(R.string.launcher_strip_battery_high, it) }

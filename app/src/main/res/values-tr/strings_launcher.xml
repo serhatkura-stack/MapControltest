@@ -128,7 +128,8 @@
     <string name="launcher_health_row_service">Bakıma kalan</string>
     <string name="launcher_health_row_service_days">Bakıma kalan süre</string>
     <string name="launcher_detail_outside">Dış sıcaklık</string>
-    <string name="launcher_health_row_engine">Motor</string>
+    <string name="launcher_health_row_engine">Motor suyu</string>
+    <string name="launcher_coolant_normal">Normal</string>
     <string name="launcher_layout_park">Park</string>
     <string name="launcher_layout_drive">Sürüş</string>
     <string name="launcher_layout_park_edit">Park düzeni</string>

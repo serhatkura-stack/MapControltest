@@ -130,7 +130,8 @@ internal data class TripData(
     val batteryV: Double? = null,
     /** Aşırı gerilim 30 sn sürdü ([OverVoltageGate]); yalnızca o zaman "Akü yüksek" uyarısı çıkar. */
     val batteryHighHeld: Boolean = false,
-    val coolantC: Int? = null,
+    /** Motor suyu durum kodu (ReadOnly 100, ham; derece değil, bkz. [CoolantStatus]). */
+    val coolantCode: Int? = null,
     val lowFuel: Boolean? = null,
     /** Servise kalan km / gün (ICMT). Araçta 2026-10-29'da okundu, gösterge menüsüyle henüz karşılaştırılmadı. */
     val serviceKm: Int? = null,
@@ -262,7 +263,7 @@ internal object TripSource {
                 avgL100 = TripDecode.avgL100(ro(ReadOnlyID.ID_AVERAGE_OIL_CONSUMPTION_AFTER_CLEAR)),
                 avgSpeedKmh = TripDecode.avgSpeedKmh(ro(ReadOnlyID.ID_AVERAGE_SPEED_AFTER_CLEAR)),
                 batteryV = ReadOnlyDecode.batteryVolts(ro(ReadOnlyID.ID_BATTERY_LEVEL)),
-                coolantC = ro(ReadOnlyID.ID_WATER_TEMPERATURE)?.let { if (it > 200) it / 10 else it }?.takeIf { it in -40..150 },
+                coolantCode = ro(ReadOnlyID.ID_WATER_TEMPERATURE),
                 lowFuel = ro(ReadOnlyID.ID_LOW_FUEL_WARNING)?.let { it == 1 },
                 outsideC = TripDecode.outsideC(hvac(HvacID.ID_AC_TEMPERATURE_CELSIUS_OUTSIDE)),
             )
@@ -757,11 +758,11 @@ internal class HealthTile(context: Context) :
         HealthMath.Issue.SERVICE_SOON -> R.string.launcher_health_service_soon
     })
 
-    /** Sorunun değeri (ölçüm), yoksa null: akü "11,4 V", motor "118 °C", bakım kalan mesafe/gün. */
+    /** Sorunun değeri (ölçüm), yoksa null: akü "11,4 V", bakım kalan mesafe/gün. */
     private fun detail(issue: HealthMath.Issue): String? = when (issue) {
         HealthMath.Issue.BATTERY_LOW, HealthMath.Issue.BATTERY_HIGH ->
             data.batteryV?.let { context.getString(R.string.launcher_health_volt_only, one(it)) }
-        HealthMath.Issue.ENGINE_HOT -> data.coolantC?.let { context.getString(R.string.launcher_temp_c, it) }
+        HealthMath.Issue.ENGINE_HOT -> null
         HealthMath.Issue.SERVICE_OVERDUE, HealthMath.Issue.SERVICE_SOON -> serviceText()
         HealthMath.Issue.LOW_FUEL -> null
     }
@@ -772,12 +773,12 @@ internal class HealthTile(context: Context) :
 
     override fun bind() {
         val d = data
-        if (!d.connected || !HealthMath.hasData(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays)) {
+        if (!d.connected || !HealthMath.hasData(d.batteryV, d.coolantCode, d.lowFuel, d.serviceKm, d.serviceDays)) {
             setIcon(R.drawable.ic_mdi_lightning_bolt, LauncherTheme.TEXT_SECONDARY)
             showMissing()
             return
         }
-        val issues = HealthMath.issues(d.batteryV, d.coolantC, d.lowFuel, d.serviceKm, d.serviceDays, d.batteryHighHeld)
+        val issues = HealthMath.issues(d.batteryV, d.lowFuel, d.serviceKm, d.serviceDays, d.batteryHighHeld)
         val bad = issues.isNotEmpty()
         setIcon(if (bad) R.drawable.ic_mdi_alert else R.drawable.ic_mdi_lightning_bolt,
             if (bad) LauncherTheme.ALERT else LauncherTheme.TEXT_SECONDARY)
@@ -799,7 +800,7 @@ internal class HealthTile(context: Context) :
             d.batteryV?.let { context.getString(R.string.launcher_health_volt_only, one(it)) },
             HealthMath.Issue.BATTERY_LOW in issues || HealthMath.Issue.BATTERY_HIGH in issues)
         add(context.getString(R.string.launcher_health_row_engine),
-            d.coolantC?.let { context.getString(R.string.launcher_temp_c, it) }, HealthMath.Issue.ENGINE_HOT in issues)
+            if (CoolantStatus.isNormal(d.coolantCode)) context.getString(R.string.launcher_coolant_normal) else null, false)
         val serviceBad = HealthMath.Issue.SERVICE_OVERDUE in issues || HealthMath.Issue.SERVICE_SOON in issues
         add(context.getString(R.string.launcher_health_row_service),
             d.serviceKm?.let { context.getString(R.string.launcher_km_value, number(it)) }, serviceBad)

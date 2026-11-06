@@ -363,10 +363,15 @@ class SportLogicTest {
 
     @Test fun dialDefaultsAndDecode() {
         assertEquals(listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = true))
-        assertEquals(listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = false))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = false))
         assertEquals(listOf(SportDial.CLOCK, SportDial.PASS80, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,p80,range,max", true))
         // G sensör yoksa düşer; tekrarlar ve bilinmeyenler düşer, boşluk varsayılanla dolar.
-        assertEquals(listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX), SportDials.decode("g,g,xx", false))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode("g,g,xx", false))
+        // Kaldırılan motor suyu ("cool") kayıtta kaldıysa o yuva sıradaki varsayılana geçer.
+        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode("z100,cool,inst,max", false))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode("z100,cool,inst,max", true))
+        assertEquals(listOf(SportDial.CLOCK, SportDial.PASS80, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,cool,range,max", false))
+        assertNull(SportDial.of("cool"))
         val d = SportDials.decode("max,max,max,max", true)
         assertEquals(4, d.toSet().size)
         assertEquals(SportDial.MAX, d[0])

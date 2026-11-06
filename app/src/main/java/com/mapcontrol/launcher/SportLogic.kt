@@ -282,7 +282,6 @@ enum class SportDial(val key: String) {
     MAX("max"),
     /** Anlık hız (gösterge hızı; devir kadranının ortasında da yazar). */
     SPEED("spd"),
-    COOLANT("cool"),
     AVG_SPEED("avg"),
     TRIP_TIME("time"),
     RANGE("range"),
@@ -304,10 +303,13 @@ object SportDials {
 
     fun offered(hasG: Boolean): List<SportDial> = SportDial.values().filter { hasG || it != SportDial.G }
 
-    /** Varsayılan: 0–100, G, Anlık, Maks. Sensör yoksa G'nin yerinde motor suyu sıcaklığı. */
+    /**
+     * Varsayılan: 0–100, G, Anlık, Maks. Sensör yoksa G'nin yerinde 80–120. Motor suyu artık listede yok (okunan değer
+     * derece değil, [CoolantStatus]): kayıttaki eski "cool" bilinmeyen anahtar sayılır, yuvası varsayılanla dolar.
+     */
     fun defaults(hasG: Boolean): List<SportDial> =
         if (hasG) listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX)
-        else listOf(SportDial.ZERO100, SportDial.COOLANT, SportDial.INSTANT, SportDial.MAX)
+        else listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX)
 
     fun encode(dials: List<SportDial>): String = dials.joinToString(",") { it.key }
 

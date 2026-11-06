@@ -17,15 +17,13 @@ internal object MiniAlerts {
     enum class Kind { ENGINE_HOT, BATTERY_LOW, BATTERY_HIGH, TIRE, FUEL_CAP, FUEL_LOW, SERVICE_OVERDUE, SERVICE_NEAR, AIR_BAD }
 
     /**
-     * Tek uyarı ve metni kuracak değerler ([tireLow] lastikte, [serviceKm] bakımda, [pm25] havada, [coolantC] motor suyunda,
-     * [batteryV] aküde).
+     * Tek uyarı ve metni kuracak değerler ([tireLow] lastikte, [serviceKm] bakımda, [pm25] havada, [batteryV] aküde).
      */
     data class Item(
         val kind: Kind,
         val tireLow: TireLow? = null,
         val serviceKm: Int? = null,
         val pm25: Int? = null,
-        val coolantC: Int? = null,
         val batteryV: Double? = null,
     )
 
@@ -39,18 +37,18 @@ internal object MiniAlerts {
         serviceDays: Int?,
         pm25In: Int?,
         batteryV: Double? = null,
-        coolantC: Int? = null,
         fuelCapOpen: Boolean = false,
         batteryHighHeld: Boolean = false,
     ): List<Item> {
         val low = TireDecode.low(tires)
-        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In, batteryV, coolantC, fuelCapOpen, batteryHighHeld)
+        return build(TireDecode.alertShown(tires?.warning, low), low, lowFuel, serviceKm, serviceDays, pm25In, batteryV, fuelCapOpen, batteryHighHeld)
     }
 
     /**
      * Sahne uyarı şeridi de aynı kuralları kullanır (§10): araç kartının özetinden gelen lastik uyarısı ([tireAlert],
-     * [tireLow]) ile. Kapı, bagaj, kaput, cam ve cam tavan burada yoktur; onları araç çizimi gösterir. Motor suyu ve akü
-     * [HealthMath] eşikleriyle (okunamayan değer uyarı sayılmaz); yakıt kapağı çizimde yoktur, şeritte yazılır.
+     * [tireLow]) ile. Kapı, bagaj, kaput, cam ve cam tavan burada yoktur; onları araç çizimi gösterir. Akü [HealthMath]
+     * eşikleriyle (okunamayan değer uyarı sayılmaz); motor suyu uyarısı derece sinyali doğrulanana dek yok ([CoolantStatus]);
+     * yakıt kapağı çizimde yoktur, şeritte yazılır.
      */
     fun build(
         tireAlert: Boolean,
@@ -60,13 +58,11 @@ internal object MiniAlerts {
         serviceDays: Int?,
         pm25In: Int?,
         batteryV: Double? = null,
-        coolantC: Int? = null,
         fuelCapOpen: Boolean = false,
         /** Aşırı gerilim 30 sn sürdü mü ([TripData.batteryHighHeld]); değilse "Akü yüksek" çıkmaz. */
         batteryHighHeld: Boolean = false,
     ): List<Item> = buildList {
-        val health = HealthMath.issues(batteryV, coolantC, null, null, null, batteryHighHeld)
-        if (HealthMath.Issue.ENGINE_HOT in health) add(Item(Kind.ENGINE_HOT, coolantC = coolantC))
+        val health = HealthMath.issues(batteryV, null, null, null, batteryHighHeld)
         if (HealthMath.Issue.BATTERY_LOW in health) add(Item(Kind.BATTERY_LOW, batteryV = batteryV))
         if (HealthMath.Issue.BATTERY_HIGH in health) add(Item(Kind.BATTERY_HIGH, batteryV = batteryV))
         if (tireAlert) add(Item(Kind.TIRE, tireLow = tireLow))

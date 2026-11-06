@@ -7,7 +7,10 @@ package com.mapcontrol.launcher
  */
 internal object HealthMath {
 
-    /** Sorunlar önem sırasıyla (küçük sıra = daha önemli). */
+    /**
+     * Sorunlar önem sırasıyla (küçük sıra = daha önemli). [ENGINE_HOT] şimdilik üretilmez: motor suyu için doğrulanmış
+     * bir derece sinyali yok ([CoolantStatus]).
+     */
     enum class Issue { ENGINE_HOT, BATTERY_LOW, BATTERY_HIGH, SERVICE_OVERDUE, LOW_FUEL, SERVICE_SOON }
 
     const val BATTERY_MIN_V = 12.0
@@ -15,20 +18,19 @@ internal object HealthMath {
     const val BATTERY_MAX_V = 15.3
     /** Aşırı gerilim uyarısı bu kadar sürmeden gösterilmez (şarj dalgalanması kısa sıçrar). */
     const val BATTERY_HIGH_HOLD_MS = 30_000L
-    const val COOLANT_MAX_C = 110
     const val SOON_KM = 1_000
     const val SOON_DAYS = 30
 
-    /** Hiçbir değer okunamıyorsa özet de yoktur (kutucuk "veri bekleniyor" gösterir). */
-    fun hasData(batteryV: Double?, coolantC: Int?, lowFuel: Boolean?, serviceKm: Int?, serviceDays: Int?): Boolean =
-        batteryV != null || coolantC != null || lowFuel != null || serviceKm != null || serviceDays != null
+    /** Hiçbir değer okunamıyorsa özet de yoktur (kutucuk "veri bekleniyor" gösterir). [coolantCode]: [CoolantStatus] kodu. */
+    fun hasData(batteryV: Double?, coolantCode: Int?, lowFuel: Boolean?, serviceKm: Int?, serviceDays: Int?): Boolean =
+        batteryV != null || coolantCode != null || lowFuel != null || serviceKm != null || serviceDays != null
 
     /**
      * [batteryHighHeld]: aşırı gerilim [BATTERY_HIGH_HOLD_MS] boyunca sürdü mü ([OverVoltageGate], [TripData.batteryHighHeld]);
-     * false iken eşik üstü gerilim de sorun sayılmaz. Düşük gerilim beklemeden sayılır.
+     * false iken eşik üstü gerilim de sorun sayılmaz. Düşük gerilim beklemeden sayılır. Motor suyu sıcaklık eşiği kapalı
+     * ([CoolantStatus]: okunan değer derece değil).
      */
-    fun issues(batteryV: Double?, coolantC: Int?, lowFuel: Boolean?, serviceKm: Int?, serviceDays: Int?, batteryHighHeld: Boolean): List<Issue> = buildList {
-        if (coolantC != null && coolantC > COOLANT_MAX_C) add(Issue.ENGINE_HOT)
+    fun issues(batteryV: Double?, lowFuel: Boolean?, serviceKm: Int?, serviceDays: Int?, batteryHighHeld: Boolean): List<Issue> = buildList {
         if (batteryV != null && batteryV < BATTERY_MIN_V) add(Issue.BATTERY_LOW)
         if (batteryHighHeld && batteryV != null && batteryV > BATTERY_MAX_V) add(Issue.BATTERY_HIGH)
         if (serviceOverdue(serviceKm, serviceDays)) add(Issue.SERVICE_OVERDUE)
@@ -51,6 +53,19 @@ internal object HealthMath {
         "service" to "health",
         "trip_totals" to "trip",
     )
+}
+
+/**
+ * Motor suyu (ReadOnly ID_WATER_TEMPERATURE, 100): araçta °C değil bir **durum kodu**. Tiggo 7'de soğuk çalıştırmada da
+ * sürüşten sonra da hep 2 okundu; 2 = normal sayılır. Diğer değerlerin anlamı bilinmiyor (aşırı ısınma kodu görülmedi),
+ * doğrulanana dek "—" gösterilir. Gerçek bir derece sinyali doğrulanana dek motor suyu °C gösterimi ve "Motor sıcak"
+ * eşiği kapalı. Aday: NewEnergy ID_VCU_TEMPERATURE_C (83) bir sürüşte 64→69 yükseldi; doğrulanmadı, kullanılmıyor.
+ */
+internal object CoolantStatus {
+    const val NORMAL = 2
+
+    /** Kod "normal" mi; bilinmeyen kod ve okunamayan değer false (ekranda "—"). */
+    fun isNormal(code: Int?): Boolean = code == NORMAL
 }
 
 /**

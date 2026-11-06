@@ -43,7 +43,8 @@ internal data class CarDetailModel(
     /** Sağlık sorunları önem sırasıyla (boş = her şey normal); hiç veri yoksa null. */
     val health: List<HealthMath.Issue>?,
     val batteryV: Double?,
-    val coolantC: Int?,
+    /** Motor suyu durum kodu ([CoolantStatus]; derece değil). */
+    val coolantCode: Int?,
     val pm25In: Int?,
     /** Dış sıcaklık °C (HVAC 19); okunamadıysa null. */
     val outsideC: Double? = null,
@@ -69,7 +70,7 @@ internal object CarDetail {
      */
     fun model(openings: Openings?, extra: ExtraData, trip: TripData, lowFuel: Boolean?): CarDetailModel {
         val o = openings
-        val hasHealth = HealthMath.hasData(trip.batteryV, trip.coolantC, lowFuel, trip.serviceKm, trip.serviceDays)
+        val hasHealth = HealthMath.hasData(trip.batteryV, trip.coolantCode, lowFuel, trip.serviceKm, trip.serviceDays)
         return CarDetailModel(
             tiresPsi = psi(extra.tires),
             tiresLow = low(extra.tires),
@@ -80,9 +81,9 @@ internal object CarDetail {
             windows = WINDOWS.map { w -> if (o != null && w in o.windows) true else extra.parts[w] },
             serviceKm = trip.serviceKm,
             serviceDays = trip.serviceDays,
-            health = if (!hasHealth) null else HealthMath.issues(trip.batteryV, trip.coolantC, lowFuel, trip.serviceKm, trip.serviceDays, trip.batteryHighHeld),
+            health = if (!hasHealth) null else HealthMath.issues(trip.batteryV, lowFuel, trip.serviceKm, trip.serviceDays, trip.batteryHighHeld),
             batteryV = trip.batteryV,
-            coolantC = trip.coolantC,
+            coolantCode = trip.coolantCode,
             pm25In = trip.pm25In,
             outsideC = trip.outsideC,
         )
@@ -171,8 +172,8 @@ internal class CarDetailSheet(private val activity: Activity) {
         row(s(R.string.launcher_health_row_battery),
             m.batteryV?.let { activity.getString(R.string.launcher_health_volt_only, String.format(java.util.Locale.getDefault(), "%,.1f", it)) } ?: dash,
             m.health?.any { it == HealthMath.Issue.BATTERY_LOW || it == HealthMath.Issue.BATTERY_HIGH } == true)
-        row(s(R.string.launcher_health_row_engine), m.coolantC?.let { activity.getString(R.string.launcher_temp_c, it) } ?: dash,
-            m.health?.contains(HealthMath.Issue.ENGINE_HOT) == true)
+        // Motor suyu: yalnız durum ("Normal"); kod derece değil, diğer kodlar doğrulanana dek "—" ([CoolantStatus]).
+        row(s(R.string.launcher_health_row_engine), if (CoolantStatus.isNormal(m.coolantCode)) s(R.string.launcher_coolant_normal) else dash, false)
         val air = m.pm25In?.let { pm ->
             val grade = s(when (AirGrade.of(pm)) {
                 AirGrade.GOOD -> R.string.launcher_air_good

@@ -136,9 +136,8 @@ internal object DataCheckTable {
         if (v in 0..1000) String.format(java.util.Locale.US, "%%%.1f", v / 10.0) else null
     }
 
-    val coolant: (Int) -> String? = { v ->
-        (if (v > 200) v / 10 else v).takeIf { it in -40..150 }?.let { "$it °C" }
-    }
+    /** Motor suyu: derece değil durum kodu ([CoolantStatus]); 2 normal, diğerleri ham kodla. */
+    val coolant: (Int) -> String? = { v -> if (v == CoolantStatus.NORMAL) "Normal (kod $v)" else "kod $v" }
 
     val battery: (Int) -> String? = { v ->
         if (v in 80..165) String.format(java.util.Locale.US, "%.1f V", v / 10.0) else null
@@ -210,7 +209,7 @@ internal object DataCheckTable {
         val health = "Araç sağlığı"
         s(health, "Akü voltajı", RO, ReadOnlyID.ID_BATTERY_LEVEL, battery)
         s(health, "IBS (anlamı belirsiz)", RO, ReadOnlyID.ID_IBS_VOLTAGE) { v -> "ham $v" }
-        s(health, "Soğutma suyu sıcaklığı", RO, ReadOnlyID.ID_WATER_TEMPERATURE, coolant)
+        s(health, "Soğutma suyu durumu", RO, ReadOnlyID.ID_WATER_TEMPERATURE, coolant)
         s(health, "Akü doluluk (IBS SOC)", RO, ReadOnlyID.ID_IBS_SOC, num(0..100, "%"))
 
         val service = "Bakım"

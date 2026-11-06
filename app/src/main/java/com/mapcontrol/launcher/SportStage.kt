@@ -580,7 +580,6 @@ internal class SportStageView(
                 }
                 SportDial.MAX -> setText(v, maxKmh?.toString() ?: DASH)
                 SportDial.SPEED -> setText(v, speedText)
-                SportDial.COOLANT -> setText(v, trip.coolantC?.toString() ?: DASH)
                 SportDial.AVG_SPEED -> setText(v, trip.avgSpeedKmh?.toString() ?: DASH)
                 SportDial.TRIP_TIME -> {
                     val min = TripTotals.drivingMinutes(trip.drivingRunMin, trip.drivingResetMin, trip.drivingAltMin, trip.engineOnMin)

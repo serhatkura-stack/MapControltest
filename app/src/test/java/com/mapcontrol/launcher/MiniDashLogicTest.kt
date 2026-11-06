@@ -44,29 +44,27 @@ class MiniDashLogicTest {
     @Test fun healthAndFuelCapComeFirstInImportanceOrder() {
         val a = MiniAlerts.build(
             TireReading(listOf(1.5, 2.4, 2.4, 2.4)), lowFuel = true, serviceKm = 800, serviceDays = 40, pm25In = 80,
-            batteryV = 11.4, coolantC = 118, fuelCapOpen = true,
+            batteryV = 11.4, fuelCapOpen = true,
         )
         assertEquals(
             listOf(
-                MiniAlerts.Kind.ENGINE_HOT, MiniAlerts.Kind.BATTERY_LOW, MiniAlerts.Kind.TIRE, MiniAlerts.Kind.FUEL_CAP,
+                MiniAlerts.Kind.BATTERY_LOW, MiniAlerts.Kind.TIRE, MiniAlerts.Kind.FUEL_CAP,
                 MiniAlerts.Kind.FUEL_LOW, MiniAlerts.Kind.SERVICE_NEAR, MiniAlerts.Kind.AIR_BAD,
             ),
             a.map { it.kind },
         )
-        assertEquals(118, a[0].coolantC)
-        assertEquals(11.4, a[1].batteryV!!, 1e-9)
+        assertEquals(11.4, a[0].batteryV!!, 1e-9)
         val (named, more) = MiniAlerts.visible(a)
-        assertEquals(listOf(MiniAlerts.Kind.ENGINE_HOT, MiniAlerts.Kind.BATTERY_LOW), named.map { it.kind })
-        assertEquals(5, more)
+        assertEquals(listOf(MiniAlerts.Kind.BATTERY_LOW, MiniAlerts.Kind.TIRE), named.map { it.kind })
+        assertEquals(4, more)
     }
 
     @Test fun healthUsesHealthMathThresholds() {
-        assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 12.6, coolantC = HealthMath.COOLANT_MAX_C).isEmpty())
+        assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 12.6).isEmpty())
         assertEquals(listOf(MiniAlerts.Kind.BATTERY_HIGH), MiniAlerts.build(null, null, null, null, null, batteryV = 15.4, batteryHighHeld = true).map { it.kind })
         // 30 sn sürmeyen aşırı gerilim şeride çıkmaz; 14,5 V (çalışan motor) hiç çıkmaz.
         assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 15.4).isEmpty())
         assertTrue(MiniAlerts.build(null, null, null, null, null, batteryV = 14.5, batteryHighHeld = true).isEmpty())
-        assertEquals(listOf(MiniAlerts.Kind.ENGINE_HOT), MiniAlerts.build(null, null, null, null, null, coolantC = 111).map { it.kind })
         assertEquals(listOf(MiniAlerts.Kind.FUEL_CAP), MiniAlerts.build(null, null, null, null, null, fuelCapOpen = true).map { it.kind })
     }
 

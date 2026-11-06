@@ -8,13 +8,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HealthMathTest {
-    private fun issues(v: Double? = 13.8, c: Int? = 90, fuel: Boolean? = false, km: Int? = 4000, days: Int? = 150, held: Boolean = true) =
-        HealthMath.issues(v, c, fuel, km, days, held)
+    private fun issues(v: Double? = 13.8, fuel: Boolean? = false, km: Int? = 4000, days: Int? = 150, held: Boolean = true) =
+        HealthMath.issues(v, fuel, km, days, held)
 
     @Test fun allNormalHasNoIssues() = assertTrue(issues().isEmpty())
 
     @Test fun missingValuesAreNotProblems() {
-        assertTrue(issues(null, null, null, null, null).isEmpty())
+        assertTrue(issues(null, null, null, null).isEmpty())
         assertFalse(HealthMath.hasData(null, null, null, null, null))
         assertTrue(HealthMath.hasData(null, null, null, 10, null))
     }
@@ -60,9 +60,20 @@ class HealthMathTest {
 
     @Test fun mostImportantFirst() {
         assertEquals(
-            listOf(Issue.ENGINE_HOT, Issue.BATTERY_LOW, Issue.LOW_FUEL, Issue.SERVICE_SOON),
-            issues(v = 11.0, c = 120, fuel = true, km = 500),
+            listOf(Issue.BATTERY_LOW, Issue.LOW_FUEL, Issue.SERVICE_SOON),
+            issues(v = 11.0, fuel = true, km = 500),
         )
+    }
+
+    @Test fun coolantIsAStatusCodeNotDegrees() {
+        // Araçta ReadOnly 100 hep 2 okundu (soğukta ve sürüşten sonra): 2 = normal, diğer kodlar bilinmiyor.
+        assertTrue(CoolantStatus.isNormal(2))
+        assertFalse(CoolantStatus.isNormal(null))
+        assertFalse(CoolantStatus.isNormal(118))
+        assertFalse(CoolantStatus.isNormal(0))
+        // Kod tek başına da "veri var" sayılır; ama hiçbir kod "Motor sıcak" üretmez (derece sinyali doğrulanmadı).
+        assertTrue(HealthMath.hasData(null, 2, null, null, null))
+        assertFalse(Issue.ENGINE_HOT in issues())
     }
 
     @Test fun removedWidgetKeysMapToTheirReplacements() {

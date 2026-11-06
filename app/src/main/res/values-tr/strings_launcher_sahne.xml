@@ -36,7 +36,6 @@
     <string name="launcher_detail_sunroof">Cam tavan</string>
     <string name="launcher_strip_tire_wheel" formatted="true">%1$s %2$d psi</string>
     <string name="launcher_strip_air">Hava kalitesi kötü</string>
-    <string name="launcher_strip_coolant_hot" formatted="true">Motor suyu %1$d°C</string>
     <string name="launcher_strip_battery_low" formatted="true">Akü zayıf %1$.1f V</string>
     <string name="launcher_strip_battery_high" formatted="true">Akü yüksek %1$.1f V</string>
     <string name="launcher_strip_fuel_cap">Yakıt kapağı açık</string>

@@ -61,10 +61,11 @@ class CarDetailTest {
 
     @Test
     fun healthSummaryAndService() {
-        val calm = CarDetail.model(null, ExtraData(), TripData(batteryV = 14.1, coolantC = 89, serviceKm = 3978, serviceDays = 155, pm25In = 4), false)
+        val calm = CarDetail.model(null, ExtraData(), TripData(batteryV = 14.1, coolantCode = CoolantStatus.NORMAL, serviceKm = 3978, serviceDays = 155, pm25In = 4), false)
         assertEquals(emptyList<HealthMath.Issue>(), calm.health)
         assertEquals(3978, calm.serviceKm)
         assertEquals(4, calm.pm25In)
+        assertEquals(CoolantStatus.NORMAL, calm.coolantCode)
         val sick = CarDetail.model(null, ExtraData(), TripData(batteryV = 11.4, serviceKm = 800, serviceDays = 40), true)
         assertEquals(listOf(HealthMath.Issue.BATTERY_LOW, HealthMath.Issue.LOW_FUEL, HealthMath.Issue.SERVICE_SOON), sick.health)
     }

@@ -408,24 +408,25 @@ internal object LauncherDemo {
         val base = tripBase()
         val sick = when (healthProblem) {
             "battery" -> base.copy(batteryV = 11.4)
-            "hot" -> base.copy(coolantC = 118)
+            // Motor suyu derece sinyali yok ([CoolantStatus]): "hot" artık uyarı üretmez.
+            "hot" -> base
             "service" -> base.copy(serviceKm = 640, serviceDays = 22)
             "overdue" -> base.copy(serviceKm = 0, serviceDays = 0)
-            "multi" -> base.copy(batteryV = 11.4, coolantC = 118, serviceKm = 640)
+            "multi" -> base.copy(batteryV = 11.4, serviceKm = 640)
             else -> base
         }
         val alerted = if (alerts) sick.copy(serviceKm = 800, serviceDays = 40, lowFuel = true, pm25In = 80, pm25Out = 95) else sick
         if (noise) {
             val t = (System.currentTimeMillis() / 1000 % 60).toInt()
             return alerted.copy(moving = false, speedKmh = 0, instantL100 = null, lights = lights,
-                batteryV = 14.3 + (t % 4) * 0.1, coolantC = 88 + t % 3, pm25In = 1 + t % 3, pm25Out = 4 + t % 2)
+                batteryV = 14.3 + (t % 4) * 0.1, coolantCode = CoolantStatus.NORMAL, pm25In = 1 + t % 3, pm25Out = 4 + t % 2)
         }
         return alerted.copy(moving = isMoving, speedKmh = speed, instantL100 = instant, lights = lights)
     }
 
     private fun tripBase(): TripData = TripData(
         connected = true, moving = true, instantL100 = 6.8, driveAvgL100 = 7.4, tripKm = 53.8,
-        avgL100 = 7.9, avgSpeedKmh = 45, batteryV = 14.1, coolantC = 89, lowFuel = false,
+        avgL100 = 7.9, avgSpeedKmh = 45, batteryV = 14.1, coolantCode = CoolantStatus.NORMAL, lowFuel = false,
         serviceKm = 3978, serviceDays = 155, pm25In = 1, pm25Out = 4, outsideC = 17.0,
         totalKm = 18_420, totalFuelL = 1_284.6, drivingRunMin = 47, drivingResetMin = 3_552,
     )
