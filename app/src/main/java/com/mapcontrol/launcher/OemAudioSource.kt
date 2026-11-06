@@ -60,9 +60,13 @@ internal object MediaSourcePick {
     /** Oynat'tan önce OEM kaynağı Bluetooth müziğine geçirilmeli mi: kaynak okunamadıysa (null) da geçirilir (OEM gibi zararsız). */
     fun needsBtSwitch(currentSourceType: Int?): Boolean = currentSourceType != OemAudioSource.BT_MUSIC
 
-    /** Oynat'ta izlenecek yol. */
+    /**
+     * Oynat'ta izlenecek yol. BT servisi bağlıysa kaynak 13 olsa bile `MUSIC_PLAY` gider: `CURRENT_SOURCE_TYPE` OEM'in son
+     * seçtiği kaynaktır, odak 42'nin şu anki sahibi değil (navigasyon anonsu, başka uygulama ya da biten HFP araması sonrası
+     * 13 kalır ama odak bizde değildir). Komut zararsızdır: OEM BT servisi odağı yalnızca tutmuyorsa ister (`j/e.java:822-833`).
+     */
     enum class Path {
-        /** OEM kaynağı zaten BT: yalnızca BT oturumuna oynat. */
+        /** OEM kaynağı zaten BT ve BT servisi yok: yalnızca BT oturumuna oynat (OPEN_SOURCE atlanır). */
         ALREADY_BT,
         /** VDBus BT `MUSIC_PLAY{playCtrl=1, playType=0}`: OEM BT servisi odak 42'yi alır ve çalar (svaudioapp'in yolu). */
         BT_PLAY,
@@ -73,8 +77,8 @@ internal object MediaSourcePick {
     }
 
     fun path(currentSourceType: Int?, btBus: Boolean, mediaBus: Boolean): Path = when {
-        !needsBtSwitch(currentSourceType) -> Path.ALREADY_BT
         btBus -> Path.BT_PLAY
+        !needsBtSwitch(currentSourceType) -> Path.ALREADY_BT
         mediaBus -> Path.OPEN_SOURCE
         else -> Path.PLAIN
     }
@@ -139,9 +143,9 @@ internal object OemAudioSource {
     }
 
     /**
-     * Kullanıcı Oynat'a bastı ve bir Bluetooth oturumu var: OEM kaynağı BT değilse OEM BT servisine çal komutu gider
-     * (odak 42 alınır); [play] yedek olarak ana iş parçacığında biraz sonra çalışır (zararsız: oturum zaten çalıyorsa
-     * onPlay bir şey yapmaz). VDBus yoksa yalnızca [play].
+     * Kullanıcı Oynat'a bastı ve bir Bluetooth oturumu var: OEM BT servisine her zaman çal komutu gider (odak 42 alınır,
+     * kaynak 13 olsa da; bkz. [MediaSourcePick.Path]); [play] yedek olarak ana iş parçacığında biraz sonra çalışır
+     * (zararsız: oturum zaten çalıyorsa onPlay bir şey yapmaz). VDBus yoksa yalnızca [play].
      */
     fun playBluetooth(context: Context, play: Runnable) {
         // VDBus init ana iş parçacığında (PhoneBackends/FavoriteKey gibi); bağlanma ve binder çağrıları arka planda.
@@ -153,6 +157,9 @@ internal object OemAudioSource {
         }
         io.execute {
             val t0 = SystemClock.elapsedRealtime()
+            // İki servisin bağlanması aynı anda başlar: bekleme en çok BIND_WAIT_MS (art arda ~3 sn değil).
+            startBind(VDServiceDef.ServiceType.MEDIA)
+            startBind(VDServiceDef.ServiceType.BT)
             val media = connect(VDServiceDef.ServiceType.MEDIA)
             val current = if (media == null) null else try {
                 VDMediaType.getValue(media.getOnce(VDEventMedia.CURRENT_SOURCE_TYPE))?.mediaType
@@ -160,7 +167,7 @@ internal object OemAudioSource {
                 Log.w(TAG, "source read: ${t.javaClass.simpleName}")
                 null
             }
-            val btBus = if (MediaSourcePick.needsBtSwitch(current)) connect(VDServiceDef.ServiceType.BT) else null
+            val btBus = connect(VDServiceDef.ServiceType.BT)
             val path = MediaSourcePick.path(current, btBus != null, media != null)
             val sent = try {
                 when (path) {
@@ -187,16 +194,24 @@ internal object OemAudioSource {
         }
     }
 
-    /** io: [type] servisine bağlanır (en çok [BIND_WAIT_MS] bekler); bağlanamazsa null. */
+    /** io: [type] servisi bağlı değilse bağlanmayı başlatır, beklemez. */
+    private fun startBind(type: VDServiceDef.ServiceType) {
+        val b = bus ?: return
+        try {
+            if (!b.isServiceConnected(type)) b.bindService(type)
+        } catch (t: Throwable) {
+            Log.w(TAG, "bind $type: ${t.javaClass.simpleName}")
+        }
+    }
+
+    /** io: [startBind] sonrası [type] servisinin bağlanmasını bekler (en çok [BIND_WAIT_MS]); bağlanamazsa null. */
     private fun connect(type: VDServiceDef.ServiceType): VDBus? {
         val b = bus ?: return null
         return try {
-            if (!b.isServiceConnected(type)) {
-                b.bindService(type)
-                val until = SystemClock.elapsedRealtime() + BIND_WAIT_MS
-                while (!b.isServiceConnected(type) && SystemClock.elapsedRealtime() < until) {
-                    SystemClock.sleep(100)
-                }
+            // Bağlanma [startBind] ile başladı; burada yalnızca beklenir (bindService iki kez çağrılmaz).
+            val until = SystemClock.elapsedRealtime() + BIND_WAIT_MS
+            while (!b.isServiceConnected(type) && SystemClock.elapsedRealtime() < until) {
+                SystemClock.sleep(100)
             }
             if (b.isServiceConnected(type)) b else null
         } catch (t: Throwable) {

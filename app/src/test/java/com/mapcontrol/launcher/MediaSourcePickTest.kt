@@ -55,7 +55,10 @@ class MediaSourcePickTest {
     }
 
     @Test fun pathPrefersBtServiceThenMediaServiceThenPlain() {
-        assertEquals(Path.ALREADY_BT, MediaSourcePick.path(13, btBus = true, mediaBus = true))
+        // Kaynak 13 ama odak başkasında olabilir: BT servisi varsa yine MUSIC_PLAY.
+        assertEquals(Path.BT_PLAY, MediaSourcePick.path(13, btBus = true, mediaBus = true))
+        assertEquals(Path.ALREADY_BT, MediaSourcePick.path(13, btBus = false, mediaBus = true))
+        assertEquals(Path.ALREADY_BT, MediaSourcePick.path(13, btBus = false, mediaBus = false))
         assertEquals(Path.BT_PLAY, MediaSourcePick.path(9, btBus = true, mediaBus = true))
         assertEquals(Path.BT_PLAY, MediaSourcePick.path(null, btBus = true, mediaBus = false))
         assertEquals(Path.OPEN_SOURCE, MediaSourcePick.path(10, btBus = false, mediaBus = true))
