@@ -34,6 +34,15 @@ data class SahneLayout(
     fun types(): Set<WidgetType> = slots().map { it.type }.toSet()
 }
 
+/**
+ * Orta bandın yerleşimi (saf): iki panelli biçimde (Tiggo 7) boş bir yan panel, düzenleme dışında yer kaplamaz; araç
+ * sahnesi o boşluğa genişler (boş soluk cam durmasın). Düzenlemede boş yuva "+" ile görünür. Dört panelde her yuva hep yerindedir.
+ */
+object SahneBand {
+    fun occupies(layout: SahneLayout, panelIndex: Int, editing: Boolean): Boolean =
+        layout.quad || editing || SahneSlots.get(layout, SahneSlotRef(SahneSlotKind.PANEL, panelIndex)) != null
+}
+
 /** Yuva türü: yan panel ya da şerit öğesi. */
 enum class SahneSlotKind { PANEL, STRIP }
 
@@ -61,12 +70,12 @@ object SahneForm {
 
     /**
      * Panel (büyük) için izinli türler, seçicideki sırayla: yalnız bu boyuta göre çizilmiş widget'lar (4 Kasım kararı §2;
-     * Navigasyon §3'ten: Yandex bildiriminden sonraki dönüş; Telefon: sesli asistan, favoriler, son aramalar).
-     * Telefon sonda: varsayılan düzende yok, yedek seçiminde en son denenir (kullanıcı seçiciden ekler).
+     * Navigasyon §3'ten: Yandex bildiriminden sonraki dönüş). Telefon artık ayrı panel değil (6 Kasım kararı): medya
+     * kartının arka yüzüdür ([MediaPhoneFlip]); eski kayıtlardaki telefon paneli [SahneSlots.migratePhonePanel] ile kalkar.
      * Diğer türlerin eski Sahne kayıtlarındaki yuvaları [SahneSlots.decode]'da yedeğe döner.
      */
     val PANEL_TYPES: List<WidgetType> =
-        listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION, WidgetType.PHONE)
+        listOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION)
 
     fun fitsPanel(type: WidgetType): Boolean = type in PANEL_TYPES
     fun fitsStrip(type: WidgetType): Boolean = type in STRIP_TYPES
@@ -276,8 +285,8 @@ object SahneSlots {
         }
         val strip = parts[3].split(",").map { slot(it) }
         val quad = parts.size == 6
-        val raw = migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip, quad,
-            if (quad) slot(parts[4]) else null, if (quad) slot(parts[5]) else null))
+        val raw = migratePhonePanel(migrateLock(SahneLayout(slot(parts[1]), slot(parts[2]), strip, quad,
+            if (quad) slot(parts[4]) else null, if (quad) slot(parts[5]) else null)))
         return fallbackPanels(raw, sanitize(raw))
     }
 
@@ -314,6 +323,24 @@ object SahneSlots {
             val cleared = set(out, ref, null)
             out = if (hasMode) cleared else set(cleared, ref, SahneSlot(newId(cleared, WidgetType.DRIVE_MODE), WidgetType.DRIVE_MODE))
             hasMode = true
+        }
+        return out
+    }
+
+    /**
+     * Telefon paneli kalktı (6 Kasım kararı: telefon medya kartının arka yüzü). Eski kayıttaki telefon paneli, düzende medya
+     * paneli varsa boşalır (iki panelli biçimde o yan kapanır, araç sahnesi genişler; [SahneBand]); medya hiç yoksa yerine
+     * medya gelir ki telefon yüzüne kart çevrilerek yine ulaşılsın. Telefon paneli yoksa düzen aynen döner.
+     */
+    fun migratePhonePanel(layout: SahneLayout): SahneLayout {
+        val refs = (0 until layout.panelCount).map { SahneSlotRef(SahneSlotKind.PANEL, it) }
+        if (refs.none { get(layout, it)?.type == WidgetType.PHONE }) return layout
+        var out = layout
+        refs.forEach { ref ->
+            if (get(out, ref)?.type != WidgetType.PHONE) return@forEach
+            val cleared = set(out, ref, null)
+            val hasMedia = refs.any { get(cleared, it)?.type == WidgetType.MEDIA }
+            out = if (hasMedia) cleared else set(cleared, ref, SahneSlot(newId(cleared, WidgetType.MEDIA), WidgetType.MEDIA))
         }
         return out
     }

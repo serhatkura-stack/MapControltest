@@ -33,6 +33,8 @@ import java.text.DateFormatSymbols
  * Son aramalar listesi panelde yok; "Tümü"de. Veri yalnızca [PhoneSource]'tan, olay güdümlü; görünmezken dinleme yok.
  * Bölümler yalnız verisi değişince yeniden kurulur; tek zamanlayıcı "Son arama" zamanının dakikalık tazelemesidir.
  *
+ * Medya kartının arka yüzü olarak da kullanılır ([MediaPhoneFlip]): aynı görünüm, yalnız başlık sağında çevirme simgesine pay.
+ *
  * [sheet]: alt çubuktaki telefon düğmesinin açtığı sayfadaki aynı görünüm (sayfanın kendi başlığı olduğu için "TELEFON"
  * etiketi gizli); [onDialed] arama başlayınca sayfayı kapatır. [onOpenAll]: "Tümü" (null ise etkinlik açar).
  *
@@ -43,6 +45,8 @@ internal class PhonePanel(
     private val sheet: Boolean = false,
     private val onDialed: (() -> Unit)? = null,
     private val onOpenAll: (() -> Unit)? = null,
+    /** Başlık sağında boş bırakılan pay (dp): medya kartının arka yüzünde köşedeki çevirme simgesine yer açar. */
+    private val headerEndInsetDp: Int = 0,
 ) : SizedWidget, PhoneListener {
 
     private val context: Context = activity
@@ -76,7 +80,10 @@ internal class PhonePanel(
             addView(headIcon, LinearLayout.LayoutParams(context.dp(20), context.dp(20)))
             addView(headLabel, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
         }
-        addView(deviceText, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (!sheet) marginStart = context.dp(16) })
+        addView(deviceText, LinearLayout.LayoutParams(0, WRAP, 1f).apply {
+            if (!sheet) marginStart = context.dp(16)
+            marginEnd = context.dp(headerEndInsetDp)
+        })
     }
 
     // --- Son arama kartı ---

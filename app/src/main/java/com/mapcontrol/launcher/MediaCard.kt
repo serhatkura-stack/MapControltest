@@ -38,6 +38,15 @@ class MediaCard(
 
     // --- Şerit (Sahne): başlık, sanatçı; dokunuş oynat/duraklat (boştayken son kaynağı açar) ---
     override var onStripChanged: (() -> Unit)? = null
+
+    /** Çalma durumu değişince (yalnız değişimde; [MediaPhoneFlip] çevirme simgesinin ışıması için). */
+    var onPlayingChanged: ((Boolean) -> Unit)? = null
+
+    /** Şu an çalıyor mu (ekranda gösterilen durum). */
+    val isPlaying: Boolean get() = shownPlaying == true
+
+    /** Yatay sürüklemenin kartı çevirmemesi gereken parçalar (ilerleme çubuğu ve süreleri). */
+    fun horizontalDragViews(): List<View> = listOf(progressBox)
     private var stripNow: StripState? = null
     override fun stripState(): StripState? = stripNow
     override fun stripTap(part: Int) {
@@ -568,6 +577,7 @@ class MediaCard(
         val previous = shownPlaying
         if (previous == isPlaying) return
         shownPlaying = isPlaying
+        onPlayingChanged?.invoke(isPlaying)
         val res = if (sahne) (if (isPlaying) R.drawable.ic_sahne_pause else R.drawable.ic_sahne_play)
         else if (isPlaying) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play
         playButton.contentDescription = context.getString(

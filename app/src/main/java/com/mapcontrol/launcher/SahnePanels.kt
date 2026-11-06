@@ -17,14 +17,16 @@ import android.widget.TextView
 import com.mapcontrol.R
 
 /**
- * Sahne yan panelindeki widget'ı kurar. Medya, yolculuk, navigasyon ve telefon kendi özel düzenleriyle ([MediaCard] Sahne kipi,
- * [SahneTripPanel], [NavigationPanel], [PhonePanel]); diğer her tür kendi kutucuğunun en büyük boyutuyla (büyük biçimi yoksa büyütülmüş kutucuk)
+ * Sahne yan panelindeki widget'ı kurar. Medya (arka yüzü telefon), yolculuk ve navigasyon kendi özel düzenleriyle
+ * ([MediaPhoneFlip]: [MediaCard] Sahne kipi + [PhonePanel], [SahneTripPanel], [NavigationPanel]); eski kayıtlardaki telefon
+ * paneli için [PhonePanel] de kurulabilir; diğer her tür kendi kutucuğunun en büyük boyutuyla (büyük biçimi yoksa büyütülmüş kutucuk)
  * cam panelin içine konur, kart zemini kaldırılır ve renkler Sahne jetonlarından gelir.
  */
 internal object SahnePanelFactory {
     /** [calm]: Sürüş düzeni; hareketli öğeler (canlı çubuk geçmişi) çizilmez, yalnızca büyük değer ve tek alt satır. */
     fun create(activity: Activity, slot: SahneSlot, calm: Boolean = false): SizedWidget = when (slot.type) {
-        WidgetType.MEDIA -> MediaCard(activity, sahne = true)
+        // Medya kartının arka yüzü telefon ([MediaPhoneFlip]); ayrı telefon paneli yok.
+        WidgetType.MEDIA -> MediaPhoneFlip(activity)
         WidgetType.TRIP -> SahneTripPanel(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
         WidgetType.PHONE -> PhonePanel(activity)

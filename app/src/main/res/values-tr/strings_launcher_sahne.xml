@@ -44,4 +44,7 @@
     <string name="launcher_sport_summary_avg">Tüketim</string>
     <!-- Spor hız kadranının altındaki küçük devir okuması. -->
     <string name="launcher_sport_rpm">%1$d dev/dk</string>
+    <!-- Medya kartının sağ üst köşesindeki çevirme simgesi (kartın arka yüzü telefon). -->
+    <string name="launcher_flip_to_phone">Telefona çevir</string>
+    <string name="launcher_flip_to_media">Medyaya çevir</string>
 </resources>

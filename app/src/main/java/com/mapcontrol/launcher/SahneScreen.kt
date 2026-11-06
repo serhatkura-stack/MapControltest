@@ -82,9 +82,18 @@ class SahneScreen(
         rebuildAll()
     }
 
-    /** Etkin düzende [type] türü bir panel yuvasında mı (alt çubuk telefon düğmesi: panel ekrandaysa sayfa açılmaz). */
-    fun hasPanel(type: WidgetType): Boolean =
-        panels.indices.any { SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type }
+    /**
+     * Etkin düzende [type] türü bir panel yuvasında mı (alt çubuk telefon düğmesi: panel ekrandaysa sayfa açılmaz). Telefon
+     * için medya kartı telefon yüzündeyse de evet.
+     */
+    fun hasPanel(type: WidgetType): Boolean = panelIndexOf(type) != null
+
+    private fun panelIndexOf(type: WidgetType): Int? = panels.indices.firstOrNull {
+        SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type ||
+            (type == WidgetType.PHONE && flipAt(it)?.face == CardFace.PHONE)
+    }
+
+    private fun flipAt(index: Int): MediaPhoneFlip? = hosted[SahneSlotRef(SahneSlotKind.PANEL, index)]?.firstOrNull() as? MediaPhoneFlip
 
     /**
      * Verilen türü taşıyan paneli kısa bir nabızla gösterir (ör. alt çubuk telefon düğmesi, panel zaten ekrandayken):
@@ -92,7 +101,8 @@ class SahneScreen(
      */
     fun flashPanel(type: WidgetType) {
         if (sportShown) return
-        val i = panels.indices.firstOrNull { SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, it))?.type == type } ?: return
+        val i = panelIndexOf(type) ?: return
+        if (flipAt(i)?.turning == true) return
         val v = panels[i]
         v.animate().cancel()
         v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(FLASH_MS).withEndAction {
@@ -192,7 +202,14 @@ class SahneScreen(
     private fun restAlpha(v: View): Float {
         val i = panels.indexOf(v)
         if (i < 0) return 1f
-        return if (SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, i)) == null && !editMode) EMPTY_ALPHA else 1f
+        return panelAlpha(i)
+    }
+
+    /** Panelin dinlenme alfası: yer kaplamayan (kapalı) boş yan 0, boş panel soluk, dolu tam. */
+    private fun panelAlpha(i: Int): Float = when {
+        !SahneBand.occupies(shown, i, editMode) -> 0f
+        SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, i)) == null && !editMode -> EMPTY_ALPHA
+        else -> 1f
     }
 
     /** Spor tamamen kapandıktan sonra: büyük bitmap ve görünüm bırakılır. */
@@ -250,7 +267,10 @@ class SahneScreen(
                     widgets = emptyList()
                 } else {
                     val w = SahnePanelFactory.create(activity, slot, calm = mode == LayoutMode.DRIVE)
-                    panel.setGlow(slot.type == WidgetType.MEDIA)
+                    val flip = w as? MediaPhoneFlip
+                    // Medya ışıması yalnız kartın medya yüzünde (telefon yüzü sakin cam).
+                    flip?.onFaceShown = { face -> panel.setGlow(face == CardFace.MEDIA) }
+                    panel.setGlow(slot.type == WidgetType.MEDIA && flip?.face != CardFace.PHONE)
                     panel.host(w.view, SahnePanelFactory.panelPaddingDp(slot.type), SahneArt.panelBackground(activity, slot.type))
                     widgets = listOf(w)
                 }
@@ -308,9 +328,9 @@ class SahneScreen(
     /** Boş yuvalar: düzenlemede "+" örtüsü, normalde soluk boş cam (panel) ya da boşluk (şerit). */
     private fun refreshEmpty() {
         overlays.forEach { (ref, o) -> o.bind(SahneSlots.get(shown, ref) != null) }
-        panels.forEachIndexed { i, p ->
-            p.alpha = if (SahneSlots.get(shown, SahneSlotRef(SahneSlotKind.PANEL, i)) == null && !editMode) EMPTY_ALPHA else 1f
-        }
+        panels.forEachIndexed { i, p -> p.alpha = panelAlpha(i) }
+        // Boş yan düzenlemede açılır, dışında kapanır: araç sahnesi genişliği değişir.
+        requestLayout()
     }
 
     private fun place(ref: SahneSlotRef, type: WidgetType) {
@@ -577,9 +597,9 @@ class SahneScreen(
         val bandH = h - stripH - gapV
         val panelW = (PANEL_W * k).toInt()
         val gapH = (GAP_H * k).toInt()
-        val stageW = w - 2 * panelW - 2 * gapH
+        val stageW = w - sideW(0, panelW, gapH) - sideW(1, panelW, gapH)
         val panelH = panelHeight(bandH, gapV)
-        panels.forEach { it.measure(exactly(panelW), exactly(panelH)) }
+        panels.forEachIndexed { i, p -> p.measure(exactly(if (SahneBand.occupies(shown, i, editMode)) panelW else 0), exactly(panelH)) }
         stage.measure(exactly(stageW), exactly(bandH + gapV))
         strip.measure(exactly(w), exactly(stripH))
         sport?.measure(exactly(w), exactly(h))
@@ -594,15 +614,19 @@ class SahneScreen(
         val stripH = context.dp(STRIP_H_DP)
         val gapV = context.dp(GAP_V_DP)
         val bandH = h - stripH - gapV
-        val panelW = leftPanel.measuredWidth
+        val k = w / DESIGN_W
+        val panelW = (PANEL_W * k).toInt()
+        val gapH = (GAP_H * k).toInt()
         val panelH = panelHeight(bandH, gapV)
-        leftPanel.layout(0, 0, panelW, panelH)
-        rightPanel.layout(w - panelW, 0, w, panelH)
+        leftPanel.layout(0, 0, leftPanel.measuredWidth, panelH)
+        rightPanel.layout(w - rightPanel.measuredWidth, 0, w, panelH)
         if (quad) {
             leftLowerPanel.layout(0, bandH - panelH, panelW, bandH)
             rightLowerPanel.layout(w - panelW, bandH - panelH, w, bandH)
         }
-        stage.layout(panelW + (w - 2 * panelW - stage.measuredWidth) / 2, 0, w - panelW - (w - 2 * panelW - stage.measuredWidth) / 2, bandH + gapV)
+        // Sahne iki yanın arasında: kapalı (boş) yan varsa o boşluğa genişler.
+        val stageL = sideW(0, panelW, gapH)
+        stage.layout(stageL, 0, stageL + stage.measuredWidth, bandH + gapV)
         strip.layout(0, h - stripH, w, h)
         sport?.layout(0, 0, w, h)
         overlays.forEach { (ref, o) ->
@@ -626,6 +650,9 @@ class SahneScreen(
 
     /** Düzenlemede yuva örtüleri dokunuşu alır; sahne zaten kilitli. */
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = false
+
+    /** Bir yanın (0 sol, 1 sağ) bantta kapladığı genişlik: panel + aralık, kapalı (boş) yanda 0 ([SahneBand]). */
+    private fun sideW(side: Int, panelW: Int, gapH: Int): Int = if (SahneBand.occupies(shown, side, editMode)) panelW + gapH else 0
 
     /** Panel yüksekliği: iki panelli biçimde bant boyu, dört panelli biçimde aralarında [GAP_V_DP] boşlukla yarısı. */
     private fun panelHeight(bandH: Int, gapV: Int): Int = if (quad) (bandH - gapV) / 2 else bandH
