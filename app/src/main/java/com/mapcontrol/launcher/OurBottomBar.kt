@@ -87,7 +87,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
      * Tek parça dock: koyu cam yüzeyli tek yuvarlak şerit (köşeler yalnızca iki uçta, kart yarıçapında), bölümler
      * arası boşluksuz; ayrım 1dp ince ayraçlarla (üstten/alttan içeride). Genişlik ağırlıkla dolar.
      */
-    override val view: View = if (LauncherTheme.sahne) sahneBar() else LinearLayout(context).apply {
+    override val view: View = if (LauncherTheme.sahne) sahneBar() else SwipeUpBar(context) { openClimatePanel() }.apply {
         orientation = LinearLayout.HORIZONTAL
         background = surface
         clipToOutline = true
@@ -124,7 +124,7 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
      * gündüz grafit), ince çizgilerle ayrılmış sürücü sıcaklığı · fan · yolcu sıcaklığı, sağda ayarlar · telefon.
      * Dokunma davranışları aynı.
      */
-    private fun sahneBar(): View = LinearLayout(context).apply {
+    private fun sahneBar(): View = SwipeUpBar(context) { openClimatePanel() }.apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, control = true)
@@ -329,6 +329,12 @@ class OurBottomBar(private val activity: Activity) : LauncherWidget, Themeable {
         }
     }
 
+    /** Çubukta yukarı kaydırma: OEM klima paneli (yalnız OEM paketi olan araçta; yoksa kısa uyarı). */
+    private fun openClimatePanel() {
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        ClimatePanel.open(context)
+    }
+
     private fun openPackage(packageName: String) {
         io.runSafely { AppLaunchHelper.launchAppOnDisplay(context, packageName, Display.DEFAULT_DISPLAY, 0) }
     }
@@ -521,4 +527,37 @@ private class DockSurface(private val context: Context, radiusDp: Float) : Drawa
     override fun setColorFilter(colorFilter: ColorFilter?) {}
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+/**
+ * Yatay çubuk kökü: dokunma alanları (sıcaklık/fan) kendi sürüklemesini sahiplenir ve üst görünümün yakalamasını
+ * kapatır, bu yüzden yalnızca düğmeler ve boşluklar üstündeki yukarı kaydırma ([ClimatePanelGesture]) yakalanır.
+ * Bırakınca eşik aşıldıysa [onSwipeUp] bir kez çağrılır.
+ */
+private class SwipeUpBar(context: Context, private val onSwipeUp: () -> Unit) : LinearLayout(context) {
+    private var downX = 0f
+    private var downY = 0f
+    private var tracking = false
+    private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+
+    override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; tracking = false }
+            android.view.MotionEvent.ACTION_MOVE ->
+                if (ClimatePanelGesture.isUpwardDrag(downY - e.rawY, e.rawX - downX, slop)) { tracking = true; return true }
+        }
+        return false
+    }
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (!tracking) return super.onTouchEvent(e)
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_UP -> {
+                tracking = false
+                if (ClimatePanelGesture.shouldOpen(downY - e.rawY, e.rawX - downX, resources.displayMetrics.density)) onSwipeUp()
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> tracking = false
+        }
+        return true
+    }
 }

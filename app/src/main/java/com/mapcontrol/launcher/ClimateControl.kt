@@ -28,7 +28,7 @@ import kotlin.math.abs
  * "Bizimki" alt çubuğunun klima bölümleri: sürücü sıcaklığı, fan, yolcu sıcaklığı. Her biri ayrı bir kart yüzeyidir
  * (çubuk üçünü ayrı yerleştirir) ve etkileşimlidir:
  *  - sıcaklık: dikey sürükleme (her 40dp = 0,5 °C, yukarı = sıcak), dokunuşta sağ yarı +0,5 / sol yarı −0,5,
- *    uzun basış diğer tarafı bu değere eşitler;
+ *    uzun basış OEM klima panelini açar ([ClimatePanel]);
  *  - fan: yatay sürükleme 1..10, dokunuş kapat/aç, altında ince 10 noktalı kademe göstergesi.
  *
  * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
@@ -211,11 +211,9 @@ internal class ClimateControl(
         private var longFired = false
         private val longPress = Runnable {
             longFired = true
-            val other = if (side == ClimateSide.DRIVER) ClimateSide.PASSENGER else ClimateSide.DRIVER
-            bubble.show(view, format(start), context.getString(R.string.launcher_climate_sync), 0)
-            commitTemp(side, start)
-            commitTemp(other, start)
-            main.postDelayed({ if (!dragging) bubble.dismiss() }, SYNC_SHOW_MS)
+            view.isPressed = true
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            ClimatePanel.open(context)
         }
 
         init {

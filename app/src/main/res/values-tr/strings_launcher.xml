@@ -110,6 +110,7 @@
     <string name="launcher_bar_settings">Ayarlar</string>
     <string name="launcher_read_only_climate">Test sürümü: klima araçtan değiştirilir</string>
     <string name="launcher_climate_pending">Klima kontrolü araç testinden sonra açılacak</string>
+    <string name="launcher_climate_panel_failed">Klima paneli açılamadı</string>
     <string name="launcher_climate_sync">Senkron</string>
     <string name="launcher_climate_driver">Sürücü sıcaklığı</string>
     <string name="launcher_climate_passenger">Yolcu sıcaklığı</string>
