@@ -130,7 +130,12 @@ class ArrivalLog {
  *
  * Günlük: `adb logcat -s SportRpm` (773 ilk değer/boş, varış aralıkları; yalnız sayılar).
  */
-internal class VhalSportReader(context: Context, private val onSpeedChange: Runnable) {
+internal class VhalSportReader(
+    context: Context,
+    /** Asıl hız yolu (CAR_SPEED) canlı mı; canlıyken 519 ana iş parçacığını uyandırmaz (VDBus iş parçacığında okunur, volatile alanlar). */
+    private val primaryLive: () -> Boolean = { false },
+    private val onSpeedChange: Runnable,
+) {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val pending = AtomicBoolean(false)
@@ -179,7 +184,7 @@ internal class VhalSportReader(context: Context, private val onSpeedChange: Runn
         speedArrivals.mark(now)
         speedAt = now
         speedKmh = kmh
-        if (gate.shouldPost(kmh) && pending.compareAndSet(false, true)) main.post(fire)
+        if (!primaryLive() && gate.shouldPost(kmh) && pending.compareAndSet(false, true)) main.post(fire)
     }
 
     private fun onRpm(e: VDEvent) {

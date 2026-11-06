@@ -170,7 +170,7 @@ internal class SportStageView(
     /** Spor görünürken hızlı hız (android.car, 10 Hz; demoda çalışmaz). */
     private val carSpeed = CarSpeedReader(activity) { onCarSpeed() }
     /** VDBus VEHICLE_HAL 519 (hız yedeği, izinsiz) ve 773 (devir adayı); görünürken abone. */
-    private val vhal = VhalSportReader(activity) { onVhalSpeed() }
+    private val vhal = VhalSportReader(activity, primaryLive = { carSpeed.live }) { onVhalSpeed() }
     /** ReadOnly 62 değişim aralıkları (tikte okunur, 500 ms çözünürlük). */
     private val rpm62Arrivals = ArrivalLog()
     /** 773 bir kez 62 ile uyuştu mu (birim doğrulaması); uyuşmadan gösterime girmez. */

@@ -34,7 +34,7 @@ internal object SportDialPrefs {
 
     /** İvme sensörü var mı (G-metre sunulur mu); demo "sensör yok" diyebilir. */
     fun hasG(context: Context): Boolean {
-        if (LauncherDemo.sportNoG) return false
+        if (LauncherDemo.enabled && LauncherDemo.sportNoG) return false
         sensorG?.let { return it }
         val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         val v = sm?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION) != null || sm?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null

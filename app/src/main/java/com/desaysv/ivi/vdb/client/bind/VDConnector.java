@@ -77,7 +77,6 @@ public class VDConnector {
                 Log.d(VDConnector.TAG, "Reconnect denemesi başlatılıyor, count=" + VDConnector.this.mReconnectCount + " service=" + VDConnector.this.mServiceInfo.getServiceName());
                 VDConnector.this.bindService();
             } else if (i9 == 2000) {
-                Log.d(VDConnector.TAG, "MSG_DISPATCH_EVENT: main thread notify, eventId=" + ((VDEvent) message.obj).getId());
                 VDConnector.this.dispatchEvent((VDEvent) message.obj, VDThreadType.MAIN_THREAD);
             } else if (i9 == 3000) {
                 Iterator it = ((Map) message.obj).entrySet().iterator();
@@ -488,7 +487,6 @@ public class VDConnector {
     }
 
     public void dispatchEvent(VDEvent vDEvent, int i9) {
-        Log.d(TAG, "dispatchEvent: id=" + vDEvent.getId() + " threadType=" + i9 + " listenerCount=" + this.mVDNotifyListenerList.size());
         synchronized (this.mVDNotifyListenerList) {
             int i10 = 0;
             while (i10 < this.mVDNotifyListenerList.size()) {

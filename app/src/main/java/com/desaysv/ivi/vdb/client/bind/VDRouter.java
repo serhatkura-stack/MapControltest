@@ -32,7 +32,7 @@ public class VDRouter {
     private final int MAX_DEBOUNCE_NUM = 10;
     private final int MSG_DISPATCH_GET_LIST_EVENT = 1000;
     private Context mContext = null;
-    private VDConnector mCurVDConnector = null;
+    private volatile VDConnector mCurVDConnector = null;
     private Handler mDebounceHandler;
     private ArrayList<VDEvent> mDebounceList = new ArrayList<>();
     private boolean mIsInited = false;
@@ -232,7 +232,7 @@ public class VDRouter {
         int id = vDEvent.getId() >> 16;
         VDConnector vDConnector = this.mCurVDConnector;
         if (vDConnector != null && vDConnector.getServiceInfo().getServiceType().getValue() == id) {
-            return this.mCurVDConnector;
+            return vDConnector;
         }
         if (id >= this.mVDConnectorList.size()) {
             Log.w(TAG, "getConnector(VDEvent): id out of range, eventId=" + vDEvent.getId() + " index=" + id + " size=" + this.mVDConnectorList.size());
@@ -458,7 +458,7 @@ public class VDRouter {
     private VDConnector getConnector(VDServiceDef.ServiceType serviceType) {
         VDConnector vDConnector = this.mCurVDConnector;
         if (vDConnector != null && vDConnector.getServiceInfo().getServiceType() == serviceType) {
-            return this.mCurVDConnector;
+            return vDConnector;
         }
         int value = serviceType.getValue();
         if (value >= this.mVDConnectorList.size()) {

@@ -619,7 +619,7 @@ class SpeedCalibration {
  * ve yeniden çizim yok.
  */
 class SpeedPostGate(private val band: Float = BAND_KMH) {
-    private var last = Float.NaN
+    @Volatile private var last = Float.NaN
 
     fun shouldPost(kmh: Float): Boolean {
         val prev = last

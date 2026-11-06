@@ -49,6 +49,7 @@ internal object LauncherDemo {
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
         if (!enabled) main.removeCallbacks(cycle)
         if (!enabled) NavigationSource.setDemo(false)
+        if (!enabled) resetSportPreview()
         if (enabled && intent.hasExtra(VehicleProfile.EXTRA_PROFILE)) VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
         if (enabled && intent.hasExtra(EXTRA_WIFI)) wifi = intent.getBooleanExtra(EXTRA_WIFI, false)
         if (enabled && intent.hasExtra(EXTRA_CHARGING)) charging = intent.getBooleanExtra(EXTRA_CHARGING, true)
