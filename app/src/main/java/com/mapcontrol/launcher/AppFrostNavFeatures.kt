@@ -156,6 +156,28 @@ internal class AppFrostNavFeatures(context: Context) : FrostNavFeatures {
         }
     }
 
+    // --- Sürüş ekranı (Navigasyon kartı; FrostNav'ın aynı bölme başlatıcısı) ---
+
+    override fun startDriveScreen(mapPkg: String?, route: Intent?, done: (String?) -> Unit) {
+        val slot = mapPkg ?: com.mapcontrol.util.SplitSlot.mapPicker(app.packageName)
+        SplitScreenLauncher.startDriveScreen(app, slot, route) { result ->
+            Log.i(TAG, "split(drive, ${if (mapPkg == null) "picker" else mapPkg}) -> $result")
+            done(if (result == SplitScreenLauncher.Result.STARTED) null else SplitScreenMessages.resultText(app, result))
+        }
+    }
+
+    override fun mapFullScreen(pkg: String, done: (Boolean) -> Unit) {
+        SplitScreenLauncher.mapFullScreen(app, pkg) { result -> done(result == SplitScreenLauncher.Result.STARTED) }
+    }
+
+    override fun endDriveScreen() = SplitScreenLauncher.endDriveScreen(app)
+
+    override fun openFullScreen(pkg: String) = SplitScreenLauncher.openFullScreenAsync(app, pkg)
+
+    override fun restoreStaleMap(pkg: String) = SplitScreenLauncher.restoreStaleMap(app, pkg)
+
+    override fun driveMapSlot(): android.graphics.Rect? = SplitScreenLauncher.driveMapSlot(app)
+
     // --- Göstergeye yansıt (MapControlService aç/kapa eylemleri → ClusterDisplayManager, Yansıtma sekmesiyle aynı) ---
 
     override fun readCluster() = ClusterState(ClusterNavigationState.getLastKnownOpen(), TargetPackageStore.read(app).ifEmpty { null })

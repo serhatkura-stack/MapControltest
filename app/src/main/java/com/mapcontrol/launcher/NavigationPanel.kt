@@ -31,7 +31,8 @@ import kotlin.math.sin
 /**
  * Sahne Navigasyon paneli. Üç hâl:
  *  - Rota var ([NavigationState.active]): büyük manevra oku (kendi vektör çizimimiz, [ManeuverArrowView]), büyük mesafe,
- *    sokak adı ve altta "Varış 14:52 · 18 km". Dokununca seçili harita uygulaması tam ekran açılır.
+ *    sokak adı ve altta "Varış 14:52 · 18 km". Dokununca sürüş ekranı açılır ([DriveScreen]: Mini gösterge + seçili harita, bölünmüş;
+ *    FrostNav'sız derlemede harita tam ekran).
  *  - Rota yok: başlık, iki büyük kısayol "Ev" / "İş" (konum ayarlıysa seçili uygulamada rota kurar; uzun basınca konum
  *    ayarı) ve "Haritayı aç".
  * Başlığın sağındaki küçük "Google ▾" / "Yandex ▾" çipi harita uygulamasını seçer ([MapAppPrefs]; yalnız kurulu olanlar
@@ -47,6 +48,8 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
     private var visible = false
     private var current = NavigationState.NONE
     private val io = LauncherIo.serial()
+    /** Sürüş ekranı (ve harita yokken seçicisi) bu derlemede var mı (FrostNav). */
+    private val drivePicker by lazy { LauncherEdition.frostNav(context).available }
     /** Etkin harita uygulaması (kurulu seçenek yoksa null); görünür olunca ve seçim değişince yenilenir. */
     private var mapApp: MapApp? = null
     private var mapChoices: List<MapApp> = emptyList()
@@ -88,6 +91,34 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         ellipsize = TextUtils.TruncateAt.END
     }
     private val arrival = sahneText(context, SahneType.SUB, Sahne.INK_3, 400).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+    /** "Bitir" hapı: bildirimin bitirme eylemi varsa görünür; dokunuşu PendingIntent'i gönderir (uygulama öldürülmez). */
+    private val endButton = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        val p = context.dp(16)
+        setPadding(p, 0, p, 0)
+        minimumHeight = context.dp(END_DP)
+        background = rounded(context, Sahne.SOFT_FILL, Sahne.CONTROL_RADIUS_DP, Sahne.HAIR_2)
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.ic_sahne_flag)
+            imageTintList = ColorStateList.valueOf(Sahne.INK_2)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(context.dp(22), context.dp(22)))
+        addView(sahneText(context, SahneType.SUB, Sahne.INK_2, 600).apply { setText(R.string.launcher_nav_end) },
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(8) })
+        visibility = View.GONE
+        isClickable = true
+        isFocusable = true
+        contentDescription = context.getString(R.string.launcher_nav_end)
+        setOnClickListener { endNavigation() }
+        pressFeedback()
+    }
+    private val arrivalRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(arrival, LinearLayout.LayoutParams(0, WRAP, 1f))
+        addView(endButton, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(12) })
+    }
     private val arrivalDivider = View(context).apply { setBackgroundColor(Sahne.HAIR_2) }
     private val routeBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -104,7 +135,7 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         })
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
         addView(arrivalDivider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)))
-        addView(arrival, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP).apply { topMargin = context.dp(10) })
+        addView(arrivalRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP).apply { topMargin = context.dp(10) })
         isClickable = true
         setOnClickListener { openMap() }
         pressFeedback()
@@ -204,8 +235,18 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         val bottom = arrivalLine(s)
         arrival.text = bottom
         arrival.visibility = if (bottom.isEmpty()) View.GONE else View.VISIBLE
-        arrivalDivider.visibility = arrival.visibility
+        endButton.visibility = if (s.endAction != null) View.VISIBLE else View.GONE
+        arrivalDivider.visibility = if (arrival.visibility == View.VISIBLE || s.endAction != null) View.VISIBLE else View.GONE
         root.contentDescription = listOfNotNull(d?.text, streetLine.ifEmpty { null }, bottom.ifEmpty { null }).joinToString(", ")
+    }
+
+    /** Bildirimin bitirme eylemini gönderir; rota bildirimi kalkınca kart kendiliğinden boşa döner. Eylem yoksa/iptalse sessizce geçer. */
+    private fun endNavigation() {
+        val action = current.endAction ?: return
+        try {
+            action.send()
+        } catch (e: android.app.PendingIntent.CanceledException) {
+        }
     }
 
     /** "Varış 14:52 · 18 km · 25 dk" (eksik parçalar düşer). */
@@ -220,9 +261,15 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
     private fun bindIdle() {
         homeTile.bind()
         workTile.bind()
-        val installed = mapPackage() != null
-        (mapButton.getChildAt(1) as TextView).setText(if (installed) R.string.launcher_nav_open_map else R.string.launcher_nav_not_installed)
-        mapButton.alpha = if (installed) 1f else DISABLED_ALPHA
+        val installed = driveMap() != null
+        // FrostNav'da harita yoksa düğme sürüş ekranını "+ Harita ekle" seçicisiyle açar.
+        val canPick = !installed && drivePicker
+        (mapButton.getChildAt(1) as TextView).setText(when {
+            installed -> R.string.launcher_nav_open_map
+            canPick -> R.string.launcher_drive_add_map
+            else -> R.string.launcher_nav_not_installed
+        })
+        mapButton.alpha = if (installed || canPick) 1f else DISABLED_ALPHA
         root.contentDescription = context.getString(R.string.launcher_widget_navigation)
     }
 
@@ -281,22 +328,40 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         false
     }
 
+    /** Sürüş ekranının harita yarısı: kartın paketi, yoksa seçicide seçilen diğer uygulama; ikisi de yoksa null (seçici). */
+    private fun driveMap(): String? = DrivePolicy.mapSlot(mapPackage(), DriveMapPrefs.other(context), ::installed)
+
+    /** Kart / "Haritayı aç": sürüş ekranı. FrostNav yoksa eskisi gibi harita tam ekran. */
     private fun openMap() {
-        val pkg = mapPackage() ?: return
-        io.runSafely { AppLaunchHelper.launchAppOnDisplay(context, pkg, Display.DEFAULT_DISPLAY, 0) }
+        val pkg = driveMap()
+        DriveScreen.open(context, pkg, null) { openMapFull(pkg) }
     }
 
-    /** Ayarlı konuma rota (Yandex: yandexmaps:// / yandexnavi://, Google: google.navigation:); konum yoksa [label] araması. */
+    private fun openMapFull(pkg: String?) {
+        pkg ?: return
+        io.runSafely { if (!DriveScreen.openLeftover(context, pkg)) AppLaunchHelper.launchAppOnDisplay(context, pkg, Display.DEFAULT_DISPLAY, 0) }
+    }
+
+    /**
+     * Ayarlı konuma rota (Yandex: yandexmaps:// / yandexnavi://, Google: google.navigation:, diğer: geo:); konum yoksa [label]
+     * araması. Rota sürüş ekranının harita yarısında açılır; FrostNav yoksa harita tam ekran.
+     */
     private fun openPlace(place: String, label: String) {
-        val pkg = mapApp?.packageName?.takeIf { installed(it) } ?: return
+        val pkg = driveMap()
+        if (pkg == null) {
+            openMap()
+            return
+        }
         val uri = NavPlaces.get(context, place)?.let { (lat, lon) -> NavPlaces.routeUri(pkg, lat, lon) } ?: NavPlaces.searchUri(pkg, label)
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            openMap()
-        } catch (e: SecurityException) {
-            openMap()
+        DriveScreen.open(context, pkg, intent) {
+            try {
+                context.startActivity(intent)
+            } catch (e: ActivityNotFoundException) {
+                openMapFull(pkg)
+            } catch (e: SecurityException) {
+                openMapFull(pkg)
+            }
         }
     }
 
@@ -412,6 +477,8 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         const val BUTTON_SP = 22f
         const val TILE_DP = 136
         const val BUTTON_DP = 64
+        /** "Bitir" hapının asgari yüksekliği (araç ekranı dokunma hedefi). */
+        const val END_DP = 64
         const val DISABLED_ALPHA = 0.45f
     }
 }
@@ -439,6 +506,7 @@ internal object NavPlaces {
      */
     fun routeUri(pkg: String, lat: Double, lon: Double): String {
         if (pkg == NavigationSource.GOOGLE_MAPS) return String.format(Locale.US, "google.navigation:q=%.6f,%.6f", lat, lon)
+        if (MapApp.fromPackage(pkg) == null) return String.format(Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f", lat, lon, lat, lon)
         val scheme = if (pkg == NavigationSource.YANDEX_NAVI) "yandexnavi" else "yandexmaps"
         return String.format(Locale.US, "%s://build_route_on_map?lat_to=%.6f&lon_to=%.6f", scheme, lat, lon)
     }
@@ -446,7 +514,7 @@ internal object NavPlaces {
     /** Arama: Haritalar `yandexmaps://maps.yandex.ru/?text=..`, Navigator `yandexnavi://map_search?text=..`, Google `geo:0,0?q=..`. */
     fun searchUri(pkg: String, text: String): String {
         val q = Uri.encode(text)
-        if (pkg == NavigationSource.GOOGLE_MAPS) return "geo:0,0?q=$q"
+        if (pkg == NavigationSource.GOOGLE_MAPS || MapApp.fromPackage(pkg) == null) return "geo:0,0?q=$q"
         return if (pkg == NavigationSource.YANDEX_NAVI) "yandexnavi://map_search?text=$q" else "yandexmaps://maps.yandex.ru/?text=$q"
     }
 }

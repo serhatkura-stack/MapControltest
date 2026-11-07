@@ -19,4 +19,5 @@
     <string name="launcher_nav_place_clear">Clear</string>
     <string name="launcher_nav_place_cancel">Cancel</string>
     <string name="launcher_nav_place_invalid">Invalid location</string>
+    <string name="launcher_nav_end">Finish</string>
 </resources>

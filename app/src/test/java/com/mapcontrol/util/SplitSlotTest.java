@@ -59,4 +59,18 @@ public class SplitSlotTest {
         assertFalse(SplitSlot.isAllowed("", self));
         assertFalse(SplitSlot.isAllowed(null, self));
     }
+
+    @Test
+    public void mapPickerIsAnOwnAllowedSlot() {
+        String self = "com.mapcontrol";
+        String picker = SplitSlot.mapPicker(self);
+        assertEquals("com.mapcontrol/.ui.activity.DriveMapPickerActivity", picker);
+        assertTrue(SplitSlot.isMapPicker(picker, self));
+        assertTrue(SplitSlot.isOwn(picker, self));
+        assertTrue(SplitSlot.isOwn(SplitSlot.miniDash(self), self));
+        assertTrue(SplitSlot.isAllowed(picker, self));
+        assertFalse(SplitSlot.isMiniDash(picker, self));
+        assertFalse(SplitSlot.isMapPicker(SplitSlot.mapPicker("com.other"), self));
+        assertFalse(SplitSlot.isOwn("ru.yandex.yandexmaps", self));
+    }
 }

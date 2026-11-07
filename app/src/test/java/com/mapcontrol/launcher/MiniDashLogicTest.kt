@@ -228,6 +228,42 @@ class MiniDashLogicTest {
         assertTrue(m.sideHeightDp - m.gapDp - MiniSide.phoneMaxDp(m) >= MiniSide.tripMinDp(m))
     }
 
+    @Test fun driveScreenHalfKeepsTripStatsRow() {
+        // 7 Kasım araç testi: sürüş ekranında Mini gösterge yarısı ~960 × 580 dp (başlık gizli), telefon paneli dolu; eski kural
+        // 1 dp eksik kalıyordu ve yolculuk panelinde yalnız "89,6 km" görünüyordu.
+        for (h in listOf(560, 570, 580, 590, 606)) for (w in listOf(940, 960)) {
+            val m = MiniLayout.forSize(w, h)
+            val at = "$w x $h"
+            assertFalse(at, m.wide)
+            assertFalse(at, m.tripList)
+            assertTrue("$at yan sütun: ${m.sideHeightDp} / ${MiniSide.sideNeedDp(m)}",
+                m.sideHeightDp >= MiniSide.sideNeedDp(m) + MiniLayout.SIDE_SPARE_DP)
+            // Dolu telefon paneliyle yolculuk paneline başlık + öncü sayı + değer satırı sığar.
+            assertTrue(at, m.sideHeightDp - m.gapDp - MiniSide.phoneMaxDp(m) >= MiniSide.tripMinDp(m))
+            // Üç değer tek satırda yan sütun genişliğine sığar.
+            assertTrue("$at değer satırı ${MiniSide.statsRowDp(m)} / ${m.sideDp}",
+                MiniSide.statsRowDp(m) <= m.sideDp - 2 * (m.panelPadDp + 6))
+            assertTrue(at, m.headerDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at, MiniSide.favoriteRowDp(m) >= MiniLayout.MIN_TOUCH_DP)
+        }
+    }
+
+    @Test fun tiggo8TopHalfKeepsTripStatsRow() {
+        for (h in listOf(440, 467, 480)) {
+            val m = MiniLayout.forSize(1707, h)
+            assertTrue(m.wide)
+            assertTrue(m.sideHeightDp - m.gapDp - MiniSide.phoneMaxDp(m) >= MiniSide.tripMinDp(m))
+            assertTrue(MiniSide.statsRowDp(m) <= m.sideDp - 2 * (m.panelPadDp + 6))
+        }
+    }
+
+    @Test fun statSizeShrinksOnlyWhenRowIsTooWide() {
+        assertEquals(20f, MiniLayout.forSize(960, 650, captionDp = 40).tripStatSp)
+        val narrow = MiniLayout.forSize(640, 610)
+        assertTrue(narrow.tripStatSp < 20f)
+        assertTrue(narrow.tripStatSp >= MiniSide.MIN_STAT_SP)
+    }
+
     @Test fun tripMinHeightMatchesManropeLines() {
         // Yazı tipi payı kapalı Manrope satırı 1,366 em: 960 × 650 (başlık 40) → 2·12 + 22 + 6 + 52 (38 sp) + 6 + 27 (20 sp).
         val m = MiniLayout.forSize(960, 650, captionDp = 40)
@@ -242,25 +278,15 @@ class MiniDashLogicTest {
     @Test fun tripPanelHiddenWithoutData() {
         assertFalse(MiniSide.tripShown(TripHero.Content.NO_DATA))
         assertTrue(MiniSide.tripShown(TripHero.Content.TRIP))
-        assertTrue(MiniSide.tripShown(TripHero.Content.LIVE))
     }
 
-    @Test fun drivingWithoutValueOrStatsHidesEmptyCard() {
-        val live = TripHero.Content.LIVE
-        assertFalse(MiniSide.tripShown(live, TripHero.Live.WAITING, emptyList()))
-        assertTrue(MiniSide.tripShown(live, TripHero.Live.WAITING, listOf(MiniSide.Stat.DURATION)))
-        assertTrue(MiniSide.tripShown(live, TripHero.Live.VALUE, emptyList()))
-        assertTrue(MiniSide.tripShown(TripHero.Content.TRIP, TripHero.Live.WAITING, emptyList()))
+    @Test fun tripStatsSameWhileDrivingAndParked() {
+        // Anlık tüketim yok (7 Kasım): sürüşte de süre, ortalama hız, ortalama tüketim.
         assertEquals(emptyList<MiniSide.Stat>(), MiniSide.stats(TripHero.Content.NO_DATA, 12.0, 30, 40, 7.0))
-    }
-
-    @Test fun tripStatsWhileDrivingAndParked() {
-        assertEquals(listOf(MiniSide.Stat.DISTANCE, MiniSide.Stat.DURATION, MiniSide.Stat.AVG_SPEED),
-            MiniSide.stats(TripHero.Content.LIVE, 53.8, 47, 45, 7.9))
         assertEquals(listOf(MiniSide.Stat.DURATION, MiniSide.Stat.AVG_SPEED, MiniSide.Stat.AVG_CONS),
             MiniSide.stats(TripHero.Content.TRIP, 53.8, 47, 45, 7.9))
         // Okunamayan (ya da 0 dk) değer düşer; tire yazılmaz.
-        assertEquals(listOf(MiniSide.Stat.AVG_SPEED), MiniSide.stats(TripHero.Content.LIVE, null, 0, 45, null))
+        assertEquals(listOf(MiniSide.Stat.AVG_SPEED), MiniSide.stats(TripHero.Content.TRIP, null, 0, 45, null))
         assertEquals(emptyList<MiniSide.Stat>(), MiniSide.stats(TripHero.Content.TRIP, 53.8, null, null, null))
     }
 

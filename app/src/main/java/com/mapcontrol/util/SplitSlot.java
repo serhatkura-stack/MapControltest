@@ -12,6 +12,8 @@ public final class SplitSlot {
 
     /** Mini gösterge activity sınıfı. */
     public static final String MINI_DASH_CLASS = "com.mapcontrol.launcher.MiniDashActivity";
+    /** Sürüş ekranının harita yarısı, harita uygulaması seçilmemişken: "+ Harita ekle" seçicisi. */
+    public static final String MAP_PICKER_CLASS = "com.mapcontrol.ui.activity.DriveMapPickerActivity";
 
     private SplitSlot() {
     }
@@ -63,15 +65,33 @@ public final class SplitSlot {
                 && MINI_DASH_CLASS.equals(classOf(slot));
     }
 
+    /** Kendi paketimizdeki harita seçici kutusu (sürüş ekranı). */
+    @NonNull
+    public static String mapPicker(@NonNull String selfPackage) {
+        return component(selfPackage, MAP_PICKER_CLASS);
+    }
+
+    /** Kutu, kendi paketimizdeki harita seçici bileşeni mi. */
+    public static boolean isMapPicker(@Nullable String slot, @NonNull String selfPackage) {
+        return isComponent(slot)
+                && selfPackage.equals(packageOf(slot))
+                && MAP_PICKER_CLASS.equals(classOf(slot));
+    }
+
+    /** Kutu kendi etkinliklerimizden biri mi (Mini gösterge ya da harita seçici; görevleri bizim, yeniden açılabilir). */
+    public static boolean isOwn(@Nullable String slot, @NonNull String selfPackage) {
+        return isMiniDash(slot, selfPackage) || isMapPicker(slot, selfPackage);
+    }
+
     /**
-     * Başlatılabilir mi: düz paket kendi paketimiz olamaz; bileşen yalnız kendi Mini göstergemiz olabilir.
+     * Başlatılabilir mi: düz paket kendi paketimiz olamaz; bileşen yalnız kendi Mini göstergemiz ya da harita seçicimiz olabilir.
      */
     public static boolean isAllowed(@Nullable String slot, @NonNull String selfPackage) {
         if (slot == null || slot.isEmpty()) {
             return false;
         }
         if (isComponent(slot)) {
-            return isMiniDash(slot, selfPackage);
+            return isOwn(slot, selfPackage);
         }
         return !slot.equals(selfPackage);
     }

@@ -1,7 +1,6 @@
 package com.mapcontrol.launcher
 
 import android.content.Context
-import com.mapcontrol.util.TargetPackageStore
 
 /**
  * Başlatıcının "harita uygulaması" seçimi: Navigasyon kartının "Haritayı aç" düğmesi, Ev / İş kısayolları, en yakın istasyon
@@ -28,20 +27,14 @@ object MapAppChoice {
     /** Kurulu seçenekler, [MapApp.ORDER] sırasıyla (seçim penceresi yalnız bunları listeler). */
     fun choices(installed: Set<String>): List<MapApp> = MapApp.ORDER.filter { it.packageName in installed }
 
-    /**
-     * Varsayılan: FrostNav'ın yansıtma hedefi bu üçten biri ve kuruluysa o; değilse kurulu ilk seçenek; hiçbiri yoksa null.
-     */
-    fun defaultFor(frostNavTarget: String?, installed: Set<String>): MapApp? {
-        val target = MapApp.fromPackage(frostNavTarget?.trim())
-        if (target != null && target.packageName in installed) return target
-        return choices(installed).firstOrNull()
-    }
+    /** Varsayılan: kurulu ilk seçenek, [MapApp.ORDER] sırasıyla (Google Haritalar, yoksa Yandex); hiçbiri yoksa null. */
+    fun defaultFor(installed: Set<String>): MapApp? = choices(installed).firstOrNull()
 
-    /** Etkin seçim: kayıtlı seçim kuruluysa o; değilse varsayılan ([defaultFor]). */
-    fun resolve(savedKey: String?, frostNavTarget: String?, installed: Set<String>): MapApp? {
+    /** Etkin seçim: kayıtlı (kullanıcının açık) seçimi kuruluysa o; değilse varsayılan ([defaultFor]). */
+    fun resolve(savedKey: String?, installed: Set<String>): MapApp? {
         val saved = MapApp.fromKey(savedKey)
         if (saved != null && saved.packageName in installed) return saved
-        return defaultFor(frostNavTarget, installed)
+        return defaultFor(installed)
     }
 
     /**
@@ -70,15 +63,9 @@ object MapAppPrefs {
     private fun saved(context: Context): String? =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
 
-    private fun frostNavTarget(context: Context): String? = try {
-        TargetPackageStore.read(context)
-    } catch (e: Exception) {
-        null
-    }
-
     /** Etkin harita uygulaması; kurulu seçenek yoksa null. */
     @JvmStatic
-    fun current(context: Context): MapApp? = MapAppChoice.resolve(saved(context), frostNavTarget(context), installedSet(context))
+    fun current(context: Context): MapApp? = MapAppChoice.resolve(saved(context), installedSet(context))
 
     /** Kullanıcı seçimi kaydedilir ve kartın rehberlik kaynağı hemen değişir. */
     @JvmStatic

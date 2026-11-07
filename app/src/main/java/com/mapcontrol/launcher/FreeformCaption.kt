@@ -28,15 +28,28 @@ internal object FreeformCaption {
      */
     fun shouldHide(windowTop: Int, usableTop: Int): Boolean = usableTop >= 0 && abs(windowTop - usableTop) <= TOLERANCE_PX
 
-    /** Yerleşimden sonra ve yapılandırma değişince çağrılır; serbest pencere değilse (başlık görünümü yoksa) bir şey yapmaz. */
-    fun apply(activity: Activity) {
+    /**
+     * Yerleşimden sonra ve yapılandırma değişince çağrılır; serbest pencere değilse (başlık görünümü yoksa) bir şey yapmaz. [force]:
+     * pencere nerede olursa olsun gizlenir (sürüş ekranının yarıları; taşıma tutamağına gerek yok, bölmeyi düğmeler yönetir).
+     */
+    fun apply(activity: Activity, force: Boolean = false) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
         val caption = captionOf(activity) ?: return
         if (caption.visibility == View.GONE) return
         val loc = IntArray(2)
         decor.getLocationOnScreen(loc)
-        if (shouldHide(loc[1], usableTop(activity))) caption.visibility = View.GONE
+        if (!force && !shouldHide(loc[1], usableTop(activity))) return
+        caption.visibility = View.GONE
+        // Öykünücü, 7 Kasım: başlık gizlense de içerik kökü başlık inset'i kadar (42 px) aşağıda kaldı (fitsSystemWindows dolgusu).
+        // Gizlenen pencere durum çubuğunun altında, çubukların dışında: inset'ler içeriğe dolgu olarak uygulanmaz.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) activity.window?.setDecorFitsSystemWindows(false)
     }
+
+    /**
+     * Saf kural (birim testlenir): kullanılabilir alanın üstü. Serbest pencerede en büyük pencere ölçüsünün üst inset'i 0 gelir
+     * (öykünücü, 7 Kasım: pencere 24'te, inset 0; başlık bu yüzden hiç gizlenmiyordu); o zaman durum çubuğu yüksekliği kullanılır.
+     */
+    fun topEdge(metricsTop: Int, statusBarPx: Int): Int = if (metricsTop > 0) metricsTop else statusBarPx
 
     /**
      * Saf kural (birim testlenir): görünen başlığın içeriğin üstünü örttüğü pay (px). Başlık görünmüyorsa ya da içerik zaten
@@ -75,15 +88,16 @@ internal object FreeformCaption {
 
     /** Durum çubuğunun altı (px); bölünmüş ekranın kullandığı ölçüyle aynı (en büyük pencere ölçüsünün üst inset'i). */
     private fun usableTop(activity: Activity): Int {
+        var metricsTop = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                return activity.windowManager.maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
+                metricsTop = activity.windowManager.maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
                     WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
                 ).top
             } catch (_: Throwable) {
             }
         }
         val id = activity.resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id != 0) activity.resources.getDimensionPixelSize(id) else -1
+        return topEdge(metricsTop, if (id != 0) activity.resources.getDimensionPixelSize(id) else -1)
     }
 }

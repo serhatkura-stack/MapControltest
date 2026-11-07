@@ -19,4 +19,5 @@
     <string name="launcher_nav_place_clear">Sil</string>
     <string name="launcher_nav_place_cancel">Vazgeç</string>
     <string name="launcher_nav_place_invalid">Geçersiz konum</string>
+    <string name="launcher_nav_end">Bitir</string>
 </resources>

@@ -265,11 +265,42 @@ internal data class MiniLayout(
                 showDate = big,
                 infoGapDp = if (big) 28 else 16,
             )
-            // Yan sütun sığmıyorsa medya şeridi en ince haline iner (kapak düşer). Genişte yan sütun tam boy: medya etkilemez.
-            if (wide || side(media) >= MiniSide.sideNeedDp(layout)) return layout
-            media = 88
-            return layout.copy(mediaDp = media, coverDp = 0, sideHeightDp = side(media))
+            // Yolculuk değerleri (süre · km/sa · L/100 km) tek satırda yan sütun genişliğine sığsın: yazı gerekirse küçülür.
+            val statSp = if (layout.tripList) layout.tripStatSp
+                else minOf(layout.tripStatSp, MiniSide.statSpForWidth(layout.sideDp, layout.panelPadDp))
+            val sized = layout.copy(tripStatSp = statSp)
+            // Genişte yan sütun tam boy: medya ve başlık etkilemez.
+            if (wide) return sized
+            return fitSide(sized, contentH)
         }
+
+        /** Yan sütunun iki paneli ve [SIDE_SPARE_DP] pay sığıyor mu (bölünmüş biçim). */
+        private fun sideFits(m: MiniLayout): Boolean = m.sideHeightDp >= MiniSide.sideNeedDp(m) + SIDE_SPARE_DP
+
+        /**
+         * Bölünmüş biçimde yan sütun (yolculuk değer satırı dahil) sığana dek sırayla küçültür: (1) medya şeridi en ince (kapak
+         * düşer), (2) üst satır 72 dp ve boşluklar 12 dp, (3) favori avatarı 44 dp, (4) yolculuğun öncü sayısı 34 sp. 7 Kasım
+         * araç testi: sürüş ekranında Mini gösterge yarısı ~960 × 580 dp; eski kural 1 dp eksik kalıyordu ve yolculuk panelinde
+         * yalnız "89,6 km" görünüyordu (süre / km/sa / L/100 km satırı düşüyordu). Dokunma alanları [MIN_TOUCH_DP] altına inmez.
+         */
+        private fun fitSide(start: MiniLayout, contentH: Int): MiniLayout {
+            fun withSide(m: MiniLayout) = m.copy(sideHeightDp = contentH - m.headerDp - m.gapDp - m.mediaDp - m.gapDp)
+            val steps = listOf<(MiniLayout) -> MiniLayout>(
+                { it.copy(mediaDp = 88, coverDp = 0) },
+                { it.copy(headerDp = minOf(it.headerDp, 72), gapDp = minOf(it.gapDp, 12)) },
+                { it.copy(favAvatarDp = minOf(it.favAvatarDp, 44)) },
+                { it.copy(tripHeroSp = minOf(it.tripHeroSp, 34f)) },
+            )
+            var m = start
+            for (step in steps) {
+                if (sideFits(m)) return m
+                m = withSide(step(m))
+            }
+            return m
+        }
+
+        /** Yan sütunda gereken yüksekliğin üstüne bırakılan pay: gerçek satır yükseklikleri tahminden birkaç dp sapabilir. */
+        const val SIDE_SPARE_DP = 4
     }
 }
 
@@ -303,25 +334,39 @@ internal object MiniSide {
     const val LIST_ROW_DP = 52
     const val LIST_GAP_DP = 20
 
-    /**
-     * Yolculuk paneli görünür mü: veri yokken gizli. Sürüşte anlık değer henüz yoksa ([TripHero.Live.WAITING]) ve altında
-     * gösterilecek değer de yoksa da gizli (yalnız başlıklı boş kutu çizilmez).
-     */
-    fun tripShown(content: TripHero.Content, live: TripHero.Live? = null, stats: List<Stat> = listOf(Stat.DISTANCE)): Boolean =
-        content != TripHero.Content.NO_DATA &&
-            !(content == TripHero.Content.LIVE && live == TripHero.Live.WAITING && stats.isEmpty())
+    /** Değer satırındaki ayırıcıların iki yanındaki boşluk (görünüm de aynısını kullanır: [MiniTripPanel]). */
+    const val STAT_GAP_DP = 14
 
     /**
-     * Öncü sayının altındaki değerler (sırasıyla; okunamayan düşer). Sürüşte mesafe, süre, ortalama hız (öncü tüketim);
-     * dururken süre, ortalama hız, ortalama tüketim (öncü mesafe).
+     * Üç değerin ("1 sa 12 dk", "45 km/sa", "6,8 L/100 km"; birimler 0,72 boyda) toplam genişliği, yazı boyu cinsinden (em);
+     * Manrope rakam ve harf genişliğinden tahmini üst sınır.
+     */
+    const val STATS_EM = 13.5f
+
+    /** Yolculuk değer satırı yazı boyunun alt sınırı. */
+    const val MIN_STAT_SP = 16f
+
+    /**
+     * Değer satırının [sideDp] genişliğindeki yan sütuna tek satırda sığacağı en büyük yazı boyu (sp ≈ dp): panel iç payı
+     * ([panelPadDp] + 6 her yanda), iki ayırıcı ve boşlukları düşülür. [MIN_STAT_SP] altına inmez.
+     */
+    fun statSpForWidth(sideDp: Int, panelPadDp: Int): Float {
+        val inner = sideDp - 2 * (panelPadDp + 6) - 4 * STAT_GAP_DP - 2
+        return (inner / STATS_EM).coerceAtLeast(MIN_STAT_SP)
+    }
+
+    /** Değer satırının tahmini genişliği (dp). */
+    fun statsRowDp(m: MiniLayout): Int = (m.tripStatSp * STATS_EM).roundToInt() + 4 * STAT_GAP_DP + 2
+
+    /** Yolculuk paneli görünür mü: yalnız veri yokken gizli. */
+    fun tripShown(content: TripHero.Content): Boolean = content != TripHero.Content.NO_DATA
+
+    /**
+     * Öncü sayının (yolculuk mesafesi) altındaki değerler (sırasıyla; okunamayan düşer): süre, ortalama hız, ortalama
+     * tüketim. Sürüşte de aynıdır; anlık tüketim bu panelde gösterilmez.
      */
     fun stats(content: TripHero.Content, km: Double?, minutes: Int?, avgSpeedKmh: Int?, avgL100: Double?): List<Stat> = when (content) {
         TripHero.Content.NO_DATA -> emptyList()
-        TripHero.Content.LIVE -> listOfNotNull(
-            Stat.DISTANCE.takeIf { km != null },
-            Stat.DURATION.takeIf { minutes != null && minutes > 0 },
-            Stat.AVG_SPEED.takeIf { avgSpeedKmh != null },
-        )
         TripHero.Content.TRIP -> listOfNotNull(
             Stat.DURATION.takeIf { minutes != null && minutes > 0 },
             Stat.AVG_SPEED.takeIf { avgSpeedKmh != null },

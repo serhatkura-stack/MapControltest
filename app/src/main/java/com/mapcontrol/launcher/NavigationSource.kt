@@ -257,13 +257,22 @@ object NavigationSource {
         } catch (e: Exception) {
             null
         }
+        val withEnd = result?.let { it.copy(endAction = findEndAction(sbn)) }
         if (BuildConfig.DEBUG) {
             val dt = SystemClock.elapsedRealtime() - t0
             if (dt > SLOW_PARSE_MS) Log.w(TAG, "slow parse ${dt} ms pkg=${sbn.packageName}")
             // Yalnız kısa bayraklar: adres ve yol adı yazılmaz.
             if (google) Log.d(TAG, "google active=${result != null} maneuver=${result?.maneuver} dist=${result?.distance != null} eta=${result?.arrivalTime != null}")
         }
-        return result
+        return withEnd
+    }
+
+    /** Bildirim eylemlerinden "bitir" eyleminin PendingIntent'i ([NavEndAction] başlık eşlemesi); yoksa null. */
+    private fun findEndAction(sbn: StatusBarNotification): android.app.PendingIntent? = try {
+        val actions = sbn.notification?.actions
+        actions?.firstOrNull { NavEndAction.isEndTitle(it.title) }?.actionIntent
+    } catch (e: Exception) {
+        null
     }
 
     /** Google Haritalar: yalnız rehberlik bildirimi ([GoogleNavParse.isGuidanceNotification]) ve extras metinleri (başlık, metin, alt metin); RemoteViews gezilmez. */

@@ -11,33 +11,21 @@ class MapAppChoiceTest {
     private val all = setOf(google, ymaps, ynavi)
 
     @Test
-    fun frostNavTargetWinsWhenInstalled() {
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor(google, all))
-        assertEquals(MapApp.YANDEX_NAVI, MapAppChoice.defaultFor(ynavi, all))
-        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.defaultFor(" $ymaps ", all))
-    }
-
-    @Test
-    fun frostNavTargetIgnoredWhenNotInstalledOrNotAMap() {
-        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.defaultFor(google, setOf(ymaps, ynavi)))
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor("com.spotify.music", all))
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor("", all))
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor(null, all))
-    }
-
-    @Test
-    fun firstInstalledInOrder() {
-        assertEquals(MapApp.YANDEX_NAVI, MapAppChoice.defaultFor(null, setOf(ynavi)))
-        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.defaultFor(null, setOf(ynavi, ymaps)))
-        assertNull(MapAppChoice.defaultFor(google, emptySet()))
+    fun defaultIsGoogleWhenInstalledElseYandex() {
+        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor(all))
+        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.defaultFor(setOf(google, ynavi)))
+        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.defaultFor(setOf(ynavi, ymaps)))
+        assertEquals(MapApp.YANDEX_NAVI, MapAppChoice.defaultFor(setOf(ynavi)))
+        assertNull(MapAppChoice.defaultFor(emptySet()))
     }
 
     @Test
     fun savedChoiceWinsOnlyWhenInstalled() {
-        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.resolve("yandex_maps", google, all))
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.resolve("yandex_maps", google, setOf(google, ynavi)))
-        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.resolve("bogus", google, all))
-        assertEquals(MapApp.YANDEX_NAVI, MapAppChoice.resolve(null, ynavi, all))
+        assertEquals(MapApp.YANDEX_MAPS, MapAppChoice.resolve("yandex_maps", all))
+        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.resolve("yandex_maps", setOf(google, ynavi)))
+        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.resolve("bogus", all))
+        assertEquals(MapApp.GOOGLE_MAPS, MapAppChoice.resolve(null, all))
+        assertNull(MapAppChoice.resolve("google_maps", emptySet()))
     }
 
     @Test
@@ -60,5 +48,11 @@ class MapAppChoiceTest {
         assertEquals("google.navigation:q=41.008200,28.978400", NavPlaces.routeUri(google, 41.0082, 28.9784))
         assertEquals("yandexmaps://build_route_on_map?lat_to=41.008200&lon_to=28.978400", NavPlaces.routeUri(ymaps, 41.0082, 28.9784))
         assertEquals("yandexnavi://build_route_on_map?lat_to=41.008200&lon_to=28.978400", NavPlaces.routeUri(ynavi, 41.0082, 28.9784))
+    }
+
+    @Test
+    fun otherNavAppsGetGeoUris() {
+        assertEquals("geo:41.008200,28.978400?q=41.008200,28.978400", NavPlaces.routeUri("com.waze", 41.0082, 28.9784))
+        assertEquals("yandexmaps://build_route_on_map?lat_to=41.008200&lon_to=28.978400", NavPlaces.routeUri(ymaps, 41.0082, 28.9784))
     }
 }

@@ -14,11 +14,9 @@ import android.widget.TextView
 import com.mapcontrol.R
 
 /**
- * Mini göstergenin yolculuk paneli ([MiniSide]): sürüşte öncü sayı canlı anlık tüketim ([tripLiveHero], ana ekrandaki
- * yolculuk kartıyla aynı metin ve durumlar), altında bu yolculuğun mesafesi, süresi ve ortalama hızı; dururken öncü sayı
- * yolculuk mesafesi, altında süre, ortalama hız ve ortalama tüketim. Veri [MiniDashActivity]'den gelir (tek [TripSource]
- * dinleyicisi, tek [ConsumptionSmoother]); veri yokken etkinlik paneli gizler. İki içerik arasında öncü satır kısa
- * çapraz geçişle değişir (ana ekran kartındaki gibi, [TripHero.crossfade]).
+ * Mini göstergenin yolculuk paneli ([MiniSide]): öncü sayı yolculuk mesafesi, altında süre, ortalama hız ve ortalama
+ * tüketim (sürüşte de aynı; anlık tüketim yok, 7 Kasım kararı). Veri [MiniDashActivity]'den gelir (tek [TripSource]
+ * dinleyicisi); veri yokken etkinlik paneli gizler.
  */
 internal class MiniTripPanel(private val context: Context) {
 
@@ -50,7 +48,7 @@ internal class MiniTripPanel(private val context: Context) {
         gravity = Gravity.CENTER_VERTICAL
         statViews.forEachIndexed { i, v ->
             if (i > 0) addView(statDividers[i - 1], LinearLayout.LayoutParams(context.dp(1), context.dp(20)).apply {
-                marginStart = context.dp(STAT_GAP_DP); marginEnd = context.dp(STAT_GAP_DP)
+                marginStart = context.dp(MiniSide.STAT_GAP_DP); marginEnd = context.dp(MiniSide.STAT_GAP_DP)
             })
             addView(v, LinearLayout.LayoutParams(WRAP, WRAP))
         }
@@ -75,7 +73,7 @@ internal class MiniTripPanel(private val context: Context) {
             addView(row, LinearLayout.LayoutParams(MATCH, context.dp(MiniSide.LIST_ROW_DP)))
         }
     }
-    /** Öncü satır ve başlığı birlikte solar (yükseklik değişmez). */
+    /** Başlık ve öncü satır. */
     private val heroBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         clipChildren = false
@@ -122,9 +120,6 @@ internal class MiniTripPanel(private val context: Context) {
 
     private var heroSp = 42f
     private var shown: Any? = null
-    private var shownContent: TripHero.Content? = null
-    private var fading = false
-    private var pending: Pair<String, TripHeroLine?>? = null
 
     fun setSizes(m: MiniLayout) {
         val p = context.dp(m.panelPadDp + 6)
@@ -145,21 +140,12 @@ internal class MiniTripPanel(private val context: Context) {
     }
 
     /** [content] NO_DATA iken çağrılmaz (panel gizli). [minutes] sürüş süresi ([TripTotals.drivingMinutes]). */
-    fun bind(content: TripHero.Content, data: TripData, display: ConsumptionSmoother.Display, minutes: Int?) {
+    fun bind(content: TripHero.Content, data: TripData, minutes: Int?) {
         val km = data.tripKm
-        val live = content == TripHero.Content.LIVE
-        val hero: TripHeroLine? = when {
-            live -> tripLiveHero(context, display).takeIf { TripHero.live(display) != TripHero.Live.WAITING }
-            km != null -> TripHeroLine(tripOne(km), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_widget_trip), Sahne.NUMERAL)
-            else -> null
+        val hero: TripHeroLine? = km?.let {
+            TripHeroLine(tripOne(it), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_widget_trip), Sahne.NUMERAL)
         }
-        // Başlık: canlıda tüketim durumu ("Anlık tüketim", "20 km/sa üstünde ölçülür"), dururken "Yolculuk". Anlık değer
-        // henüz gelmediyse başlık yine "Anlık tüketim" (öncü yok): araç bağlı, "Araç verisi bekleniyor" sahnenin tek satırı.
-        val title = when {
-            live && hero == null -> context.getString(R.string.launcher_widget_consumption)
-            live -> tripLiveHero(context, display).sub
-            else -> context.getString(R.string.launcher_widget_trip)
-        }
+        val title = context.getString(R.string.launcher_widget_trip)
         val kinds = MiniSide.stats(content, km, minutes, data.avgSpeedKmh, data.avgL100)
         val stats = kinds.map { s ->
             when (s) {
@@ -180,12 +166,7 @@ internal class MiniTripPanel(private val context: Context) {
         val key = Triple(title to hero, stats, heroSp)
         if (key == shown) return
         shown = key
-        val from = shownContent
-        shownContent = content
-        iconLive = live
-        if (TripHero.crossfade(from, content) && view.isAttachedToWindow) fadeTo(title, hero)
-        else if (fading) pending = title to hero
-        else applyHero(title, hero)
+        applyHero(title, hero)
         val unitSp = (statViews[0].textSize / context.resources.displayMetrics.scaledDensity * 0.72f).toInt()
         statViews.forEachIndexed { i, v ->
             val text = stats.getOrNull(i)
@@ -205,56 +186,21 @@ internal class MiniTripPanel(private val context: Context) {
             kinds.indices.map { "${labels[it]} ${stats[it]}" }).joinToString(", ")
     }
 
-    /** Başlık simgesi içerikle: canlı tüketimde yaprak (ana ekran kartıyla aynı), yolculukta rota; başlıkla birlikte değişir. */
-    private var iconLive = false
-    private var iconShown: Boolean? = null
-
     private fun applyHero(title: String, h: TripHeroLine?) {
         head.text = title
-        if (iconShown != iconLive) {
-            iconShown = iconLive
-            headIcon.setImageResource(if (iconLive) R.drawable.ic_sahne_leaf else R.drawable.ic_sahne_route)
-        }
         heroRow.visibility = if (h == null) View.GONE else View.VISIBLE
         if (h == null) return
-        // Sayı olmayan öncü ("Düşük hız", "Araç duruyor") daha küçük: sayı gibi bağırmaz.
-        val numeric = h.value.firstOrNull()?.isDigit() == true
-        big.textSize = if (numeric) heroSp else heroSp * 0.7f
+        big.textSize = heroSp
         big.setTextColor(h.color)
         big.text = h.value
         bigUnit.visibility = if (h.unit == null) View.GONE else View.VISIBLE
         if (h.unit != null) bigUnit.text = h.unit
     }
 
-    private fun fadeTo(title: String, h: TripHeroLine?) {
-        pending = title to h
-        if (fading) return
-        fading = true
-        heroBox.animate().cancel()
-        heroBox.animate().alpha(0f).setDuration(FADE_HALF_MS).withEndAction {
-            fading = false
-            pending?.let { applyHero(it.first, it.second) }
-            pending = null
-            heroBox.animate().alpha(1f).setDuration(FADE_HALF_MS).start()
-        }.start()
-    }
-
-    fun stop() {
-        heroBox.animate().cancel()
-        heroBox.alpha = 1f
-        if (fading) {
-            fading = false
-            pending?.let { applyHero(it.first, it.second) }
-        }
-        pending = null
-    }
-
     private companion object {
         const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
         const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
         const val HEAD_SP = 17f
-        const val STAT_GAP_DP = 14
-        const val FADE_HALF_MS = 100L
     }
 }
 

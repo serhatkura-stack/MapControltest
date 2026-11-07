@@ -1,7 +1,6 @@
 package com.mapcontrol.launcher
 
 import android.app.Activity
-import android.app.ActivityOptions
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -45,9 +44,12 @@ import java.util.Date
  * [MiniLayout]'ta (bölünmüş yarı ya da geniş satır); serbest pencere başlığı gizlenemezse içerik onun altından başlar
  * ([FreeformCaption.overlapPx]).
  *
+ * Sürüş ekranının yarısı olarak açılınca ([DriveScreen], Navigasyon kartı) başlık her zaman gizlenir, "Tam ekran" "Ana ekran" adını
+ * alır (iki "tam ekran" karışmasın) ve yanında yazılı "Haritayı büyüt" düğmesi çıkar: diğer yarıdaki haritayı tam ekran yapar, bu yarı
+ * kapanır. Yer açılsın diye "Müzik aç" o zaman yalnız simge kalır.
+ *
  * Veri kaynakları ana ekranınkilerle aynıdır ve paylaşılır ([VehicleMetricsRepository], [TripSource], [LauncherMediaController],
- * [PhoneSource], sahnenin kendi kaynakları); araca hiçbir şey yazılmaz. Sürüş durumu ana ekrandaki kartlarla aynı kuralla
- * ([DriveLayoutPolicy]; ana ekran gizliyken [DriveMotion] işlemez) burada ayrıca izlenir. Görünmezken (onStop) tüm
+ * [PhoneSource], sahnenin kendi kaynakları); araca hiçbir şey yazılmaz. Görünmezken (onStop) tüm
  * dinleyiciler ve yoklamalar durur.
  */
 class MiniDashActivity : Activity() {
@@ -61,21 +63,8 @@ class MiniDashActivity : Activity() {
     // --- Durum (yalnızca değişince yeniden bağlanır) ---
     private var snapshot: VehicleMetricsSnapshot? = null
     private var trip = TripData()
-    private var smoother = ConsumptionSmoother()
-    private var consumption = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
-    /** Yolculuk kartıyla aynı "sürüşte" kararı (5 sn hareketle girilir, P/el freni ya da 3 dk duruşla çıkılır). */
-    private val motionPolicy = DriveLayoutPolicy()
-    private var driving = false
-    @Volatile private var observedMoving: Boolean? = null
     private var phoneView: MiniSide.PhoneView? = null
     private var tripShownNow: Boolean? = null
-    private val motionTick = object : Runnable {
-        override fun run() {
-            if (!started) return
-            motionStep()
-            main.postDelayed(this, MOTION_TICK_MS)
-        }
-    }
     private var navHint: NavHint? = null
     private var lastTop: Triple<Int?, Int?, Boolean>? = null
     private var lastMedia: MediaUi? = null
@@ -83,15 +72,13 @@ class MiniDashActivity : Activity() {
     private var captionPx = 0
     /** Demo: `--ez launcher_mini_demo_idle true` çalan bir şey yokmuş gibi gösterir (daraltılmış medya). */
     private var demoIdle = false
+    /** Sürüş ekranının yarısı olarak açıldı ([DriveScreen.EXTRA_DRIVE]): başlık her zaman gizlenir, harita düğmesi gösterilir. */
+    private var drive = false
 
     private val metricsListener = VehicleMetricsRepository.Listener { s ->
-        // Hareket: gösterge hızı > 0 (ana ekranla aynı; okunamıyorsa bilinmiyor).
-        observedMoving = if (s.connected && (VehicleMetricsSnapshot.isValid(s.displaySpeed) || VehicleMetricsSnapshot.isValid(s.actualSpeed))) s.preferredSpeed() > 0 else null
         main.post { if (started && !LauncherDemo.enabled) { snapshot = s; bindTop() } }
     }
     private val tripListener = TripSource.Listener {
-        // Her okuma yumuşatıcıya girer (dururken de): sürüşe geçince ortalama hazır olsun.
-        consumption = smoother.update(it.instantL100, it.speedKmh, it.moving)
         trip = it
         bindTop()
         bindTrip()
@@ -126,6 +113,8 @@ class MiniDashActivity : Activity() {
     private lateinit var gauge: SahneStage.FuelGauge
     private lateinit var fullPill: Pill
     private lateinit var musicPill: Pill
+    /** Sürüş ekranı: diğer yarıdaki haritayı tam ekran yapar (yalnız simge). */
+    private lateinit var mapPill: Pill
     private lateinit var stage: SahneStage
     private lateinit var mediaStrip: LinearLayout
     private lateinit var artwork: ImageView
@@ -180,17 +169,12 @@ class MiniDashActivity : Activity() {
 
     private fun readDemo(intent: Intent?) {
         demoIdle = LauncherDemo.enabled && intent?.getBooleanExtra(EXTRA_DEMO_IDLE, false) == true
+        drive = intent?.getBooleanExtra(DriveScreen.EXTRA_DRIVE, false) == true
     }
 
     override fun onStart() {
         super.onStart()
         started = true
-        // Her açılışta sürüş durumu ve tüketim ortalaması sıfırdan: kapalıyken geçen duruş eski "sürüşte"yi taşımasın.
-        motionPolicy.reset(if (DriveMotion.driving) LayoutMode.DRIVE else LayoutMode.PARK)
-        driving = DriveMotion.driving
-        observedMoving = null
-        smoother = ConsumptionSmoother()
-        consumption = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
         registerReceiver(timeReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_TIME_TICK)
             addAction(Intent.ACTION_TIME_CHANGED)
@@ -207,14 +191,44 @@ class MiniDashActivity : Activity() {
         stage.onVisible()
         phonePanel.onVisible()
         bindTrip()
-        main.removeCallbacks(motionTick)
-        main.postDelayed(motionTick, MOTION_TICK_MS)
         nav.start(navListener)
     }
 
     override fun onResume() {
         super.onResume()
         LauncherEdition.setHomeForeground(true)
+        bindMapPill()
+    }
+
+    override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+        super.onTopResumedActivityChanged(isTopResumedActivity)
+        // Seçici yarısında harita seçildiyse düğme görünür olur (Mini göstergeye dönünce).
+        if (isTopResumedActivity) bindMapPill()
+    }
+
+    /** Harita düğmesi yalnız sürüş ekranında ve harita yarısında bir harita varken; "Tam ekran" sürüş ekranında "Ana ekran". */
+    private fun bindMapPill() {
+        if (!::mapPill.isInitialized) return
+        mapPill.visibility = if (drive && DriveScreen.active && DriveScreen.mapPackage != null) View.VISIBLE else View.GONE
+        fullPill.setText(getString(if (drive) R.string.launcher_drive_home else R.string.launcher_mini_fullscreen))
+        layoutNow?.let { applyPillText(it) }
+    }
+
+    /**
+     * Yazılar dar yarıda gizli; harita düğmesi görünürken "Müzik aç" yalnız simge (üç yazılı hap başlık satırına sığmaz). Geniş
+     * yerleşimde (Tiggo 8 üst yarı, bilgi sütunu ~372 dp) "Ana ekran" da yalnız ev simgesi kalır: öykünücüde 2560x1440'ta "An…" diye
+     * kesiliyordu; yazılı kalan tek düğme "Haritayı büyüt".
+     */
+    private fun applyPillText(m: MiniLayout) {
+        val mapShown = mapPill.visibility == View.VISIBLE
+        fullPill.setTextShown(m.pillText && !(mapShown && m.wide))
+        mapPill.setTextShown(m.pillText)
+        musicPill.setTextShown(m.pillText && !mapShown)
+    }
+
+    /** Harita tam ekran olur, sonra bu yarı kapanır (Ana ekran tuşu yine bizim ana ekranımıza döner; [DriveScreen]). */
+    private fun goMapFullScreen() {
+        DriveScreen.mapFullScreen(this) { ok -> if (ok && !isFinishing) finishAndRemoveTask() }
     }
 
     override fun onPause() {
@@ -231,7 +245,6 @@ class MiniDashActivity : Activity() {
         media.stop()
         stage.onHidden()
         phonePanel.onHidden()
-        tripPanel.stop()
         nav.stop()
         main.removeCallbacksAndMessages(null)
         super.onStop()
@@ -258,7 +271,7 @@ class MiniDashActivity : Activity() {
     /** Başlığı gizlemeyi dener; kalan örtüşme değiştiyse yerleşim yeniden seçilir. */
     private fun onWindowLaidOut() {
         if (isFinishing || isDestroyed) return
-        FreeformCaption.apply(this)
+        FreeformCaption.apply(this, force = drive)
         val px = FreeformCaption.overlapPx(this, root)
         if (px == captionPx) return
         captionPx = px
@@ -270,17 +283,7 @@ class MiniDashActivity : Activity() {
      * sürümde de açıkça adlandırılır (HOME rolü kapalıyken de bizim launcher'ımıza döner).
      */
     private fun goFullScreen() {
-        try {
-            val intent = Intent(this, HomeLauncherActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            val opts = ActivityOptions.makeBasic().toBundle() ?: Bundle()
-            // ActivityOptions.setLaunchWindowingMode (gizli API) ile aynı anahtarlar; 1 = WINDOWING_MODE_FULLSCREEN.
-            opts.putInt("android.activity.windowingMode", WINDOWING_MODE_FULLSCREEN)
-            opts.putInt("android:windowingMode", WINDOWING_MODE_FULLSCREEN)
-            startActivity(intent, opts)
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "tam ekran açılamadı", e)
-        }
+        DriveScreen.launchHome(this)
         finishAndRemoveTask()
     }
 
@@ -317,25 +320,14 @@ class MiniDashActivity : Activity() {
         layoutNow?.let { applyFuelMargin(it) }
     }
 
-    /** Sürüş durumu: ana ekrandaki kart politikasıyla aynı ([DriveLayoutPolicy]); değişince yolculuk paneli yeniden bağlanır. */
-    private fun motionStep() {
-        val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
-        val parked = if (motionPolicy.wantsParkSignal(moving)) DriveSignals.parked() else { DriveSignals.invalidate(); false }
-        motionPolicy.update(System.currentTimeMillis(), moving, parked, canSwitch = true, immediatePark = LauncherDemo.enabled && moving == false)
-        val now = motionPolicy.mode == LayoutMode.DRIVE
-        if (now == driving) return
-        driving = now
-        bindTrip()
-    }
-
     /** Yolculuk paneli: veri yokken gizli (tire yok); görünürlüğü değişince yan sütun yeniden bölünür. */
     private fun bindTrip() {
         if (!::tripPanel.isInitialized) return
-        val content = TripHero.content(driving, trip.connected, trip.tripKm)
+        val content = TripHero.content(trip.connected, trip.tripKm)
         val d = trip
         val minutes = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin)
-        val shown = MiniSide.tripShown(content, TripHero.live(consumption), MiniSide.stats(content, d.tripKm, minutes, d.avgSpeedKmh, d.avgL100))
-        if (shown) tripPanel.bind(content, d, consumption, minutes)
+        val shown = MiniSide.tripShown(content)
+        if (shown) tripPanel.bind(content, d, minutes)
         if (shown != tripShownNow) {
             tripShownNow = shown
             applySide()
@@ -482,6 +474,9 @@ class MiniDashActivity : Activity() {
         }
         fullPill = Pill(this, R.drawable.ic_sahne_home, getString(R.string.launcher_mini_fullscreen)) { goFullScreen() }
         musicPill = Pill(this, R.drawable.ic_sahne_note, getString(R.string.launcher_mini_open_music)) { openMusic() }
+        mapPill = Pill(this, R.drawable.ic_sahne_expand, getString(R.string.launcher_drive_map_big)) { goMapFullScreen() }
+        mapPill.contentDescription = getString(R.string.launcher_drive_map_full)
+        mapPill.visibility = View.GONE
 
         // Ana ekranın araç sahnesi: menzil omzu burada üst satırda olduğu için gizli; kilit hapı ve uyarı şeridi aynen.
         stage = SahneStage(this).apply { showRange = false; hideLockWhileWaiting = true }
@@ -596,6 +591,7 @@ class MiniDashActivity : Activity() {
         (navRow.parent as? ViewGroup)?.removeView(navRow)
         // Boşluk "Müzik aç"ın sağında: o gizliyken "Tam ekran" hizadan kaymaz.
         pills.addView(musicPill, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)).apply { marginEnd = dp(12) })
+        pills.addView(mapPill, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)).apply { marginEnd = dp(12) })
         pills.addView(fullPill, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)))
         side.addView(tripPanel.view, LinearLayout.LayoutParams(MATCH, 0, 1f))
         side.addView(phonePanel.view, LinearLayout.LayoutParams(MATCH, dp(MiniLayout.MIN_TOUCH_DP)))
@@ -646,8 +642,7 @@ class MiniDashActivity : Activity() {
         rangeValue.textSize = m.valueSp
         fuelValue.textSize = m.valueSp
         rangeUnit.textSize = m.valueSp / 2f
-        fullPill.setTextShown(m.pillText)
-        musicPill.setTextShown(m.pillText)
+        applyPillText(m)
         lp(side).apply { width = dp(m.sideDp) }
         lp(mediaStrip).apply { height = dp(m.mediaDp) }
         mediaStrip.setPadding(dp(if (m.coverDp > 0) 12 else 20), 0, dp(12), 0)
@@ -752,6 +747,12 @@ class MiniDashActivity : Activity() {
             pressFeedback()
         }
 
+        fun setText(text: String) {
+            if (label.text == text) return
+            label.text = text
+            contentDescription = text
+        }
+
         fun setTextShown(shown: Boolean) {
             label.visibility = if (shown) VISIBLE else GONE
             if (shown) setPadding(context.dp(20), 0, context.dp(24), 0) else setPadding(0, 0, 0, 0)
@@ -760,7 +761,6 @@ class MiniDashActivity : Activity() {
 
     companion object {
         private const val TAG = "MiniDash"
-        private const val WINDOWING_MODE_FULLSCREEN = 1
         private const val MODE_NO_ACCESS = 0
         private const val MODE_IDLE = 1
         private const val MODE_SESSION = 2
@@ -768,7 +768,6 @@ class MiniDashActivity : Activity() {
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         private const val FUEL_BAR_DP = 64
         private const val COVER_RADIUS_DP = 14f
-        private const val MOTION_TICK_MS = 500L
 
         /** Demo navigasyon satırı: `--ez launcher_mini_demo_nav true` (yalnızca demo açıkken). */
         const val EXTRA_DEMO_NAV = "launcher_mini_demo_nav"

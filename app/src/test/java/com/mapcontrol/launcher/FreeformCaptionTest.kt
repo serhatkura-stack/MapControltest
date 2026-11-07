@@ -30,4 +30,12 @@ class FreeformCaptionTest {
         assertEquals(0, FreeformCaption.overlap(captionShown = true, captionBottom = 66, contentTop = 90))
         assertEquals(0, FreeformCaption.overlap(captionShown = false, captionBottom = 66, contentTop = 24))
     }
+
+    @Test fun topEdgeFallsBackToStatusBarWhenFreeformMetricsReportZero() {
+        // Öykünücü, 7 Kasım: serbest pencerede en büyük pencere ölçüsünün üst inset'i 0, durum çubuğu 24 px.
+        assertEquals(24, FreeformCaption.topEdge(metricsTop = 0, statusBarPx = 24))
+        assertTrue(FreeformCaption.shouldHide(windowTop = 24, usableTop = FreeformCaption.topEdge(0, 24)))
+        assertEquals(70, FreeformCaption.topEdge(metricsTop = 70, statusBarPx = 24))
+        assertEquals(-1, FreeformCaption.topEdge(metricsTop = 0, statusBarPx = -1))
+    }
 }

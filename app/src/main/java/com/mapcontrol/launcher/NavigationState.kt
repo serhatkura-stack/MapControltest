@@ -45,6 +45,8 @@ data class NavigationState(
     val sourcePackage: String? = null,
     /** Son güncelleme (System.currentTimeMillis). */
     val updatedAtMs: Long = 0L,
+    /** Bildirimin "navigasyonu bitir" eylemi ([NavEndAction] ile bulunur); yoksa null ve "Bitir" düğmesi gizlenir. */
+    val endAction: android.app.PendingIntent? = null,
 ) {
     companion object {
         /** Rota yok. */
