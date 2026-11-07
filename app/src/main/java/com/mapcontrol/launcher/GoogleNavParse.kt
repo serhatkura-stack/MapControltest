@@ -1,5 +1,6 @@
 package com.mapcontrol.launcher
 
+import android.app.Notification
 import com.mapcontrol.nav.GoogleMapsNavNotificationParser
 import com.mapcontrol.nav.GoogleMapsNavSnapshot
 
@@ -31,7 +32,7 @@ object GoogleNavParse {
         val instruction = snap.formatManeuverDirectionLine()?.takeIf { it.any(Char::isLetter) && NavParse.parseDistanceOnly(it) == null }
         val minutes = NavParse.parseMinutes(snap.etaDurationLabel())
         val remaining = NavParse.findDistance(snap.etaDistanceLabel())
-        val arrival = NavParse.findClock(snap.etaArrivalLabel())
+        val arrival = arrivalClock(snap.etaArrivalLabel())
         if (distance == null && instruction == null && minutes == null && remaining == null) return null
         val maneuver = maneuverFromInstruction(instruction) ?: NavManeuver.UNKNOWN
         val exit = if (maneuver == NavManeuver.ROUNDABOUT_ENTER) NavParse.parseExitNumber(instruction) else null
@@ -50,6 +51,28 @@ object GoogleNavParse {
     }
 
     private fun clean(s: String?): String? = s?.trim()?.ifEmpty { null }
+
+    /**
+     * Rehberlik bildirimi mi: Google Haritalar aynı pakette trafik / işe gidiş gibi sayı içeren başka bildirimler de yayımlar;
+     * yalnız navigasyon kategorisindeki ya da süren (ongoing / ön plan hizmeti) bildirim rota sayılır
+     * (FrostNav'ın `GoogleMapsNavNotificationCoordinator.score()` ölçütleriyle aynı işaretler).
+     */
+    fun isGuidanceNotification(category: String?, flags: Int): Boolean =
+        category == Notification.CATEGORY_NAVIGATION ||
+            (flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE)) != 0
+
+    private val CLOCK_12 = Regex("""(?iu)(?<!\d)(1[0-2]|0?[1-9])[:.]([0-5]\d)\s*([ap])\.?\s*m\b\.?""")
+
+    /** Varış saati 24 saat "HH:mm": 12 saatlik "1:26 PM" → "13:26", "12:05 AM" → "00:05"; AM/PM yoksa [NavParse.findClock]. */
+    fun arrivalClock(text: String?): String? {
+        if (text == null) return null
+        CLOCK_12.find(text)?.let { m ->
+            val h12 = m.groupValues[1].toInt() % 12
+            val h = if (m.groupValues[3].equals("p", ignoreCase = true)) h12 + 12 else h12
+            return "${h.toString().padStart(2, '0')}:${m.groupValues[2]}"
+        }
+        return NavParse.findClock(text)
+    }
 
     private val UTURN = Regex("""(?iu)u[\s-]?turn|u\s+dönüş|geri\s+dön""")
     private val ROUNDABOUT = Regex("""(?iu)roundabout|traffic\s+circle|rotary|döner\s+kavşa|dönel\s+kavşa|göbek""")

@@ -58,7 +58,6 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         setPadding(p, context.dp(6), p, context.dp(6))
         background = rounded(context, Sahne.SOFT_FILL, Sahne.CONTROL_RADIUS_DP, Sahne.HAIR_2)
         setOnClickListener { chooseMapApp() }
-        pressFeedback()
     }
 
     private val listener: (NavigationState) -> Unit = { s ->
@@ -246,6 +245,8 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         appChip.text = if (many) app.label + " \u25BE" else app.label
         appChip.isClickable = many
         appChip.isFocusable = many
+        // Tek seçenekte basma animasyonu da olmasın (dokunulmaz görünsün).
+        if (many) appChip.pressFeedback() else appChip.setOnTouchListener(null)
         appChip.contentDescription = context.getString(R.string.launcher_nav_map_app_title) + ": " + app.label
     }
 

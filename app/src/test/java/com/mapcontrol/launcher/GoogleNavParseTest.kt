@@ -83,4 +83,24 @@ class GoogleNavParseTest {
         assertEquals(1500, s.distance!!.meters)
         assertEquals("18:40", s.arrivalTime)
     }
+
+    @Test
+    fun twelveHourArrivalBecomes24Hour() {
+        val s = GoogleNavParse.parse("200 m", "Turn left - Main", "5 min · 800 m · 1:26 PM ETA")!!
+        assertEquals("13:26", s.arrivalTime)
+        assertEquals("00:05", GoogleNavParse.arrivalClock("12:05 AM ETA"))
+        assertEquals("12:40", GoogleNavParse.arrivalClock("12:40 p.m."))
+        assertEquals("09:15", GoogleNavParse.arrivalClock("9:15 am"))
+        assertEquals("23:01", GoogleNavParse.arrivalClock("TVS: 23:01"))
+    }
+
+    @Test
+    fun onlyNavigationOrOngoingNotificationIsGuidance() {
+        assertTrue(GoogleNavParse.isGuidanceNotification(android.app.Notification.CATEGORY_NAVIGATION, 0))
+        assertTrue(GoogleNavParse.isGuidanceNotification(null, android.app.Notification.FLAG_ONGOING_EVENT))
+        assertTrue(GoogleNavParse.isGuidanceNotification(null, android.app.Notification.FLAG_FOREGROUND_SERVICE))
+        // Trafik / işe gidiş bildirimi: sayı içerse de rota değil.
+        assertEquals(false, GoogleNavParse.isGuidanceNotification(android.app.Notification.CATEGORY_RECOMMENDATION, 0))
+        assertEquals(false, GoogleNavParse.isGuidanceNotification(null, android.app.Notification.FLAG_AUTO_CANCEL))
+    }
 }

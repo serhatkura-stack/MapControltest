@@ -45,6 +45,9 @@ object NavigationSource {
     /** Etkin seçimin paketleri (varsayılan eski davranış: Yandex). Dinleyici bağlanınca ve seçim değişince güncellenir. */
     @Volatile private var accepted: Set<String> = MapAppChoice.notificationPackages(null)
     @Volatile private var acceptedResolved = false
+    /** Son seçim okuması (worker); kullanıcı seçmediyse seçim FrostNav hedef paketine bağlıdır, bu yüzden ara ara yenilenir. */
+    private var acceptedReadAtMs = 0L
+    private const val ACCEPTED_REFRESH_MS = 5_000L
 
     private const val TAG = "NavSource"
 
@@ -120,9 +123,14 @@ object NavigationSource {
         }
     }
 
-    private fun refreshAccepted(context: Context) {
-        accepted = MapAppChoice.notificationPackages(try { MapAppPrefs.current(context) } catch (e: Exception) { null })
+    /** Seçimi tercihten yeniden okur (worker); kabul edilen paketler değiştiyse true. */
+    private fun refreshAccepted(context: Context): Boolean {
+        val next = MapAppChoice.notificationPackages(try { MapAppPrefs.current(context) } catch (e: Exception) { null })
         acceptedResolved = true
+        acceptedReadAtMs = SystemClock.elapsedRealtime()
+        if (next == accepted) return false
+        accepted = next
+        return true
     }
 
     @JvmStatic
@@ -155,7 +163,15 @@ object NavigationSource {
         if (sbn == null || sbn.packageName !in PACKAGES) return
         serviceRef = WeakReference(service)
         worker.post {
-            if (!acceptedResolved) refreshAccepted(service)
+            // Panel açılmadan da (mini gösterge) FrostNav hedefi değişince seçim eskimesin: ara ara yeniden oku.
+            val stale = !acceptedResolved || SystemClock.elapsedRealtime() - acceptedReadAtMs > ACCEPTED_REFRESH_MS
+            if (stale && refreshAccepted(service)) {
+                worker.removeCallbacks(confirmRemoved)
+                activeKey = null
+                gate.clear()
+                if (!resync()) setReal(NavigationState.NONE)
+                return@post
+            }
             if (sbn.packageName in accepted) handlePosted(service, sbn)
         }
     }
@@ -200,8 +216,9 @@ object NavigationSource {
         } catch (e: Exception) {
             null
         } ?: return false
-        for (sbn in active) {
-            val pkg = sbn?.packageName ?: continue
+        // Google'da navigasyon kategorisindeki bildirim önce (aynı pakette başka süren bildirim de olabilir).
+        for (sbn in active.filterNotNull().sortedBy { if (it.packageName == GOOGLE_MAPS && it.notification?.category != android.app.Notification.CATEGORY_NAVIGATION) 1 else 0 }) {
+            val pkg = sbn.packageName ?: continue
             if (pkg !in accepted) continue
             // Yeniden eşitlemede kapı kullanılmaz: kayıtlı içerik aynı olsa bile durum yeniden kurulmalı.
             val parsed = parse(service, sbn) ?: continue
@@ -249,9 +266,12 @@ object NavigationSource {
         return result
     }
 
-    /** Google Haritalar: yalnız extras metinleri (başlık, metin, alt metin); RemoteViews gezilmez. */
+    /** Google Haritalar: yalnız rehberlik bildirimi ([GoogleNavParse.isGuidanceNotification]) ve extras metinleri (başlık, metin, alt metin); RemoteViews gezilmez. */
     private fun parseGoogle(sbn: StatusBarNotification): NavigationState? {
-        val extras = sbn.notification?.extras ?: return null
+        val n = sbn.notification ?: return null
+        // Trafik / işe gidiş gibi sayı içeren diğer Google bildirimleri kartı ele geçirmesin.
+        if (!GoogleNavParse.isGuidanceNotification(n.category, n.flags)) return null
+        val extras = n.extras ?: return null
         return GoogleNavParse.parse(
             extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString(),
             extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString(),
