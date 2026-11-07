@@ -50,7 +50,9 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     NAVIGATION("nav_turn", R.string.launcher_widget_navigation, R.drawable.ic_sahne_nav, listOf(Span(4, 4))),
     // Telefon paneli ([PhonePanel]): sesli asistan, favoriler, son aramalar. Anahtar "phone_call": "phone_reminder" telefon
     // hatırlatma kutucuğunundur ([PhoneTile]).
-    PHONE("phone_call", R.string.launcher_widget_phone_call, R.drawable.ic_sahne_phone, listOf(Span(4, 4)));
+    PHONE("phone_call", R.string.launcher_widget_phone_call, R.drawable.ic_sahne_phone, listOf(Span(4, 4))),
+    // Direksiyon ısıtma ([SteerHeatTile]): yalnız şerit; yalnız CarConfig 120 izin veren araçta (Tiggo 8) sunulur.
+    STEER_HEAT("steer_heat", R.string.launcher_widget_steer_heat, R.drawable.ic_mdi_steering, listOf(Span(2, 2)));
 
     companion object {
         /**
@@ -114,5 +116,6 @@ object WidgetFactory {
         WidgetType.CLUSTER_MIRROR -> ClusterMirrorTile(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
         WidgetType.PHONE -> PhonePanel(activity)
+        WidgetType.STEER_HEAT -> SteerHeatTile(activity)
     }
 }

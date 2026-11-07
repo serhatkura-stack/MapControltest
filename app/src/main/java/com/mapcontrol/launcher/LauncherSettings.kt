@@ -204,8 +204,9 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setText(R.string.launcher_phone_priority_hint)
         }, fullWidth())
 
-        // Gösterge haritası (deneysel): yalnızca gösterge ekranı varsa. Varsayılan kapalı.
-        if (ClusterMap.hasCluster(activity)) addClusterMapControls(d)
+        // Gösterge haritası (deneysel): yalnızca gösterge ekranı varsa ve bu derleme sunuyorsa (gömülü FrostNav derlemesinde
+        // gizli: gösterge işi donduruldu, [LauncherEdition.CLUSTER_MAP_SETTING]). Varsayılan kapalı.
+        if (LauncherEdition.CLUSTER_MAP_SETTING && ClusterMap.hasCluster(activity)) addClusterMapControls(d)
 
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
@@ -559,7 +560,7 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     /** Java yardımcısı senkron çalıştığı için arka planda açılır. */
     private fun openApp(packageName: String) {
         launcher.runSafely {
-            AppLaunchHelper.launchAppOnDisplay(activity, packageName, Display.DEFAULT_DISPLAY, 0)
+            if (!DriveScreen.openLeftover(activity, packageName)) AppLaunchHelper.launchAppOnDisplay(activity, packageName, Display.DEFAULT_DISPLAY, 0)
         }
     }
 

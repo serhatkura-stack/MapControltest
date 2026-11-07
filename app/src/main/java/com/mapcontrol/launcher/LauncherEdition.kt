@@ -35,11 +35,17 @@ internal object LauncherEdition {
      */
     const val WRITES_ON = true
 
+    /** Ayarlardaki deneysel "Gösterge haritası" satırı. Gömülü FrostNav (Berk) derlemesi: gizli, gösterge işi donduruldu (6 Kasım). */
+    const val CLUSTER_MAP_SETTING = false
+
     @Suppress("UNUSED_PARAMETER")
     fun init(context: Context) = Unit
 
     /** Launcher (ana ekran / Mini gösterge) öndeyken yüzen FrostNav geri okunu gizler; başka uygulama önde iken eskisi gibi. */
     fun setHomeForeground(front: Boolean) = com.mapcontrol.manager.FloatingBackButtonManager.setSuppressed(front)
+
+    /** Ana ekran göründü: açılışta (MapControlService) istenen arayüz açılmış sayılır ve yeniden başlatılmaz. */
+    fun onLauncherShown(context: Context) = com.mapcontrol.util.BootSession.markUiLaunched(context)
 
     /** Ayarlar (MapControl ana ekranı) bu derlemede var mı. */
     const val HAS_SETTINGS = true

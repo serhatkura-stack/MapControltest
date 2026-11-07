@@ -141,6 +141,10 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
     private var artKey: Pair<Int, Int>? = null
     private var ambientFront = 0
     private var ambientColor: Int? = null
+    /** Kapaktan çıkan renk (null = kapak yok ya da renksiz) ve müzik çalıyor mu; ışık [AmbientModeColor.decide] ile seçilir. */
+    private var coverColor: Int? = null
+    private var mediaPlaying = false
+    private val playingListener: (Boolean) -> Unit = { mediaPlaying = it; refreshAmbient() }
     private var ambientAnim: ValueAnimator? = null
     private val artIo = LauncherIo.serial()
     private val main = Handler(Looper.getMainLooper())
@@ -290,6 +294,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         sources.forEach { it.onVisible() }
         TripSource.add(activity, tripListener)
         SahneCover.listener = artListener
+        SahneCover.playingListener = playingListener
+        mediaPlaying = SahneCover.playing
         onArtwork(SahneCover.current)
         visibleNow = true
         car.setActive(true)
@@ -300,6 +306,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         sources.forEach { it.onHidden() }
         TripSource.remove(tripListener)
         if (SahneCover.listener === artListener) SahneCover.listener = null
+        if (SahneCover.playingListener === playingListener) SahneCover.playingListener = null
         visibleNow = false
         car.setActive(false)
         ambientAnim?.end()
@@ -311,6 +318,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         vehicle.onSummary = null
         TripSource.remove(tripListener)
         if (SahneCover.listener === artListener) SahneCover.listener = null
+        if (SahneCover.playingListener === playingListener) SahneCover.playingListener = null
         visibleNow = false
         car.setActive(false)
         ambientAnim?.cancel()
@@ -366,7 +374,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
 
     private fun applyWaiting() {
         rangeBlock.visibility = if (!showRange) View.GONE else if (waiting) View.INVISIBLE else View.VISIBLE
-        skeleton.visibility = if (waiting && showRange) View.VISIBLE else View.GONE
+        // Veri yokken gri iskelet çubuğu çizilmez (boş gri blok gibi görünüyordu); "Araç verisi bekleniyor" notu yeter.
+        skeleton.visibility = View.GONE
         waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
         lockChip.visibility = if (waiting && hideLockWhileWaiting) View.INVISIBLE else View.VISIBLE
     }
@@ -450,14 +459,18 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         if (key == artKey) return
         artKey = key
         if (b == null || b.isRecycled) {
-            setAmbient(null)
+            coverColor = null
+            refreshAmbient()
             return
         }
         artIo.runSafely {
             val c = AmbientColor.of(b)
-            main.post { if (artKey == key) setAmbient(c) }
+            main.post { if (artKey == key) { coverColor = c; refreshAmbient() } }
         }
     }
+
+    /** Kapak rengi, çalma durumu ve sürüş modundan ışığı seçer (mod değişince etkinlik yeniden kurulduğu için mod burada okunur). */
+    private fun refreshAmbient() = setAmbient(AmbientModeColor.decide(coverColor, mediaPlaying, LauncherTheme.driveMode))
 
     /** Ortam rengini yumuşakça değiştirir: arka görünüm yeni renkte belirir, öndeki söner (yalnızca alfa canlanır). */
     private fun setAmbient(color: Int?) {
@@ -886,6 +899,17 @@ internal object SahneCover {
         private set
     private var gen = -1
     var listener: ((Bitmap?) -> Unit)? = null
+
+    /** Müzik çalıyor mu (medya kartı bildirir): kapaktan renk çıkmazsa ışık sürüş modu rengini yalnız çalarken taşır. */
+    var playing: Boolean = false
+        private set
+    var playingListener: ((Boolean) -> Unit)? = null
+
+    fun publishPlaying(p: Boolean) {
+        if (p == playing) return
+        playing = p
+        playingListener?.invoke(p)
+    }
 
     fun publish(b: Bitmap?) {
         val g = b?.generationId ?: -1

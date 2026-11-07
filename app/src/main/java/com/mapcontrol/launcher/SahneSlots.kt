@@ -65,7 +65,7 @@ object SahneForm {
         WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
         WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
         WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
-        WidgetType.CLUSTER_MIRROR,
+        WidgetType.CLUSTER_MIRROR, WidgetType.STEER_HEAT,
     )
 
     /**
@@ -94,18 +94,18 @@ object SahneForm {
     val TIGGO7_HIDDEN: Set<WidgetType> = setOf(WidgetType.REAR_SPEAKER)
 
     /**
-     * Gizlenen şerit yuvasının yerine sırayla denenen türler (düzende olmayan ilki). Anlık tüketim en sonda ve yolculuk
-     * paneli varken hiç seçilmez: yolculuk kartı sürüşte zaten canlı tüketimi gösterir (6 Kasım kararı; çift olmasın).
+     * Gizlenen şerit yuvasının yerine sırayla denenen türler (düzende olmayan ilki). Anlık tüketim en sonda. Yolculuk
+     * kartı artık anlık tüketimi göstermez (7 Kasım kararı), bu yüzden yolculuk paneli varken de seçilebilir.
      */
     val TIGGO7_REPLACEMENTS: List<WidgetType> = listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER, WidgetType.CONSUMPTION)
 
-    /** Düzende yolculuk paneli var mı (sürüşte öncü satırı canlı tüketimdir; şeritteki tüketim kutucuğu onu yineler). */
+    /** Düzende yolculuk paneli var mı (yalnız v1 → v2 geçişi [SahneSlots.migrateTripConsumption] kullanır; çalışma anında kullanılmaz). */
     fun hasTripPanel(layout: SahneLayout): Boolean =
         listOf(layout.left, layout.right, layout.leftLower, layout.rightLower).any { it?.type == WidgetType.TRIP }
 
-    /** Şerit yuvasına [layout]'ta yedek olarak konabilir mi: yolculuk paneli varken anlık tüketim konmaz. */
-    fun stripFallbackOk(layout: SahneLayout, type: WidgetType): Boolean =
-        fitsStrip(type) && !(type == WidgetType.CONSUMPTION && hasTripPanel(layout))
+    /** Şerit yuvasına [layout]'ta yedek olarak konabilir mi: şeride sığan her tür (yolculuk paneli artık tüketimi engellemez). */
+    @Suppress("UNUSED_PARAMETER")
+    fun stripFallbackOk(layout: SahneLayout, type: WidgetType): Boolean = fitsStrip(type)
 
     /**
      * Yazması araçta doğrulanmamış, bu yüzden her iki biçimde de sunulmayan türler: arka hoparlör
@@ -115,9 +115,23 @@ object SahneForm {
     val UNVERIFIED: Set<WidgetType> =
         if (ComfortWriter.REAR_SPEAKER_WRITE_VERIFIED) emptySet() else setOf(WidgetType.REAR_SPEAKER)
 
-    /** Bu biçimde ([quad] false = Tiggo 7) gösterilebilir mi. */
+    /**
+     * Araç yapılandırmasına göre bu araçta olmayan türler: direksiyon ısıtma yalnız CarConfig 120 (ve ülke) izin verirse
+     * ([CarFeatures.steerHeat]; bilinmiyorsa gizli). Tiggo 7'de CS 160 yazmaları geri yansıtır ama ısıtıcı yoktur; karar
+     * modelden ya da geri okumadan değil, yapılandırmadan gelir.
+     */
+    fun configHidden(): Set<WidgetType> = if (CarFeatures.steerHeat == true) emptySet() else setOf(WidgetType.STEER_HEAT)
+
+    /**
+     * Kayıtlı düzenden çıkarılacak yapılandırma türleri: yalnız yapılandırma kesin "yok" derse ([CarFeatures.steerHeat] false).
+     * Bilinmiyorsa (ilk açılış, okunamadı) kayıttaki yuva kalır; aksi halde düzenlemede kaydetmek onu kalıcı silerdi.
+     * Seçici ve varsayılan düzen [configHidden] ile bilinmeyeni de gizler.
+     */
+    fun configRemoved(): Set<WidgetType> = if (CarFeatures.steerHeat == false) setOf(WidgetType.STEER_HEAT) else emptySet()
+
+    /** Bu biçimde ([quad] false = Tiggo 7) ve bu araçta ([configHidden]) gösterilebilir mi. */
     fun available(type: WidgetType, quad: Boolean): Boolean =
-        type !in UNVERIFIED && (quad || (type !in TIGGO7_HIDDEN && type !in QUAD_ONLY_PANELS))
+        type !in UNVERIFIED && type !in configHidden() && (quad || (type !in TIGGO7_HIDDEN && type !in QUAD_ONLY_PANELS))
 
     /** Düzende telefon paneli var mı (dört panelli biçim): varsa medya kartı telefon sayfasını sunmaz. */
     fun hasPhonePanel(layout: SahneLayout): Boolean =
@@ -186,40 +200,40 @@ object SahneSlots {
     const val APP_SEP = "+"
 
     /**
-     * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şeritte iki uçta koltuklar (sol direksiyonlu kabine
-     * göre sürücü solda, yolcu sağda), ortada duran araçta en çok kullanılan dört iş: bagaj (yük alıp verme), ekranı kapat
-     * ([rearSpeaker] ise arka hoparlör: yalnız Tiggo 8; Tiggo 7'de DSP erişilemiyor), iki uygulama (yola çıkmadan
-     * müzik/harita) ve sürüş modu (kapı kilidi sahnenin sağ üstündeki hapta; şeritte çift olmasın). Anlık tüketim şeritte
-     * yok: sağdaki yolculuk kartı sürüşte onu öncü satırında gösterir (6 Kasım kararı).
+     * Tiggo 7 varsayılan şeridi (Park ve Sürüş aynı; 7 Kasım sahibin seçimi): sürücü koltuğu · bölünmüş ekran (sürüş ekranı) ·
+     * göstergeye yansıt · bagaj · ekolayzer · yolcu koltuğu. Sürüş modu varsayılanda yok (seçicide duruyor; mod fiziksel
+     * düğmeyle değişiyor). Koltuklar iki uçta (sol direksiyonlu kabine göre sürücü solda).
      */
-    fun defaultPark(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
-        left = SahneSlot("media", WidgetType.MEDIA),
-        right = SahneSlot("trip", WidgetType.TRIP),
-        strip = listOf(
-            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
-            SahneSlot("trunk", WidgetType.TRUNK),
-            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
-            SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
-            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
-            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
-        ),
+    fun defaultStrip(): List<SahneSlot?> = listOf(
+        SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
+        SahneSlot("split_screen", WidgetType.SPLIT_SCREEN),
+        SahneSlot("cluster_mirror", WidgetType.CLUSTER_MIRROR),
+        SahneSlot("trunk", WidgetType.TRUNK),
+        SahneSlot("equalizer", WidgetType.EQUALIZER),
+        SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
     )
 
     /**
-     * Sürüş varsayılanı: solda medya, sağda anlık tüketim (sürüşte akan tek büyük değer); şeritte sürücü koltuğu · ekranı kapat
-     * ([rearSpeaker] ise arka hoparlör, yalnız Tiggo 8) · iki uygulama · mola hatırlatıcı · sürüş modu · yolcu koltuğu.
+     * Park varsayılanı: solda medya, sağda "Toplam" bölümlü yolculuk; şerit [defaultStrip]. [appPackages] ve [rearSpeaker]
+     * artık şeridi etkilemiyor (iki uygulama ve ekranı kapat / arka hoparlör varsayılandan çıktı, seçicide duruyor); imza eski
+     * çağıranlar için kaldı. Yalnız ilk kurulum ve sıfırlamada kullanılır; kayıtlı düzene dokunulmaz.
      */
+    @Suppress("UNUSED_PARAMETER")
+    fun defaultPark(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
+        left = SahneSlot("media", WidgetType.MEDIA),
+        right = SahneSlot("trip", WidgetType.TRIP),
+        strip = defaultStrip(),
+    )
+
+    /**
+     * Sürüş varsayılanı: Park ile aynı paneller (7 Kasım kararı: solda medya, telefon arkasında; sağda "Toplam" bölümlü
+     * yolculuk) ve aynı şerit ([defaultStrip], 7 Kasım). Yalnız ilk kurulum ve sıfırlamada kullanılır; kayıtlı düzene dokunulmaz.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun defaultDrive(appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout = SahneLayout(
         left = SahneSlot("media", WidgetType.MEDIA),
-        right = SahneSlot("consumption", WidgetType.CONSUMPTION),
-        strip = listOf(
-            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
-            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
-            SahneSlot("app_pair", WidgetType.APP, appExtra(appPackages)),
-            SahneSlot("break_reminder", WidgetType.BREAK_REMINDER),
-            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
-            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
-        ),
+        right = SahneSlot("trip", WidgetType.TRIP),
+        strip = defaultStrip(),
     )
 
     fun defaults(mode: LayoutMode, appPackages: List<String> = emptyList(), rearSpeaker: Boolean = false): SahneLayout =
@@ -227,17 +241,36 @@ object SahneSlots {
 
     /**
      * Tiggo 8 varsayılanı (Park ve Sürüş aynı panel dizilişi): sol üst medya, sol alt navigasyon, sağ üst yolculuk, sağ alt
-     * telefon; şerit o modun Tiggo 7 şeridiyle aynı. Sağ alt eskiden tüketimdi; yolculuk kartı sürüşte canlı tüketimi zaten
-     * gösterdiğinden yineliyordu (7 Kasım kararı): yer olduğundan telefon yine kendi panelidir, medya kartı yalnız medyadır.
+     * telefon. Sağ alt eskiden tüketimdi; yolculuk kartı sürüşte canlı tüketimi zaten gösterdiğinden yineliyordu (7 Kasım
+     * kararı): yer olduğundan telefon yine kendi panelidir, medya kartı yalnız medyadır.
+     *
+     * Şerit: [steerHeat] (CarConfig 120 izin veriyor, [CarFeatures.steerHeat]) ise direksiyon ısıtma sürücü koltuğunun hemen
+     * yanına gelir ([quadStrip]); değilse o modun Tiggo 7 şeridi.
      */
-    fun defaultsQuad(mode: LayoutMode, appPackages: List<String> = emptyList()): SahneLayout =
-        defaults(mode, appPackages, rearSpeaker = WidgetType.REAR_SPEAKER !in SahneForm.UNVERIFIED).copy(
+    fun defaultsQuad(mode: LayoutMode, appPackages: List<String> = emptyList(), steerHeat: Boolean = false): SahneLayout {
+        val rear = WidgetType.REAR_SPEAKER !in SahneForm.UNVERIFIED
+        val base = defaults(mode, appPackages, rearSpeaker = rear)
+        return base.copy(
             left = SahneSlot("media", WidgetType.MEDIA),
             right = SahneSlot("trip", WidgetType.TRIP),
+            strip = if (steerHeat) quadStrip(mode, appPackages, rear) else base.strip,
             quad = true,
             leftLower = SahneSlot("nav_turn", WidgetType.NAVIGATION),
             rightLower = SahneSlot("phone", WidgetType.PHONE),
         )
+    }
+
+    /**
+     * Direksiyon ısıtmalı Tiggo 8 şeridi (Park ve Sürüş aynı): ısıtmalar sürücünün elinin altında (koltuk, direksiyon), sonra
+     * [defaultStrip]'in ortası; şerit [STRIP_SLOTS] yuva olduğundan ortanın sonuncusu (ekolayzer) düşer: bölünmüş ekran ·
+     * göstergeye yansıt · bagaj kalır. Yolcu koltuğu en sağda.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun quadStrip(mode: LayoutMode, appPackages: List<String>, rearSpeaker: Boolean): List<SahneSlot?> {
+        val base = defaultStrip()
+        val middle = base.subList(1, base.size - 1).take(STRIP_SLOTS - 3)
+        return listOf(base.first(), SahneSlot("steer_heat", WidgetType.STEER_HEAT)) + middle + base.last()
+    }
 
     /** Alt yuvaların tercih ettiği türler (yükseltme ve yedek için): sol alt navigasyon, sağ alt telefon. */
     private fun preferredPanel(index: Int): WidgetType = when (index) {
@@ -350,8 +383,9 @@ object SahneSlots {
     }
 
     /**
-     * v1 → v2 bir kerelik geçiş: yolculuk kartı sürüşte canlı tüketimi öncü satırında gösterir, şeritteki "Anlık tüketim"
-     * kutucuğu onu yineler. Düzende yolculuk paneli varsa şeritteki tüketim yuvası ekranı kapata döner; ekranı kapat zaten
+     * v1 → v2 bir kerelik GEÇMİŞ geçiş (yalnız v1 kayıtlara; yeni kayıtlara uygulanmaz): o zaman yolculuk kartı sürüşte
+     * canlı tüketimi öncü satırında gösteriyordu, şeritteki "Anlık tüketim" kutucuğu onu yineliyordu (7 Kasım'dan beri
+     * kart göstermiyor; kayıtlar geri yazılmaz). Düzende yolculuk paneli varsa şeritteki tüketim yuvası ekranı kapata döner; ekranı kapat zaten
      * düzendeyse mola hatırlatıcıya, o da varsa aynen kalır. Yolculuk paneli ya da şeritte tüketim yoksa düzen aynen döner.
      */
     fun migrateTripConsumption(layout: SahneLayout): SahneLayout {
@@ -438,14 +472,15 @@ object SahneSlots {
      * Tiggo 7 kaydı: gizlenen türdeki ([SahneForm.TIGGO7_HIDDEN]) şerit yuvası, düzende olmayan ilk yedek türe
      * ([SahneForm.TIGGO7_REPLACEMENTS]) döner, hiçbiri boşta değilse boşalır; panelde gizli tür olmaz. Gizli tür yoksa aynen döner.
      */
-    fun forTiggo7(layout: SahneLayout): SahneLayout = replaceHidden(layout, SahneForm.TIGGO7_HIDDEN + SahneForm.UNVERIFIED)
+    fun forTiggo7(layout: SahneLayout): SahneLayout =
+        replaceHidden(layout, SahneForm.TIGGO7_HIDDEN + SahneForm.UNVERIFIED + SahneForm.configRemoved())
 
     /**
      * Tiggo 8 kaydı: doğrulanmamış türdeki ([SahneForm.UNVERIFIED], arka hoparlör) şerit yuvası [forTiggo7]'deki gibi yedeğe
      * döner (önce ekranı kapat, o varsa mola hatırlatıcı). Her yüklemede uygulanır (seçicide de sunulmadığından kullanıcının
      * bilerek koyduğu bir seçim silinmez); doğrulanınca bayrakla kendiliğinden durur.
      */
-    fun forTiggo8(layout: SahneLayout): SahneLayout = replaceHidden(layout, SahneForm.UNVERIFIED)
+    fun forTiggo8(layout: SahneLayout): SahneLayout = replaceHidden(layout, SahneForm.UNVERIFIED + SahneForm.configRemoved())
 
     /** [hidden] türdeki şerit yuvaları, düzende olmayan ilk yedek türe ([SahneForm.TIGGO7_REPLACEMENTS]) döner; yoksa boşalır. */
     fun replaceHidden(layout: SahneLayout, hidden: Set<WidgetType>): SahneLayout {
@@ -480,6 +515,11 @@ class SahneStore(
     private val mode: LayoutMode,
     vehicle: VehicleProfile = VehicleProfile.compute(context),
 ) {
+    init {
+        // Yapılandırma kararları (direksiyon ısıtma, sürüş modları): kayıtlı değer hemen, araçtan okuma arka planda.
+        CarFeatures.init(context)
+    }
+
     private val appPackages = DefaultApps.installedDefaults(context, DEFAULT_APP_SLOTS)
     private val prefs = context.applicationContext.getSharedPreferences(prefsName(Profiles.current(context), vehicle), Context.MODE_PRIVATE)
     private val key = key(mode)
@@ -497,7 +537,9 @@ class SahneStore(
 
     fun save(layout: SahneLayout) = prefs.edit().putString(key, SahneSlots.encode(layout)).apply()
 
-    fun defaults(): SahneLayout = if (quad) SahneSlots.defaultsQuad(mode, appPackages) else SahneSlots.defaults(mode, appPackages)
+    /** İlk kurulum / sıfırlama düzeni (kayıt yoksa); kayıtlı düzen hiç değiştirilmez. */
+    fun defaults(): SahneLayout =
+        if (quad) SahneSlots.defaultsQuad(mode, appPackages, steerHeat = CarFeatures.steerHeat == true) else SahneSlots.defaults(mode, appPackages)
 
     /** Kayıt bu aracın biçiminde değilse çevrilir: Tiggo 8'in eski iki panelli kaydı dört panelliye yükselir. */
     private fun forVehicle(layout: SahneLayout): SahneLayout = when {

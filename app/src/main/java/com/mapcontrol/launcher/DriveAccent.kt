@@ -7,19 +7,20 @@ import com.mapcontrol.R
 
 /**
  * Sürüş moduna göre launcher'ın vurgu rengi (salt-okur; araca hiçbir şey yazılmaz).
- * Mod ham değerleri aracınkiyle aynı: 0 Eko, 1 Normal, 2 Spor, 3 Kar, 4 Çamur, 5 Kum, 6 Arazi.
+ * Mod değerleri [DriveModes] tablosudur (okuma = yazma, 7 Kasım ölçümü): 0 Eko, 1 Normal, 2 Spor, 3 Kar, 4 Çamur, 5 Arazi, 7 Kum.
  * Yalnızca vurgu değişir; zemin, kart ve metin renkleri aynı kalır. Normal mod varsayılan vurguyu korur.
  *
  * Renkler beyaz yazıyla okunur kalacak şekilde seçildi: gündüz >= 4.5:1, gece >= 3:1 (büyük/kalın yazı).
  */
 object DriveAccent {
-    const val ECO = 0
-    const val NORMAL = 1
-    const val SPORT = 2
-    const val SNOW = 3
-    const val MUD = 4
-    const val SAND = 5
-    const val OFFROAD = 6
+    // Mod değerleri; tek kaynak [DriveModes] (okuma = yazma).
+    const val ECO = DriveModes.ECO
+    const val NORMAL = DriveModes.NORMAL
+    const val SPORT = DriveModes.SPORT
+    const val SNOW = DriveModes.SNOW
+    const val MUD = DriveModes.MUD
+    const val SAND = DriveModes.SAND
+    const val OFFROAD = DriveModes.OFFROAD
 
     /** Mod başına (gece, gündüz) vurgu; Normal listede yok = temanın kendi vurgusu. */
     private val ACCENTS: Map<Int, Pair<Int, Int>> = mapOf(
@@ -166,24 +167,50 @@ object SportModePrefs {
  * Pencere odağı alır: süre dolunca yalnız odak bizden gitmişse (`focusLost`) gönderilir; odak [FOCUS_WAIT_MS] içinde
  * gitmezse pencere hiç açılmamıştır (OEM bazı durumlarda göstermez) ve yayın düşer. Arka planda geçen değişimler için
  * yayın olmasın diye çağıran görünmez olunca / demo sürerken [reset] eder (dönüşteki ilk gözlem değişim sayılmaz).
+ *
+ * Bizim sürüş modu widget'ımızın istediği değişim ([ownRequestAt] son istek, [ownRequests] toplam istek sayısı; [OWN_WINDOW_MS]
+ * içinde gözlenen değişimler, istek başına bir) her mod için
+ * kapatılır: spor ekranı ya da "Spor modu (deneysel)" gerekmez, yalnız [ownAllowed] (ör. düzenleme açık değil) sorulur.
  */
 class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
     private var last: Int? = null
     private var dueAt: Long? = null
+    /** Bekleyen yayın bizim isteğimizden mi (kapı [ownAllowed]) yoksa spor geçişinden mi (kapı [allowed]). */
+    private var dueOwn = false
+    /**
+     * Kullanılan istek sayısı: her istek en çok bir değişimi kapatır (aracın geri dönmesi gibi fazladan değişim kapanmaz).
+     * Pencere ([OWN_WINDOW_MS]) dolunca artan istekler de kullanılmış sayılır (birleşen değişimlerden kalan istek sonra
+     * araçtan gelen bir değişimi kapatmasın).
+     */
+    private var usedOwn = 0
 
     /** true: yayını şimdi gönder (bu değişim için bir daha true dönmez). */
-    fun update(now: Long, mode: Int?, allowed: Boolean, sportShown: Boolean, focusLost: Boolean = true): Boolean {
+    fun update(
+        now: Long,
+        mode: Int?,
+        allowed: Boolean,
+        sportShown: Boolean,
+        focusLost: Boolean = true,
+        ownRequestAt: Long? = null,
+        ownRequests: Int = 0,
+        ownAllowed: Boolean = allowed,
+    ): Boolean {
+        val inWindow = ownRequestAt != null && now - ownRequestAt in 0..OWN_WINDOW_MS
+        if (!inWindow) usedOwn = ownRequests
         if (mode != null) {
             val prev = last
             last = mode
             if (prev != null && prev != mode) {
                 val starts = mode == DriveAccent.SPORT || (prev == DriveAccent.SPORT && sportShown)
+                val own = inWindow && ownRequests > usedOwn
+                if (own) usedOwn++
                 // Yeni değişim önceki bekleyeni geçersiz kılar (değişim başına en çok bir yayın).
-                dueAt = if (allowed && starts) now + delayMs else null
+                dueOwn = own && ownAllowed
+                dueAt = if (dueOwn || (allowed && starts)) now + delayMs else null
             }
         }
         val at = dueAt ?: return false
-        if (!allowed) { dueAt = null; return false }
+        if (!(if (dueOwn) ownAllowed else allowed)) { dueAt = null; return false }
         if (now < at) return false
         if (!focusLost) {
             // Odak bizde: pencere (henüz) açık değil. Biraz bekle; açılmazsa kapatılacak bir şey yok.
@@ -198,6 +225,7 @@ class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
     fun reset() {
         last = null
         dueAt = null
+        dueOwn = false
     }
 
     companion object {
@@ -205,5 +233,7 @@ class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
         const val DELAY_MS = 300L
         /** Süre dolduktan sonra pencerenin odağı almasını bekleme payı. */
         const val FOCUS_WAIT_MS = 1_500L
+        /** Widget isteğinden sonra aracın modu bu süre içinde değişirse değişim "bizim" sayılır. */
+        const val OWN_WINDOW_MS = 5_000L
     }
 }

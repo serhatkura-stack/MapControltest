@@ -21,9 +21,22 @@ internal object WidgetWriter {
 
     private val readbackPool = Executors.newCachedThreadPool { r -> Thread(r, "widget-readback").apply { isDaemon = true } }
 
-    /** CarInfoProxy.sendItemValue ile gönderilen yazmalar (koltuk, klima, bagaj). */
+    /** Servis bağlı değilken CarInfoProxy.init için uygulama bağlamı ([attach]); yoksa yeniden deneme yapılmaz. */
+    @Volatile
+    private var appContext: Context? = null
+
+    /** Bağlantı yeniden denemesi için uygulama bağlamını bir kez verir (widget kurucuları çağırır; tekrarı zararsız). */
+    fun attach(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
+    }
+
+    /**
+     * CarInfoProxy.sendItemValue ile gönderilen yazmalar (koltuk, klima, bagaj, sürüş modu, direksiyon ısıtma). Servis bağlı
+     * değilse bağlanıp [WidgetWritePolicy.CONNECT_RETRY_MS] sonra bir kez yeniden dener ([WidgetWritePolicy.connectStep]).
+     */
     fun send(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
-        attempt(module, id, value, isConnected = { proxy.isServiceConnnected }) {
+        attempt(module, id, value, isConnected = { proxy.isServiceConnnected },
+            connect = appContext?.let { ctx -> { proxy.init(ctx) } }) {
             proxy.sendItemValue(module, id, value)
         }
     }
@@ -45,7 +58,9 @@ internal object WidgetWriter {
         ) { controls.setCentralLock(locked) }
     }
 
-    private fun attempt(module: Int, id: Int, value: Int, isConnected: () -> Boolean, send: () -> Unit) {
+    private fun attempt(
+        module: Int, id: Int, value: Int, isConnected: () -> Boolean, connect: (() -> Unit)? = null, send: () -> Unit,
+    ) {
         val verdict = WidgetWritePolicy.evaluate(module, id, value)
         if (verdict !is WidgetWritePolicy.Verdict.Allowed) {
             val widget = WidgetWritePolicy.find(module, id, value)?.widget
@@ -53,10 +68,28 @@ internal object WidgetWriter {
             return
         }
         val entry = verdict.entry
-        if (!isConnected()) {
-            Log.w(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(entry.widget, module, id, value, "refused-no-service"))
-            return
+        when (WidgetWritePolicy.connectStep(isConnected(), retried = connect == null)) {
+            WidgetWritePolicy.ConnectStep.SEND -> deliver(entry, module, id, value, send)
+            WidgetWritePolicy.ConnectStep.REFUSE -> refuseNoService(entry, module, id, value)
+            WidgetWritePolicy.ConnectStep.CONNECT_AND_RETRY -> {
+                Log.i(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(entry.widget, module, id, value, "connecting"))
+                runCatching { connect?.invoke() }
+                readbackPool.execute {
+                    SystemClock.sleep(WidgetWritePolicy.CONNECT_RETRY_MS)
+                    when (WidgetWritePolicy.connectStep(isConnected(), retried = true)) {
+                        WidgetWritePolicy.ConnectStep.SEND -> deliver(entry, module, id, value, send)
+                        else -> refuseNoService(entry, module, id, value)
+                    }
+                }
+            }
         }
+    }
+
+    private fun refuseNoService(entry: WidgetWritePolicy.Entry, module: Int, id: Int, value: Int) {
+        Log.w(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(entry.widget, module, id, value, "refused-no-service"))
+    }
+
+    private fun deliver(entry: WidgetWritePolicy.Entry, module: Int, id: Int, value: Int, send: () -> Unit) {
         val before = entry.readBack.map { it to describe(it) }
         send()
         Log.i(WidgetWritePolicy.LOG_TAG, WidgetWritePolicy.logLine(entry.widget, module, id, value, "sent") +

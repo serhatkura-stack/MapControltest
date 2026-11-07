@@ -20,13 +20,15 @@ class DriveAccentTest {
         for (night in listOf(true, false)) {
             assertNull(DriveAccent.accentFor(DriveAccent.NORMAL, night))
             assertNull(DriveAccent.accentFor(9, night))
+            // 6 araçta hiç görülmedi: tanımsız, vurgu yok.
+            assertNull(DriveAccent.accentFor(6, night))
             assertNull(DriveAccent.accentFor(-1, night))
         }
         assertFalse(DriveAccent.hasBadge(DriveAccent.NORMAL))
     }
 
     @Test fun everyOtherModeHasDistinctReadableAccent() {
-        val modes = listOf(0, 2, 3, 4, 5, 6)
+        val modes = listOf(0, 2, 3, 4, 5, 7)
         val seen = HashSet<Int>()
         for (m in modes) {
             val n = DriveAccent.accentFor(m, true)
@@ -43,7 +45,7 @@ class DriveAccentTest {
     @Test fun doneButtonHasStrongContrastForEveryAccent() {
         val defaults = mapOf(true to 0xFF3B82F6.toInt(), false to 0xFF2563EB.toInt())
         for (night in listOf(true, false)) {
-            for (m in 0..6) {
+            for (m in 0..7) {
                 val accent = DriveAccent.accentFor(m, night) ?: defaults.getValue(night)
                 val fill = DriveAccent.buttonFill(accent)
                 assertTrue("mode $m night=$night %06X".format(fill and 0xFFFFFF), DriveAccent.contrastWithWhite(fill) >= 4.5)

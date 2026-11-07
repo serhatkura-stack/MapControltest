@@ -27,6 +27,7 @@ import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.launcher.CarSignals
 import com.mapcontrol.launcher.LauncherDemo
+import com.mapcontrol.launcher.LauncherEdition
 import com.mapcontrol.launcher.LauncherTheme
 import com.mapcontrol.util.AppLaunchHelper
 import com.mapcontrol.launcher.cluster.ClusterMapMath.Box
@@ -110,8 +111,10 @@ internal object ClusterMap {
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** Gömülü yapıda ayar satırı gizli ([LauncherEdition.CLUSTER_MAP_SETTING]): eskiden açılmış kayıt da haritayı açmaz. */
     @JvmStatic
-    fun isEnabled(c: Context): Boolean = prefs(c).getBoolean(KEY_ENABLED, false)
+    fun isEnabled(c: Context): Boolean =
+        LauncherEdition.CLUSTER_MAP_SETTING && prefs(c).getBoolean(KEY_ENABLED, false)
     fun setEnabled(c: Context, on: Boolean) = prefs(c).edit().putBoolean(KEY_ENABLED, on).apply()
     fun frameChoice(c: Context): FrameChoice = FrameChoice.of(prefs(c).getString(KEY_FRAME, null))
     fun setFrameChoice(c: Context, v: FrameChoice) = prefs(c).edit().putString(KEY_FRAME, v.key).apply()

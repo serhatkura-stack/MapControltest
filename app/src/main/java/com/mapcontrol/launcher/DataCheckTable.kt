@@ -143,7 +143,8 @@ internal object DataCheckTable {
         if (v in 80..165) String.format(java.util.Locale.US, "%.1f V", v / 10.0) else null
     }
 
-    val driveMode = labels(0 to "Eco", 1 to "Normal", 2 to "Sport", 3 to "Kar", 4 to "Çamur", 5 to "Kum", 6 to "Arazi")
+    /** Sürüş modu (NewEnergy 4) değerleri; tek kaynak [DriveModes] (okuma = yazma; 6 bilinmiyor). */
+    val driveMode = labels(*DriveMode.values().map { it.value to it.trName }.toTypedArray())
 
     /** Cam tavan operate: 2/5 kapalı, 3/6/7 açık, 4 hareket. */
     val sunroofOperate = labels(2 to "Kapalı", 5 to "Kapalı", 3 to "Açık", 6 to "Açık", 7 to "Açık", 4 to "Hareket")

@@ -21,6 +21,9 @@ internal object LauncherEdition {
     /** Widget yazmaları her zaman açık (kapılar açık, beyaz liste şartıyla). */
     const val WRITES_ON = true
 
+    /** Ayarlardaki deneysel "Gösterge haritası" satırı. Ayrı test uygulaması: deneme için açık. */
+    const val CLUSTER_MAP_SETTING = true
+
     /** true: araç verisi yalnızca okunur, dokunuşlar komut göndermez. Bu derlemede de false. */
     const val READ_ONLY = false
 
@@ -29,6 +32,10 @@ internal object LauncherEdition {
     /** Bu derlemede ok resmi ayrı resmi FrostNav uygulamasına ait; denetlenemez, işlem yok. */
     @Suppress("UNUSED_PARAMETER")
     fun setHomeForeground(front: Boolean) = Unit
+
+    /** Test uygulamasında açılış servisi yok. */
+    @Suppress("UNUSED_PARAMETER")
+    fun onLauncherShown(context: Context) = Unit
 
     /** Koltuk soğutma yazması araçta doğrulandı (sürücü, CS 93). */
     const val SEAT_VENT_WRITE_VERIFIED = true

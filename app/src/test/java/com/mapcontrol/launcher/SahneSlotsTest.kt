@@ -12,13 +12,45 @@ class SahneSlotsTest {
 
     private val apps = listOf("com.google.android.apps.youtube.music", "com.google.android.apps.maps")
 
+    /** 7 Kasım öncesi Park varsayılanı (eski kayıtların geçiş testleri için): bagaj, ekranı kapat / arka hoparlör, iki uygulama, sürüş modu. */
+    private fun oldPark(appPackages: List<String> = apps, rearSpeaker: Boolean = false) = SahneLayout(
+        left = SahneSlot("media", WidgetType.MEDIA),
+        right = SahneSlot("trip", WidgetType.TRIP),
+        strip = listOf(
+            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
+            SahneSlot("trunk", WidgetType.TRUNK),
+            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
+            SahneSlot("app_pair", WidgetType.APP, SahneSlots.appExtra(appPackages)),
+            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
+            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
+        ),
+    )
+
+    /** 7 Kasım öncesi Sürüş varsayılanı: ekranı kapat / arka hoparlör, iki uygulama, mola hatırlatıcı, sürüş modu. */
+    private fun oldDrive(appPackages: List<String> = apps, rearSpeaker: Boolean = false) = SahneLayout(
+        left = SahneSlot("media", WidgetType.MEDIA),
+        right = SahneSlot("trip", WidgetType.TRIP),
+        strip = listOf(
+            SahneSlot("seat_driver", WidgetType.SEAT_DRIVER),
+            if (rearSpeaker) SahneSlot("rear_speaker", WidgetType.REAR_SPEAKER) else SahneSlot("screen_off", WidgetType.SCREEN_OFF),
+            SahneSlot("app_pair", WidgetType.APP, SahneSlots.appExtra(appPackages)),
+            SahneSlot("break_reminder", WidgetType.BREAK_REMINDER),
+            SahneSlot("drive_mode", WidgetType.DRIVE_MODE),
+            SahneSlot("seat_passenger", WidgetType.SEAT_PASSENGER),
+        ),
+    )
+
+    /** 7 Kasım varsayılan şeridi (sahibin seçimi; Park ve Sürüş aynı). */
+    private val newStrip = listOf(WidgetType.SEAT_DRIVER, WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR, WidgetType.TRUNK,
+        WidgetType.EQUALIZER, WidgetType.SEAT_PASSENGER)
+
     @Test
     fun curatedSlotListsMatchTheOwnerDecision() {
         val strip = setOf(
             WidgetType.SEAT_DRIVER, WidgetType.SEAT_PASSENGER, WidgetType.TRUNK, WidgetType.APP, WidgetType.REAR_SPEAKER,
             WidgetType.DRIVE_MODE, WidgetType.BREAK_REMINDER, WidgetType.SCREEN_OFF, WidgetType.PHONE_REMINDER,
             WidgetType.CONSUMPTION, WidgetType.WEB_PANEL, WidgetType.EQUALIZER, WidgetType.AUTOMATION, WidgetType.SPLIT_SCREEN,
-            WidgetType.CLUSTER_MIRROR,
+            WidgetType.CLUSTER_MIRROR, WidgetType.STEER_HEAT,
         )
         // Telefon yalnız dört panelde (Tiggo 8) ayrı panel; Tiggo 7'de medya kartının arka yüzü (6-7 Kasım).
         val panel = setOf(WidgetType.MEDIA, WidgetType.TRIP, WidgetType.CONSUMPTION, WidgetType.NAVIGATION, WidgetType.PHONE)
@@ -32,9 +64,10 @@ class SahneSlotsTest {
         }
         // Seçici yalnızca listeyi sunar: araç kartı (sahnenin kendisi) hiçbir yuvada yok.
         assertFalse(WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.PANEL) || WidgetType.VEHICLE in SahneForm.offered(SahneSlotKind.STRIP))
-        assertEquals(SahneForm.STRIP_TYPES - WidgetType.REAR_SPEAKER, SahneForm.offered(SahneSlotKind.STRIP))
+        // Direksiyon ısıtma yalnız CarConfig 120 izin verirse (burada bilinmiyor: gizli).
+        assertEquals(SahneForm.STRIP_TYPES - WidgetType.REAR_SPEAKER - WidgetType.STEER_HEAT, SahneForm.offered(SahneSlotKind.STRIP))
         // Arka hoparlör yazması doğrulanmadı: Tiggo 8 seçicisinde de yok (7 Kasım).
-        assertEquals(SahneForm.STRIP_TYPES - WidgetType.REAR_SPEAKER, SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+        assertEquals(SahneForm.STRIP_TYPES - WidgetType.REAR_SPEAKER - WidgetType.STEER_HEAT, SahneForm.offered(SahneSlotKind.STRIP, quad = true))
         assertEquals(SahneForm.PANEL_TYPES - WidgetType.PHONE, SahneForm.offered(SahneSlotKind.PANEL))
         assertEquals(SahneForm.PANEL_TYPES, SahneForm.offered(SahneSlotKind.PANEL, quad = true))
     }
@@ -93,16 +126,21 @@ class SahneSlotsTest {
         val d = SahneSlots.defaultPark(apps)
         assertEquals(WidgetType.MEDIA, d.left?.type)
         assertEquals(WidgetType.TRIP, d.right?.type)
-        assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.SCREEN_OFF, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
-            d.strip.map { it?.type },
-        )
-        assertEquals(listOf<String?>(apps[0], apps[1]), SahneSlots.appPackages(d.strip[3]?.extra))
+        // 7 Kasım sahibin seçimi: sürücü koltuğu, bölünmüş ekran, göstergeye yansıt, bagaj, ekolayzer, yolcu koltuğu.
+        assertEquals(newStrip, d.strip.map { it?.type })
+        // Sürüş modu varsayılan şeritte yok, seçicide duruyor.
+        assertFalse(WidgetType.DRIVE_MODE in d.types())
+        assertTrue(WidgetType.DRIVE_MODE in SahneForm.offered(SahneSlotKind.STRIP, quad = false))
+        assertTrue(WidgetType.DRIVE_MODE in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
         // Yolculuk kartı sürüşte canlı tüketimi gösterir: şeritte anlık tüketim yinelenmez.
         assertFalse(WidgetType.CONSUMPTION in d.strip.map { it?.type })
-        // Tiggo 8 şeridinde de arka hoparlör yok (yazması doğrulanmadı, 7 Kasım): ekranı kapat.
-        assertEquals(WidgetType.SCREEN_OFF, SahneSlots.defaultsQuad(LayoutMode.PARK, apps).strip[2]?.type)
-        assertEquals(WidgetType.SCREEN_OFF, SahneSlots.defaultsQuad(LayoutMode.DRIVE, apps).strip[1]?.type)
+        // Tiggo 8 (direksiyon ısıtma yok / bilinmiyor): Tiggo 7 şeridiyle aynı; arka hoparlör yok.
+        LayoutMode.values().forEach { mode ->
+            val q = SahneSlots.defaultsQuad(mode, apps)
+            assertEquals(newStrip, q.strip.map { it?.type })
+            assertFalse(WidgetType.REAR_SPEAKER in q.types())
+            assertFalse(WidgetType.DRIVE_MODE in q.types())
+        }
     }
 
     @Test
@@ -110,11 +148,11 @@ class SahneSlotsTest {
         val d = SahneSlots.defaultDrive(apps)
         assertEquals(STRIP_SLOTS, d.strip.size)
         assertEquals(WidgetType.MEDIA, d.left?.type)
-        assertEquals(WidgetType.CONSUMPTION, d.right?.type)
-        assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.SCREEN_OFF, WidgetType.APP, WidgetType.BREAK_REMINDER, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
-            d.strip.map { it?.type },
-        )
+        // 8 Kasım: sürüşte de sağda "Toplam" bölümlü yolculuk (yalnız ilk kurulum / sıfırlama).
+        assertEquals(WidgetType.TRIP, d.right?.type)
+        // 7 Kasım: Sürüş şeridi Park'la aynı.
+        assertEquals(newStrip, d.strip.map { it?.type })
+        assertEquals(SahneSlots.defaultPark(apps).strip, d.strip)
     }
 
     @Test
@@ -123,21 +161,21 @@ class SahneSlotsTest {
         assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad = false))
         assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
         val t7 = SahneSlots.defaultPark(apps)
-        assertFalse(SahneForm.canPlace(t7, SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
+        assertFalse(SahneForm.canPlace(SahneSlots.set(t7, SahneSlotRef(SahneSlotKind.STRIP, 2), null), SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
         assertFalse(SahneForm.canPlace(SahneSlots.defaultsQuad(LayoutMode.PARK, apps).let { SahneSlots.set(it, SahneSlotRef(SahneSlotKind.STRIP, 2), null) },
             SahneSlotRef(SahneSlotKind.STRIP, 2), WidgetType.REAR_SPEAKER))
         // Eski Park kaydı: arka hoparlör yuvası düzende olmayan ilk yedeğe (ekranı kapat) döner; yolculuk paneli varken tüketim gelmez.
-        val oldPark = SahneSlots.defaultPark(apps, rearSpeaker = true)
+        val oldPark = oldPark(apps, rearSpeaker = true)
         val park = SahneSlots.forTiggo7(SahneSlots.decode(SahneSlots.encode(oldPark))!!)
         assertEquals(WidgetType.SCREEN_OFF, park.strip[2]?.type)
         assertFalse(WidgetType.CONSUMPTION in park.types())
         assertFalse(WidgetType.REAR_SPEAKER in park.types())
         // Eski Sürüş kaydı: tüketim panelde olduğundan ekranı kapat gelir.
-        val drive = SahneSlots.forTiggo7(SahneSlots.defaultDrive(apps, rearSpeaker = true))
+        val drive = SahneSlots.forTiggo7(oldDrive(apps, rearSpeaker = true))
         assertEquals(WidgetType.SCREEN_OFF, drive.strip[1]?.type)
         assertEquals(drive, SahneSlots.sanitize(drive))
         // Yedeklerin hepsi düzendeyse yuva boşalır.
-        var full = SahneSlots.defaultPark(apps, rearSpeaker = true)
+        var full = oldPark(apps, rearSpeaker = true)
         SahneForm.TIGGO7_REPLACEMENTS.forEachIndexed { i, type ->
             val ref = SahneSlotRef(SahneSlotKind.STRIP, listOf(0, 1, 4, 5)[i])
             full = SahneSlots.set(full, ref, SahneSlot(type.key, type))
@@ -278,7 +316,8 @@ class SahneSlotsTest {
         assertEquals(slot, SahneSlots.get(e, ref))
         assertEquals(d.left, e.left)
         assertEquals("break_reminder", slot.id)
-        assertEquals("drive_mode_2", SahneSlots.newId(d, WidgetType.DRIVE_MODE)) // sürüş modu zaten Park şeridinde
+        assertEquals("drive_mode", SahneSlots.newId(d, WidgetType.DRIVE_MODE)) // sürüş modu artık varsayılan şeritte yok
+        assertEquals("trunk_2", SahneSlots.newId(d, WidgetType.TRUNK)) // bagaj zaten Park şeridinde
         assertEquals("app_2", SahneSlots.newId(SahneSlots.set(d, ref, SahneSlot("app", WidgetType.APP)), WidgetType.APP))
         assertNull(SahneSlots.get(SahneSlots.set(e, ref, null), ref))
     }
@@ -294,7 +333,7 @@ class SahneSlotsTest {
             d.strip.map { it?.type },
         )
         assertEquals("drive_mode", d.strip[4]?.id)
-        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d"), rearSpeaker = false), d)
+        assertEquals(oldPark(listOf("a.b", "c.d"), rearSpeaker = false), d)
         assertEquals(d, SahneSlots.decode(SahneSlots.encode(d)))
     }
 
@@ -439,15 +478,15 @@ class SahneSlotsTest {
     @Test
     fun tiggo8SavedRearSpeakerBecomesScreenOff() {
         // 6 Kasım Tiggo 8 Park kaydı: şeritte arka hoparlör → ekranı kapat; Sürüş: aynı.
-        val park = SahneSlots.forTiggo8(SahneSlots.defaultPark(apps, rearSpeaker = true).copy(quad = true,
+        val park = SahneSlots.forTiggo8(oldPark(apps, rearSpeaker = true).copy(quad = true,
             leftLower = SahneSlot("nav_turn", WidgetType.NAVIGATION), rightLower = SahneSlot("phone", WidgetType.PHONE)))
         assertEquals(WidgetType.SCREEN_OFF, park.strip[2]?.type)
         assertFalse(WidgetType.REAR_SPEAKER in park.types())
-        assertEquals(SahneSlots.defaultsQuad(LayoutMode.PARK, apps), park)
-        val drive = SahneSlots.forTiggo8(SahneSlots.defaultDrive(apps, rearSpeaker = true))
+        assertEquals(oldPark(apps).strip, park.strip)
+        val drive = SahneSlots.forTiggo8(oldDrive(apps, rearSpeaker = true))
         assertEquals(WidgetType.SCREEN_OFF, drive.strip[1]?.type)
         // Ekranı kapat zaten şeritteyse mola hatırlatıcı gelir.
-        val both = SahneSlots.set(SahneSlots.defaultPark(apps, rearSpeaker = true), SahneSlotRef(SahneSlotKind.STRIP, 1),
+        val both = SahneSlots.set(oldPark(apps, rearSpeaker = true), SahneSlotRef(SahneSlotKind.STRIP, 1),
             SahneSlot("screen_off", WidgetType.SCREEN_OFF))
         assertEquals(WidgetType.BREAK_REMINDER, SahneSlots.forTiggo8(both).strip[2]?.type)
         // Arka hoparlör yoksa aynen.
@@ -507,7 +546,7 @@ class SahneSlotsTest {
         val old = "v1|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,consumption~consumption~," +
             "app~app_pair~a.b+c.d,drive_mode~drive_mode~,seat_passenger~seat_passenger~"
         val d = SahneSlots.decode(old)!!
-        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d")), d)
+        assertEquals(oldPark(listOf("a.b", "c.d")), d)
         // Yeniden yazılınca v3 olur ve bir daha dokunulmaz.
         val again = SahneSlots.encode(d)
         assertTrue(again.startsWith("v3|"))
@@ -541,14 +580,16 @@ class SahneSlotsTest {
     }
 
     @Test
-    fun tiggo7ReplacementSkipsConsumptionWithTripPanel() {
-        // Yedeklerin ilk üçü düzende: tüketim sırası gelse de yolculuk paneli varken konmaz, yuva boşalır.
-        var d = SahneSlots.defaultPark(apps, rearSpeaker = true)
+    fun tiggo7ReplacementMayUseConsumptionWithTripPanel() {
+        // Yedeklerin ilk üçü düzende: yolculuk kartı artık tüketim göstermediği için (7 Kasım) sıra tüketime gelir, yolculuk paneli engellemez.
+        var d = oldPark(apps, rearSpeaker = true)
         listOf(WidgetType.SCREEN_OFF, WidgetType.BREAK_REMINDER, WidgetType.PHONE_REMINDER).forEachIndexed { i, t ->
             d = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.STRIP, listOf(0, 1, 4)[i]), SahneSlot(t.key, t))
         }
-        assertNull(SahneSlots.forTiggo7(d).strip[2])
-        // Yolculuk paneli yoksa tüketim yedek olabilir.
+        assertTrue(SahneForm.hasTripPanel(d))
+        assertTrue(SahneForm.stripFallbackOk(d, WidgetType.CONSUMPTION))
+        assertEquals(WidgetType.CONSUMPTION, SahneSlots.forTiggo7(d).strip[2]?.type)
+        // Yolculuk paneli yoksa da aynı.
         val noTrip = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 1), SahneSlot("nav_turn", WidgetType.NAVIGATION))
         assertEquals(WidgetType.CONSUMPTION, SahneSlots.forTiggo7(noTrip).strip[2]?.type)
     }
@@ -584,5 +625,91 @@ class SahneSlotsTest {
             assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad))
             assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.PANEL, quad))
         }
+    }
+
+    // --- Direksiyon ısıtma (Tiggo 8, CarConfig 120) ve kayıtlı düzenlerin korunması (8 Kasım) ---
+
+    @org.junit.After fun clearCarFeatures() { CarFeatures.steerHeat = null }
+
+    @Test
+    fun steerHeatIsOfferedOnlyWhenConfigAllows() {
+        CarFeatures.steerHeat = null
+        assertFalse(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+        CarFeatures.steerHeat = false
+        assertFalse(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+        CarFeatures.steerHeat = true
+        assertTrue(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+        assertTrue(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.STRIP, quad = false))
+        assertFalse(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.PANEL, quad = true))
+    }
+
+    @Test
+    fun tiggo8DefaultStripPutsSteerHeatNextToDriverSeat() {
+        CarFeatures.steerHeat = true
+        LayoutMode.values().forEach { mode ->
+            val d = SahneSlots.defaultsQuad(mode, apps, steerHeat = true)
+            assertEquals(STRIP_SLOTS, d.strip.size)
+            assertEquals(WidgetType.SEAT_DRIVER, d.strip[0]?.type)
+            assertEquals(WidgetType.STEER_HEAT, d.strip[1]?.type)
+            assertEquals(WidgetType.SEAT_PASSENGER, d.strip.last()?.type)
+            assertFalse(WidgetType.DRIVE_MODE in d.types())
+            assertEquals(d, SahneSlots.sanitize(d))
+            assertEquals(d, SahneSlots.forTiggo8(d))
+            assertEquals(d, SahneSlots.decode(SahneSlots.encode(d)))
+        }
+        // Yedi iş altı yuvaya sığmaz: direksiyon ısıtma sürücü koltuğunun yanına girer, ortanın sonuncusu (ekolayzer) düşer.
+        val withSteer = listOf(WidgetType.SEAT_DRIVER, WidgetType.STEER_HEAT, WidgetType.SPLIT_SCREEN, WidgetType.CLUSTER_MIRROR,
+            WidgetType.TRUNK, WidgetType.SEAT_PASSENGER)
+        LayoutMode.values().forEach { mode ->
+            assertEquals(withSteer, SahneSlots.defaultsQuad(mode, apps, steerHeat = true).strip.map { it?.type })
+        }
+        // Yapılandırma izin vermezse (ya da okunamadıysa) Tiggo 8 şeridi Tiggo 7'ninkiyle aynı.
+        assertEquals(SahneSlots.defaults(LayoutMode.PARK, apps).strip, SahneSlots.defaultsQuad(LayoutMode.PARK, apps, steerHeat = false).strip)
+    }
+
+    @Test
+    fun steerHeatSlotFallsBackWhenConfigSaysNo() {
+        CarFeatures.steerHeat = true
+        val d = SahneSlots.defaultsQuad(LayoutMode.DRIVE, apps, steerHeat = true)
+        CarFeatures.steerHeat = false
+        val t8 = SahneSlots.forTiggo8(d)
+        assertFalse(WidgetType.STEER_HEAT in t8.types())
+        assertEquals(WidgetType.SCREEN_OFF, t8.strip[1]?.type) // ilk boştaki yedek
+        assertFalse(WidgetType.STEER_HEAT in SahneSlots.forTiggo7(d.copy(quad = false, leftLower = null, rightLower = null)).types())
+    }
+
+    @Test
+    fun savedSteerHeatSlotSurvivesUnknownConfig() {
+        // Yapılandırma henüz okunmadı (null): kayıttaki yuva yerinde kalır, düzenlemede kaydetmek onu silmez.
+        CarFeatures.steerHeat = true
+        val d = SahneSlots.defaultsQuad(LayoutMode.PARK, apps, steerHeat = true)
+        CarFeatures.steerHeat = null
+        assertEquals(d, SahneSlots.forTiggo8(d))
+        // Seçici bilinmeyende yine sunmaz.
+        assertFalse(WidgetType.STEER_HEAT in SahneForm.offered(SahneSlotKind.STRIP, quad = true))
+    }
+
+    @Test
+    fun savedLayoutsAreNeverChangedByNewDefaults() {
+        // Eski varsayılanla kaydedilmiş v3 Sürüş düzeni (sağda tüketim) aynen kalır; yeni varsayılan yalnız kayıt yoksa gelir.
+        val savedDrive = "v3|media~media~|consumption~consumption~|seat_driver~seat_driver~,screen_off~screen_off~," +
+            "app~app_pair~a.b+c.d,break_reminder~break_reminder~,drive_mode~drive_mode~,seat_passenger~seat_passenger~"
+        val drive = SahneSlots.decode(savedDrive)!!
+        assertEquals(WidgetType.CONSUMPTION, drive.right?.type)
+        assertEquals(savedDrive, SahneSlots.encode(drive))
+        assertEquals(drive, SahneSlots.forTiggo7(drive))
+        assertFalse(SahneSlots.isLegacy(savedDrive))
+        // 7 Kasım öncesi kaydedilmiş Park düzeni (sürüş modu şeritte): yeni varsayılan şerit kayda karışmaz, sürüş modu kalır.
+        val savedPark = SahneSlots.encode(oldPark(apps))
+        val park = SahneSlots.forTiggo7(SahneSlots.decode(savedPark)!!)
+        assertTrue(WidgetType.DRIVE_MODE in park.types())
+        assertEquals(savedPark, SahneSlots.encode(park))
+        assertNotEquals(SahneSlots.defaultPark(apps), park)
+        // Kayıtlı Tiggo 8 düzeni: direksiyon ısıtma desteklense de şeride kendiliğinden eklenmez.
+        CarFeatures.steerHeat = true
+        val savedQuad = SahneSlots.encode(SahneSlots.defaultsQuad(LayoutMode.PARK, apps, steerHeat = false))
+        val quad = SahneSlots.forTiggo8(SahneSlots.toQuad(SahneSlots.decode(savedQuad)!!))
+        assertFalse(WidgetType.STEER_HEAT in quad.types())
+        assertEquals(savedQuad, SahneSlots.encode(quad))
     }
 }

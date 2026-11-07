@@ -282,7 +282,10 @@ class OurBottomBar(
     }
 
     private fun openPackage(packageName: String) {
-        io.runSafely { AppLaunchHelper.launchAppOnDisplay(context, packageName, Display.DEFAULT_DISPLAY, 0) }
+        io.runSafely {
+            // Sürüş ekranından yarıda kalmış harita tam ekran açılır ([DriveScreen.openLeftover]).
+            if (!DriveScreen.openLeftover(context, packageName)) AppLaunchHelper.launchAppOnDisplay(context, packageName, Display.DEFAULT_DISPLAY, 0)
+        }
     }
 
     private fun openAndroidSettings() {

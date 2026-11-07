@@ -2,6 +2,7 @@ package com.mapcontrol.launcher
 
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
+import com.desaysv.ivi.extra.project.carinfo.NewEnergyID
 import com.desaysv.ivi.extra.project.carinfo.ReadOnlyID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp
@@ -19,6 +20,7 @@ internal object WidgetWritePolicy {
     private const val CS = VDEventCarInfo.MODULE_CAR_SETTING
     private const val HV = VDEventCarInfo.MODULE_HVAC
     private const val RO = VDEventCarInfo.MODULE_READONLY_INFO
+    private const val NE = VDEventCarInfo.MODULE_NEW_ENERGY
 
     /** Beyaz liste girdisi: widget adı, modül, kimlik, izinli değerler ve yazmadan sonra 3 sn izlenecek sinyaller. */
     class Entry(
@@ -64,6 +66,12 @@ internal object WidgetWritePolicy {
         // Klima gücü (HVAC 18): 1 aç / 2 kapat. Panel yolunda sıcaklık/fan yazmadan önce otomatik 1 de buradan geçer (dock yolunda gönderilmez).
         Entry("ClimatePower", HV, HvacID.ID_AC_WORKING, setOf(ClimateMath.POWER_ON, ClimateMath.POWER_OFF),
             listOf(sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
+        // Klima aç/kapat, FrostNav sırası (ClimateMath.powerPlan): açmada 18 ← 1'den ~150 ms sonra A/C 1 ← 1 ve otomatik 4 ← 1;
+        // kapatmada üçü de 2. 0 yazılmaz (OEM HvacModel).
+        Entry("ClimateAc", HV, HvacID.ID_AC_STATE, setOf(ClimateMath.AC_ON, ClimateMath.AC_OFF),
+            listOf(sig("hvac1_ac_state", HV, HvacID.ID_AC_STATE), sig("hvac18_power", HV, HvacID.ID_AC_WORKING))),
+        Entry("ClimateAuto", HV, HvacID.ID_AC_AUTO_STATE, setOf(ClimateMath.AC_ON, ClimateMath.AC_OFF),
+            listOf(sig("hvac4_auto_state", HV, HvacID.ID_AC_AUTO_STATE), sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (1..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL), PANEL_ACTIVE)),
         // Klima, "fabrika paneli: Gizle": OEM alt dock'unun kimlikleri, aynı ham değerler (bizim SVSystemUI model/svhvac/e/c.java:393
@@ -88,6 +96,13 @@ internal object WidgetWritePolicy {
         // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç.
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK))),
+        // Sürüş modu: NewEnergy 4 YAZMA değerleri (FrostNav'ın araçta çalışan yazması, OEM seçicisi): Eko 0, Normal 1, Spor 2,
+        // Kar 3, Çamur 4, Arazi 5, Kum 7 ([DriveModes]; okunan değerler aynı, 7 Kasım ölçümü).
+        Entry("DriveMode", NE, NewEnergyID.ID_DRIVE_MODE, DriveModes.WRITE_VALUES,
+            listOf(sig("ne4_drive_mode", NE, NewEnergyID.ID_DRIVE_MODE))),
+        // Direksiyon ısıtma (Tiggo 8): anahtar gibi, açarken de kapatırken de 160 ← 1 (OEM sesli komut); 0 yazılmaz.
+        Entry("SteerHeat", CS, CarSettingID.ID_CAR_STEER_WHEEL_HEAT, setOf(ComfortPlan.STEER_WHEEL_TOGGLE),
+            listOf(ComfortPlan.STEER_WHEEL_HEAT)),
     )
 
     private fun seat(widget: String, id: Int) =
@@ -104,6 +119,19 @@ internal object WidgetWritePolicy {
     /** Karar yalnızca beyaz listedir; hız ya da vites sorulmaz (sürüşte de park halinde de aynı). */
     fun evaluate(module: Int, id: Int, value: Int): Verdict =
         find(module, id, value)?.let { Verdict.Allowed(it) } ?: Verdict.NotWhitelisted
+
+    /** Servis bağlantısı adımı: bağlıysa gönder; ilk denemede bağlı değilse bağlan ve bir kez yeniden dene; yine yoksa reddet. */
+    enum class ConnectStep { SEND, CONNECT_AND_RETRY, REFUSE }
+
+    /** [retried]: bağlanma denemesinden ([CONNECT_RETRY_MS] sonra) gelen ikinci bakış. */
+    fun connectStep(connected: Boolean, retried: Boolean): ConnectStep = when {
+        connected -> ConnectStep.SEND
+        retried -> ConnectStep.REFUSE
+        else -> ConnectStep.CONNECT_AND_RETRY
+    }
+
+    /** CarInfoProxy.init'ten sonra yeniden bakmadan önce bekleme (FrostNav sürüş modu yazmasıyla aynı: 500 ms). */
+    const val CONNECT_RETRY_MS = 500L
 
     /** Özellik kapısı: doğrulanmış ya da yazmalar açık ([LauncherEdition.WRITES_ON], iki derlemede de hep true). */
     fun gate(verified: Boolean, writesOn: Boolean): Boolean = verified || writesOn

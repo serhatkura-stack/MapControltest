@@ -620,6 +620,7 @@ class MediaCard(
         val previous = shownPlaying
         if (previous == isPlaying) return
         shownPlaying = isPlaying
+        SahneCover.publishPlaying(isPlaying)
         onPlayingChanged?.invoke(isPlaying)
         val res = if (sahne) (if (isPlaying) R.drawable.ic_sahne_pause else R.drawable.ic_sahne_play)
         else if (isPlaying) R.drawable.ic_mdi_pause else R.drawable.ic_mdi_play
