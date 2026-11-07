@@ -72,7 +72,7 @@ internal class MiniTripPanel(private val context: Context) {
         visibility = View.GONE
         listRows.forEachIndexed { i, row ->
             addView(listHairs[i], LinearLayout.LayoutParams(MATCH, context.dp(1)))
-            addView(row, LinearLayout.LayoutParams(MATCH, context.dp(LIST_ROW_DP)))
+            addView(row, LinearLayout.LayoutParams(MATCH, context.dp(MiniSide.LIST_ROW_DP)))
         }
     }
     /** Öncü satır ve başlığı birlikte solar (yükseklik değişmez). */
@@ -95,12 +95,13 @@ internal class MiniTripPanel(private val context: Context) {
         clipChildren = false
         addView(heroBox, LinearLayout.LayoutParams(MATCH, WRAP))
         addView(statsRow, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(MiniSide.TRIP_GAP_DP) })
-        addView(statsList, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(LIST_GAP_DP) })
+        addView(statsList, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(MiniSide.LIST_GAP_DP) })
         // Güvenlik ağı: değer satırı panele sığmıyorsa yarım kesik görünmesin, düşsün (yükseklik büyüyünce geri gelir).
         addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
-            if (wide || !statsWanted) return@addOnLayoutChangeListener
+            if (!statsWanted) return@addOnLayoutChangeListener
             val inner = (bottom - top) - paddingTop - paddingBottom
-            val need = heroBox.height + context.dp(MiniSide.TRIP_GAP_DP) + statsRowNeedPx()
+            val need = heroBox.height + if (wide) context.dp(MiniSide.LIST_GAP_DP) + statsListNeedPx()
+                else context.dp(MiniSide.TRIP_GAP_DP) + statsRowNeedPx()
             val fit = need <= inner
             if (fit != statsFit) post { statsFit = fit; applyStatsVisibility() }
         }
@@ -110,11 +111,13 @@ internal class MiniTripPanel(private val context: Context) {
     private var statsWanted = false
     private var statsFit = true
 
+    private fun statsListNeedPx(): Int = listRows.count { it.visibility == View.VISIBLE } * context.dp(MiniSide.LIST_ROW_DP + 1)
+
     private fun statsRowNeedPx(): Int = if (statsRow.height > 0) statsRow.height else (statViews[0].textSize * MiniSide.TRIP_LINE).toInt()
 
     private fun applyStatsVisibility() {
         statsRow.visibility = if (statsWanted && !wide && statsFit) View.VISIBLE else View.GONE
-        statsList.visibility = if (statsWanted && wide) View.VISIBLE else View.GONE
+        statsList.visibility = if (statsWanted && wide && statsFit) View.VISIBLE else View.GONE
     }
 
     private var heroSp = 42f
@@ -131,8 +134,8 @@ internal class MiniTripPanel(private val context: Context) {
         statViews.forEach { it.textSize = m.tripStatSp }
         statDividers.forEach { (it.layoutParams as LinearLayout.LayoutParams).height = context.dp((m.tripStatSp * 1.1f).toInt()) }
         head.textSize = if (m.tripHeroSp >= 56f) 20f else HEAD_SP
-        wide = m.wide
-        // Genişte içerik üstten başlar (ortada yüzen tek satır yerine etiketli liste); bölünmüşte panel kendi boyunda, ortalı.
+        wide = m.tripList
+        // Liste biçiminde içerik üstten başlar (ortada yüzen tek satır yerine etiketli liste); bölünmüşte panel kendi boyunda, ortalı.
         view.gravity = if (wide) Gravity.TOP else Gravity.CENTER_VERTICAL
         listLabels.forEach { it.textSize = m.tripStatSp * 0.8f }
         listValues.forEach { it.textSize = m.tripStatSp }
@@ -179,6 +182,7 @@ internal class MiniTripPanel(private val context: Context) {
         shown = key
         val from = shownContent
         shownContent = content
+        iconLive = live
         if (TripHero.crossfade(from, content) && view.isAttachedToWindow) fadeTo(title, hero)
         else if (fading) pending = title to hero
         else applyHero(title, hero)
@@ -201,8 +205,16 @@ internal class MiniTripPanel(private val context: Context) {
             kinds.indices.map { "${labels[it]} ${stats[it]}" }).joinToString(", ")
     }
 
+    /** Başlık simgesi içerikle: canlı tüketimde yaprak (ana ekran kartıyla aynı), yolculukta rota; başlıkla birlikte değişir. */
+    private var iconLive = false
+    private var iconShown: Boolean? = null
+
     private fun applyHero(title: String, h: TripHeroLine?) {
         head.text = title
+        if (iconShown != iconLive) {
+            iconShown = iconLive
+            headIcon.setImageResource(if (iconLive) R.drawable.ic_sahne_leaf else R.drawable.ic_sahne_route)
+        }
         heroRow.visibility = if (h == null) View.GONE else View.VISIBLE
         if (h == null) return
         // Sayı olmayan öncü ("Düşük hız", "Araç duruyor") daha küçük: sayı gibi bağırmaz.
@@ -242,8 +254,6 @@ internal class MiniTripPanel(private val context: Context) {
         const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
         const val HEAD_SP = 17f
         const val STAT_GAP_DP = 14
-        const val LIST_ROW_DP = 52
-        const val LIST_GAP_DP = 20
         const val FADE_HALF_MS = 100L
     }
 }

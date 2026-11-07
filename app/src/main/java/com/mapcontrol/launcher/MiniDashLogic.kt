@@ -183,6 +183,12 @@ internal data class MiniLayout(
     val favAvatarDp: Int,
     /** Rota satırı yalnızca tam ekranda: bölünmüş ekranda harita zaten yanda, aynı bilgiyi tekrarlamaz. */
     val showNav: Boolean,
+    /** Yolculuk değerleri etiketli liste hâlinde mi (yalnız büyük geniş pencere); değilse tek satır. */
+    val tripList: Boolean = false,
+    /** Geniş biçimde saatin altında tarih (kısa geniş pencerede yer açmak için düşer). */
+    val showDate: Boolean = false,
+    /** Geniş biçimde bilgi sütununda saat → menzil arası; menzil → yakıt arası bunun 6 dp eksiği. */
+    val infoGapDp: Int = 28,
 ) {
     companion object {
         const val MIN_TOUCH_DP = 64
@@ -190,6 +196,26 @@ internal data class MiniLayout(
         /** Geniş satır yerleşimi: pencere en az bu kadar geniş ve en-boy oranı en az bu kadar yatay. */
         const val WIDE_MIN_WIDTH_DP = 1200
         const val WIDE_MIN_ASPECT = 2.4f
+
+        /** Yazı tipi payı açık metin satırı / yazı boyu (Manrope, tahmini üst sınır). */
+        private const val PADDED_LINE = 1.6f
+        /** Rota satırının en küçük yüksekliği ve üst payı (görünümle aynı). */
+        const val NAV_ROW_DP = 68
+        const val NAV_GAP_DP = 24
+        const val INFO_LABEL_SP = 16f
+
+        /**
+         * Geniş biçimde bilgi sütununun (saat, tarih, menzil, yakıt, rota, düğmeler) gereken yüksekliği; rota satırı görünür
+         * varsayılır. [MiniDashActivity] aynı ölçüleri kullanır.
+         */
+        fun infoNeedDp(m: MiniLayout): Int {
+            val line = MiniSide.TRIP_LINE
+            val clock = m.clockSp * line
+            val date = if (m.showDate) 8 + 20f * PADDED_LINE else 0f
+            val value = m.valueSp * line + 4 + INFO_LABEL_SP * PADDED_LINE
+            val nav = if (m.showNav) (NAV_GAP_DP + NAV_ROW_DP).toFloat() else 0f
+            return (clock + date + m.infoGapDp + value + (m.infoGapDp - 6) + value + nav + MIN_TOUCH_DP).roundToInt()
+        }
 
         /** Saf kural (birim testlenir): 960 genişlikli yarılar (≈ 1,6) ve dar pencereler false. */
         fun isWide(widthDp: Int, heightDp: Int): Boolean =
@@ -209,15 +235,16 @@ internal data class MiniLayout(
             val header = if (wide) 0 else if (compact) 72 else 84
             var media = if (tight) 88 else if (compact) 96 else if (wide && usableH >= 560) 120 else 108
             val contentH = usableH - 2 * padding
+            val big = wide && usableH >= 560
             // Yan sütun: bölünmüşte araçla aynı satırda (medya şeridi altta, tam genişlik), genişte tam yükseklik.
             fun side(mediaH: Int): Int = if (wide) contentH else contentH - header - gap - mediaH - gap
-            val big = wide && usableH >= 560
             val layout = MiniLayout(
                 wide = wide,
                 paddingDp = padding,
                 gapDp = gap,
-                clockSp = if (wide) (if (usableH >= 560) 80f else 64f) else if (compact) 48f else 60f,
-                valueSp = if (wide) 48f else if (compact) 30f else 38f,
+                // Kısa geniş pencerede (Tiggo 8 üst yarısı) bilgi sütunu sığsın: saat ve rakamlar küçülür, tarih düşer.
+                clockSp = if (wide) (if (big) 80f else 52f) else if (compact) 48f else 60f,
+                valueSp = if (wide) (if (big) 48f else 40f) else if (compact) 30f else 38f,
                 headerDp = header,
                 pillText = wide || widthDp >= 860,
                 sideDp = if (wide) (widthDp * 0.29f).toInt().coerceIn(420, 560) else (widthDp * 0.38f).toInt().coerceIn(280, 380),
@@ -233,8 +260,11 @@ internal data class MiniLayout(
                 callRowDp = if (big) 80 else MIN_TOUCH_DP,
                 favAvatarDp = if (big) 72 else if (compact) 48 else 52,
                 showNav = wide,
+                tripList = big,
+                showDate = big,
+                infoGapDp = if (big) 28 else 16,
             )
-            // Yan sütun sığmıyorsa medya şeridi en ince haline iner (kapak düşer).
+            // Yan sütun sığmıyorsa medya şeridi en ince haline iner (kapak düşer). Genişte yan sütun tam boy: medya etkilemez.
             if (wide || side(media) >= MiniSide.sideNeedDp(layout)) return layout
             media = 88
             return layout.copy(mediaDp = media, coverDp = 0, sideHeightDp = side(media))
@@ -268,8 +298,17 @@ internal object MiniSide {
 
     enum class Stat { DISTANCE, DURATION, AVG_SPEED, AVG_CONS }
 
-    /** Yolculuk paneli görünür mü: veri yokken gizli. */
-    fun tripShown(content: TripHero.Content): Boolean = content != TripHero.Content.NO_DATA
+    /** Geniş liste biçimi: satır yüksekliği, ince çizgi ve listenin üst payı (görünüm de aynısını kullanır). */
+    const val LIST_ROW_DP = 52
+    const val LIST_GAP_DP = 20
+
+    /**
+     * Yolculuk paneli görünür mü: veri yokken gizli. Sürüşte anlık değer henüz yoksa ([TripHero.Live.WAITING]) ve altında
+     * gösterilecek değer de yoksa da gizli (yalnız başlıklı boş kutu çizilmez).
+     */
+    fun tripShown(content: TripHero.Content, live: TripHero.Live? = null, stats: List<Stat> = listOf(Stat.DISTANCE)): Boolean =
+        content != TripHero.Content.NO_DATA &&
+            !(content == TripHero.Content.LIVE && live == TripHero.Live.WAITING && stats.isEmpty())
 
     /**
      * Öncü sayının altındaki değerler (sırasıyla; okunamayan düşer). Sürüşte mesafe, süre, ortalama hız (öncü tüketim);
@@ -333,11 +372,11 @@ internal object MiniSide {
 
     /**
      * Yolculuk panelinin en küçük yüksekliği: başlık, öncü sayı ve değer satırı; ikisi de yazı tipi payı kapalı, satır
-     * yüksekliği [TRIP_LINE] (görünümle aynı ölçü: [MiniTripPanel]).
+     * yüksekliği [TRIP_LINE] (görünümle aynı ölçü: [MiniTripPanel]). Liste biçiminde değer satırı yerine üç etiketli satır.
      */
     fun tripMinDp(m: MiniLayout): Int =
-        2 * m.panelPadDp + TRIP_HEAD_DP + TRIP_GAP_DP + (m.tripHeroSp * TRIP_LINE).roundToInt() + TRIP_GAP_DP +
-            (m.tripStatSp * TRIP_LINE).roundToInt()
+        2 * m.panelPadDp + TRIP_HEAD_DP + TRIP_GAP_DP + (m.tripHeroSp * TRIP_LINE).roundToInt() +
+            if (m.tripList) LIST_GAP_DP + 3 * (LIST_ROW_DP + 1) else TRIP_GAP_DP + (m.tripStatSp * TRIP_LINE).roundToInt()
 
     /** Yan sütunun iki paneli için gereken en az yükseklik. */
     fun sideNeedDp(m: MiniLayout): Int = tripMinDp(m) + m.gapDp + phoneMaxDp(m)

@@ -177,6 +177,23 @@ class MiniDashLogicTest {
         assertTrue(m.coverDp > 0)
         assertTrue(m.skipDp >= MiniLayout.MIN_TOUCH_DP)
         assertTrue(MiniLayout.forSize(1707, 480).wide)
+        // Kısa geniş pencerede yolculuk değerleri tek satır (etiketli liste sığmaz); yan sütun iki paneli taşır.
+        for (h in listOf(467, 470)) {
+            val t = MiniLayout.forSize(1707, h)
+            assertFalse(t.tripList)
+            assertTrue("yan sütun sığar ($h)", t.sideHeightDp >= MiniSide.sideNeedDp(t))
+            // Bilgi sütunu (rota satırı dahil) içerik yüksekliğine sığar; tarih düşer.
+            assertFalse(t.showDate)
+            assertTrue("bilgi sütunu sığar ($h): ${MiniLayout.infoNeedDp(t)}", MiniLayout.infoNeedDp(t) <= h - 2 * t.paddingDp)
+        }
+    }
+
+    @Test fun fullScreenInfoColumnFits() {
+        val m = MiniLayout.forSize(1920, 648)
+        assertTrue(m.tripList)
+        assertTrue(m.showDate)
+        assertTrue(MiniLayout.infoNeedDp(m) <= 648 - 2 * m.paddingDp)
+        assertTrue(m.sideHeightDp >= MiniSide.sideNeedDp(m))
     }
 
     @Test fun narrowerHalvesStayColumn() {
@@ -215,9 +232,9 @@ class MiniDashLogicTest {
         // Yazı tipi payı kapalı Manrope satırı 1,366 em: 960 × 650 (başlık 40) → 2·12 + 22 + 6 + 52 (38 sp) + 6 + 27 (20 sp).
         val m = MiniLayout.forSize(960, 650, captionDp = 40)
         assertEquals(137, MiniSide.tripMinDp(m))
-        // Tam ekran (büyük): 2·24 + 22 + 6 + 88 (64 sp) + 6 + 36 (26 sp).
+        // Tam ekran (büyük, etiketli liste): 2·24 + 22 + 6 + 88 (64 sp) + 20 + 3·53.
         val big = MiniLayout.forSize(1920, 650)
-        assertEquals(206, MiniSide.tripMinDp(big))
+        assertEquals(343, MiniSide.tripMinDp(big))
     }
 
     // --- Yan sütun: yolculuk ---
@@ -226,6 +243,14 @@ class MiniDashLogicTest {
         assertFalse(MiniSide.tripShown(TripHero.Content.NO_DATA))
         assertTrue(MiniSide.tripShown(TripHero.Content.TRIP))
         assertTrue(MiniSide.tripShown(TripHero.Content.LIVE))
+    }
+
+    @Test fun drivingWithoutValueOrStatsHidesEmptyCard() {
+        val live = TripHero.Content.LIVE
+        assertFalse(MiniSide.tripShown(live, TripHero.Live.WAITING, emptyList()))
+        assertTrue(MiniSide.tripShown(live, TripHero.Live.WAITING, listOf(MiniSide.Stat.DURATION)))
+        assertTrue(MiniSide.tripShown(live, TripHero.Live.VALUE, emptyList()))
+        assertTrue(MiniSide.tripShown(TripHero.Content.TRIP, TripHero.Live.WAITING, emptyList()))
         assertEquals(emptyList<MiniSide.Stat>(), MiniSide.stats(TripHero.Content.NO_DATA, 12.0, 30, 40, 7.0))
     }
 

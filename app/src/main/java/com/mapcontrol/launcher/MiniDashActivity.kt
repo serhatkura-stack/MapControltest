@@ -332,11 +332,10 @@ class MiniDashActivity : Activity() {
     private fun bindTrip() {
         if (!::tripPanel.isInitialized) return
         val content = TripHero.content(driving, trip.connected, trip.tripKm)
-        val shown = MiniSide.tripShown(content)
-        if (shown) {
-            val d = trip
-            tripPanel.bind(content, d, consumption, TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin))
-        }
+        val d = trip
+        val minutes = TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin)
+        val shown = MiniSide.tripShown(content, TripHero.live(consumption), MiniSide.stats(content, d.tripKm, minutes, d.avgSpeedKmh, d.avgL100))
+        if (shown) tripPanel.bind(content, d, consumption, minutes)
         if (shown != tripShownNow) {
             tripShownNow = shown
             applySide()
@@ -485,7 +484,7 @@ class MiniDashActivity : Activity() {
         musicPill = Pill(this, R.drawable.ic_sahne_note, getString(R.string.launcher_mini_open_music)) { openMusic() }
 
         // Ana ekranın araç sahnesi: menzil omzu burada üst satırda olduğu için gizli; kilit hapı ve uyarı şeridi aynen.
-        stage = SahneStage(this).apply { showRange = false }
+        stage = SahneStage(this).apply { showRange = false; hideLockWhileWaiting = true }
 
         // Medya şeridi (yalnızca oturum varken).
         artwork = ImageView(this).apply {
@@ -541,7 +540,7 @@ class MiniDashActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             background = GlassDrawable(this@MiniDashActivity, Sahne.CONTROL_RADIUS_DP, shadow = 0f)
             setPadding(dp(18), dp(10), dp(18), dp(10))
-            minimumHeight = dp(68)
+            minimumHeight = dp(MiniLayout.NAV_ROW_DP)
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_sahne_route)
                 setTint(Sahne.ICE)
@@ -622,6 +621,7 @@ class MiniDashActivity : Activity() {
             info.gravity = Gravity.START
             info.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
             info.addView(date, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(8) })
+            // Tarih yalnız büyük geniş pencerede (applyLayout: MiniLayout.showDate).
             stats.addView(rangeBlock, LinearLayout.LayoutParams(WRAP, WRAP))
             stats.addView(fuelBlock, LinearLayout.LayoutParams(WRAP, WRAP))
             info.addView(stats, LinearLayout.LayoutParams(WRAP, WRAP))
@@ -668,8 +668,10 @@ class MiniDashActivity : Activity() {
             lp(rangeBlock).apply { marginStart = 0 }
         } else {
             lp(info).apply { width = dp(m.infoDp) }
-            lp(stats).apply { topMargin = dp(28) }
-            lp(navRow).apply { topMargin = dp(24) }
+            // Ölçüler MiniLayout.infoNeedDp ile aynı: kısa geniş pencerede sütun taşmaz.
+            date.visibility = if (m.showDate) View.VISIBLE else View.GONE
+            lp(stats).apply { topMargin = dp(m.infoGapDp) }
+            lp(navRow).apply { topMargin = dp(MiniLayout.NAV_GAP_DP) }
             lp(body).apply { marginStart = g }
             lp(side).apply { marginStart = g }
             lp(mediaStrip).apply { topMargin = g }
@@ -687,7 +689,7 @@ class MiniDashActivity : Activity() {
         val first = rangeBlock.visibility == View.GONE
         lp(fuelBlock).apply {
             marginStart = if (m.wide || first) 0 else dp(if (m.pillText) 28 else 20)
-            topMargin = if (m.wide && !first) dp(22) else 0
+            topMargin = if (m.wide && !first) dp(m.infoGapDp - 6) else 0
         }
         fuelBlock.requestLayout()
     }
@@ -700,7 +702,7 @@ class MiniDashActivity : Activity() {
         clipToPadding = false
     }
 
-    private fun label(res: Int) = sahneText(this, 16f, Sahne.INK_3, 500).apply { setText(res) }
+    private fun label(res: Int) = sahneText(this, MiniLayout.INFO_LABEL_SP, Sahne.INK_3, 500).apply { setText(res) }
 
     private fun roundButton(icon: Int, label: Int, primary: Boolean, onClick: () -> Unit): FrameLayout = FrameLayout(this).apply {
         background = if (primary) GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Sahne.CTA_TOP, Sahne.CTA_BOTTOM)).apply {
