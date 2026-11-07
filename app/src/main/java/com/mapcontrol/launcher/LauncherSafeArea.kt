@@ -15,7 +15,7 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
  * üstüne oturuyor. Bu yüzden gerçek cihazda ek bir yedek boşluk UYGULANMAZ (yalnızca sistemin bildirdiği inset).
  *
  * Emülatörde aynı düzeni denemek için yalnızca debug yapıda `--ei launcher_oem_inset <px>` verilir: bu hem
- * alt bandı ayırır, alt çubuğumuzu kaldırır hem de OEM çubuğunun görsel taklidini ([OemBarMock]) çizer.
+ * alt bandı ayırır ve alt çubuğumuzu kaldırır.
  */
 object LauncherSafeArea {
 
@@ -33,9 +33,6 @@ object LauncherSafeArea {
 
     /** Debug yapıda `launcher_oem_inset` ekstrasıyla taklit edilen çubuk mu (gerçek Desay tespitinde false). */
     fun isMocked(): Boolean = (debugOverridePx ?: 0) > 0
-
-    /** Mock çubuğu çizilecek mi: yalnızca "Orijinal"de; Bizimki ve Gizli'de OEM çubuğu gizlenir (emülatör gerçek aracı taklit eder). */
-    fun showsMockBar(context: Context): Boolean = isMocked() && !LauncherBottomBar.hidesOemBar(context)
 
     /** Desay ünitesi mi: ucuz ve sağlam bir paket varlığı kontrolü (yalnızca bilgi; yerleşimi değiştirmez). */
     fun isDesayUnit(context: Context): Boolean = try {

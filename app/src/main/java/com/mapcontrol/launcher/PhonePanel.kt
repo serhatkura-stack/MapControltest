@@ -30,8 +30,8 @@ import java.text.DateFormatSymbols
  *     ve tür işareti (cevapsızda işaret ALERT yanar), sağda 76dp **Geri ara**.
  *  3. Favoriler (112dp): yalnız isimli 3 kişi (76dp fotoğraf ya da baş harf + ad; dokun: ara, basılı tut: sabitle) ve
  *     dördüncü hücrede **Tümü** (Son aramalar / Kişiler sayfası, [PhoneAllSheet]).
- *  4. "Sesli asistan" şeridi (76dp, tam genişlik).
- * "Sesli asistan düğmesi: Kapalı" ([PhonePrefs.showAssistant]; adb: `--ez launcher_phone_assistant false`): şerit kalkar,
+ *  4. "Sesli asistan" şeridi (76dp, tam genişlik; yalnız "Sesli asistan düğmesi: Açık" iken).
+ * "Sesli asistan düğmesi: Kapalı" (varsayılan; [PhonePrefs.showAssistant]; adb: `--ez launcher_phone_assistant false`): şerit kalkar,
  * "Son arama" kartı büyür (büyük avatar/ad, geniş **Geri ara**) ve favoriler 3 sütunlu ızgara olur (en çok 5 kişi + Tümü,
  * [PhoneUiLogic.compactGrid]); yükseklik [PhoneUiLogic.compactSizes] ile boşluksuz paylaşılır. Açıkken düzen değişmez.
  * Son aramalar listesi panelde yok; "Tümü"de. Veri yalnızca [PhoneSource]'tan, olay güdümlü; görünmezken dinleme yok.

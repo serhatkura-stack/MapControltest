@@ -235,13 +235,20 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         val bottom = arrivalLine(s)
         arrival.text = bottom
         arrival.visibility = if (bottom.isEmpty()) View.GONE else View.VISIBLE
-        endButton.visibility = if (s.endAction != null) View.VISIBLE else View.GONE
-        arrivalDivider.visibility = if (arrival.visibility == View.VISIBLE || s.endAction != null) View.VISIBLE else View.GONE
+        endButton.visibility = if (s.hasEnd) View.VISIBLE else View.GONE
+        arrivalDivider.visibility = if (arrival.visibility == View.VISIBLE || s.hasEnd) View.VISIBLE else View.GONE
         root.contentDescription = listOfNotNull(d?.text, streetLine.ifEmpty { null }, bottom.ifEmpty { null }).joinToString(", ")
     }
 
-    /** Bildirimin bitirme eylemini gönderir; rota bildirimi kalkınca kart kendiliğinden boşa döner. Eylem yoksa/iptalse sessizce geçer. */
+    /**
+     * Bildirimin bitirme eylemini gönderir; rota bildirimi kalkınca kart kendiliğinden boşa döner. Eylem yoksa/iptalse
+     * sessizce geçer. Demo rotada yalnız demo rota kapatılır (kart gerçek duruma döner).
+     */
     private fun endNavigation() {
+        if (current.demoEnd) {
+            NavigationSource.setDemo(false)
+            return
+        }
         val action = current.endAction ?: return
         try {
             action.send()

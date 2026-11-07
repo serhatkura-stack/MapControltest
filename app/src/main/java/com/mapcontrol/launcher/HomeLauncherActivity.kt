@@ -122,7 +122,6 @@ class HomeLauncherActivity : Activity() {
     private var driveMapHint: View? = null
     private val showDriveMapHint = Runnable { driveMapHint?.animate()?.alpha(1f)?.setDuration(DRIVE_FADE_MS)?.start() }
     private val onDriveBackdrop: (Boolean) -> Unit = { show -> showDriveBackdrop(show) }
-    private var mockBar: View? = null
 
     private var started = false
     private var resumed = false
@@ -154,7 +153,6 @@ class HomeLauncherActivity : Activity() {
         VehicleProfile.resolve(this)
         LauncherDemo.applyPreview(intent, restored = savedInstanceState != null)
         LauncherDemo.applyMoving(intent)
-        PhoneDataProbe.applyFrom(this, intent)
         // Debug: telefon panelinde asistan düğmesi (yeniden kurulumda eski istek ayarın üstüne yazmasın).
         if (savedInstanceState == null) PhonePrefs.applyShowAssistantExtra(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
@@ -232,18 +230,11 @@ class HomeLauncherActivity : Activity() {
                 insets
             }
         }
-        // İçerik her zaman bir FrameLayout: kök düzen, (hata ayıklamada) OEM çubuğu taklidi ve en üstte arama şeridi.
+        // İçerik her zaman bir FrameLayout: kök düzen ve en üstte arama şeridi.
         // Kök düzene bağlı her şey (rootLayout, tema geçişi, karşılama, iç boşluk dinleyicisi) `root`'u kullanır, içerik görünümünü değil.
         setContentView(FrameLayout(this).apply {
             clipChildren = false
             addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            if (LauncherSafeArea.showsMockBar(this@HomeLauncherActivity)) {
-                // Hata ayıklama: OEM çubuğunun taklidi ayrılan alt bandın içinde, uygulamaların üstünde durur.
-                val band = LauncherSafeArea.oemInsetPx(this@HomeLauncherActivity)
-                addView(OemBarMock.build(this@HomeLauncherActivity).also { mockBar = it }, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, minOf(band, dp(OemBarMock.BODY_DP)), Gravity.BOTTOM
-                ).apply { setMargins(dp(OemBarMock.SIDE_DP), 0, dp(OemBarMock.SIDE_DP), dp(OemBarMock.BOTTOM_GAP_DP)) })
-            }
             // Sürüş ekranı açıkken yarıların arkasında yalnız zemin görünür (kartlar durum çubuğu şeridinden ve kenarlardan sızmaz).
             // Harita başlıktaki X ile kapatılırsa yarısı boş kalmasın: orada "Haritayı aç" görünür, dokununca sürüş ekranı yeniden açılır.
             addView(FrameLayout(this@HomeLauncherActivity).apply {
@@ -310,7 +301,6 @@ class HomeLauncherActivity : Activity() {
         consumeAppearanceExtra(intent)
         consumeEditExtra(intent)
         consumeShowCall(intent)
-        PhoneDataProbe.applyFrom(this, intent)
         PhonePrefs.applyShowAssistantExtra(this, intent)
         com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
@@ -403,7 +393,6 @@ class HomeLauncherActivity : Activity() {
             if (oemBarForced) fresh.view.visibility = View.GONE
             if (started) showWidget(fresh)
         }
-        mockBar?.let { old -> OemBarMock.build(this).also { swapView(old, it); mockBar = it } }
         callBanner.applyTheme()
         callScreen.applyTheme()
         fixedWidgets = listOfNotNull(header, ourBar, callBanner)

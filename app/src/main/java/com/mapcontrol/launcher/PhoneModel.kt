@@ -182,7 +182,6 @@ object PhoneSource {
     private const val REREAD_DEBOUNCE_MS = 1_000L
     private const val SETTLE_MS = 300L
     private const val VDBUS_WAIT_MS = 3_000L
-    private const val PROBE_BIND_WAIT_MS = 3_000L
     private const val ASSISTANT_IDLE_CLOSE_MS = 10_000L
     private const val MAX_FAVORITES = 6
     /** Bir veri sahibi geri geldiğinde bu süreden eski veri yeniden okunur (gözlemci yokken kaçan değişiklikler için). */
@@ -905,41 +904,6 @@ object PhoneSource {
         }
     }
 
-    /**
-     * Debug sondası ([PhoneDataProbe]): rehber sağlayıcısı dolu olsa bile VDBus rehber/geçmiş yolunu bir kez dener.
-     * Ana iş parçacığında çağrılır; okuma io'da. Sonuç yalnızca sayılarla günlüğe yazılır, panele uygulanmaz.
-     */
-    fun probeVdbusData(context: Context) {
-        val app = context.applicationContext
-        if (appContext == null) appContext = app
-        ensureBackends(app)
-        val vd = vdbus ?: return
-        if (vd.bus == null) vd.prepare(app)
-        io.execute {
-            vd.connect()
-            val until = SystemClock.elapsedRealtime() + PROBE_BIND_WAIT_MS
-            while (!vd.available() && SystemClock.elapsedRealtime() < until) {
-                try {
-                    Thread.sleep(100)
-                } catch (e: InterruptedException) {
-                    break
-                }
-            }
-            PhoneDataProbe.log("BT VDBus bağlı=${vd.available()}")
-            val started = SystemClock.elapsedRealtime()
-            val data = try {
-                vdbusData?.read(emptyList())
-            } catch (t: Throwable) {
-                Log.w(TAG, "sonda: ${t.javaClass.simpleName}")
-                null
-            }
-            PhoneDataProbe.log(
-                "okuma bitti kişi=${data?.contacts?.size ?: -1} geçmiş=${data?.recents?.size ?: -1} " +
-                    "süre=${SystemClock.elapsedRealtime() - started}ms",
-            )
-        }
-    }
-
     /** Direksiyon ses tuşu (VR) uzun basış dinleyicisini ayara göre açar/kapatır ([PhonePrefs.assistantOnVoiceKey]). */
     fun syncVoiceKey(context: Context) {
         appContext = context.applicationContext
@@ -1471,12 +1435,24 @@ object PhonePrefs {
         prefs(context).edit().putBoolean(Profiles.key(context, KEY_ASSISTANT), on).apply()
     }
 
+    /** "Sesli asistan düğmesi" varsayılanı: KAPALI (büyük son arama + favori ızgarası); ayardan açılabilir. */
+    const val SHOW_ASSISTANT_DEFAULT = false
+
     /**
-     * "Sesli asistan düğmesi" (varsayılan AÇIK = bugünkü düzen). Kapalıyken telefon paneli/sayfası asistan şeridi olmadan
-     * büyük "Son arama" kartı ve 2×3 favori ızgarasıyla kurulur. Değişim açık panellere [addShowAssistantListener] ile gider.
+     * Kayıtlı değer ([stored], hiç yazılmadıysa null) → geçerli ayar. Kullanıcının açıkça yazdığı değer (açık ya da
+     * kapalı) aynen korunur; yalnız hiç dokunulmamışsa [SHOW_ASSISTANT_DEFAULT] geçerlidir. Saf, JVM testli.
      */
-    fun showAssistant(context: Context): Boolean =
-        prefs(context).getBoolean(Profiles.key(context, KEY_SHOW_ASSISTANT), true)
+    fun resolveShowAssistant(stored: Boolean?): Boolean = stored ?: SHOW_ASSISTANT_DEFAULT
+
+    /**
+     * "Sesli asistan düğmesi" (varsayılan KAPALI). Kapalıyken telefon paneli/sayfası asistan şeridi olmadan büyük
+     * "Son arama" kartı ve 2×3 favori ızgarasıyla kurulur. Değişim açık panellere [addShowAssistantListener] ile gider.
+     */
+    fun showAssistant(context: Context): Boolean {
+        val p = prefs(context)
+        val key = Profiles.key(context, KEY_SHOW_ASSISTANT)
+        return resolveShowAssistant(if (p.contains(key)) p.getBoolean(key, SHOW_ASSISTANT_DEFAULT) else null)
+    }
 
     fun setShowAssistant(context: Context, on: Boolean) {
         if (showAssistant(context) == on) return
@@ -1497,7 +1473,7 @@ object PhonePrefs {
 
     fun applyShowAssistantExtra(context: Context, intent: android.content.Intent?) {
         if (intent?.hasExtra(EXTRA_SHOW_ASSISTANT) != true || !LauncherCrashGuard.isDebuggable(context)) return
-        setShowAssistant(context, intent.getBooleanExtra(EXTRA_SHOW_ASSISTANT, true))
+        setShowAssistant(context, intent.getBooleanExtra(EXTRA_SHOW_ASSISTANT, SHOW_ASSISTANT_DEFAULT))
     }
 
     private val showAssistantListeners = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()

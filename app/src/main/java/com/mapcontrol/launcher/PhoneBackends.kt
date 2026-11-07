@@ -1017,7 +1017,6 @@ internal object VdbusBtNotify {
             }
         }
         if (changed) bus.subscribeCommit()
-        if (changed) PhoneDataProbe.log("standart abonelik: ${ids.size} olay")
         true
     } catch (t: Throwable) {
         Log.w(TAG, "vdbus standart abonelik: ${t.javaClass.simpleName}")
@@ -1064,8 +1063,7 @@ internal object VdbusBtNotify {
  *
  * Kişiler: tam liste (isimli olanlar; "Tümü" sayfası için yalnızca bellekte). Fotoğraf yalnızca gereken alt küme için
  * çözülür (geçmişte geçen numaralar ve sabitlenenler): [PhonePhotos.putEncoded] başarılıysa [PhoneContact.photoKey].
- * Hiç yanıt gelmezse null döner (boş rehber gibi görünmesin). Sonda ([PhoneDataProbe]) açıksa her adım yalnızca
- * sayılarla günlüğe yazılır.
+ * Hiç yanıt gelmezse null döner (boş rehber gibi görünmesin).
  */
 internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBackend {
     override val name: String = PhoneBackendName.VDBUS
@@ -1091,7 +1089,6 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             putSyncType(syncType)
             if (key != null) putSyncKey(key)
         }))
-        PhoneDataProbe.log("istek gönderildi olay=$eventId tür=$syncType etiket=${if (key != null) "var" else "yok"}")
     }
 
     /**
@@ -1109,10 +1106,6 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             val progress = VDBTListProgress.getValue(e)
             val items = parse(e)?.filterIsInstance(cls).orEmpty()
             val offer = acc.offer(progress?.key, progress?.index ?: 0, progress?.total ?: 0, items)
-            PhoneDataProbe.log(
-                "parça olay=$listId index=${progress?.index} toplam=${progress?.total} adet=${items.size} " +
-                    "durum=${offer.name.lowercase()}",
-            )
             if (offer != VdListCollector.Offer.ACCEPTED) return@handler
             lastAt.set(SystemClock.uptimeMillis())
             if (acc.finished || acc.failed) finished.countDown()
@@ -1130,7 +1123,6 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
         } finally {
             VdbusBtNotify.remove(listId, handler)
         }
-        PhoneDataProbe.log("bitti olay=$listId ${acc.summary()} süre=${SystemClock.uptimeMillis() - startedAt}ms")
         return acc.result()
     }
 
@@ -1147,10 +1139,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
     }
 
     override fun read(pinnedIds: List<String>): PhoneData? {
-        if (!available()) {
-            PhoneDataProbe.log("BT VDBus bağlı değil")
-            return null
-        }
+        if (!available()) return null
         return try {
             cacheSeen = null
             val records = load(
@@ -1169,10 +1158,6 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
             }
             val wanted = recents.map { FavoritesRanker.normalizeNumber(it.number) }.toHashSet()
             val contacts = convertContacts(raw.orEmpty(), wanted, pinnedIds.toHashSet())
-            PhoneDataProbe.log(
-                "sonuç geçmiş ham=${records?.size ?: -1} geçerli=${recents.size} rehber ham=${raw?.size ?: -1} " +
-                    "kişi=${contacts.size} foto=${contacts.count { it.photoKey != null }}",
-            )
             PhoneData(contacts, joinNames(recents, contacts))
         } catch (e: RuntimeException) {
             Log.w(TAG, "vdbus veri: ${e.javaClass.simpleName}")

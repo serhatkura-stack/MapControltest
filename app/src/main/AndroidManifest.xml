@@ -206,7 +206,7 @@
         </activity>
 
         <!-- Mini gösterge: bölünmüş ekranın bir yarısında (960 x ~610) açılan, boyutu değişebilen ayrı ekran (ana ekran
-             bölünemez). Uygulama listesinde ayrı simgesi var; serbest pencere (freeform) bölmesinde seçilebilir. Kendi görev
+             bölünemez). Uygulama listesi simgesi aşağıdaki alias'ta (yalnız launcher modunda); serbest pencere (freeform) bölmesinde seçilebilir. Kendi görev
              ilişkisi (taskAffinity) ana ekranla ve FrostNav'la aynı göreve karışmasın diye. -->
         <activity
             android:name="com.mapcontrol.launcher.MiniDashActivity"
@@ -217,12 +217,21 @@
             android:resizeableActivity="true"
             android:supportsPictureInPicture="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
-            android:theme="@style/Theme.Sahne.DriveHalf">
+            android:theme="@style/Theme.Sahne.DriveHalf" />
+
+        <!-- Mini göstergenin uygulama listesi simgesi: varsayılan KAPALI; yalnız FrostNav launcher modu açıkken
+             LauncherModeManager etkinleştirir (MiniDashEntry). Bölünmüş ekran etkinliği bileşen adıyla açar, simgeye bağlı değil. -->
+        <activity-alias
+            android:name="com.mapcontrol.launcher.MiniDashLauncherAlias"
+            android:targetActivity="com.mapcontrol.launcher.MiniDashActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="Mini gösterge">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- Sürüş ekranının harita yarısı, harita uygulaması yokken ("+ Harita ekle"; DriveScreen). Yalnız bölünmüş ekran başlatıcısı
              açar; kendi görev ilişkisi, uygulama listesinde simgesi yok. -->

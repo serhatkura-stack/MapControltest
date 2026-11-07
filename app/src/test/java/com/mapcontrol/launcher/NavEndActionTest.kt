@@ -27,4 +27,11 @@ class NavEndActionTest {
         assertEquals(-1, NavEndAction.indexOf(listOf("Mute", "Share")))
         assertEquals(0, NavEndAction.indexOf(listOf("Çık")))
     }
+
+    @Test fun demoRouteShowsEndPill() {
+        assertTrue(NavigationState.DEMO.demoEnd)
+        assertTrue(NavigationState.DEMO.hasEnd)
+        assertFalse(NavigationState.NONE.hasEnd)
+        assertFalse(NavigationState(active = true).hasEnd)
+    }
 }

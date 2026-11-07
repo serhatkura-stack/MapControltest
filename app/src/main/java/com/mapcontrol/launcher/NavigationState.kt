@@ -47,7 +47,12 @@ data class NavigationState(
     val updatedAtMs: Long = 0L,
     /** Bildirimin "navigasyonu bitir" eylemi ([NavEndAction] ile bulunur); yoksa null ve "Bitir" düğmesi gizlenir. */
     val endAction: android.app.PendingIntent? = null,
+    /** Yalnız demo rota: "Bitir" hapı görünür, dokunuşu demo rotayı kapatır (bildirim eylemi yok). */
+    val demoEnd: Boolean = false,
 ) {
+    /** "Bitir" hapı gösterilir mi: bildirimin bitirme eylemi var ya da demo rota. */
+    val hasEnd: Boolean get() = endAction != null || demoEnd
+
     companion object {
         /** Rota yok. */
         @JvmField val NONE = NavigationState(active = false)
@@ -60,6 +65,7 @@ data class NavigationState(
             street = "Atatürk Cd.",
             arrivalTime = "14:52",
             remainingDistance = NavDistance("18", "km", 18_000),
+            demoEnd = true,
         )
     }
 }
