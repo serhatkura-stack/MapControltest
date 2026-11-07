@@ -470,7 +470,7 @@ class MediaCard(
             // Mod değişince ikincil satırların görünürlüğü yeniden hesaplanır.
             lastSession = null
         }
-        // Radyo (svaudioapp FM/AM/DAB oturumu): frekans başlıkta, kaynak "Radyo", ilerleme ve süreler yok.
+        // Radyo (OEM ses uygulaması FM/AM/DAB oturumu): frekans başlıkta, kaynak "Radyo", ilerleme ve süreler yok.
         val radio = if (newMode == Mode.SESSION) RadioDisplay.of(state.source, state.title, state.artist, oemSource()) else null
         val showProgress = newMode == Mode.SESSION && radio == null
         if (showProgress != lastShowProgress) {

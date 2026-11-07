@@ -93,7 +93,7 @@ internal object TrunkMath {
         TrunkState.UNKNOWN -> TrunkAction.NONE
     }
 
-    /** OEM bagaj tıklama kilidi: iki komut arası en az bu kadar (SVSetting `isTrunkClickable`, `u0.a(1000L)`). */
+    /** OEM bagaj tıklama kilidi: iki komut arası en az bu kadar (OEM ayarlarında da 1 sn). */
     const val DEBOUNCE_MS = 1_000L
 
     /** CarSetting 92 yazma değerleri (OEM): 1 = aç, 2 = kapat. */
@@ -101,7 +101,7 @@ internal object TrunkMath {
     const val CMD_CLOSE = 2
 
     /**
-     * OEM'in gönderdiği değeri seçer (`SVSetting i0/m.D`, `SVSystemUI QuickSettingPresenter.triggerTrunkState`):
+     * OEM ayarlar / hızlı ayarlarla aynı değeri seçer:
      * `(CS92 == 2 || PLG_POSITION == 0) ? 1 (aç) : 2 (kapat)`, yani kapalı ya da duruyorsa aç, açık ya da hareketteyse kapat.
      * İkisi de okunamazsa null (OEM kuralı uygulanamaz).
      */

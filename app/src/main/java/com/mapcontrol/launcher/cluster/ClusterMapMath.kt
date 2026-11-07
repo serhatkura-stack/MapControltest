@@ -3,7 +3,7 @@ package com.mapcontrol.launcher.cluster
 /**
  * "Gösterge haritası (deneysel)" için saf hesaplar (JVM'de test edilir; android.graphics yok).
  * Tüm ölçüler gösterge ekranının (Tiggo 7, ekran 2: 1920x720 @160) gerçek pikselidir;
- * QNX öğelerinin yerleri katalog/gosterge-olculeri-6kasim.md'den.
+ * QNX öğelerinin yerleri araçta ölçüldü (6 Kasım).
  */
 internal object ClusterMapMath {
 

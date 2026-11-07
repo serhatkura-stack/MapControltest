@@ -419,8 +419,7 @@ public class VDConnector {
     }
 
     /**
-     * Gövde OEM vdbus istemcisinden (SVBluetoothPhone com/desaysv/ivi/vdb/client/bind/VDConnector.java:550-579).
-     * Önceki jadx çıktısında finally içinde sonsuz döngü vardı: ilk çağrı iş parçacığını sonsuza kadar kilitliyordu.
+     * Önceki sürümde finally içinde sonsuz döngü vardı: ilk çağrı iş parçacığını sonsuza kadar kilitliyordu.
      * Yalnızca CHILD / MAIN_AND_CHILD iş parçacığı türleri mThreadSubscribeBuffer'a girer (yoksa ana iş parçacığı).
      */
     public void addSubscribe(VDEvent vDEvent) {
@@ -903,8 +902,7 @@ public class VDConnector {
     }
 
     /**
-     * Biriken abonelikleri servise tek seferde gönderir. Gövde OEM vdbus.jar'daki VDConnector.subscribeCommit'ten
-     * taşındı (jadx temiz çözüyor). Abonelik listesi değişmediyse hiçbir şey yapmaz; dağıtım iş parçacığı bir kez açılır.
+     * Biriken abonelikleri servise tek seferde gönderir. Abonelik listesi değişmediyse hiçbir şey yapmaz; dağıtım iş parçacığı bir kez açılır.
      */
     public void subscribeCommit() {
         VdLog.d(TAG, "subscribeCommit: service=" + this.mServiceInfo.getServiceName() + " client=" + this.mContext.getPackageName());

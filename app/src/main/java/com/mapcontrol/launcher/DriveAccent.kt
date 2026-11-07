@@ -157,9 +157,9 @@ object SportModePrefs {
 }
 
 /**
- * OEM sürüş modu penceresini kapatma kararı (saf; JVM'de sınanır). Aracın SVVehicleSetting `DriveModeDialog`'u mod
- * değişince açılır ve `com.desaysv.systemui.ACTION_DIALOG_CLOSE` yayınını dinleyip kapanır (izinsiz, dinamik alıcı;
- * DriveModeDialog.java:45-51, 359). Pencere odağı aldığı için spor geçişi ([SportGate]) onun kapanmasını bekler.
+ * OEM sürüş modu penceresini kapatma kararı (saf; JVM'de sınanır). Aracın OEM sürüş modu penceresi mod
+ * değişince açılır ve `com.desaysv.systemui.ACTION_DIALOG_CLOSE` yayınını dinleyip kapanır (izinsiz, dinamik alıcı).
+ * Pencere odağı aldığı için spor geçişi ([SportGate]) onun kapanmasını bekler.
  *
  * Yayın BÜTÜN OEM pencerelerini kapatır; bu yüzden yalnız gözlenen bir sürüş modu değişiminden sonra, değişim başına en çok
  * bir kez ve yalnız spor geçişi başlayacaksa: yeni mod Spor, ya da eski mod Spor ve spor ekranı açık (çıkış). İlk gözlem

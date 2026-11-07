@@ -19,8 +19,8 @@ internal data class DialInfoLite(val state: Int, val outGoing: Boolean = false, 
 
 /**
  * VDBus DIAL (262545) için hangi aramanın kimliğinin (uuid) gönderileceği. OEM servisi kapatmayı (dialCtrl 3)
- * terminateCall(addr, uuid) ile yapar ve uuid boşsa hiçbir şey yapmaz (SVVDSBluetooth n/a.java:93-98); ayrı bir
- * "reddet" komutu yok, OEM arayüzü de gelen aramayı aynı yolla reddeder (PhoneCallActivity.java:1007-1018).
+ * terminateCall(addr, uuid) ile yapar ve uuid boşsa hiçbir şey yapmaz; ayrı bir
+ * "reddet" komutu yok, OEM arayüzü de gelen aramayı aynı yolla reddeder.
  */
 internal object VdCallPick {
     /** Reddedilecek: gelen ya da bekleyen arama. Yoksa null (arka uç başarısız sayılır, sıradaki yol denenir). */
@@ -38,7 +38,7 @@ internal object VdCallPick {
 
     /**
      * Cevaplama türü (VDValueBT.AcceptCallType). Araç HFP yığını tek gelen aramada (durum 4) bayrak 0 değilse hiçbir şey
-     * yapmaz (DsvBluetooth HeadsetClientStateMachine.acceptCall); bekleyen aramada (5) 0 ve 1 ikisi de "kabul et, ötekini
+     * yapmaz (araç HFP yığını); bekleyen aramada (5) 0 ve 1 ikisi de "kabul et, ötekini
      * beklet" demektir. Bu yüzden her zaman NONE (0); VDBTDial'ın varsayılanı 1 tek gelen aramada yok sayılıyordu.
      */
     const val ACCEPT_TYPE = 0
@@ -390,8 +390,8 @@ internal object PhoneBackendChooser {
 
 /**
  * DTMF tuşu → VDBus DIAL (ctrl 4) number alanı. OEM servisi `Byte.parseByte(number)` ile ONDALIK okur ve o baytı
- * HFP sendDTMF'e verir (SVVDSBluetooth m/m.java:376-384); OEM arayüzü tuşun ASCII baytını gönderir
- * (SVBluetoothPhone PhoneCallActivity.java:796-797). Bu yüzden '5' → "53", '*' → "42", '#' → "35". Geçersizse null.
+ * HFP sendDTMF'e verir; OEM arayüzü tuşun ASCII baytını gönderir.
+ * Bu yüzden '5' → "53", '*' → "42", '#' → "35". Geçersizse null.
  */
 internal object DtmfCode {
     fun valid(c: Char): Boolean = c in '0'..'9' || c == '*' || c == '#'
@@ -399,7 +399,7 @@ internal object DtmfCode {
     fun vdNumber(c: Char): String? = if (valid(c)) c.code.toString() else null
 }
 
-/** DIAL_AUDIO_MODE durum değeri (m/m.java:211-219: SCO 0 kopuk → 2, 1 bağlanıyor → 3, 2 bağlı → 1). */
+/** DIAL_AUDIO_MODE durum değeri (SCO 0 kopuk → 2, 1 bağlanıyor → 3, 2 bağlı → 1). */
 internal object AudioModeMap {
     const val CAR = 1
     const val PHONE = 2
@@ -415,8 +415,8 @@ internal object AudioModeMap {
 
 /**
  * Konuşma sayacının başlangıcı. VDBTDialInfo.time = OEM'in arama başlangıcı, **SystemClock.elapsedRealtime** (duvar
- * saati değil): SVVDSBluetooth (T1E24) l/j.java:315-320, 351-354 değeri elapsedRealtime ile koyar; ilk değer
- * BluetoothHeadsetClientCall.getCreationElapsedMilli (m/a.java:183) → l/m.java:233 putTime. elapsedRealtime cihaz
+ * saati değil): OEM BT servisi (T1E24) değeri elapsedRealtime ile koyar; ilk değer
+ * BluetoothHeadsetClientCall.getCreationElapsedMilli. elapsedRealtime cihaz
  * genelinde tek saat olduğundan doğrudan bizim [android.os.SystemClock.elapsedRealtime] ile karşılaştırılır; çevirme
  * yok. Değer makul değilse (0, gelecekte ya da 12 saatten eski) null: çağıran [PhoneStateMap.nextCall]'ın kendi
  * başlangıcını kullanır.
@@ -434,13 +434,13 @@ internal object CallClock {
 }
 
 /**
- * HFP sesli tanıma (BVRA, Siri/Google) başlatma planı (saf). Araç yığını (DsvBluetooth HeadsetClientStateMachine):
- *  - AT+BVRA=1 yalnızca kendi durumu 0 iken gönderilir, değilse sessizce düşer ama binder yine true döner (:977-985);
- *    AT+BVRA=0 yalnızca durum 1 iken gönderilir, durum 0'da zararsız bir hiçliktir (:986-993).
- *  - Bizim isteğimizin OK'i durumu SESSİZCE 1/0 yapar, yayın yok (:1136-1146); telefondan gelen +BVRA yalnızca değer
- *    değişirse AG_EVENT olarak yayınlanır (:1056-1063). HF'nin başlattığı oturumda AG_EVENT 1 hiç gelmeyebilir: tek
+ * HFP sesli tanıma (BVRA, Siri/Google) başlatma planı (saf). Araç HFP yığını:
+ *  - AT+BVRA=1 yalnızca kendi durumu 0 iken gönderilir, değilse sessizce düşer ama binder yine true döner;
+ *    AT+BVRA=0 yalnızca durum 1 iken gönderilir, durum 0'da zararsız bir hiçliktir.
+ *  - Bizim isteğimizin OK'i durumu SESSİZCE 1/0 yapar, yayın yok; telefondan gelen +BVRA yalnızca değer
+ *    değişirse AG_EVENT olarak yayınlanır. HF'nin başlattığı oturumda AG_EVENT 1 hiç gelmeyebilir: tek
  *    sağlam doğrulama SCO'nun bağlanması (AUDIO_STATE 1 bağlanıyor / 2 bağlı).
- *  - Durum yalnızca +BVRA:0, kendi durdurmamızın OK'i ya da durum makinesinin yeniden kurulması (:559) ile 0 olur.
+ *  - Durum yalnızca +BVRA:0, kendi durdurmamızın OK'i ya da durum makinesinin yeniden kurulması ile 0 olur.
  * Bu yüzden yığının 1'de kalmış olabileceğini bildiğimiz sürece ([stackMaybeActive]; süreç başında bilinmez = true)
  * başlatmadan önce durdurulur ve kısa beklenir. 6 Kasım araç: UNCONFIRMED sonrası doğrudan başlatma hep düşüyordu.
  */
@@ -477,18 +477,18 @@ internal object CallPoll {
  * Rehber/geçmiş yenileme kararı (saf). Bellek içi depo süreç boyunca tutulur; boş bir okuma dolu depoyu SİLMEZ
  * (yalnızca farklı bir telefon bağlanınca depo sıfırlanır).
  *
- * OEM gerçeği (bizim araç T1E24, SVVDSBluetooth p/r.java, p/v.java): _CACHE haritası yalnızca o PBAP oturumunda bir
- * indirme bitince dolar (p/v.java:35-53 → r.F/E) ve PBAP kopunca silinir (p/v.java:108-113 → r.a). _DB yolu indirme
- * sonrası hiç yanıt vermez (k/e.java:320-328, p/v.java:56-75), kullanılmaz. Boş harita tek {total 0} yayını verir
+ * OEM gerçeği (bizim araç T1E24): _CACHE haritası yalnızca o PBAP oturumunda bir
+ * indirme bitince dolar ve PBAP kopunca silinir. _DB yolu indirme
+ * sonrası hiç yanıt vermez, kullanılmaz. Boş harita tek {total 0} yayını verir
  * (6 Kasım araç: BT yığını yeniden başladı, PBAP koptu, indirme bitmeden istendi).
  * Çözüm: önbellek boşsa bağlantı başına EN ÇOK BİR KEZ PHONE_BOOK_SYNC (262346) ctrl 1 tür 50 (rehber+geçmiş
- * indirmesi; p/r.java:103-112), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
+ * indirmesi), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
  * toplanır; PHONE_BOOK_SYNC durum yayını FINISHED (1) gelince önbellek yeniden istenir.
  */
 internal object PhonebookRefresh {
     enum class Step { NONE, CACHE, DOWNLOAD }
 
-    /** VDValueBT.SyncStatus: START 0, FINISHED 1, IDLE 20, WAITING 21 (p/r.java:416-452). */
+    /** VDValueBT.SyncStatus: START 0, FINISHED 1, IDLE 20, WAITING 21. */
     fun downloading(syncStatus: Int?): Boolean = syncStatus == 0 || syncStatus == 21
 
     /**

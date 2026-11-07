@@ -11,7 +11,6 @@ import java.util.List;
 /**
  * Konfor otomasyonunun araca yazdığı (modül, kimlik, değer) tabloları. SAF kod: VDBus'a, Android'e dokunmaz,
  * JVM'de sınanır; ClimateAutomationEngine yalnızca buradaki listeleri sırayla gönderir.
- * Kaynak: katalog/BULGULAR-root-3kasim.md madde 4 ve iklim tablosu, OEM SystemUI HvacModel / SVVrControl a/b.java.
  */
 final class ClimateAutomationWrites {
 
@@ -85,7 +84,7 @@ final class ClimateAutomationWrites {
                 // OEM arka buz çözmeyi yalnızca HVAC 80 ile yazar; CS 159'u hiçbir OEM uygulaması yazmıyor
                 return Collections.singletonList(hvac(HvacID.ID_AC_REAR_DEFROST, 1));
             case ClimateAutomationStore.CLIMATE:
-                // Önce güç 18 ← 1; A/C ve otomatik ~150 ms sonra (OEM sırası, SVVrControl a/b.java postDelayed 150L)
+                // Önce güç 18 ← 1; A/C ve otomatik ~150 ms sonra (OEM sırası)
                 return Collections.singletonList(hvac(HvacID.ID_AC_WORKING, 1));
             default:
                 return null;
@@ -115,11 +114,11 @@ final class ClimateAutomationWrites {
                 return Arrays.asList(hvac(HvacID.ID_AC_FRONT_GLASS_HEAT, 2), hvac(HvacID.ID_AC_MAX_FRONT_DEFOREST, 2));
             case ClimateAutomationStore.REAR_DEFROST:
                 // OEM her tıkta 80 ← 1 yazar (anahtar); araçta 0 ve tekrar 1 kapatmadı. Kapatma değeri
-                // belirsiz olduğu için mevcut 0 korunuyor (katalog/oem-komut-kodlamalari.md, UNCLEAR)
+                // belirsiz olduğu için mevcut 0 korunuyor (kodlama doğrulanmadı)
                 return Collections.singletonList(hvac(HvacID.ID_AC_REAR_DEFROST, 0));
             case ClimateAutomationStore.CLIMATE:
                 // OEM: A/C 1 ve güç 18 için 1 aç, 2 kapat; 0 hiç yazılmaz. Otomatik 4: T1E24_INT dalında 2 ile
-                // kapatılır (HvacModel.onAutoClick, HvacModel.java:596-600); sesli komut da her modelde 4 ← 2 (a/b.java:884)
+                // kapatılır; sesli komut da her modelde 4 ← 2
                 return Arrays.asList(
                         hvac(HvacID.ID_AC_STATE, 2), hvac(HvacID.ID_AC_WORKING, 2), hvac(HvacID.ID_AC_AUTO_STATE, 2));
             default:

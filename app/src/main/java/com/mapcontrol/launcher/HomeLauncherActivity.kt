@@ -493,8 +493,8 @@ class HomeLauncherActivity : Activity() {
     }
 
     /**
-     * OEM sürüş modu penceresini kapatır: SystemUI'nin kendi gönderdiği yayınla aynı (SVSystemUI util/s.java:319-325,
-     * bayraklar 0x20 | 0x01000000 | 0x10000000). Yayın tüm OEM pencerelerini kapatır; çağıran [OemDriveDialogCloser] süzer.
+     * OEM sürüş modu penceresini kapatır: SystemUI'nin kendi gönderdiği yayınla aynı
+     * (bayraklar 0x20 | 0x01000000 | 0x10000000). Yayın tüm OEM pencerelerini kapatır; çağıran [OemDriveDialogCloser] süzer.
      */
     private fun closeOemDriveDialog() {
         try {

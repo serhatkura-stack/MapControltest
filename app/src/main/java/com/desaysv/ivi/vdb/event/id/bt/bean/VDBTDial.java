@@ -1,6 +1,6 @@
 /*
- * OEM sınıfının birebir kopyası; Parcel alan sırası değiştirilmemeli (OEM servisi sınıf adıyla açar).
- * Tek fark: toString() gizlilik için isim/numara/adres/portre içermez.
+ * VDBus BT veri sınıfı (araçla konuşmak için); Parcel alan sırası Parcel uyumu için sabit, değiştirilmemeli (servis sınıf adıyla açar).
+ * toString() gizlilik için isim/numara/adres/portre içermez.
  */
 package com.desaysv.ivi.vdb.event.id.bt.bean;
 
@@ -11,15 +11,13 @@ import com.desaysv.ivi.vdb.event.VDEvent;
 import com.desaysv.ivi.vdb.event.base.VDKey;
 
 public class VDBTDial implements Parcelable {
-    public static final Parcelable.Creator<VDBTDial> CREATOR = new Parcelable.Creator<VDBTDial>() { // from class: com.desaysv.ivi.vdb.event.id.bt.bean.VDBTDial.1
-        /* JADX WARN: Can't rename method to resolve collision */
-        @Override // android.os.Parcelable.Creator
+    public static final Parcelable.Creator<VDBTDial> CREATOR = new Parcelable.Creator<VDBTDial>() {
+        @Override
         public VDBTDial createFromParcel(Parcel parcel) {
             return new VDBTDial(parcel);
         }
 
-        /* JADX WARN: Can't rename method to resolve collision */
-        @Override // android.os.Parcelable.Creator
+        @Override
         public VDBTDial[] newArray(int r1) {
             return new VDBTDial[r1];
         }
@@ -32,7 +30,7 @@ public class VDBTDial implements Parcelable {
     private int mRedialType = 0;
     private String mUuid = null;
 
-    @Override // android.os.Parcelable
+    @Override
     public int describeContents() {
         return 0;
     }
@@ -100,7 +98,7 @@ public class VDBTDial implements Parcelable {
         readFromParcel(parcel);
     }
 
-    @Override // android.os.Parcelable
+    @Override
     public void writeToParcel(Parcel parcel, int r2) {
         parcel.writeString(this.mNumber);
         parcel.writeString(this.mAddress);

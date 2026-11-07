@@ -14,7 +14,7 @@ import java.util.Locale
  * Rehber ve son aramaların uygulamaya özel disk önbelleği (süreç yeniden başlayınca anında gösterim için).
  *
  * OEM'de kalıcılık yok: BT servisinin _CACHE haritası yalnız o PBAP oturumunda indirme bitince dolar, PBAP kopunca
- * silinir (SVVDSBluetooth p/v.java:35-53, 108-113; k/e.java:320-325). Bu yüzden son başarılı listeyi biz tutarız.
+ * silinir. Bu yüzden son başarılı listeyi biz tutarız.
  *
  * GİZLİLİK:
  * - Dosya yalnızca `noBackupFilesDir` içinde (uygulamaya özel, otomatik yedeğe girmez); başka yere kopyalanmaz.
@@ -34,7 +34,7 @@ internal object PhoneCache {
 
     private const val MAGIC = 0x4D4C5042 // "MLPB"
     private const val VERSION = 1
-    /** OEM sınırları: rehber en çok 5000 (q/b0.java:95-108), geçmiş depoda [DirectoryStore.MAX_RECENTS]. */
+    /** OEM sınırları: rehber en çok 5000, geçmiş depoda [DirectoryStore.MAX_RECENTS]. */
     const val MAX_CONTACTS = 5000
     private const val SALT = "mapcontrol-phone-cache-v1:"
 

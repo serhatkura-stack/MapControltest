@@ -825,7 +825,7 @@ internal object SplitTileText {
         return (if (i >= 0) e.substring(0, i) else e).trim().ifEmpty { null }
     }
 
-    /** Bileşendeki tam sınıf adı (".Sinif" paketle tamamlanır); bileşen değilse null. (launchertest util/'u görmez, burada.) */
+    /** Bileşendeki tam sınıf adı (".Sinif" paketle tamamlanır); bileşen değilse null. (Test derlemesi util/'u görmez, burada.) */
     fun classOf(entry: String?): String? {
         val e = entry?.trim().orEmpty()
         val i = e.indexOf('/')
@@ -837,7 +837,7 @@ internal object SplitTileText {
     /** Ad çözülemezse gösterilecek yazı: ham bileşen değil, paket adı. */
     fun display(entry: String?, label: String?): String? = label?.takeIf { it.isNotBlank() } ?: packageOf(entry)
 
-    /** Kendi Mini göstergemizin sınıfı (util/SplitSlot.MINI_DASH_CLASS ile aynı; launchertest util/'u görmez). */
+    /** Kendi Mini göstergemizin sınıfı (util/SplitSlot.MINI_DASH_CLASS ile aynı; test derlemesi util/'u görmez). */
     const val MINI_DASH_CLASS = "com.mapcontrol.launcher.MiniDashActivity"
 
     /** Seçim kendi paketimizin bir bileşeni mi (Mini gösterge ya da harita seçici). */

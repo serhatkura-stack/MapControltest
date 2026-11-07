@@ -98,8 +98,7 @@ internal object TripDecode {
 
     /**
      * Toplam km önce 71'den (`ID_GRAND_TOTAL_KM`, araçta [0,0,43,24] = 11032 km, göstergeyle eşleşti), geçersizse 150'den.
-     * 150 (`ID_TOTAL_MILEAGE`) SVLauncher, SVVehicleSetting, SVSetting, SVAudioApp vb. `ReadOnlyID`'lerinde tanımlı (yalnızca
-     * SVEngMode'un eski SDK kopyasında yok) ama hiçbir OEM uygulaması 150/153/71'i okumuyor: birimi ve anlamı doğrulanmadı;
+     * 150 (`ID_TOTAL_MILEAGE`) OEM `ReadOnlyID` tanımlarında var ama hiçbir OEM uygulaması 150/153/71'i okumuyor: birimi ve anlamı doğrulanmadı;
      * makul görünen yanlış bir değer (km×10, başka sayaç) doğrulanmış 71'in önüne geçmesin diye yalnızca yedek.
      * Her biri ayrı çözülür: `?:` yalnızca null'da düştüğünden geçersiz (0) birincil km satırını kaybettiriyordu.
      */
@@ -828,8 +827,7 @@ internal class HealthTile(context: Context) :
 }
 
 /**
- * ReadOnly kimlikleri: FrostNav'ın `ReadOnlyID` jar'ında bulunmayan, yeni Desay yazılımının eklediği sinyaller (SVVDSCarInfo
- * `ReadOnlyID`, root dökümü, katalog/root-dump-envanter.md bölüm 3). Eski yazılımlı araçta okunamaz: bütün çağıranlar null'u kaldırır.
+ * ReadOnly kimlikleri: FrostNav'ın `ReadOnlyID` jar'ında bulunmayan, yeni Desay yazılımının eklediği sinyaller. Eski yazılımlı araçta okunamaz: bütün çağıranlar null'u kaldırır.
  */
 internal object ReadOnlyIds {
     const val TIRE_PRESSURE = 140

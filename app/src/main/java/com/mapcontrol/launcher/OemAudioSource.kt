@@ -23,19 +23,19 @@ import java.util.concurrent.Executors
 /**
  * Müzik kartı / mini gösterge seçim kuralları (saf, JVM'de sınanır).
  *
- * 6 Kasım araç: BT yeniden bağlanınca OEM ses kaynağı radyoda kaldı (svaudioapp odak tutuyor), kart radyonun boş "am"
+ * 6 Kasım araç: BT yeniden bağlanınca OEM ses kaynağı radyoda kaldı (OEM ses uygulaması odak tutuyor), kart radyonun boş "am"
  * oturumunu gösterdi ve BT çalması 1-2 sn sonra durdu. Kurallar: hiçbir oturum çalmıyorsa ve bir Bluetooth oturumu varsa
  * OEM ses uygulamasının (radyo) oturumu karta seçilmez.
  */
 internal object MediaSourcePick {
 
-    /** A2DP sink oturumu (DsvBluetooth = com.android.bluetooth, a2dpsink/mbs/A2dpMediaBrowserService). */
+    /** A2DP sink oturumu (com.android.bluetooth). */
     const val BT_PKG = "com.android.bluetooth"
 
     /**
-     * OEM ses merkezi (radyo/USB). Bizim araç (T1E24, svaudioapp T19C V_20251114): `com.desaysv.svaudioapp`
-     * (dumpsys media_session: RadioMediaSessionBrowserService / MediaPlaybackService; OEM SVLauncher AudioSourceManager.java:227).
-     * Arkadaşın aracı (T18FL4): `com.desaysv.audioapp` (ImpAudioSourceManager.java:52).
+     * OEM ses merkezi (radyo/USB). Bizim araç (T1E24): `com.desaysv.svaudioapp`
+     * (dumpsys media_session: RadioMediaSessionBrowserService / MediaPlaybackService).
+     * Arkadaşın aracı (T18FL4): `com.desaysv.audioapp`.
      */
     const val OEM_AUDIO_PKG = "com.desaysv.svaudioapp"
     const val OEM_AUDIO_PKG_OLD = "com.desaysv.audioapp"
@@ -46,8 +46,8 @@ internal object MediaSourcePick {
 
     /**
      * Telefon önceliğine giden BT oturumu durumu ([PlaybackState] kodu; null: durum yok). PLAYING (3) → true; ERROR (7) →
-     * null ("oturum yok": OEM A2DP servisi kopuşta durumu "bluetooth disconnected" hatasıyla ERROR'a çeker, DsvBluetooth
-     * `A2dpMediaBrowserService.java:511`); gerisi false.
+     * null ("oturum yok": OEM A2DP servisi kopuşta durumu "bluetooth disconnected" hatasıyla ERROR'a çeker); gerisi
+     * false.
      */
     fun btPlaying(state: Int?): Boolean? = when (state) {
         STATE_PLAYING -> true
@@ -61,9 +61,9 @@ internal object MediaSourcePick {
     fun isOemAudio(pkg: String?) = pkg == OEM_AUDIO_PKG || pkg == OEM_AUDIO_PKG_OLD
 
     /**
-     * svaudioapp'in kendi çaldığı OEM kaynak türleri (VDValueMedia.MediaType: LOCAL_MUSIC 2, USB0 3, USB1 4, FM_AM 8, FM 9,
-     * AM 10, DAB 24). Hepsi OEM başlatıcı kartının izlediği listede (SVLauncher `d/g/b/g/f/k.java:31`) ve medya servisinde
-     * denetçisi var (SVVDSMedia `svmediasourceinfo/b/c.java:142-200`; tanımsız türde `PlayStatusEventHandle` NPE verir).
+     * OEM ses uygulamasının kendi çaldığı OEM kaynak türleri (VDValueMedia.MediaType: LOCAL_MUSIC 2, USB0 3, USB1 4, FM_AM 8, FM 9,
+     * AM 10, DAB 24). Hepsi OEM başlatıcı kartının izlediği listede ve medya servisinde
+     * denetçisi var (tanımsız türde `PlayStatusEventHandle` NPE verir).
      */
     private val OEM_OWN_SOURCES = setOf(2, 3, 4, 8, 9, 10, 24)
 
@@ -75,7 +75,7 @@ internal object MediaSourcePick {
     /**
      * Seçilecek oturumun sırası; liste boşsa -1. [current] seçili oturumun sırası (yoksa -1). [follow]: kartın izleyeceği OEM
      * kaynağı ([OemAudioSource.followSource]; yoksa null).
-     * 1) Çalan ilk oturum. 2) Seçili oturum üçüncü taraf değilse OEM kaynağı izlenir: 13 → BT oturumu; svaudioapp kaynağı
+     * 1) Çalan ilk oturum. 2) Seçili oturum üçüncü taraf değilse OEM kaynağı izlenir: 13 → BT oturumu; OEM ses uygulaması kaynağı
      * (radyo/USB, yalnızca canlı geçişten sonra) → OEM ses oturumu. 3) Seçili oturum korunur (duraklatılan müzik atlamaz) —
      * seçili oturum OEM radyosuysa ve BT oturumu varsa korunmaz. 4) Başlığı olan ilk oturum; o OEM radyosuysa ve BT varsa BT.
      * 5) BT. 6) İlk oturum.
@@ -102,14 +102,14 @@ internal object MediaSourcePick {
     /**
      * Oynat'ta izlenecek yol. BT servisi bağlıysa kaynak 13 olsa bile `MUSIC_PLAY` gider: `CURRENT_SOURCE_TYPE` OEM'in son
      * seçtiği kaynaktır, odak 42'nin şu anki sahibi değil (navigasyon anonsu, başka uygulama ya da biten HFP araması sonrası
-     * 13 kalır ama odak bizde değildir). Komut zararsızdır: OEM BT servisi odağı yalnızca tutmuyorsa ister (`j/e.java:822-833`).
+     * 13 kalır ama odak bizde değildir). Komut zararsızdır: OEM BT servisi odağı yalnızca tutmuyorsa ister.
      */
     enum class Path {
         /** OEM kaynağı zaten BT ve BT servisi yok: yalnızca BT oturumuna oynat (OPEN_SOURCE atlanır). */
         ALREADY_BT,
-        /** VDBus BT `MUSIC_PLAY{playCtrl=1, playType=0}`: OEM BT servisi odak 42'yi alır ve çalar (svaudioapp'in yolu). */
+        /** VDBus BT `MUSIC_PLAY{playCtrl=1, playType=0}`: OEM BT servisi odak 42'yi alır ve çalar (OEM ses uygulamasının yolu). */
         BT_PLAY,
-        /** VDBus MEDIA `OPEN_SOURCE` reason=8: medya servisi svaudioapp BTMusicService'i başlatır, o da BT_PLAY gönderir. */
+        /** VDBus MEDIA `OPEN_SOURCE` reason=8: medya servisi OEM ses uygulaması BTMusicService'i başlatır, o da BT_PLAY gönderir. */
         OPEN_SOURCE,
         /** VDBus yok: yalnızca BT oturumuna oynat (odak 42 değilse A2dpMediaBrowserService bunu yok sayar). */
         PLAIN,
@@ -126,7 +126,7 @@ internal object MediaSourcePick {
     enum class SkipPath {
         /** `MediaController.skipToNext/Previous` (üçüncü taraf uygulama ya da VDBus yok). */
         SESSION,
-        /** VDBus BT `MUSIC_PLAY{playCtrl=5|4, playType=0}`: OEM BT servisi odak 42'yi ister ve atlar (svaudioapp'in yolu). */
+        /** VDBus BT `MUSIC_PLAY{playCtrl=5|4, playType=0}`: OEM BT servisi odak 42'yi ister ve atlar (OEM ses uygulamasının yolu). */
         BT_CTRL,
         /** VDBus MEDIA `MEDIA_SOURCE_PLAY_STATUS{mediaType=geçerli kaynak, playAction=5|4}`: OEM başlatıcı kartının yolu. */
         MEDIA_CTRL,
@@ -134,10 +134,10 @@ internal object MediaSourcePick {
 
     /**
      * [activePkg]: kartın oturumu (yoksa null). [oemSource]: `CURRENT_SOURCE_TYPE` (bilinmiyorsa null).
-     * BT oturumu → BT servisi bağlıysa BT_CTRL (`com.android.bluetooth` oturumuna giden next/prev odak 42 yokken no-op,
-     * `A2dpMediaBrowserService.java:100-114`). OEM ses oturumu, kaynak svaudioapp'in → MEDIA_CTRL; kaynak 13 ise SESSION
-     * (MEDIA_CTRL{13} BT denetçisine gider, `svmediasourceinfo/b/c.java` 13 → `d.b`: kart radyoyu gösterirken BT parçası
-     * değişirdi). Oturum yok, kaynak svaudioapp'in ya da 13 → MEDIA_CTRL. Gerisi SESSION (üçüncü taraf uygulamanın kendi
+     * BT oturumu → BT servisi bağlıysa BT_CTRL (`com.android.bluetooth` oturumuna giden next/prev odak 42 yokken no-op).
+     * OEM ses oturumu, kaynak OEM ses uygulamasınınsa → MEDIA_CTRL; kaynak 13 ise SESSION
+     * (MEDIA_CTRL{13} BT denetçisine gider, kart radyoyu gösterirken BT parçası
+     * değişirdi). Oturum yok, kaynak OEM ses uygulamasının ya da 13 → MEDIA_CTRL. Gerisi SESSION (üçüncü taraf uygulamanın kendi
      * odağı var; OEM kaynağına dokunulmaz).
      */
     fun skipPath(activePkg: String?, oemSource: Int?, btBus: Boolean, mediaBus: Boolean): SkipPath = when {
@@ -148,7 +148,7 @@ internal object MediaSourcePick {
         else -> SkipPath.SESSION
     }
 
-    /** Kartın izleyeceği OEM kaynağı: 13 her zaman; svaudioapp kaynağı yalnızca canlı geçişle geldiyse (bkz. [pick]). */
+    /** Kartın izleyeceği OEM kaynağı: 13 her zaman; OEM ses uygulaması kaynağı yalnızca canlı geçişle geldiyse (bkz. [pick]). */
     fun follow(source: Int?, switchedLive: Boolean): Int? = when {
         source == OemAudioSource.BT_MUSIC -> source
         isOemOwnSource(source) && switchedLive -> source
@@ -159,7 +159,7 @@ internal object MediaSourcePick {
 /**
  * OEM kaynağı izleme durumu (saf, JVM'de sınanır; [OemAudioSource] kilit altında kullanır).
  *
- * Canlı geçiş (svaudioapp kaynağına) tek seferliktir: bir Bluetooth oturumu sonradan belirirse unutulur. Yoksa BT 13 → telefon
+ * Canlı geçiş (OEM ses uygulaması kaynağına) tek seferliktir: bir Bluetooth oturumu sonradan belirirse unutulur. Yoksa BT 13 → telefon
  * koptu, kaynak radyoya (9) düştü → telefon yeniden bağlandı, kaynak 9'da kaldı zinciri 6 Kasım hatasını geri getirir
  * (kart BT oturumu yerine boş radyo oturumunu seçer). Süreç uyku boyunca yaşarsa eski geçiş de böyle silinir.
  */
@@ -188,18 +188,18 @@ internal class SourceFollow {
 }
 
 /**
- * OEM ses kaynağını Bluetooth müziğine geçirme (bizim araç T1E24 dökümü, 6 Kasım):
+ * OEM ses kaynağını Bluetooth müziğine geçirme (bizim araç T1E24, 6 Kasım ölçümü):
  *
  * - Araçta ses kaynağını müzik odağının sahibi belirler. BT müziğin odağını (usage=1, content=2, legacyStreamType=42)
- *   yalnızca OEM BT servisi `com.desaysv.ivi.vds.bt` ister: `MUSIC_PLAY` (262948) → `h/h.java:102-104` → `h/g.java:227-235`
- *   → `h/b.java:180-187` `play()` = `g0(1, true)` → `j/e.java:822-833` → `d/c.java:317-344` `u()`.
- * - `com.android.bluetooth` oturumuna giden play/next/prev, odak 42 değilse yok sayılır (`A2dpMediaBrowserService.java:81-89,313`).
- *   Bu yüzden ilk yol svaudioapp'in kendi yolu: `BTMusicManager.java:364-370,524-526` `MUSIC_PLAY{1,0}` (yol BT_PLAY).
- * - Yedek: OEM başlatıcı kartının yolu `AudioSourceManager.java:719-727` `set(MEDIA_SOURCE_PLAY_STATUS, VDMediaPlay{13, 6,
- *   info{reason=8}})`. Medya servisi (`svmediasourceinfo/d/b.java:164-188,326-336`) bunu svaudioapp `BTMusicService`'e
- *   iletir; o yalnızca reason 2/6/8'e tepki verir (`BTMusicService.java:99-127`). Arkadaşın aracındaki reason=13
- *   (REASON_SOURCE_LIST) bizim svaudioapp'te yok sayılır. disPlayView=2 ile OEM ekranı açılmaz (`:128`).
- * - Geçerli kaynak `CURRENT_SOURCE_TYPE` (393217), yük `media.bean.VDMediaType` (`SourceTypeEventHandle.java:35-42`).
+ * yalnızca OEM BT servisi `com.desaysv.ivi.vds.bt` ister: `MUSIC_PLAY` (262948).
+
+ * - `com.android.bluetooth` oturumuna giden play/next/prev, odak 42 değilse yok sayılır.
+ * Bu yüzden ilk yol OEM ses uygulamasının kendi yolu: `MUSIC_PLAY{1,0}` (yol BT_PLAY).
+ * - Yedek: OEM başlatıcı kartının yolu `set(MEDIA_SOURCE_PLAY_STATUS, VDMediaPlay{13, 6,
+ * info{reason=8}})`. Medya servisi bunu OEM ses uygulaması `BTMusicService`'e
+ * iletir; o yalnızca reason 2/6/8'e tepki verir. Arkadaşın aracındaki reason=13
+ * (REASON_SOURCE_LIST) bizim OEM ses uygulamasında yok sayılır. disPlayView=2 ile OEM ekranı açılmaz.
+ * - Geçerli kaynak `CURRENT_SOURCE_TYPE` (393217), yük `media.bean.VDMediaType`.
  *
  * Kullanıcı Oynat'a ya da seçicide bir kaynağa bastığında, bir de telefonda Oynat'a basılınca ("Telefon önceliği",
  * [onBtPlayback]) çalışır; binder çağrıları arka plandadır. Günlük etiketi `MediaSource`
@@ -211,19 +211,18 @@ internal object OemAudioSource {
 
     const val BT_MUSIC = 13
     const val PLAY_ACTION_OPEN_SOURCE = 6
-    /** VDValueMedia REASON_CARDS (SVVDSMedia VDValueMedia.java:151): OEM kart ve SystemUI yolu, iki araçta da var. */
+    /** VDValueMedia REASON_CARDS: OEM kart ve SystemUI yolu, iki araçta da var. */
     const val REASON_CARDS = 8
     const val DISPLAY_BACKGROUND = 2
     const val INTENT_DEFAULT_VIEW = 1
 
-    /** VDBTMusicPlay playCtrl=1 (PLAY), playType=0 (svaudioapp BTMusicManager.setPlayOperation). */
+    /** VDBTMusicPlay playCtrl=1 (PLAY), playType=0 (OEM ses uygulamasıyla aynı). */
     const val BT_PLAY_CTRL_PLAY = 1
     const val BT_PLAY_TYPE_DEFAULT = 0
 
     /**
-     * İleri/Geri: VDBTMusicPlay playCtrl 5/4 (svaudioapp `BTMusicManager.java:596-602`; OEM BT servisi `VB/h/g.java:254-259`
-     * 4 → skipToPrevious, 5 → skipToNext) ve VDMediaPlay playAction 5/4 (SVLauncher `AudioSourceManager.java:734-762`
-     * playNext/playPre → `playPerOrNext(5|4)`; SVVDSMedia `PlayStatusEventHandle.java:59-64` 4 → önceki, 5 → sonraki).
+     * İleri/Geri: VDBTMusicPlay playCtrl 5/4 (OEM BT servisi 4 → skipToPrevious, 5 → skipToNext) ve VDMediaPlay
+     * playAction 5/4 (OEM ana ekran kartıyla aynı; medya servisi 4 → önceki, 5 → sonraki).
      */
     const val CTRL_NEXT = 5
     const val CTRL_PREV = 4
@@ -248,25 +247,24 @@ internal object OemAudioSource {
         })
     }
 
-    /** İlk yol: svaudioapp `BTMusicManager.play()` ile aynı yük. */
+    /** İlk yol: OEM ses uygulamasının BT oynat yüküyle aynı. */
     fun btPlayPayload(): VDBTMusicPlay = btCtrlPayload(BT_PLAY_CTRL_PLAY)
 
-    /** svaudioapp `BTMusicManager.setPlayOperation(ctrl)` ile aynı yük (playType 0). */
+    /** OEM ses uygulamasının BT denetim yüküyle aynı (playType 0). */
     fun btCtrlPayload(ctrl: Int): VDBTMusicPlay = VDBTMusicPlay().apply {
         putPlayCtrl(ctrl)
         putPlayType(BT_PLAY_TYPE_DEFAULT)
     }
 
     /**
-     * OEM başlatıcı kartının İleri/Geri yükü (`AudioSourceManager.java:334-349`); kart tıklaması bilgi eklemez
-     * (`NormalMediaCard.java:358-378` playNext()/playPre() argümansız).
+     * OEM başlatıcı kartının İleri/Geri yükü; kart tıklaması bilgi eklemez.
      *
      * Radyoda (9/10) OEM kartıyla aynı zincir, 7 Kasım günlüğüyle doğrulandı: medya servisi 5/4'ü `FM_AM_PLAY_STATUS`
-     * NEXT_CHANNEL 7 / PREV_CHANNEL 6'ya çevirir (`svmediasourceinfo/d/ac.java:68-75`), SVVDSRadio svaudioapp'e "next"/"pre"
-     * yollar (`b/c/k.java:125-132`), svaudioapp çoklu kipte `MULTI_SEEK_FORWARD/BACKWARD` → istasyon LİSTESİNDE sonraki/önceki
-     * (`RadioControlAction.java:668-698`; araçta `RadioControlTool dealMessage: radioAction = MULTI_SEEK_FORWARD` görüldü).
+     * NEXT_CHANNEL 7 / PREV_CHANNEL 6'ya çevirir, OEM radyo servisi OEM ses uygulamasına "next"/"pre"
+     * yollar, OEM ses uygulaması çoklu kipte `MULTI_SEEK_FORWARD/BACKWARD` → istasyon LİSTESİNDE sonraki/önceki
+     * (araçta `RadioControlTool dealMessage: radioAction = MULTI_SEEK_FORWARD` görüldü).
      * Liste boşsa (AM hiç taranmamış, frekans 522 kHz'de kaldı) OEM kartında da istasyon değişmez. Frekans adımı
-     * (NEXT_FREQUENCY 9 / PREV_FREQUENCY 8) SVVDSRadio'da boş (`b/c/k.java:21-26`): başka bir yol yok.
+     * (NEXT_FREQUENCY 9 / PREV_FREQUENCY 8) OEM radyo servisinde boş: başka bir yol yok.
      */
     fun skipPayload(type: Int, next: Boolean): VDMediaPlay = VDMediaPlay().apply {
         putMediaType(type)
@@ -400,8 +398,8 @@ internal object OemAudioSource {
     }
 
     /**
-     * `CURRENT_SOURCE_TYPE` (393217) aboneliği, OEM başlatıcısı gibi (`AudioSourceManager.java:231-246`, bildirim
-     * `:121-145`). Abonelik süreç boyunca tek; [listener] [unwatchSource] ile çıkarılır. Ana iş parçacığından çağrılır.
+     * `CURRENT_SOURCE_TYPE` (393217) aboneliği, OEM başlatıcısı gibi.
+     * Abonelik süreç boyunca tek; [listener] [unwatchSource] ile çıkarılır. Ana iş parçacığından çağrılır.
      */
     fun watchSource(context: Context, listener: SourceListener) {
         sourceListeners.add(listener)
@@ -510,7 +508,7 @@ internal object OemAudioSource {
 
     /**
      * io: kartın Oynat'ındaki BT geçişi, oturum oynatı olmadan: BT servisi bağlıysa `MUSIC_PLAY{1,0}` (OEM BT servisi odak
-     * 42'yi ister; telefon bu arada duraklatıldıysa yeniden çalar, `j/e.java:822-844`), yoksa `OPEN_SOURCE{13, reason 8}`.
+     * 42'yi ister; telefon bu arada duraklatıldıysa yeniden çalar), yoksa `OPEN_SOURCE{13, reason 8}`.
      */
     private fun sendBtSwitch(tag: String, source: Int?) {
         val t0 = SystemClock.elapsedRealtime()
@@ -538,8 +536,8 @@ internal object OemAudioSource {
 
     /**
      * Kart seçicisinden BT dışı kaynak ([type]: FM 9, AM 10, USB0 3): OEM kartı / SystemUI gibi `MEDIA_SOURCE_PLAY_STATUS
-     * {type, playAction 6, reason 8}` (`AudioSourceManager.java:719-727`, SVSystemUI `j/h/f/h.java:136-147`), ama arka planda
-     * (disPlayView 2; intent görünümü yalnızca ön planda anlamlı, `svmediasourceinfo/f/b.java:107-109`). Telefon önceliği
+     * {type, playAction 6, reason 8}`, ama arka planda
+     * (disPlayView 2; intent görünümü yalnızca ön planda anlamlı). Telefon önceliği
      * bir süre karışmaz. Yalnızca kullanıcı dokunuşuyla çağrılır.
      */
     fun openSource(context: Context, type: Int) {
@@ -572,7 +570,7 @@ internal object OemAudioSource {
     }
 
     /**
-     * USB0 müziği bağlı mı (salt okuma): SVSystemUI `j/h/f/h.java:128-134` gibi `getOnce(MEDIA_SOURCE_EXT_INFO{mediaType 3})`
+     * USB0 müziği bağlı mı (salt okuma): OEM SystemUI gibi `getOnce(MEDIA_SOURCE_EXT_INFO{mediaType 3})`
      * → connectState ([SourceChoice.usbConnected]). Sonuç ana iş parçacığında [result]'a; okunamazsa false.
      */
     fun checkUsb(context: Context, result: (Boolean) -> Unit) {

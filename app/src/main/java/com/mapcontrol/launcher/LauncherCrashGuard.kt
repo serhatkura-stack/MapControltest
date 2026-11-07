@@ -7,7 +7,7 @@ import android.content.pm.ApplicationInfo
  * HOME kalıcı sabitlendiğinde (cihaz sahibi) çöken bir launcher sürücüyü ana ekransız bırakmasın diye
  * çökme döngüsü bekçisi. Launcher başladıktan [WINDOW_MS] içinde süreç iki kez çökerse "tetiklendi"
  * işaretlenir; uygulama tarafı (MapControlApplication) bunu görüp HOME sabitlemesini kaldırır, alias'ı
- * kapatır ve Launcher Modu'nu kapatır (aracın kendi ana ekranı döner). launchertest [util] paketini
+ * kapatır ve Launcher Modu'nu kapatır (aracın kendi ana ekranı döner). Test derlemesi [util] paketini
  * görmediği için bu sınıf yalnızca SharedPreferences yazar; kapatma işini uygulama yapar.
  */
 object LauncherCrashGuard {

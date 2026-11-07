@@ -69,8 +69,7 @@ public final class ClimateAutomationEngine {
      */
     private static final int MAX_STARTUP_SEND_ATTEMPTS = 3;
     /**
-     * OEM sesli komut klima kapalıyken önce güç (HVAC 18 ← 1) gönderir, asıl komutu 150 ms sonra yollar
-     * (SVVrControl a/b.java o()/k(): postDelayed 150L).
+     * OEM sesli komut klima kapalıyken önce güç (HVAC 18 ← 1) gönderir, asıl komutu 150 ms sonra yollar.
      */
     private static final long CLIMATE_POWER_LEAD_MS = 150;
     /**
@@ -877,7 +876,7 @@ public final class ClimateAutomationEngine {
 
     /**
      * Direksiyon ısıtma anahtarı: CS 160 okunur (1 açık, 0 kapalı); hedeften farklıysa 160 ← 1 gönderilir
-     * (OEM sesli komut SVVrControl vehicle/d.java STEERING_WHEEL_HEATING). Okunamazsa gönderilmez, hata fırlatır.
+     * (OEM sesli komut STEERING_WHEEL_HEATING). Okunamazsa gönderilmez, hata fırlatır.
      * Gönderim zamanı yalnızca gerçekten yazıldığında kaydedilir (TOGGLE_RESEND_GAP_MS bundan ölçülür).
      */
     private void toggleSteerWheelHeat(CarInfoProxy proxy, boolean on) {

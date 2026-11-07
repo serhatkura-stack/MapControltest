@@ -23,9 +23,9 @@ import java.util.List;
  * Bildirim dinleyicisi bağlanınca başlar ({@link LauncherMediaNotificationListener#onListenerConnected}; erişim açıkken
  * sistem onu süreç boyunca bağlı tutar), koptuğunda durur. Oturum listesi okunamazsa (erişim yok) hiçbir şey beslenmez.
  * <p>
- * OEM A2DP servisi (DsvBluetooth {@code A2dpMediaBrowserService.java:195-198,511}) AVRCP kopunca oturumu pasif yapar
+ * OEM A2DP servisi AVRCP kopunca oturumu pasif yapar
  * (etkin oturumlardan düşer) ve durumu ERROR'a çeker; ikisi de "oturum yok" ({@code null}) olarak iletilir. Yeniden bağlanıp
- * çalınca oturum yeniden etkinleşir ({@code :554-556}).
+ * çalınca oturum yeniden etkinleşir.
  */
 public final class BtSessionWatcher {
 

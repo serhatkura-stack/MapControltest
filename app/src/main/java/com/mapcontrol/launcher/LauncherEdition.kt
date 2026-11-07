@@ -18,7 +18,7 @@ import com.mapcontrol.util.WifiController
 /**
  * Launcher'ın araca komut gönderen ve MapControl'e bağlanan tek noktası.
  *
- * Salt-okur test uygulaması (`launchertest` modülü) bu dosyanın kendi sürümünü kullanır: orada
+ * Salt-okur test derlemesi bu dosyanın kendi sürümünü kullanır: orada
  * komutlar hiçbir şey yapmaz ve Ayarlar girişi yoktur. Launcher'ın geri kalanı iki derlemede aynıdır.
  */
 internal object LauncherEdition {

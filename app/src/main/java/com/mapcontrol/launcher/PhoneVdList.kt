@@ -1,14 +1,14 @@
 package com.mapcontrol.launcher
 
 /**
- * VDBus rehber/geçmiş parçalarını toplayan saf mantık (Android'siz; birim testli). Sunucu tarafı
- * (SVVDSBluetooth v/o.java:52-110): liste 10'arlık parçalara bölünür; her parçada index = o parçanın son sırası,
+ * VDBus rehber/geçmiş parçalarını toplayan saf mantık (Android'siz; birim testli). Sunucu tarafı:
+ * liste 10'arlık parçalara bölünür; her parçada index = o parçanın son sırası,
  * total = liste boyu, key = istekteki etiket ([VdListCollector.key]). Boş/null liste tek parça {index 0, total 0}.
- * Bitiş kuralı OEM telefon uygulamasıyla aynı (SVBluetoothPhone PBAPManager.java:427-446, 492-521):
+ * Bitiş kuralı OEM telefon uygulamasıyla aynı:
  * total > 0 ise index >= total-1 bitti; total == 0 boş bitti; total < 0 veri hatası.
  *
- * Aynı liste iki kez yayımlanabilir (veritabanı yolunda adresli ve adressiz SP yükleme olayı ikisi de _DB yayar:
- * q/v.java:56-96): bitişten sonra gelen parçalar yok sayılır.
+ * Aynı liste iki kez yayımlanabilir (veritabanı yolunda adresli ve adressiz SP yükleme olayı ikisi de _DB yayar):
+ * bitişten sonra gelen parçalar yok sayılır.
  */
 internal class VdListCollector<T>(val key: String?) {
     enum class Offer { ACCEPTED, OTHER_KEY, AFTER_FINISH }
@@ -59,7 +59,7 @@ internal class VdListCollector<T>(val key: String?) {
 
 /** Bekleme kararı (saf): ne kadar daha beklenecek; 0 ya da eksi → bekleme bitti. */
 internal object VdListWait {
-    /** OEM PBAPManager: her parçada sıfırlanan 60 × 50 ms = 3 sn sessizlik sınırı (PBAPManager.java:455-469). */
+    /** OEM telefon uygulamasıyla aynı: her parçada sıfırlanan 60 × 50 ms = 3 sn sessizlik sınırı. */
     const val IDLE_MS = 3_000L
     /** OEM'de üst sınır yok; çok büyük rehberde paneli sonsuza kadar bekletmemek için. */
     const val HARD_MS = 20_000L

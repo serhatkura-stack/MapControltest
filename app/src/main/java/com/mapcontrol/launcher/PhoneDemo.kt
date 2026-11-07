@@ -8,7 +8,7 @@ import android.util.Log
 /**
  * Telefon önizlemesi (yalnızca [LauncherDemo] açıkken). Gerçek kişi yok: sahte isimler ve 0555 000 00 xx numaraları.
  *
- *   adb shell am start -n com.mapcontrol.launchertest/com.mapcontrol.launcher.HomeLauncherActivity \
+ *   adb shell am start -n <paket>/com.mapcontrol.launcher.HomeLauncherActivity \
  *     --ez launcher_demo true --ez launcher_demo_phone true --es launcher_demo_call incoming
  *
  * `launcher_demo_call` = incoming | active | none; verilmesi `launcher_demo_phone true` demektir.

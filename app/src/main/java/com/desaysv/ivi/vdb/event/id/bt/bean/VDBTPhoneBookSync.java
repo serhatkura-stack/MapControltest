@@ -1,6 +1,6 @@
 /*
- * OEM sınıfının birebir kopyası; Parcel alan sırası değiştirilmemeli (OEM servisi sınıf adıyla açar).
- * Tek fark: toString() gizlilik için isim/numara/adres/portre içermez.
+ * VDBus BT veri sınıfı (araçla konuşmak için); Parcel alan sırası Parcel uyumu için sabit, değiştirilmemeli (servis sınıf adıyla açar).
+ * toString() gizlilik için isim/numara/adres/portre içermez.
  */
 package com.desaysv.ivi.vdb.event.id.bt.bean;
 
@@ -11,15 +11,13 @@ import com.desaysv.ivi.vdb.event.VDEvent;
 import com.desaysv.ivi.vdb.event.base.VDKey;
 
 public class VDBTPhoneBookSync implements Parcelable {
-    public static final Parcelable.Creator<VDBTPhoneBookSync> CREATOR = new Parcelable.Creator<VDBTPhoneBookSync>() { // from class: com.desaysv.ivi.vdb.event.id.bt.bean.VDBTPhoneBookSync.1
-        /* JADX WARN: Can't rename method to resolve collision */
-        @Override // android.os.Parcelable.Creator
+    public static final Parcelable.Creator<VDBTPhoneBookSync> CREATOR = new Parcelable.Creator<VDBTPhoneBookSync>() {
+        @Override
         public VDBTPhoneBookSync createFromParcel(Parcel parcel) {
             return new VDBTPhoneBookSync(parcel);
         }
 
-        /* JADX WARN: Can't rename method to resolve collision */
-        @Override // android.os.Parcelable.Creator
+        @Override
         public VDBTPhoneBookSync[] newArray(int r1) {
             return new VDBTPhoneBookSync[r1];
         }
@@ -30,7 +28,7 @@ public class VDBTPhoneBookSync implements Parcelable {
     private int mSyncCtrl = 1;
     private String mSyncKey = null;
 
-    @Override // android.os.Parcelable
+    @Override
     public int describeContents() {
         return 0;
     }
@@ -82,7 +80,7 @@ public class VDBTPhoneBookSync implements Parcelable {
         readFromParcel(parcel);
     }
 
-    @Override // android.os.Parcelable
+    @Override
     public void writeToParcel(Parcel parcel, int r2) {
         parcel.writeString(this.mSyncAddress);
         parcel.writeInt(this.mSyncType);

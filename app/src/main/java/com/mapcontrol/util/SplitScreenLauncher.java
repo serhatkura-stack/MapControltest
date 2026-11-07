@@ -590,7 +590,7 @@ public final class SplitScreenLauncher {
         return sideBySideFor(dm.widthPixels, dm.heightPixels);
     }
 
-    /** Serbest pencere açılış seçenekleri (MyCar {@code r()} anahtarları birebir): mod 5, [bounds], ekran 0. */
+    /** Serbest pencere açılış seçenekleri (aşağıdaki pencere seçenekleriyle aynı anahtarlar): mod 5, [bounds], ekran 0. */
     @NonNull
     private static Bundle freeformOptions(Rect bounds) {
         return windowingOptions(bounds, WINDOWING_MODE_FREEFORM);

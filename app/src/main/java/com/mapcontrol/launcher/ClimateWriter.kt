@@ -14,7 +14,7 @@ internal enum class ClimateSide { DRIVER, PASSENGER }
  */
 internal object ClimateMath {
     /**
-     * Sıcaklık adımı. Geçerli aralık (OEM `VRC a/a.java`, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
+     * Sıcaklık adımı. Geçerli aralık (OEM, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
      * 30 °C üstü (ham 31..33) OEM'de yoktur ve yazılmaz.
      */
     const val TEMP_STEP = 0.5
@@ -71,29 +71,26 @@ internal object ClimateMath {
     const val POWER_OFF = 2
 
     /**
-     * OEM sesli komutu klima kapalıyken sıcaklık/fan yazmadan önce 18 ← 1 gönderir (`VRC a/b.java:1285`). Güç okunabiliyor
+     * OEM sesli komutu klima kapalıyken sıcaklık/fan yazmadan önce 18 ← 1 gönderir. Güç okunabiliyor
      * ve açık değilse önce açılır; okunamıyorsa (sinyal yok) hiçbir şey eklenmez.
      */
     fun needsPowerOn(powerRaw: Int?): Boolean = powerRaw != null && powerRaw != POWER_ON
 
     /**
      * Sıcaklık/fan yazmadan önce güç (18 ← 1) gönderilsin mi. [quiet] (OEM dock kimlikleri 76/78/77): HAYIR. OEM alt dock'u
-     * klima kapalıyken de yalnızca dock kimliğini yazar, güç göndermez (SVSystemUI `svhvac/viewmodel/MainViewModel.java:815-870`
-     * leftTempAdd/Down/Set/Up, `:633-648` addDockWindSpeed; tek kapı kontak: `car_power_on_tips`). 18 ← 1 panel yoludur
-     * (`HvacModel.java:953-956` onPowerClick; panelin fan +/− kapalıyken yalnızca güç gönderir, `MainViewModel.java:1248-1267`)
+     * klima kapalıyken de yalnızca dock kimliğini yazar, güç göndermez (tek kapı kontak:
+     * `car_power_on_tips`). 18 ← 1 panel yoludur (panelin fan +/− kapalıyken yalnızca güç gönderir)
      * ve 6 Kasım araçta klima kapalıyken OEM panelini açtı. Panel kimlikleri (10/13/12) ile eski yol (sesli komut gibi) korunur.
-     * Bizim araçta da doğrulandı: SVSystemUI'de HVAC 18 hiç yazılmıyor, yalnız okunuyor (`model/svhvac/e/c.java:486-488` x0);
-     * dock'un tek HVAC 9 yazması yukarı kaydırmadır (`model/svhvac/e/b.java:174-180`).
+     * Bizim araçta da doğrulandı: OEM SystemUI'de HVAC 18 hiç yazılmıyor, yalnız okunuyor;
+     * dock'un tek HVAC 9 yazması yukarı kaydırmadır.
      */
     fun powerOnBeforeWrite(quiet: Boolean, powerRaw: Int?): Boolean = !quiet && needsPowerOn(powerRaw)
 
     /**
      * Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. Fanı 1'in altına indirmek klimayı KAPATMAZ ve 0 yazılmaz:
-     * OEM de böyle (T1E24 dökümü, 6 Kasım). Otomatik panel çubuğu ilerleme + 1 yazar, en az 1 (`SVHvac/.../HvacPageView.java:303`,
-     * `:327`; eksi düğmesi ilerleme 0'da durur `:2135-2138`); alt dock `Math.max(1, ilerleme)` ve yalnız `p > 1` iken azaltır
-     * (`SVSystemUI/.../i/a/x.java:29`, `:108`); sesli komut "MIN/MINUS" alt sınır `J() = 1`'de kalır, "zaten en düşük" der
-     * (`SVVrControl/.../vrcontrol/a/b.java:897`, `:925-965`, `a.java:32-34`). Kapatma yalnızca ayrı güç düğmesi: HVAC 18 ← 2
-     * (`SVHvac/.../model/svhvac/f/e.java:875-880` y(); sesli "klimayı kapat" `b.java:663`).
+     * OEM de böyle (T1E24, 6 Kasım ölçümü). Otomatik panel çubuğu en az 1 yazar (eksi düğmesi 1'de durur); alt dock da
+     * 1'in altına inmez; sesli komut "en düşük" kademede kalır. Kapatma yalnızca ayrı güç düğmesi: HVAC 18 ← 2
+     * (sesli "klimayı kapat" da aynı).
      */
     fun encodeFan(level: Int): Int = level.coerceIn(1, FAN_MAX)
 
@@ -101,16 +98,16 @@ internal object ClimateMath {
     const val AC_ON = 1
     const val AC_OFF = 2
 
-    /** Açmada güç yazmasından sonra A/C + otomatik için bekleme (OEM SVVrControl a/b.java postDelayed 150L). */
+    /** Açmada güç yazmasından sonra A/C + otomatik için bekleme (OEM postDelayed 150L). */
     const val POWER_FOLLOW_UP_MS = 150L
 
     /**
-     * Klimayı açma/kapatma yazma planı (HVAC kimliği → ham değer), FrostNav konfor otomasyonuyla birebir
-     * (`vehicle/ClimateAutomationWrites.java` CLIMATE onWrites/climateFollowUpWrites/offWrites; eşitlik JVM testiyle korunur):
+     * Klimayı açma/kapatma yazma planı (HVAC kimliği → ham değer), FrostNav konfor otomasyonuyla aynı
+     * (ClimateAutomationWrites CLIMATE; eşitlik JVM testiyle korunur):
      *  - Aç: önce [first] = 18 ← 1, [POWER_FOLLOW_UP_MS] sonra [followUp] = 1 ← 1, 4 ← 1.
      *  - Kapat: [first] = 1 ← 2, 18 ← 2, 4 ← 2; [followUp] boş.
-     * Not: sıcaklık/fan yazmadan önceki otomatik açma ([powerOnBeforeWrite]) bilerek yalnız 18 ← 1 kalır (OEM sesli komut
-     * `VRC a/b.java:1285`); orada A/C ve otomatiği açmak kullanıcının o an yazdığı fanı/ayarı ezer.
+     * Not: sıcaklık/fan yazmadan önceki otomatik açma ([powerOnBeforeWrite]) bilerek yalnız 18 ← 1 kalır (OEM sesli komutu
+     * gibi); orada A/C ve otomatiği açmak kullanıcının o an yazdığı fanı/ayarı ezer.
      */
     class PowerPlan(val first: List<Pair<Int, Int>>, val followUp: List<Pair<Int, Int>>)
 
@@ -140,9 +137,9 @@ internal object ClimateWriter {
 
     /**
      * Sıcaklık kimliği. [quiet] (ayar "fabrika paneli: Gizle"): OEM alt dock'unun kimlikleri, sürücü 76 / yolcu 78, aynı ham
-     * kodlama. Bizim araçta (T1E24) doğrulandı: dock sürücü → HVAC 76 (`SVSystemUI/.../model/svhvac/e/c.java:393-400` R),
-     * yolcu → 78 (`:431-438` l0), klima tipinden bağımsız (`NavigationBarView.java` tip 0/1 → `present/svhvac/b/b.java:388-397`).
-     * Aksi halde OEM panelinin 10 / 13 (`SVHvac/.../model/svhvac/f/e.java:526-539`, `:866-872`).
+     * kodlama. Bizim araçta (T1E24) doğrulandı: dock sürücü → HVAC 76,
+     * yolcu → 78, klima tipinden bağımsız.
+     * Aksi halde OEM panelinin 10 / 13.
      */
     fun tempId(side: ClimateSide, quiet: Boolean): Int = when {
         quiet && side == ClimateSide.DRIVER -> HvacID.ID_AC_DRIVER_SET_TEMPERATURE
@@ -155,9 +152,9 @@ internal object ClimateWriter {
      * Fan kimliği: [quiet] → 77, aksi halde panelin 12. Ham değer ikisinde de kademe.
      *
      * KARAR (belirsiz kanıt, mevcut davranış korunuyor): bizim aracın OEM dock'u otomatik klimada (config 4 == 1, günlükte
-     * `HvacConfig =0`) fanı 77'ye DEĞİL 12'ye yazar (`SVSystemUI/.../util/u.java:95-97` l() → tip 2 → `f1.java:206-208` →
-     * `j/h/b/c1.java:653-657` U0: HVAC 12). 77 bizim SystemUI'de yalnız elektrikli/manuel klima düzeninin fanıdır
-     * (`model/svhvac/e/c.java:476-483` w0) ve arkadaşın dock'unun kimliğidir. 12 aynı zamanda panelin kimliği; 12 yazmasının
+     * `HvacConfig =0`) fanı 77'ye DEĞİL 12'ye yazar
+     * (HVAC 12). 77 bizim SystemUI'de yalnız elektrikli/manuel klima düzeninin fanıdır
+     * ve arkadaşın dock'unun kimliğidir. 12 aynı zamanda panelin kimliği; 12 yazmasının
      * ECU'da paneli (HVAC 9 bit 0) açıp açmadığı araçta ölçülmedi, 77'nin bizim ECU'da kademeyi değiştirdiği de günlükle
      * kanıtlanmadı. Araç testi bitene kadar 77 kalır; her dock fan yazmasında karar `WidgetWrite` günlüğüne düşer.
      */

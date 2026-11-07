@@ -36,8 +36,8 @@ internal object ClimatePanelGesture {
 /**
  * OEM klima panelini açar (araçta çubuğun gizlediği OEM yukarı kaydırma jestinin yerine). Araca yazma yok: yalnızca
  * OEM HVAC servisine arayüz açma isteği (`type` = OPEN_PANEL, `page` 0 = ön klima). Not (bizim araç, T1E24): OPEN_PANEL
- * statik `isHvacShow` bayrağını true yapar ama paneli ZORLA açmaz; HVAC 9 bit 0 o an 0 ise panel kapalı kalır
- * (`SVHvac/.../svhvac/service/HvacService.java:83-87` → `view/h.java:647-655`). Servis başarısız olursa OEM
+ * statik `isHvacShow` bayrağını true yapar ama paneli ZORLA açmaz; HVAC 9 bit 0 o an 0 ise panel kapalı kalır.
+ * Servis başarısız olursa OEM
  * uygulamasının ana etkinliği, o da yoksa kısa uyarı. Sonuç ([TAG]) bir kez günlüğe yazılır.
  */
 internal object ClimatePanel {
@@ -66,15 +66,15 @@ internal object ClimatePanel {
     }
 
     /**
-     * OEM panelini kapatır: `HvacService` `type` = CLOSE_HVAC_BT. Bizim araçta (T1E24, SVHvac 2025-11-12) panel SVHvac'ın
-     * kendisidir ve servis bu isteği şöyle işler (`SVHvac/.../svhvac/service/HvacService.java:88-106`, T1E24'te
-     * `svhvaclib.a.f()` false): HVAC 9 bit 0 (ön sıra) açıksa 9 ← 2, bit 2 (koku) açıksa 64 ← 2, bit 1 (PM2.5) açıksa 51 ← 0.
+     * OEM panelini kapatır: `HvacService` `type` = CLOSE_HVAC_BT. Bizim araçta (T1E24) panel OEM klima
+     * uygulamasının kendisidir ve servis bu isteği şöyle işler (T1E24'te):
+     * HVAC 9 bit 0 (ön sıra) açıksa 9 ← 2, bit 2 (koku) açıksa 64 ← 2, bit 1 (PM2.5) açıksa 51 ← 0.
      * Bu yazmaları BİZ değil OEM uygulaması yapar; değerler OEM'in panelde aşağı kaydırma kapatmasıyla aynıdır
-     * (`model/svhvac/f/d.java:179-181` X0: 9 ← 2). ECU 9=0 gönderince panel kendi animasyonuyla kapanır (`view/h.java:547-572`).
+     * (9 ← 2). ECU 9=0 gönderince panel kendi animasyonuyla kapanır.
      *
-     * CLOSE_PANEL KULLANILMAZ: servis statik `isHvacShow` bayrağını false yapar (`HvacService.java:79-82`) ve bayrak yeni bir
+     * CLOSE_PANEL KULLANILMAZ: servis statik `isHvacShow` bayrağını false yapar ve bayrak yeni bir
      * OPEN_PANEL gelene kadar öyle kalır; o sürede ECU 9=1 gönderse de (fiziksel klima düğmesi, OEM dock) panel açılmaz
-     * (`view/h.java:554`; 6 Kasım günlüğü 15:48:42 `isHvacShow =false`). Arkadaşın build'inde servis aynı türü
+     * (6 Kasım günlüğü 15:48:42 `isHvacShow =false`). Arkadaşın build'inde servis aynı türü
      * `ACTION_HVAC_SERVICE` yayınına çevirir, SystemUI `HvacActionReceiver` CLOSE_HVAC_BT'yi de işler; servis yoksa yayını biz göndeririz.
      */
     fun close(context: Context, hv9Before: Int?): String {
@@ -130,13 +130,13 @@ internal object ClimatePanel {
 /**
  * OEM klima panelinin görünürlük anahtarları ve HVAC 9 bit alanı (saf, birim testli).
  *
- * Görünürlük: bizim araçta SVHvac `Settings.System "hvacshow"` (tamamı küçük harf) yazar; açılınca "true"
- * (`SVHvac/.../svhvac/view/h.java:668`), kapanma animasyonu bitince ve yok edilirken "false" (`h.java:219`, `:835`).
+ * Görünürlük: bizim araçta OEM klima uygulaması `Settings.System "hvacshow"` (tamamı küçük harf) yazar; açılınca "true",
+ * kapanma animasyonu bitince ve yok edilirken "false".
  * Settings anahtarları büyük/küçük harfe duyarlıdır. `hvacShow` ve `HVAC_DIALOG_IS_SHOW` arkadaşın build'inin (panel
  * SystemUI'de) anahtarlarıdır; yedek olarak sonra okunur.
  *
- * HVAC 9 düz 1/0 değil, bit alanıdır: bit 0 ön sıra klima, bit 1 PM2.5, bit 2 koku (`SVHvac/.../model/svhvac/f/d.java:185-212`,
- * `(f(9) >> n) & 1`).
+ * HVAC 9 düz 1/0 değil, bit alanıdır: bit 0 ön sıra klima, bit 1 PM2.5, bit 2 koku
+ * (`(f(9) >> n) & 1`).
  */
 internal object ClimatePanelBits {
     val SHOW_KEYS = listOf("hvacshow", "hvacShow", "HVAC_DIALOG_IS_SHOW")
@@ -149,8 +149,8 @@ internal object ClimatePanelBits {
     fun fragrance(hv9: Int?): Boolean = hv9 != null && (hv9 and 4) != 0
 
     /**
-     * CLOSE_HVAC_BT bir şey yazar mı: yalnızca ön sıra, PM2.5 ve koku bitlerini temizler (`HvacService.java:88-106`).
-     * Panel arka sıralar için de açılır (`view/h.java:547-572` A1: 2. sıra config 151, 3. sıra config 138); o durumda ya da
+     * CLOSE_HVAC_BT bir şey yazar mı: yalnızca ön sıra, PM2.5 ve koku bitlerini temizler.
+     * Panel arka sıralar için de açılır (2. sıra config 151, 3. sıra config 138); o durumda ya da
      * servisin modeli boşsa hiçbir şey yazılmaz. Okunamadıysa (`null`) denemeye izin verilir.
      */
     fun closeCanAct(hv9: Int?): Boolean = hv9 == null || frontRow(hv9) || pm25(hv9) || fragrance(hv9)
@@ -182,8 +182,8 @@ internal object ClimatePanelPrefs {
 /**
  * "Klima tuşlarına kilit": klima durumu değişince OEM panelinin kendiliğinden açılmasına dair SAF karar (birim testli).
  *
- * Neden açılıyor (bizim araç, T1E24): panel SVHvac'tadır ve HVAC 9'un bitlerinden biri gelince açılır
- * (`SVHvac/.../svhvac/view/h.java:547-572` A1; [ClimatePanelBits]). Fiziksel klima tuşları, OEM alt dock'u ve bizim dock
+ * Neden açılıyor (bizim araç, T1E24): panel OEM klima uygulamasındadır ve HVAC 9'un bitlerinden biri gelince açılır
+ * ([ClimatePanelBits]). Fiziksel klima tuşları, OEM alt dock'u ve bizim dock
  * yazmalarımız ECU'nun 9=1 göndermesine yol açar (7 Kasım araç testi: güç açma, AC, sıcaklık, iç/dış hava, AUTO, fan, ön
  * buz çözme açar; klima kapatma ve arka cam ısıtma açmaz). Panel açılışı değişen değerden ~0,5 sn ÖNCE de gelebilir.
  *
@@ -212,8 +212,8 @@ internal object ClimatePanelPolicy {
 
     /**
      * Kapatma isteğinden sonra bu süre içindeki açılış sinyali aynı panelin kapanışıdır: ECU ~130 ms'de 9=0 gönderir
-     * (6 Kasım günlüğü 15:48:51.722 → .849), `hvacshow` ise 800 ms'lik kapanma animasyonu bitince "false" olur
-     * (`view/h.java:219`, `:810`). İki kaynağın aynı açılış için ikinci kenarı yeniden kapatma doğurmasın.
+     * (6 Kasım günlüğü 15:48:51.722 → .849), `hvacshow` ise 800 ms'lik kapanma animasyonu bitince "false" olur.
+     * İki kaynağın aynı açılış için ikinci kenarı yeniden kapatma doğurmasın.
      */
     const val CLOSING_MS = 600L
 
@@ -382,7 +382,7 @@ internal object ClimatePanelPolicy {
  * Sinyaller (yeni izin gerekmez):
  *  - VDBus HVAC aboneliği ([ClimatePanelPolicy.SUBSCRIBE_IDS]): klima değerlerinin değişimi ve HVAC 9 bit 0 kenarı (panel
  *    ECU'nun 9=1'iyle açılır; aynı bildirimi OEM de dinler, o yüzden en erken sinyal budur).
- *  - `Settings.System` görünürlük anahtarları ([ClimatePanelBits.SHOW_KEYS]) için ContentObserver: SVHvac panel açılınca
+ * - `Settings.System` görünürlük anahtarları ([ClimatePanelBits.SHOW_KEYS]) için ContentObserver: OEM klima uygulaması panel açılınca
  *    "true" yazar; anında gelir ve VDBus aboneliği düşmüşse de çalışır.
  *  - Bizim dock yazmamız ([arm]): yazmadan önce değişiklik olarak sayılır.
  * Karar [ClimatePanelPolicy.Lock]'ta; her karar `ClimatePanel` etiketiyle tek satır günlüğe yazılır (yalnızca sayı/kimlik).

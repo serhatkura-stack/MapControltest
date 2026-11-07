@@ -6,7 +6,7 @@ import android.content.Intent
 /**
  * FrostNav özelliklerine bağlanan beş widget'ın (web paneli, ekolayzer, otomasyon, bölünmüş ekran, göstergeye yansıt)
  * arka ucu. Widget'lar yalnızca bu arayüzü bilir; gerçek sürüm ([LauncherEdition.frostNav]) FrostNav'ın kendi
- * yöneticilerini, tercihlerini ve servislerini çağırır, özelliklerin iç işleyişine dokunmaz. Test sürümünde (`launchertest`)
+ * yöneticilerini, tercihlerini ve servislerini çağırır, özelliklerin iç işleyişine dokunmaz. Salt-okur test derlemesinde
  * FrostNav yoktur: [NONE] her şeyi "yok" döner ve hiçbir şey yapmaz.
  *
  * Bu widget'lar aracın hareketini değil, uygulama/cihaz durumunu değiştirir; FrostNav'ın kendisi kısıtlamadığı için sürüşte

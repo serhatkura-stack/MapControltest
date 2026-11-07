@@ -21,8 +21,7 @@ import kotlin.math.roundToInt
  * VDBus VEHICLE_HAL servisi 0..65535 aralığını taşır (OEM `VDServiceDef.createServiceList`) ve olay kimliği VHAL özellik
  * kimliğinin alt 16 bitidir: PERF_VEHICLE_SPEED 0x11600207 → 519, GEAR_SELECTION 0x11400400 → 1024, IGNITION_STATE
  * 0x11400409 → 1033, PARKING_BRAKE_ON 0x11200402 → 1026 (OEM `VDEventVehicleHal`). Değer `DoubleVector` içinde gelir;
- * OEM 519'u m/s × 3,6 = km/sa okur (SVVehicleSetting `VehiclehalManager.java:52,80-85`, SVVDSSms
- * `AmbientLightService.java:139-143`).
+ * OEM 519'u m/s × 3,6 = km/sa okur.
  *
  * ENGINE_RPM 0x11600305 (`android.car.VehiclePropertyIds.ENGINE_RPM = 291504901`) aynı kurala göre 773 olur. Bunu hiçbir
  * OEM uygulaması kullanmıyor; bu yüzden 773 gösterime ancak taze geliyorsa ve bir kez ReadOnly 62 ile uyuştuysa ([agrees]) girer.

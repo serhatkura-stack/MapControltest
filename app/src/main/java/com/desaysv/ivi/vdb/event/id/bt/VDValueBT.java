@@ -1,5 +1,5 @@
 /*
- * OEM sınıfının birebir kopyası (yalnızca sabitler); değerler değiştirilmemeli.
+ * VDBus BT sabitleri (araçla konuşmak için); değerler servisle aynı olmalı, değiştirilmemeli.
  */
 package com.desaysv.ivi.vdb.event.id.bt;
 

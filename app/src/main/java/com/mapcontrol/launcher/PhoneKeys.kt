@@ -18,7 +18,7 @@ import java.lang.ref.WeakReference
 
 /**
  * Direksiyon ses (VR) tuşundan karara giden saf kural (JVM testli). Tuş VDBus'tan (6, eylem) çiftleri olarak gelir
- * (SMS denetleyicisi, SVVDSSms controller/b/d.java): kısa basış (6,0)(6,3), uzun basış (6,0)(6,1)(6,4). Uzun basış
+ * (SMS denetleyicisi): kısa basış (6,0)(6,3), uzun basış (6,0)(6,1)(6,4). Uzun basış
  * eşiği 1200 ms (araç Android Auto sertifikalıysa 600 ms); "süper uzun" (2) bu kodda hiç gönderilmez.
  *
  * - Uzun basış (6,1) ve ayar açık → [Decision.ASSISTANT] (PhoneSource aç/kapa yapar: asistan açıksa kapatır).

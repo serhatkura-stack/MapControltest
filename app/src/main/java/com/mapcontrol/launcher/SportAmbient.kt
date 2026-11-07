@@ -12,8 +12,8 @@ import com.mapcontrol.vehicle.VehicleMetricsRepository
 import java.util.concurrent.Executors
 
 /**
- * "Spor modunda ambiyans rengi" kararlarının SAF kuralları (JVM'de sınanır). Klasik iç ambiyans yolu (OEM SVSetting,
- * Tiggo 8 dökümü): CarSetting 7 aç/kapa (okuma 1 = açık), 11 renk SIRASI (RGB değil, okuma 1..64 geçerli), 55 sürüş
+ * "Spor modunda ambiyans rengi" kararlarının SAF kuralları (JVM'de sınanır). Klasik iç ambiyans yolu (OEM ayarlar,
+ * Tiggo 8 yazılımı): CarSetting 7 aç/kapa (okuma 1 = açık), 11 renk SIRASI (RGB değil, okuma 1..64 geçerli), 55 sürüş
  * moduna bağlı (1 = açık), 8 müzik ritmi (1 = açık). Spor başlarken geçerli renk hatırlanır ve OEM tablosundaki
  * kırmızı-turuncu ([SPORT_COLOR]) yazılır; spor bitince hatırlanan renk geri yazılır.
  */
@@ -85,7 +85,7 @@ internal object SportAmbientLogic {
  */
 internal object SportAmbient {
 
-    /** Ambiyans rengi yazması araçta DOĞRULANMADI (CS 11 kodlaması Tiggo 8 dökümünden). Tur 6'dan sonra true yapılır. */
+    /** Ambiyans rengi yazması araçta DOĞRULANMADI (CS 11 kodlaması Tiggo 8 yazılımından). Tur 6'dan sonra true yapılır. */
     const val AMBIENT_WRITE_VERIFIED = false
 
     const val STABLE_MS = 2_000L

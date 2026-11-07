@@ -874,7 +874,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
 /**
  * Tavan katmanları (renkten bağımsız; yalnız cam alanı, kenarlar saydam): [closed] perde kapalı kumaş, [open] perde açık
  * cam + hafif gökyüzü yansıması, [hole] ön panel açıkken görünen kabin (ön panelin yeri). Kaynak: gpt-image ile mevcut
- * araba görselinin tavanı üzerinde düzenlendi (katalog/konsept-openai/tavan). [edge] kenar ışığı maskesi (ALPHA_8).
+ * araba görselinin tavanı üzerinde düzenlendi. [edge] kenar ışığı maskesi (ALPHA_8).
  * Süreç başına bir kez, yalnızca ilk tavan durumu gelince çözülür (~1,8 MB).
  */
 private class RoofArt(val closed: Bitmap?, val open: Bitmap?, val hole: Bitmap?) {

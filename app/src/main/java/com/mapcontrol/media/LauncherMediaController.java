@@ -136,7 +136,7 @@ public final class LauncherMediaController {
 
     /**
      * Seçili olmayan oturumlar da izlenir: biri çalmaya başlarsa ya da seçili oturum durursa yeniden seçilir.
-     * 6 Kasım araç: radyo (svaudioapp, "am") seçiliyken Bluetooth müziği başladı; iki oturum zaten etkin olduğundan
+     * 6 Kasım araç: radyo (OEM ses uygulaması, "am") seçiliyken Bluetooth müziği başladı; iki oturum zaten etkin olduğundan
      * oturum listesi değişmedi ve kart radyoda kaldı.
      */
     private final List<MediaController> watched = new ArrayList<>();
@@ -415,7 +415,7 @@ public final class LauncherMediaController {
     private boolean selfGrantTried;
 
     /**
-     * Araçta "Bildirim erişimi" ayar ekranı yok (T1E24 Ayarlar'ı NOTIFICATION_LISTENER_SETTINGS'i çözmüyor; 6 Kasım dökümü):
+     * Araçta "Bildirim erişimi" ayar ekranı yok (T1E24 Ayarlar'ı NOTIFICATION_LISTENER_SETTINGS'i çözmüyor; 6 Kasım ölçümü):
      * kullanıcı bu izni ekrandan veremez. Kurulum aracı WRITE_SECURE_SETTINGS verdiyse dinleyicimizi listeye kendimiz ekleriz
      * (yalnız ekleme; diğer dinleyiciler korunur). İzin yoksa sessizce geçer, kart "izin gerekli" durumunda kalır.
      */

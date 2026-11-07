@@ -7,8 +7,8 @@ import com.desaysv.ivi.vdb.event.VDEvent;
 import com.desaysv.ivi.vdb.event.base.VDKey;
 
 /**
- * VDBus medya oynatma yükü (MEDIA_SOURCE_PLAY_STATUS). Paket adı ve Parcel sırası OEM vdbus kitaplığıyla birebir aynı olmalı:
- * sunucu sınıfı adıyla çözer (vdbus/.../event/id/media/bean/VDMediaPlay.java:92-108).
+ * VDBus medya oynatma yükü (MEDIA_SOURCE_PLAY_STATUS). Paket adı ve Parcel sırası servisle aynı olmalı:
+ * sunucu sınıfı adıyla çözer.
  */
 public class VDMediaPlay implements Parcelable {
     public static final Parcelable.Creator<VDMediaPlay> CREATOR = new Parcelable.Creator<VDMediaPlay>() {

@@ -48,7 +48,7 @@ internal object WidgetWritePolicy {
 
     /**
      * HVAC 9 geri okuması: bit alanı ([ClimatePanelBits]; bit 0 ön sıra, bit 1 PM2.5, bit 2 koku). Bitlerden biri gelince
-     * bizim araçta SVHvac OEM klima panelini açar (`SVHvac/.../svhvac/view/h.java:547-572`); panel/dock kimliklerinin araçta
+     * bizim araçta OEM klima panelini açar; panel/dock kimliklerinin araçta
      * karşılaştırması için izlenir. Günlükte çözülmüş hâli de yazılır ([WidgetWriter]).
      */
     private val PANEL_ACTIVE = sig("hvac9_display_active", HV, HvacID.ID_AC_DISPLAY_ACTIVE)
@@ -74,8 +74,8 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac4_auto_state", HV, HvacID.ID_AC_AUTO_STATE), sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL))),
         Entry("ClimateFan", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL, (1..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL), PANEL_ACTIVE)),
-        // Klima, "fabrika paneli: Gizle": OEM alt dock'unun kimlikleri, aynı ham değerler (bizim SVSystemUI model/svhvac/e/c.java:393
-        // sürücü 76, :431 yolcu 78; fan 77 = elektrikli düzenin dock fanı :476, otomatik klimada OEM dock 12 yazar, bkz.
+        // Klima, "fabrika paneli: Gizle": OEM alt dock'unun kimlikleri, aynı ham değerler (bizim
+        // sürücü 76, yolcu 78; fan 77 = elektrikli düzenin dock fanı, otomatik klimada OEM dock 12 yazar, bkz.
         // ClimateWriter.fanId). Sonuç panel kimliklerinden (10/13/12) geri okunur. HVAC 9'u biz yazmayız: panel kapatmada 9 ← 2'yi
         // OEM HvacService (CLOSE_HVAC_BT) kendisi gönderir.
         Entry("ClimateTempDriverDock", HV, HvacID.ID_AC_DRIVER_SET_TEMPERATURE, TEMP_VALUES,
@@ -84,7 +84,7 @@ internal object WidgetWritePolicy {
             listOf(sig("hvac13_temp_passenger", HV, HvacID.ID_AC_TEMPERATURE_COPILOT), PANEL_ACTIVE)),
         Entry("ClimateFanDock", HV, HvacID.ID_AC_SET_BLOW_LEVEL, (1..10).toSet(),
             listOf(sig("hvac12_blow_speed", HV, HvacID.ID_AC_BLOW_SPEED_LEVEL), PANEL_ACTIVE)),
-        // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM SVSetting i0/m.D, SVSystemUI QuickSettingPresenter.triggerTrunkState); doğrulanmadı.
+        // Bagaj: yalnızca CarSetting 92, 1 aç / 2 kapat (OEM ayarlar / hızlı ayarlarla aynı); doğrulanmadı.
         Entry("Trunk", CS, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, setOf(1, 2), TRUNK_READ),
         // Arka hoparlör: DSP SOUND_FIELD (modül = olay kimliği, kimlik sabit; değer = fade 0..20, balance gönderirken korunur). Uç değeri doğrulanmadı.
         Entry("RearSpeaker", VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, (0..SoundFieldMath.MAX).toSet(),

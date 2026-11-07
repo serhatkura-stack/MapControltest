@@ -62,7 +62,7 @@ internal object PhoneUiLogic {
     }
 
     /**
-     * OEM küçük arama hapı (SVBluetoothPhone PhoneCallService, mShowType 2: 240×54, x 421 y 16, her uygulamanın üstünde)
+     * OEM küçük arama hapı (OEM telefon uygulaması, 240×54, x 421 y 16, her uygulamanın üstünde)
      * süreyi/durumu kendisi gösteriyor mu: arama DesaySV telefon yığınından geliyorsa ([PhoneBackendName.VDBUS]) ve
      * aranıyor ya da konuşma sürüyorsa. O zaman bizim hap süre/durum yazmaz ve saniye sayacı durur (araçta her şey iki
      * kez görünüyordu); ad, sessiz işareti ve Kapat kalır. Gelen aramada ve "Arama bitti"de OEM hapı yok. Telecom/HFP

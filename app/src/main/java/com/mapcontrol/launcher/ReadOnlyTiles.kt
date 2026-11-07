@@ -82,7 +82,7 @@ internal object ReadOnlyDecode {
     const val PAD_OFF = 4
 
     /**
-     * Kablosuz şarj durumu (CarSetting 44), OEM durum çubuğu gibi (SystemUI StatusBarViewModel.t1):
+     * Kablosuz şarj durumu (CarSetting 44), OEM durum çubuğu gibi:
      * 0 boşta, 1 şarj oluyor, 2 OEM'in ayrı tuttuğu durum (şarj tamamlandı sayılır; araçta görülmedi), 3 hata.
      * Başka değer bilinmiyor (null). 0 ve 1 araçta ölçüldü.
      */
@@ -101,7 +101,7 @@ internal object ReadOnlyDecode {
     fun phoneCharging(state: Int?): Boolean = state == PAD_CHARGING || state == PAD_FULL
 
     /**
-     * Kablosuz şarj anahtarı (CarSetting 45) okuması: 1 açık (OEM CarInfoUtil.p0; araçta hep 1 okundu). Başka bilinen
+     * Kablosuz şarj anahtarı (CarSetting 45) okuması: 1 açık (araçta hep 1 okundu). Başka bilinen
      * değer kapalıdır ve durum yerine [PAD_OFF] gösterilir. Anahtar okunamadıysa (null) [padState] olduğu gibi kalır.
      * Not: OEM bu anahtarı 2 = aç, 1 = kapat diye YAZAR; okunan ve yazılan değer farklıdır.
      */

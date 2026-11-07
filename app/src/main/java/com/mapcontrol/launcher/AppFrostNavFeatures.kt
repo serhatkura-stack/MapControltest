@@ -27,7 +27,7 @@ import com.mapcontrol.vehicle.SunroofAutomationEngine
 
 /**
  * [FrostNavFeatures]'ın gerçek sürümü: her çağrı FrostNav'ın kendi ayar sekmesinin kullandığı yoldan geçer. Yalnızca :app'te
- * derlenir (`launchertest` bu dosyayı almaz, [FrostNavFeatures.NONE] kullanır).
+ * derlenir (salt-okur test derlemesi bu dosyayı almaz, [FrostNavFeatures.NONE] kullanır).
  *
  * Web sunucusu: süreç genelindeki tek sahibi [WebServerHost]'tur; FrostNav'ın Aktar sekmesi de aynı örneği kullanır. Durum
  * ondan okunur ve dinlenir, adres FrostNav'ın kendi adres seçiminden ([WebServerHost.currentHost]) gelir; başlat/durdur

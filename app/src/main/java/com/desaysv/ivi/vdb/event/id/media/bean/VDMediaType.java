@@ -1,5 +1,5 @@
 /*
- * OEM sınıfının birebir kopyası (SVVDSMedia/.../event/id/media/bean/VDMediaType.java:1-83; arkadaşın vdbus'unda da aynı).
+ * VDBus medya kaynağı türü verisi (araçla konuşmak için).
  * Parcel alan sırası değiştirilmemeli: OEM medya servisi CURRENT_SOURCE_TYPE cevabını bu sınıf adıyla yazar
  * (SourceTypeEventHandle.getEventInfo), alıcı aynı adlı ve aynı sıralı sınıfla açar.
  */

@@ -2,9 +2,9 @@ package com.mapcontrol.comfort
 
 /**
  * Konfor yazma testi (tavan perdesi, buğu giderme, direksiyon ısıtma) için SAF kod: VDBus'a, Android'e dokunmaz,
- * JVM'de sınanır. Araca yazan tek sınıf launchertest'teki ComfortSender'dır; o da her yazmadan önce [validate]
+ * JVM'de sınanır. Araca yazan taraf her yazmadan önce [validate]
  * ile (modül, kimlik, değer) üçlüsünü SERT beyaz listeden geçirir. Liste dışı her şey [WriteNotAllowed] fırlatır.
- * Kaynak: katalog/KONFOR-ARASTIRMA.md bölüm 1-2 ve VehicleSunroofController / ClimateAutomationEngine çağrıları.
+ * Değerler VehicleSunroofController / ClimateAutomationEngine çağrılarıyla aynı.
  */
 object ComfortPlan {
 

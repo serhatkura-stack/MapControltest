@@ -1,6 +1,5 @@
 /*
- * OEM sınıfının birebir kopyası (SVVDSMedia/.../event/id/media/bean/VDMediaExtInfo.java:1-107; SVLauncher ve SVSystemUI'de
- * aynı alanlar, aynı sıra). Parcel alan sırası değiştirilmemeli: medya servisi MEDIA_SOURCE_EXT_INFO cevabını bu sınıf adıyla
+ * VDBus medya kaynağı ek bilgisi (araçla konuşmak için). Parcel alan sırası değiştirilmemeli: medya servisi MEDIA_SOURCE_EXT_INFO cevabını bu sınıf adıyla
  * yazar, alıcı aynı adlı ve aynı sıralı sınıfla açar. Kart yalnızca okur (USB bağlı mı, connectState).
  */
 package com.desaysv.ivi.vdb.event.id.media.bean;

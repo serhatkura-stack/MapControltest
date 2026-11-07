@@ -24,7 +24,7 @@ internal data class SoundFieldReading(val balance: Int? = null, val fade: Int? =
  * Arka hoparlör kapatmanın saf kuralları (JVM'de sınanır). Arka hoparlör doğrudan kapatılamaz: ön-arka dengesi (fader) ön uca
  * çekilir, eski değer saklanır ve ikinci dokunuşta geri verilir.
  *
- * Kanıt: aracın kendi Ayarlar uygulaması (SVSetting `SoundSettingModel`): `setSoundFiled(balance, fade)` düz bir Bundle'a
+ * Kanıt: aracın kendi Ayarlar uygulaması (OEM ayarlar): `setSoundFiled(balance, fade)` düz bir Bundle'a
  * `"type"` = balance, `"value"` = fade yazar ve `VDBus.set(VDEvent(VDEventDsp.SOUND_FIELD, bundle))` gönderir; `getBalance()` /
  * `getFade()` düz `getOnce(SOUND_FIELD)` payload'ından `getInt("type")` / `getInt("value")` okur (yedek: sistem özellikleri,
  * varsayılan 10). Orta 10/10, OEM sıfırla (10,10), sürücü ön ayarı (7,7). Her yazma İKİ değeri birlikte taşır: dengeyi korumak için

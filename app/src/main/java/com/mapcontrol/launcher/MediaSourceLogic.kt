@@ -4,9 +4,9 @@ package com.mapcontrol.launcher
  * Telefon önceliği kararı (saf, JVM'de sınanır; [OemAudioSource] kilit altında kullanır).
  *
  * 7 Kasım araç (tur7-1048): kaynak AM (10) iken telefonda Oynat'a basıldı. `com.android.bluetooth` A2DP oturumu PLAYING
- * oldu (OEM BT servisi `BTSer-MediaCON onPlaybackStateChanged: playState=3`, SVVDSBluetooth `j/e.java:425-433`; aynı oturumu
- * `j/e.java:789` MediaBrowser ile izliyor), ama OEM BT servisi odak 42'yi yalnızca `carAudioType` listesindeyse ister
- * (`i/e.java:337-347`, liste `b/b.java:17` boş): istemedi, `checkAudioFocus` 1000 ms sonra (`i/e.java:227-243`, postDelayed
+ * oldu (OEM BT servisi `BTSer-MediaCON onPlaybackStateChanged: playState=3`; aynı oturumu
+ * MediaBrowser ile izliyor), ama OEM BT servisi odak 42'yi yalnızca `carAudioType` listesindeyse ister
+ * (liste boş): istemedi, `checkAudioFocus` 1000 ms sonra (postDelayed
  * 1000) telefonu duraklattı (AVRCP PAUSE, keyCode 70). OEM telefonu öne almıyor; bu sınıf "geç" kararını verir.
  *
  * Yalnızca BT oturumunun duraklamış → çalıyor geçişinde (süreç başında oturum zaten varken ilk gözlem geçiş sayılmaz; oturum
@@ -16,7 +16,7 @@ package com.mapcontrol.launcher
  *
  * Kullanıcı seçimi: bizim seçici her zaman; OEM'de `CURRENT_SOURCE_TYPE`'ın 13 dışına geçmesi yalnızca BT oturumu varken ve
  * bağlantı kopmamışken ([lostGraceMs] içinde, iki yönde de). OEM A2DP servisi kopuşta oturumu pasif yapar ve durumu
- * ERROR'a çeker (DsvBluetooth `A2dpMediaBrowserService.java:195-198,511`): OEM'in kendi 13 → radyo düşüşü kullanıcı seçimi
+ * ERROR'a çeker: OEM'in kendi 13 → radyo düşüşü kullanıcı seçimi
  * sayılsaydı telefon yeniden bağlanıp çalınca geçilmez, OEM 1 sn sonra telefonu duraklatırdı (asıl şikâyet).
  */
 internal class PhonePriority(
@@ -101,10 +101,10 @@ internal class PhonePriority(
 }
 
 /**
- * Radyo oturumunun kartta gösterimi (saf). svaudioapp `RadioMediaSessionBrowserService.java:107-116,151-155`: FM/AM'de
+ * Radyo oturumunun kartta gösterimi (saf). OEM ses uygulamasında FM/AM'de
  * TITLE = ham frekans (`String.valueOf(getRadioFrequency())`; RDS istasyon adı varsa o), ARTIST = "am" / "fm"
  * (`RadioMessage.getRadioMessageSource`, DAB'da "dab" değil topluluk etiketi). Ham frekans kHz'dir: FM'de
- * `getCalculateFrequency` 1000'e böler (89700 → 89.7 MHz), AM'de olduğu gibi (522 kHz) (`RadioMessage.java:127-137`).
+ * `getCalculateFrequency` 1000'e böler (89700 → 89.7 MHz), AM'de olduğu gibi (522 kHz).
  */
 internal object RadioDisplay {
 
@@ -164,10 +164,10 @@ internal object RadioDisplay {
 }
 
 /**
- * Kartın kaynak seçicisi (saf). Türler OEM'de doğrulandı: SVVDSMedia `svmediasourceinfo/b/c.java:150-170` 9 → FM
- * (`d/af.java` bant 1), 10 → AM (`d/ab.java` bant 5), 3 → USB0 müziği (`d/m.java:103-116`), 13 → BT müziği; OPEN_SOURCE
- * reason 8 radyoda SVVDSRadio `b/c/k.java:86-110` ile FM_SOURCE / AM_SOURCE'u açar. USB yalnızca medya servisi bağlı
- * derse (`MEDIA_SOURCE_EXT_INFO` connectState 2/3, VDValueMedia.MediaConnectState; SVSystemUI `j/h/f/h.java:128-134`).
+ * Kartın kaynak seçicisi (saf). Türler OEM'de doğrulandı: OEM medya servisi 9 → FM
+ * (bant 1), 10 → AM (bant 5), 3 → USB0 müziği, 13 → BT müziği; OPEN_SOURCE
+ * reason 8 radyoda OEM radyo servisi ile FM_SOURCE / AM_SOURCE'u açar. USB yalnızca medya servisi bağlı
+ * derse (`MEDIA_SOURCE_EXT_INFO` connectState 2/3, VDValueMedia.MediaConnectState; OEM SystemUI).
  */
 internal object SourceChoice {
 

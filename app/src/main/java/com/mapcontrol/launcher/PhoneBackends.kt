@@ -73,13 +73,13 @@ internal interface CallBackend {
     /**
      * Sesi telefona ([toPhone] true) ya da araca aktarır. false = desteklenmiyor/başarısız. VDBus: DIAL_AUDIO_MODE
      * (262548) {"status": 1 araç / 2 telefon}; OEM servisi 1'de connectAudio, diğerinde disconnectAudio çağırır
-     * (SVVDSBluetooth m/m.java:321-346; OEM arayüzü aynı yolu kullanır: PhoneCallActivity.java:887-903).
+     * (OEM arayüzü de aynı yolu kullanır).
      */
     fun setAudioToPhone(toPhone: Boolean): Boolean = false
     /**
      * Konuşma sırasında tek DTMF tuşu ('0'..'9', '*', '#'). false = desteklenmiyor/başarısız. VDBus: DIAL ctrl 4; OEM
-     * servisi number'ı Byte.parseByte ile ONDALIK sayı olarak okur (m/m.java:376-384), OEM arayüzü ASCII kodunu gönderir
-     * (PhoneCallActivity.java:796-797): '5' için number = "53" ([DtmfCode.vdNumber]).
+     * servisi number'ı Byte.parseByte ile ONDALIK sayı olarak okur, OEM arayüzü ASCII kodunu gönderir:
+     * '5' için number = "53" ([DtmfCode.vdNumber]).
      */
     fun sendDtmf(c: Char): Boolean = false
     /**
@@ -99,7 +99,7 @@ internal interface CallBackend {
     /** Ses yönü yayını (VDBus DIAL_AUDIO_MODE 262548) dinleyicisi; io kuyruğunda çağrılır. null bırakır. */
     fun setAudioListener(l: ((Boolean) -> Unit)?) {}
     /**
-     * io: arayanın fotoğrafı (VDBus PHONE_BOOK_CONTACT_INFO 262383 getOnce {number} → portrait, q/r.java:279-298).
+     * io: arayanın fotoğrafı (VDBus PHONE_BOOK_CONTACT_INFO 262383 getOnce {number} → portrait).
      * Bulunamazsa null. Numara günlüğe yazılmaz.
      */
     fun contactPortrait(number: String): ByteArray? = null
@@ -308,7 +308,7 @@ internal object HfpLink {
 
     /**
      * HFP istemci yayınları (AG_CALL_CHANGED, AG_EVENT, AUDIO_STATE_CHANGED) UserHandle.ALL ile değil, Bluetooth
-     * sürecinin kullanıcısına gönderilir (HeadsetClientStateMachine.java:212). Süreç kullanıcı 0'da değilse yayınlar
+     * sürecinin kullanıcısına gönderilir. Süreç kullanıcı 0'da değilse yayınlar
      * gelmeyebilir: o zaman durum yoklamayla okunur.
      */
     val userId: Int by lazy {
@@ -386,7 +386,7 @@ internal object HfpClientApi {
 
     /**
      * AT+BVRA=1. Dikkat: araç yığını yalnızca kendi durumu 0 iken gönderir, değilse sessizce düşürür ama yine de true
-     * döner (HeadsetClientStateMachine.java:977-985); true "başladı" demek değildir.
+     * döner; true "başladı" demek değildir.
      */
     fun startVoiceRecognition(proxy: Any, device: BluetoothDevice): Boolean {
         val r = invoke(proxy, "startVoiceRecognition", arrayOf(DEV), device)
@@ -688,7 +688,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     /** VDBus_DISPATCH: yalnızca çözümler ve io'ya aktarır ([handle]). */
     private val infoHandler: (VDEvent) -> Unit = { e -> handle(e) }
 
-    /** VDBus_DISPATCH: DIAL_AUDIO_MODE {"value": MAC, "status": 1 araç / 2 telefon / 3 bağlanıyor} (m/n.java:93-96). */
+    /** VDBus_DISPATCH: DIAL_AUDIO_MODE {"value": MAC, "status": 1 araç / 2 telefon / 3 bağlanıyor}. */
     private val audioHandler: (VDEvent) -> Unit = { e ->
         val status = try {
             e.payload?.getInt(VDKey.STATUS, -1) ?: -1
@@ -750,9 +750,9 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     }
 
     /**
-     * DIAL (262545) yükü her zaman bir VDBTDial içerir: OEM sunucusu getValue sonucunu null denetimi yapmadan kullanır
-     * (SVVDSBluetooth m/m.java:350-354), boş yük sistem BT servisini çökertir. Adres boşsa servis bağlı cihazı
-     * kullanır (m/l.java); büyük/küçük harf fark etmez.
+     * DIAL (262545) yükü her zaman bir VDBTDial içerir: OEM sunucusu getValue sonucunu null denetimi yapmadan kullanır;
+     * boş yük sistem BT servisini çökertir. Adres boşsa servis bağlı cihazı
+     * kullanır; büyük/küçük harf fark etmez.
      */
     private fun send(ctrl: Int, number: String?, uuid: String? = null, acceptType: Int? = null): Boolean {
         val b = bus ?: return false
@@ -796,7 +796,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 
     /**
      * DIAL_MIC_MODE (262547): {"status": 2 sessiz / 1 açık}; OEM servisi AudioManager.setMicrophoneMute'u sistem
-     * uid'siyle çağırır (m/m.java:403-416, m/l.java:294-301).
+     * uid'siyle çağırır.
      */
     override fun setMute(on: Boolean): Boolean {
         val b = bus ?: return false
@@ -812,7 +812,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         }
     }
 
-    /** DIAL_AUDIO_MODE (262548): status 1 araç / 2 telefon; "value" (MAC) boşsa bağlı cihaz (m/m.java:321-346). */
+    /** DIAL_AUDIO_MODE (262548): status 1 araç / 2 telefon; "value" (MAC) boşsa bağlı cihaz. */
     override fun setAudioToPhone(toPhone: Boolean): Boolean {
         val b = bus ?: return false
         if (!available()) return false
@@ -856,7 +856,7 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
     }
 
     /**
-     * io: OEM'in kendi kullandığı STANDART abonelik ([VdbusBtNotify]; SVVRService c/a.java:55-70,106 her 2 sn'de
+     * io: OEM'in kendi kullandığı STANDART abonelik ([VdbusBtNotify]; her 2 sn'de
      * DIAL_INFO_LIST alıyor). Eski `VDBus.subscribe(VDEvent, stub)` özel olay yoluydu ve BT servisi o yola hiç
      * yayımlamıyor: 6 Kasım araçta arama bitince şerit ACTIVE kalmasının nedeni buydu. Abonelik süreç boyunca açık
      * kalır; [close] yalnızca işleyicileri çıkarır.
@@ -893,14 +893,14 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
         return list.any { it.state != PhoneStateMap.TERMINATED && it.state != PhoneStateMap.MISSED }
     }
 
-    /** io: getOnce DIAL_AUDIO_MODE (boş "value" = bağlı cihaz; m/m.java:102-118). */
+    /** io: getOnce DIAL_AUDIO_MODE (boş "value" = bağlı cihaz). */
     override fun readAudioOnPhone(): Boolean? {
         val e = getOnce(VDEventBT.DIAL_AUDIO_MODE) ?: return null
         val status = e.payload?.getInt(VDKey.STATUS, -1) ?: return null
         return AudioModeMap.onPhone(status)
     }
 
-    /** io: getOnce DIAL_MIC_MODE {"status": 2 sessiz / 1 açık} (m/m.java:204-209). */
+    /** io: getOnce DIAL_MIC_MODE {"status": 2 sessiz / 1 açık}. */
     override fun readMicMuted(): Boolean? {
         val e = getOnce(VDEventBT.DIAL_MIC_MODE) ?: return null
         return when (e.payload?.getInt(VDKey.STATUS, -1)) {
@@ -935,8 +935,8 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 
     /**
      * VDBus_DISPATCH ya da io: listeyi çözüp durumu io'ya aktarır. Yayın yükünde "data" listesinin yanında "status" =
-     * VDBTListProgress(index=size-1, total=size) vardır (m/n.java:97-100); boş liste total 0 ile yayımlanır → NONE.
-     * getOnce yanıtında progress yoktur (m/m.java:120-122). Fotoğraf baytları çözülmeden io'ya geçer.
+     * VDBTListProgress(index=size-1, total=size) vardır; boş liste total 0 ile yayımlanır → NONE.
+     * getOnce yanıtında progress yoktur. Fotoğraf baytları çözülmeden io'ya geçer.
      */
     private fun handle(e: VDEvent) {
         val progress = try {
@@ -976,10 +976,10 @@ internal class VdbusCallBackend(private val io: Executor, private val onAvailabi
 }
 
 /**
- * VDBus BT yayınlarına OEM'in kullandığı STANDART abonelik: addSubscribe + subscribeCommit + registerVDNotifyListener
- * (SVBluetoothPhone manager/j.java:277-297). `VDBus.subscribe(VDEvent, stub)` "özel olay" aboneliğidir
- * (IVDBus.subscribeCustomizedEvent); BT servisi onSubscribeCustomizedEvent'i ezmiyor (VDBTService.java; yalnızca
- * VDService.java:156 boş gövde), yayınlar yalnızca standart abonelere gider (VDBinder.publish → mEventMap). Bu yüzden
+ * VDBus BT yayınlarına OEM'in kullandığı STANDART abonelik: addSubscribe + subscribeCommit + registerVDNotifyListener.
+ * `VDBus.subscribe(VDEvent, stub)` "özel olay" aboneliğidir
+ * (IVDBus.subscribeCustomizedEvent); BT servisi onSubscribeCustomizedEvent'i ezmiyor (yalnızca
+ * boş gövde), yayınlar yalnızca standart abonelere gider (VDBinder.publish → mEventMap). Bu yüzden
  * rehber/geçmiş yanıtları bize hiç ulaşmıyordu ("vdbus veri: yanıt yok").
  *
  * Abonelikler süreç boyunca açık kalır (sunucu her commit'te bu istemcinin tüm listesini değiştirir; servis yeniden
@@ -1035,30 +1035,26 @@ internal object VdbusBtNotify {
 /**
  * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan).
  *
- * Kaynaklar bizim aracın dökümü (T1E24, SVVDSBluetooth 251114): VDPBAPManager = p/v.java, VDPBAPDataParse = p/r.java,
- * yükleme = u/o.java, indirme görevi = k/e.java. (Arkadaşın T18T28 sürümünde aynı sınıflar q/v, q/r, v/o; davranış
- * normalize diff ile aynı.)
+ * Davranış bizim araçta (T1E24) ölçüldü; arkadaşın T18T28 sürümünde de aynı.
  *
- * OEM telefon uygulaması (SVBluetoothPhone) rehberi VDBus'tan DEĞİL, BT servisinin AndLinker arayüzünden alır
- * (sdk/bluetooth/manager/AndLinkerManager.java:36 → IPBAPManager.loadContact/loadCallLog). Bizim araçta o servis
+ * OEM telefon uygulaması rehberi VDBus'tan DEĞİL, BT servisinin AndLinker arayüzünden alır. Bizim araçta o servis
  * (AndLinkerService) exported=true ve izinsiz; arkadaşın sürümünde exported=false. OTA ile kapanabileceği için burada
  * kullanılmıyor; aynı veri BT servisinin VDBus PBAP dağıtıcısında da var:
  *
  * 1. ..._LIST_CACHE (262376 rehber / 262377 geçmiş) STANDART aboneliği ([VdbusBtNotify]).
  * 2. set PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber / 6 geçmiş, adres null = bağlı
- *    cihaz, key = bizim etiketimiz} (p/r.java:125-131, 153-159, 251-277). Sunucu bellekteki haritayı (yoksa tek boş
+ * cihaz, key = bizim etiketimiz}. Sunucu bellekteki haritayı (yoksa tek boş
  *    yayın {index 0, total 0}) 10'arlık parçalarla yayar: {"data": liste, "status": VDBTListProgress(adres, index,
- *    total, key)} (u/o.java:52-110). Harita yalnızca o PBAP oturumunda indirme bitince (durum 1 → p/v.java:35-53,
- *    r.F/E) ya da liste değişince dolar; PBAP kopunca silinir (p/v.java:108-113 → r.a).
- * 3. PHONE_BOOK_SYNC_DB (262378) KULLANILMAZ: indirme görevleri SharedPreferences'ı her kayıtta siliyor
- *    (k/e.java:320-325; görevler z2=true ile kurulur: q/r.java:45, q/i.java:39); indirme bitince yükleme durumu 0 olur
- *    (k/e.java:328) ve _LIST_DB yalnızca durum 3'te yayınlanır (p/v.java:56-75). İndirme sonrası hiç yanıt gelmez;
+ * total, key)}. Harita yalnızca o PBAP oturumunda indirme bitince (durum 1)
+ * ya da liste değişince dolar; PBAP kopunca silinir.
+ * 3. PHONE_BOOK_SYNC_DB (262378) KULLANILMAZ: indirme görevleri SharedPreferences'ı her kayıtta siliyor;
+ *    indirme bitince yükleme durumu 0 olur ve _LIST_DB yalnızca durum 3'te yayınlanır. İndirme sonrası hiç yanıt gelmez;
  *    eski kod her okumada boşuna beklerdi.
  *
  * Ayrıca ([watch]): indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348, key null) ve eşitleme
  * durumu PHONE_BOOK_SYNC (262346, VDBTPhoneBookSync{status, type 7 rehber / 6 geçmiş}) edilgen dinlenir. Durum
- * getOnce ile tür başına sorulur ([syncStatus]; p/r.java:300-324; OEM ana ekranı da önbellekten önce bunu sorar,
- * SVLauncher y.java:165-178). İndirme isteği ([requestDownload]: PHONE_BOOK_SYNC ctrl 1 tür 50) yalnızca kullanıcı
+ * getOnce ile tür başına sorulur ([syncStatus]; OEM ana ekranı da önbellekten önce bunu sorar).
+ * İndirme isteği ([requestDownload]: PHONE_BOOK_SYNC ctrl 1 tür 50) yalnızca kullanıcı
  * rehber sayfasını açınca, bağlantı başına bir kez, PhoneSource'tan gelir.
  *
  * Kişiler: tam liste (isimli olanlar; "Tümü" sayfası için yalnızca bellekte). Fotoğraf yalnızca gereken alt küme için
@@ -1082,7 +1078,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
 
     override fun available(): Boolean = call.available()
 
-    /** VDBTPhoneBookSync'li istek (bean'siz SYNC* sunucuyu çökertir: q/r.java:96-100). */
+    /** VDBTPhoneBookSync'li istek (bean'siz SYNC* sunucuyu çökertir). */
     private fun request(b: VDBus, eventId: Int, syncType: Int, key: String?) {
         b.set(VDBTPhoneBookSync.createEvent(eventId, VDBTPhoneBookSync().apply {
             putSyncCtrl(VDValueBT.SyncCtrl.START)
@@ -1203,7 +1199,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
     }
 
     /**
-     * io: PHONE_BOOK_SYNC getOnce {tür} → indirme durumu (VDValueBT.SyncStatus; p/r.java:300-324: tür 1/2/7 rehber
+     * io: PHONE_BOOK_SYNC getOnce {tür} → indirme durumu (VDValueBT.SyncStatus; tür 1/2/7 rehber
      * görevinin, 3-6/8 geçmiş görevinin durumu, adres boşsa bağlı cihaz). null = bilinmiyor (bean yok ya da hata).
      */
     fun syncStatus(syncType: Int): Int? {
@@ -1222,7 +1218,7 @@ internal class VdbusDataBackend(private val call: VdbusCallBackend) : DataBacken
 
     /**
      * io: telefondan rehber + geçmiş indirmesi (PHONE_BOOK_SYNC 262346 ctrl 1 tür 50 = downloadCurrentContactCallLog,
-     * adres null = bağlı cihaz; r.java:95-110). YALNIZCA kullanıcı rehber sayfasını açınca ve bağlantı başına bir kez
+     * adres null = bağlı cihaz). YALNIZCA kullanıcı rehber sayfasını açınca ve bağlantı başına bir kez
      * (PhoneSource karar verir). Sonuç [watch] ile edilgen gelir.
      */
     fun requestDownload(): Boolean {
@@ -1453,7 +1449,7 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
 /**
  * Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Döküm analizi (6 Kasım): OEM yazılımı
  * BVRA'yı hiç çağırmaz ve bunun için VDBus olayı ya da dışa açık intent yoktur; yol BluetoothHeadsetClient
- * (yalnızca android.permission.BLUETOOTH + etkin kullanıcı denetimi, HeadsetClientService.java:158-169,492-505).
+ * (yalnızca android.permission.BLUETOOTH + etkin kullanıcı denetimi).
  *
  * Yığın davranışı ve plan: [VoicePlan]. Başarı "SCO bağlanıyor/bağlı ya da AG_EVENT VOICE_RECOGNITION=1" ile
  * [CONFIRM_MS] içinde doğrulanır; binder'ın true dönmesi yetmez. Açıkken ikinci basış kapatır. Yığın 1'de kalmış

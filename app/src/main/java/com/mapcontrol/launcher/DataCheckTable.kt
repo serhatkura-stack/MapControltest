@@ -264,7 +264,7 @@ internal object DataCheckTable {
 
         s("Vites", "Vites", RO, ReadOnlyID.ID_GEARBOX_STATE, gear)
 
-        // Root dökümünden gelen yeni sinyaller (Tiggo 8 yazılımı): ham değer görülsün diye anlamı doğrulanmadı sayılır.
+        // Tiggo 8 yazılımının yeni sinyalleri: ham değer görülsün diye anlamı doğrulanmadı sayılır.
         val oem = "Yeni sinyaller"
         s(oem, "Lastik basıncı (140)", RO, ReadOnlyIds.TIRE_PRESSURE, unverified)
         s(oem, "Toplam km (150)", RO, ReadOnlyIds.TOTAL_MILEAGE, unverified)

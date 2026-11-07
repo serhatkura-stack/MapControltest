@@ -1,9 +1,9 @@
 /*
- * OEM sınıfının birebir kopyası (SVVDSBluetooth com.desaysv.ivi.vdb.event.id.bt.bean.VDBTListProgress); Parcel alan
+ * VDBus BT liste ilerleme verisi (araçla konuşmak için); Parcel alan
  * sırası değiştirilmemeli: address(String), index(int), total(int), key(String). OEM servisi DIAL_INFO_LIST ve
  * PHONE_BOOK_*_LIST* yayınlarına bunu "status" anahtarıyla koyar; sınıf yoksa Bundle açılırken (Android 11/12 ilk
  * erişimde tüm değerleri açar) "data" listesi de okunamaz.
- * Tek fark: toString() gizlilik için adres içermez.
+ * toString() gizlilik için adres içermez.
  */
 package com.desaysv.ivi.vdb.event.id.bt.bean;
 

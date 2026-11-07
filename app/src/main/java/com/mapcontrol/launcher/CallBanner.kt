@@ -31,7 +31,7 @@ import com.mapcontrol.R
  *  - Gelen arama: büyük düzen, üst ortada; arayanın adı, "Gelen arama"; solda kırmızı **Reddet**, sağda yeşil
  *    **Cevapla** (96dp).
  *
- * Yerleşim OEM arama pencerelerine göre (SVBluetoothPhone PhoneCallService.java:929-958, TYPE_PHONE, bizim ekranın
+ * Yerleşim OEM arama pencerelerine göre (TYPE_PHONE, bizim ekranın
  * üstüne çizilir; 160 dpi'de dp = px): gelen aramada OEM şeridi 1200×234 üst ortada (y 0-234), aranıyor/konuşmada küçük
  * yeşil hap (mShowType 2) x 421-661, y 16-70 ve süreyi kendisi sayar. Bu yüzden gelen arama kartı OEM şeridinin altından
  * başlar ([INCOMING_TOP_DP]; üst omuzdaki "Kilitli" hapını da örtmez); DesaySV yığınında kompakt hap süre yazmaz

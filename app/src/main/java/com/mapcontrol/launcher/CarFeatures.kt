@@ -14,7 +14,7 @@ import com.mapcontrol.vehicle.material.OemEolConfigReader
  */
 internal object CarConfigMath {
 
-    /** OEM SVSystemUI HvacController / SVSetting CarConfigUtils: bu ülkelerde koltuk ve direksiyon ısıtma gizlenir. */
+    /** OEM ayarlarıyla aynı: bu ülkelerde koltuk ve direksiyon ısıtma gizlenir. */
     val HEAT_HIDDEN_REGIONS: Set<Int> = setOf(5, 7, 32)
 
     /**

@@ -1,8 +1,8 @@
 /*
- * OEM sınıfının birebir kopyası (SVAudioApp ve SVVDSMedia içinde aynı: .../event/id/bt/bean/VDBTMusicPlay.java:1-133).
- * Parcel alan sırası değiştirilmemeli: OEM BT servisi (com.desaysv.ivi.vds.bt, h/g.java:227-232) MUSIC_PLAY yükünü bu
+ * VDBus BT müzik denetim verisi (araçla konuşmak için).
+ * Parcel alan sırası değiştirilmemeli: OEM BT servisi (com.desaysv.ivi.vds.bt) MUSIC_PLAY yükünü bu
  * sınıf adıyla açar ve null denetimi yapmadan kullanır; uymayan bir parcel o servisi çökertebilir.
- * Tek fark: toString() sorgu/medya kimliği/adres/ekleri içermez (gizlilik).
+ * toString() sorgu/medya kimliği/adres/ekleri içermez (gizlilik).
  */
 package com.desaysv.ivi.vdb.event.id.bt.bean;
 

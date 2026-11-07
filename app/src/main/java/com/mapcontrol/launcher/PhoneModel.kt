@@ -78,7 +78,7 @@ data class CallState(
     val muted: Boolean = false,
     /**
      * Ses telefonda (SCO kopuk; OEM "Sesi telefona aktar" seçili). VDBus DIAL_AUDIO_MODE (262548) yayını/getOnce:
-     * status 1 araç, 2 telefon, 3 bağlanıyor (SVVDSBluetooth m/m.java:211-219, m/n.java:93-96).
+     * status 1 araç, 2 telefon, 3 bağlanıyor.
      */
     val audioOnPhone: Boolean = false,
     /** Arayanın fotoğrafı için [PhonePhotos] anahtarı (VDBTDialInfo.portrait ya da eşleşen kişi); yoksa null. */
@@ -193,7 +193,7 @@ object PhoneSource {
     private const val FRESH_MS = 10_000L
     /** PHONE_BOOK_SYNC "bitti" yayınlarından sonra önbellek isteği (rehber ve geçmiş ayrı ayrı biter; tek istek). */
     private const val SYNC_READ_DELAY_MS = 800L
-    /** VDValueBT.SyncStatus.FINISHED (r.java:416-452). */
+    /** VDValueBT.SyncStatus.FINISHED. */
     private const val VDSYNC_FINISHED = 1
     private const val DEMO_VERSION_OFFSET = 1_000_000
     /** Depo değişince disk önbelleği bu gecikmeyle yazılır (parça parça gelen indirme tek yazım olsun). */
@@ -701,7 +701,7 @@ object PhoneSource {
     /**
      * io: yenileme politikası. HFP bağlandı / açılış / panel → yalnızca önbellek (okuma). Kullanıcı rehber sayfasını
      * açtı → okuma + gerekirse bağlantı başına bir kez indirme ([maybeDownload]). Arama bitti → VDBus'ta istek yok
-     * (OEM telefon uygulaması her aramadan sonra geçmiş indirmesini kendisi başlatır, BasePhoneCallService.java:54;
+     * (OEM telefon uygulaması her aramadan sonra geçmiş indirmesini kendisi başlatır;
      * parçalar ve "bitti" durumu edilgen gelir); rehber sağlayıcısında yerel okuma.
      */
     private fun refreshInternal(reason: RefreshReason) {
@@ -743,7 +743,7 @@ object PhoneSource {
             Log.i(TAG, "rehber: indirme gerekmiyor (önbellek=${vd.cacheTotal} istendi=$downloadRequested)")
             return
         }
-        // OEM ana ekranının tarifi (SVLauncher y.java:165-178): durum tür başına sorulur (7 rehber, 6 geçmiş).
+        // OEM ana ekranının tarifi: durum tür başına sorulur (7 rehber, 6 geçmiş).
         val status = PhonebookRefresh.combine(
             vd.syncStatus(VDValueBT.PhoneBookSyncType.CONTACT_SYNC),
             vd.syncStatus(VDValueBT.PhoneBookSyncType.CALLLOG_SYNC),
@@ -791,7 +791,7 @@ object PhoneSource {
      * açılır, sahip yoksa kullanımdan 10 sn sonra kapanır.
      *
      * Süren arama varken hiçbir şey yapmaz (true döner, uyarı yok): OEM de BT araması sırasında kendi asistanını
-     * kapatır (SVVRService manager/b/a.java) ve SCO sırasında BVRA istenmez. Başarı yalnızca telefon doğrulayınca
+     * kapatır ve SCO sırasında BVRA istenmez. Başarı yalnızca telefon doğrulayınca
      * (+BVRA:1 ya da SCO sesi) sayılır; doğrulanmazsa ASSISTANT_UNAVAILABLE.
      */
     fun startVoiceAssistant(): Boolean {
@@ -1357,8 +1357,8 @@ class PhoneDirectory(
  * Diske, günlüğe, paylaşıma asla yazılmaz; farklı telefon bağlanınca ve süreç bitince gider.
  *
  * Anahtarlar: kişi için [PhoneContact.id] ("v:<OEM id>" / "c:<rehber id>"), arama için "call:<OEM uuid>".
- * Kaynaklar: VDBTContacts.portrait (rehber parçaları; SVVDSBluetooth q/r.java:386-399), VDBTDialInfo.portrait
- * (DIAL_INFO_LIST; m/m.java:234), PHONE_BOOK_CONTACT_INFO (262383) getOnce {number} → portrait (q/r.java:279-298).
+ * Kaynaklar: VDBTContacts.portrait (rehber parçaları), VDBTDialInfo.portrait
+ * (DIAL_INFO_LIST), PHONE_BOOK_CONTACT_INFO (262383) getOnce {number} → portrait.
  * Kural: [PhoneContact.photoKey]/[CallState.photoKey] yalnızca görüntü önbelleğe girdikten SONRA atanır; UI
  * [get] null dönerse baş harfe düşer (önbellekten atılmış olabilir).
  */
