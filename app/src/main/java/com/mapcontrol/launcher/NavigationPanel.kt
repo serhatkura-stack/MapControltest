@@ -31,9 +31,11 @@ import kotlin.math.sin
 /**
  * Sahne Navigasyon paneli. Üç hâl:
  *  - Rota var ([NavigationState.active]): büyük manevra oku (kendi vektör çizimimiz, [ManeuverArrowView]), büyük mesafe,
- *    sokak adı ve altta "Varış 14:52 · 18 km". Dokununca Yandex tam ekran açılır.
- *  - Rota yok: başlık, iki büyük kısayol "Ev" / "İş" (konum ayarlıysa Yandex'te rota kurar, değilse Yandex aramasını açar;
- *    uzun basınca konum ayarı) ve "Haritayı aç".
+ *    sokak adı ve altta "Varış 14:52 · 18 km". Dokununca seçili harita uygulaması tam ekran açılır.
+ *  - Rota yok: başlık, iki büyük kısayol "Ev" / "İş" (konum ayarlıysa seçili uygulamada rota kurar; uzun basınca konum
+ *    ayarı) ve "Haritayı aç".
+ * Başlığın sağındaki küçük "Google ▾" / "Yandex ▾" çipi harita uygulamasını seçer ([MapAppPrefs]; yalnız kurulu olanlar
+ * listelenir). Seçim hem açılan uygulamayı hem kartın hangi bildirimi okuduğunu belirler.
  *  - Bildirim erişimi yok: kısa Türkçe ileti ve sistem bildirim erişimi ayarını açan düğme (izin kodla verilmez).
  * Veri [NavigationSource]'tan, olay güdümlü (yoklama yok).
  */
@@ -45,6 +47,19 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
     private var visible = false
     private var current = NavigationState.NONE
     private val io = LauncherIo.serial()
+    /** Etkin harita uygulaması (kurulu seçenek yoksa null); görünür olunca ve seçim değişince yenilenir. */
+    private var mapApp: MapApp? = null
+    private var mapChoices: List<MapApp> = emptyList()
+
+    /** Başlıktaki seçim çipi: "Google ▾". Tek seçenek varsa ok yok, dokunulmaz. */
+    private val appChip = sahneText(context, SahneType.SUB, Sahne.INK_3, 500).apply {
+        maxLines = 1
+        val p = context.dp(10)
+        setPadding(p, context.dp(6), p, context.dp(6))
+        background = rounded(context, Sahne.SOFT_FILL, Sahne.CONTROL_RADIUS_DP, Sahne.HAIR_2)
+        setOnClickListener { chooseMapApp() }
+        pressFeedback()
+    }
 
     private val listener: (NavigationState) -> Unit = { s ->
         current = s
@@ -62,6 +77,8 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         }, LinearLayout.LayoutParams(context.dp(24), context.dp(24)))
         addView(sahneText(context, SahneType.HEAD, Sahne.INK_2, 500).apply { setText(R.string.launcher_widget_navigation) },
             LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(10) })
+        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(appChip, LinearLayout.LayoutParams(WRAP, WRAP))
     }
 
     // --- Rota ---
@@ -90,14 +107,14 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         addView(arrivalDivider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)))
         addView(arrival, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP).apply { topMargin = context.dp(10) })
         isClickable = true
-        setOnClickListener { openYandex() }
+        setOnClickListener { openMap() }
         pressFeedback()
     }
 
     // --- Rota yok ---
     private val homeTile = PlaceTile(NavPlaces.HOME, R.drawable.ic_sahne_home, R.string.launcher_nav_home)
     private val workTile = PlaceTile(NavPlaces.WORK, R.drawable.ic_sahne_work, R.string.launcher_nav_work)
-    private val mapButton = ctaButton(R.string.launcher_nav_open_map) { openYandex() }
+    private val mapButton = ctaButton(R.string.launcher_nav_open_map) { openMap() }
     private val idleBox = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
@@ -135,13 +152,17 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = context.dp(12) })
     }
 
-    init { bind() }
+    init {
+        refreshMapApp()
+        bind()
+    }
 
     override val view: View get() = root
     override fun applySpan(span: Span) = Unit
 
     override fun onVisible() {
         visible = true
+        refreshMapApp()
         NavigationSource.addListener(listener)
     }
 
@@ -200,17 +221,57 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
     private fun bindIdle() {
         homeTile.bind()
         workTile.bind()
-        val installed = yandexPackage() != null
+        val installed = mapPackage() != null
         (mapButton.getChildAt(1) as TextView).setText(if (installed) R.string.launcher_nav_open_map else R.string.launcher_nav_not_installed)
         mapButton.alpha = if (installed) 1f else DISABLED_ALPHA
         root.contentDescription = context.getString(R.string.launcher_widget_navigation)
     }
 
-    // --- Yandex'e geçiş ---
+    // --- Harita uygulamasına geçiş ---
 
-    /** Kurulu Yandex paketi: önce rotayı gönderen, sonra Haritalar, sonra Navigator. */
-    private fun yandexPackage(): String? =
-        listOfNotNull(current.sourcePackage, NavigationSource.YANDEX_MAPS, NavigationSource.YANDEX_NAVI).firstOrNull { installed(it) }
+    /** Seçimi (kurulu set + FrostNav hedefi + kayıt) yeniden okur; çipi ve kartın bildirim kaynağını günceller. */
+    private fun refreshMapApp() {
+        val installed = MapAppPrefs.installedSet(context)
+        mapChoices = MapAppChoice.choices(installed)
+        mapApp = MapAppPrefs.current(context)
+        NavigationSource.setMapApp(mapApp)
+        bindChip()
+    }
+
+    private fun bindChip() {
+        val app = mapApp
+        appChip.visibility = if (app == null) View.GONE else View.VISIBLE
+        if (app == null) return
+        val many = mapChoices.size > 1
+        appChip.text = if (many) app.label + " \u25BE" else app.label
+        appChip.isClickable = many
+        appChip.isFocusable = many
+        appChip.contentDescription = context.getString(R.string.launcher_nav_map_app_title) + ": " + app.label
+    }
+
+    /** Kurulu seçenekler arasında seçim (tek seçim penceresi). */
+    private fun chooseMapApp() {
+        val choices = mapChoices
+        if (choices.size < 2) return
+        val checked = choices.indexOf(mapApp)
+        AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(R.string.launcher_nav_map_app_choose)
+            .setSingleChoiceItems(choices.map { it.fullName }.toTypedArray(), checked) { d, which ->
+                choices.getOrNull(which)?.let { MapAppPrefs.set(context, it) }
+                d.dismiss()
+                refreshMapApp()
+                bind()
+            }
+            .setNegativeButton(R.string.launcher_nav_place_cancel, null)
+            .show()
+    }
+
+    /** Açılacak paket: rota sürüyorsa rotayı gönderen (seçili uygulamanınkidir), değilse seçili uygulama. */
+    private fun mapPackage(): String? {
+        val src = current.sourcePackage
+        if (current.active && src != null && installed(src)) return src
+        return mapApp?.packageName?.takeIf { installed(it) }
+    }
 
     private fun installed(pkg: String): Boolean = try {
         context.packageManager.getPackageInfo(pkg, 0)
@@ -219,22 +280,22 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         false
     }
 
-    private fun openYandex() {
-        val pkg = yandexPackage() ?: return
+    private fun openMap() {
+        val pkg = mapPackage() ?: return
         io.runSafely { AppLaunchHelper.launchAppOnDisplay(context, pkg, Display.DEFAULT_DISPLAY, 0) }
     }
 
-    /** Ayarlı konuma rota (Yandex derin bağlantısı); konum yoksa Yandex'te [label] araması. */
+    /** Ayarlı konuma rota (Yandex: yandexmaps:// / yandexnavi://, Google: google.navigation:); konum yoksa [label] araması. */
     private fun openPlace(place: String, label: String) {
-        val pkg = yandexPackage() ?: return
+        val pkg = mapApp?.packageName?.takeIf { installed(it) } ?: return
         val uri = NavPlaces.get(context, place)?.let { (lat, lon) -> NavPlaces.routeUri(pkg, lat, lon) } ?: NavPlaces.searchUri(pkg, label)
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            openYandex()
+            openMap()
         } catch (e: SecurityException) {
-            openYandex()
+            openMap()
         }
     }
 
@@ -354,7 +415,7 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
     }
 }
 
-/** Ev / iş konumları (profil bağımsız, yer tutucu ayar) ve Yandex derin bağlantıları. */
+/** Ev / iş konumları (profil bağımsız, yer tutucu ayar) ve harita derin bağlantıları (Yandex, Google). */
 internal object NavPlaces {
     const val HOME = "home"
     const val WORK = "work"
@@ -371,15 +432,20 @@ internal object NavPlaces {
 
     fun format(lat: Double, lon: Double): String = String.format(Locale.US, "%.6f, %.6f", lat, lon)
 
-    /** Yandex Haritalar: `yandexmaps://build_route_on_map?lat_to=..&lon_to=..`; Navigator: `yandexnavi://…` aynı parametrelerle. */
+    /**
+     * Yandex Haritalar: `yandexmaps://build_route_on_map?lat_to=..&lon_to=..`; Navigator: `yandexnavi://…` aynı parametrelerle;
+     * Google Haritalar: `google.navigation:q=lat,lon` (doğrudan rehberlik).
+     */
     fun routeUri(pkg: String, lat: Double, lon: Double): String {
+        if (pkg == NavigationSource.GOOGLE_MAPS) return String.format(Locale.US, "google.navigation:q=%.6f,%.6f", lat, lon)
         val scheme = if (pkg == NavigationSource.YANDEX_NAVI) "yandexnavi" else "yandexmaps"
         return String.format(Locale.US, "%s://build_route_on_map?lat_to=%.6f&lon_to=%.6f", scheme, lat, lon)
     }
 
-    /** Arama: Haritalar `yandexmaps://maps.yandex.ru/?text=..`, Navigator `yandexnavi://map_search?text=..`. */
+    /** Arama: Haritalar `yandexmaps://maps.yandex.ru/?text=..`, Navigator `yandexnavi://map_search?text=..`, Google `geo:0,0?q=..`. */
     fun searchUri(pkg: String, text: String): String {
         val q = Uri.encode(text)
+        if (pkg == NavigationSource.GOOGLE_MAPS) return "geo:0,0?q=$q"
         return if (pkg == NavigationSource.YANDEX_NAVI) "yandexnavi://map_search?text=$q" else "yandexmaps://maps.yandex.ru/?text=$q"
     }
 }

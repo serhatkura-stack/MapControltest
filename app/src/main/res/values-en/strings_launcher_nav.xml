@@ -4,7 +4,9 @@
     <string name="launcher_nav_home">Home</string>
     <string name="launcher_nav_work">Work</string>
     <string name="launcher_nav_open_map">Open map</string>
-    <string name="launcher_nav_not_installed">Yandex Maps is not installed</string>
+    <string name="launcher_nav_map_app_title">Map app</string>
+    <string name="launcher_nav_map_app_choose">Choose map app</string>
+    <string name="launcher_nav_not_installed">No map app installed (Google or Yandex)</string>
     <string name="launcher_nav_route_hint">Start route</string>
     <string name="launcher_nav_set_hint">Tap to set</string>
     <string name="launcher_nav_access_message">To see the next turn here, allow notification access.</string>

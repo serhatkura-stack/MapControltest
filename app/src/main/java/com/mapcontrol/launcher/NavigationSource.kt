@@ -15,7 +15,8 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 /**
  * Navigasyon durumunun tek kaynağı (gözlenebilir, yoklama yok). Uygulamanın mevcut bildirim dinleyicisi
- * (`LauncherMediaNotificationListener`) Yandex Haritalar / Yandex Navigator bildirimlerini buraya iletir; her bildirim
+ * (`LauncherMediaNotificationListener`) Yandex Haritalar / Yandex Navigator / Google Haritalar bildirimlerini buraya iletir
+ * (yalnız başlatıcının harita seçimindeki uygulamanınki okunur, [MapAppPrefs]); Yandex için her bildirim
  * güncellemesinde [NavParse] ile yeni bir [NavigationState] üretilir ve dinleyicilere ana iş parçacığında verilir.
  * Rehberlik bildirimi kalkınca durum [NavigationState.NONE] olur.
  *
@@ -37,7 +38,13 @@ import java.util.concurrent.CopyOnWriteArraySet
 object NavigationSource {
     const val YANDEX_MAPS = "ru.yandex.yandexmaps"
     const val YANDEX_NAVI = "ru.yandex.yandexnavi"
-    @JvmField val PACKAGES: Set<String> = setOf(YANDEX_MAPS, YANDEX_NAVI)
+    const val GOOGLE_MAPS = "com.google.android.apps.maps"
+    /** Okunabilen tüm rehberlik paketleri; hangisinin okunacağını harita seçimi ([MapAppChoice.notificationPackages]) belirler. */
+    @JvmField val PACKAGES: Set<String> = setOf(YANDEX_MAPS, YANDEX_NAVI, GOOGLE_MAPS)
+
+    /** Etkin seçimin paketleri (varsayılan eski davranış: Yandex). Dinleyici bağlanınca ve seçim değişince güncellenir. */
+    @Volatile private var accepted: Set<String> = MapAppChoice.notificationPackages(null)
+    @Volatile private var acceptedResolved = false
 
     private const val TAG = "NavSource"
 
@@ -98,10 +105,31 @@ object NavigationSource {
 
     // --- Bildirim dinleyicisinden (ana iş parçacığı); iş worker'a aktarılır ---
 
+    /** Harita seçimi değişti: yalnız seçilen uygulamanın bildirimi okunur; durum etkin bildirimlerden yeniden kurulur. */
+    @JvmStatic
+    fun setMapApp(app: MapApp?) {
+        val next = MapAppChoice.notificationPackages(app)
+        acceptedResolved = true
+        if (next == accepted) return
+        accepted = next
+        worker.post {
+            worker.removeCallbacks(confirmRemoved)
+            activeKey = null
+            gate.clear()
+            if (!resync()) setReal(NavigationState.NONE)
+        }
+    }
+
+    private fun refreshAccepted(context: Context) {
+        accepted = MapAppChoice.notificationPackages(try { MapAppPrefs.current(context) } catch (e: Exception) { null })
+        acceptedResolved = true
+    }
+
     @JvmStatic
     fun onListenerConnected(service: NotificationListenerService) {
         serviceRef = WeakReference(service)
         worker.post {
+            refreshAccepted(service)
             PACKAGES.forEach { NavNotificationReader.forget(it) }
             gate.clear()
             resync()
@@ -126,12 +154,15 @@ object NavigationSource {
     fun onNotificationPosted(service: NotificationListenerService, sbn: StatusBarNotification?) {
         if (sbn == null || sbn.packageName !in PACKAGES) return
         serviceRef = WeakReference(service)
-        worker.post { handlePosted(service, sbn) }
+        worker.post {
+            if (!acceptedResolved) refreshAccepted(service)
+            if (sbn.packageName in accepted) handlePosted(service, sbn)
+        }
     }
 
     @JvmStatic
     fun onNotificationRemoved(service: NotificationListenerService, sbn: StatusBarNotification?) {
-        if (sbn == null || sbn.packageName !in PACKAGES) return
+        if (sbn == null || sbn.packageName !in accepted) return
         serviceRef = WeakReference(service)
         worker.post {
             gate.forget(sbn.key)
@@ -171,7 +202,7 @@ object NavigationSource {
         } ?: return false
         for (sbn in active) {
             val pkg = sbn?.packageName ?: continue
-            if (pkg !in PACKAGES) continue
+            if (pkg !in accepted) continue
             // Yeniden eşitlemede kapı kullanılmaz: kayıtlı içerik aynı olsa bile durum yeniden kurulmalı.
             val parsed = parse(service, sbn) ?: continue
             gate.remember(sbn.key, sbn.postTime, signature(sbn))
@@ -203,16 +234,30 @@ object NavigationSource {
 
     private fun parse(context: Context, sbn: StatusBarNotification): NavigationState? {
         val t0 = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
+        val google = sbn.packageName == GOOGLE_MAPS
         val result = try {
-            NavParse.parse(NavNotificationReader.read(context, sbn), System.currentTimeMillis())
+            if (google) parseGoogle(sbn) else NavParse.parse(NavNotificationReader.read(context, sbn), System.currentTimeMillis())
         } catch (e: Exception) {
             null
         }
         if (BuildConfig.DEBUG) {
             val dt = SystemClock.elapsedRealtime() - t0
             if (dt > SLOW_PARSE_MS) Log.w(TAG, "slow parse ${dt} ms pkg=${sbn.packageName}")
+            // Yalnız kısa bayraklar: adres ve yol adı yazılmaz.
+            if (google) Log.d(TAG, "google active=${result != null} maneuver=${result?.maneuver} dist=${result?.distance != null} eta=${result?.arrivalTime != null}")
         }
         return result
+    }
+
+    /** Google Haritalar: yalnız extras metinleri (başlık, metin, alt metin); RemoteViews gezilmez. */
+    private fun parseGoogle(sbn: StatusBarNotification): NavigationState? {
+        val extras = sbn.notification?.extras ?: return null
+        return GoogleNavParse.parse(
+            extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString(),
+            extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString(),
+            extras.getCharSequence(android.app.Notification.EXTRA_SUB_TEXT)?.toString(),
+            System.currentTimeMillis(),
+        )
     }
 
     private fun setReal(next: NavigationState) {

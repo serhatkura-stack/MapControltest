@@ -30,6 +30,10 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         include 'com/mapcontrol/util/ProjectionTargetApps.java'
         include 'com/mapcontrol/util/AppLaunchHelper.java'
         include 'com/mapcontrol/util/AppIconHelper.java'
+        // Navigasyon kartının harita seçimi (FrostNav hedefi varsayılan) ve Google Haritalar bildirim ayrıştırıcısı.
+        include 'com/mapcontrol/util/TargetPackageStore.java'
+        include 'com/mapcontrol/nav/GoogleMapsNavNotificationParser.java'
+        include 'com/mapcontrol/nav/GoogleMapsNavSnapshot.java'
         // Konfor yazma testi: saf beyaz liste, komut çözümleyici (ComfortPlan) ve park kapısı (ParkGate).
         include 'com/mapcontrol/comfort/**'
         include 'com/mapcontrol/vehicle/material/OemEolConfigReader.java'
