@@ -28,11 +28,7 @@
     <string name="launcher_mini_turn_ferry">Feribot</string>
     <string name="launcher_mini_turn_finish">Varış noktası</string>
     <string name="launcher_mini_turn_waypoint">Ara nokta</string>
-    <string name="launcher_mini_seat_driver">Sürücü</string>
-    <string name="launcher_mini_seat_passenger">Yolcu</string>
-    <string name="launcher_mini_mode_heat">Isıtma</string>
-    <string name="launcher_mini_mode_cool">Soğutma</string>
     <string name="launcher_mini_open_music">Müzik aç</string>
-    <!-- Koltuk tuşu değeri: kip · seviye ("Isıtma · Orta"). -->
-    <string name="launcher_mini_seat_value" formatted="true">%1$s · %2$s</string>
+    <!-- Yan sütunun telefon satırı: bağlı telefon yokken tek sessiz satır. -->
+    <string name="launcher_mini_phone_off">Telefon bağlı değil</string>
 </resources>

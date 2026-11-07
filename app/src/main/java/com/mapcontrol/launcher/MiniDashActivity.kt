@@ -39,28 +39,43 @@ import java.util.Date
  *
  * Yan panele göz atan sürücü için önem sırası: (1) saat, menzil ve yakıt büyük; (2) ana ekranın araç sahnesi ([SahneStage],
  * küçültülmüş: kapı / bagaj / ışıklar canlı, kilit hapı, uyarı şeridi, dokununca araç detayı); (3) ince medya şeridi (çalan bir
- * şey yokken yer tutmaz, üstte "Müzik aç" düğmesi kalır); (4) sürücü koltuk ısıtma ve yolcu koltuk soğutma tek dokunuşla;
- * (5) "Tam ekran" ile ana ekrana dönüş. Klima yok (fabrika çubuğunda), hız yok (gösterge panelinde). Yerleşim kuralları
+ * şey yokken yer tutmaz, üstte "Müzik aç" düğmesi kalır); (4) yan sütunda yolculuk (sürüşte canlı anlık tüketim, dururken
+ * yolculuk mesafesi; [MiniTripPanel]) ve telefon (tek dokunuşla "Geri ara", favoriler; [MiniPhonePanel]); (5) "Tam ekran" ile
+ * ana ekrana dönüş. Klima yok (fabrika çubuğunda), hız yok (gösterge panelinde), koltuklar ana ekranda. Yerleşim kuralları
  * [MiniLayout]'ta (bölünmüş yarı ya da geniş satır); serbest pencere başlığı gizlenemezse içerik onun altından başlar
  * ([FreeformCaption.overlapPx]).
  *
  * Veri kaynakları ana ekranınkilerle aynıdır ve paylaşılır ([VehicleMetricsRepository], [TripSource], [LauncherMediaController],
- * sahnenin kendi kaynakları); koltuk tuşları [SeatHeatModel] üzerinden yazar, yani yazma kapıları (LauncherEdition, test
- * anahtarı, demo) aynen geçerlidir; yeni bir araç yazma yolu yoktur. Görünmezken (onStop) tüm dinleyiciler ve yoklamalar durur.
+ * [PhoneSource], sahnenin kendi kaynakları); araca hiçbir şey yazılmaz. Sürüş durumu ana ekrandaki kartlarla aynı kuralla
+ * ([DriveLayoutPolicy]; ana ekran gizliyken [DriveMotion] işlemez) burada ayrıca izlenir. Görünmezken (onStop) tüm
+ * dinleyiciler ve yoklamalar durur.
  */
 class MiniDashActivity : Activity() {
 
     private val main = Handler(Looper.getMainLooper())
     private val metrics by lazy { VehicleMetricsRepository.getInstance(applicationContext) }
     private lateinit var media: LauncherMediaController
-    private lateinit var seatHeat: SeatHeatModel
-    private lateinit var seatVent: SeatHeatModel
     private var nav: MiniNavSource = MiniNavSource.NONE
     private var started = false
 
     // --- Durum (yalnızca değişince yeniden bağlanır) ---
     private var snapshot: VehicleMetricsSnapshot? = null
     private var trip = TripData()
+    private var smoother = ConsumptionSmoother()
+    private var consumption = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
+    /** Yolculuk kartıyla aynı "sürüşte" kararı (5 sn hareketle girilir, P/el freni ya da 3 dk duruşla çıkılır). */
+    private val motionPolicy = DriveLayoutPolicy()
+    private var driving = false
+    @Volatile private var observedMoving: Boolean? = null
+    private var phoneView: MiniSide.PhoneView? = null
+    private var tripShownNow: Boolean? = null
+    private val motionTick = object : Runnable {
+        override fun run() {
+            if (!started) return
+            motionStep()
+            main.postDelayed(this, MOTION_TICK_MS)
+        }
+    }
     private var navHint: NavHint? = null
     private var lastTop: Triple<Int?, Int?, Boolean>? = null
     private var lastMedia: MediaUi? = null
@@ -69,8 +84,18 @@ class MiniDashActivity : Activity() {
     /** Demo: `--ez launcher_mini_demo_idle true` çalan bir şey yokmuş gibi gösterir (daraltılmış medya). */
     private var demoIdle = false
 
-    private val metricsListener = VehicleMetricsRepository.Listener { s -> main.post { if (started && !LauncherDemo.enabled) { snapshot = s; bindTop() } } }
-    private val tripListener = TripSource.Listener { if (it != trip) { trip = it; bindTop() } }
+    private val metricsListener = VehicleMetricsRepository.Listener { s ->
+        // Hareket: gösterge hızı > 0 (ana ekranla aynı; okunamıyorsa bilinmiyor).
+        observedMoving = if (s.connected && (VehicleMetricsSnapshot.isValid(s.displaySpeed) || VehicleMetricsSnapshot.isValid(s.actualSpeed))) s.preferredSpeed() > 0 else null
+        main.post { if (started && !LauncherDemo.enabled) { snapshot = s; bindTop() } }
+    }
+    private val tripListener = TripSource.Listener {
+        // Her okuma yumuşatıcıya girer (dururken de): sürüşe geçince ortalama hazır olsun.
+        consumption = smoother.update(it.instantL100, it.speedKmh, it.moving)
+        trip = it
+        bindTop()
+        bindTrip()
+    }
     private val mediaListener = LauncherMediaController.Listener { s -> if (!LauncherDemo.enabled) main.post { if (started) bindMedia(s) } }
     private val navListener = MiniNavSource.Listener { h -> navHint = h; bindNav() }
     private val timeReceiver = object : BroadcastReceiver() {
@@ -84,9 +109,10 @@ class MiniDashActivity : Activity() {
     private lateinit var info: LinearLayout
     private lateinit var stats: LinearLayout
     private lateinit var pills: LinearLayout
-    /** Bölünmüş: araç | koltuklar satırı. Geniş: araç / medya sütunu. */
+    /** Bölünmüş: araç | yan sütun (yolculuk + telefon) satırı. Geniş: araç / medya sütunu. */
     private lateinit var body: LinearLayout
-    private lateinit var seats: LinearLayout
+    /** Yan sütun: yolculuk + telefon. */
+    private lateinit var side: LinearLayout
     private var arrangedWide: Boolean? = null
     private lateinit var clock: TextView
     /** Geniş biçimde saatin altında gün ve tarih (ana ekran başlığındaki biçim). */
@@ -114,8 +140,8 @@ class MiniDashActivity : Activity() {
     private lateinit var navManeuver: TextView
     private lateinit var navDistance: TextView
     private lateinit var navEta: TextView
-    private lateinit var heatTile: SeatToggle
-    private lateinit var ventTile: SeatToggle
+    private lateinit var tripPanel: MiniTripPanel
+    private lateinit var phonePanel: MiniPhonePanel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,12 +151,10 @@ class MiniDashActivity : Activity() {
         // Demo bayrakları LauncherDemo'nun kendi okuyucularıyla (yalnızca debug derlemede açılır).
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyPreview(intent)
+        LauncherDemo.applyMoving(intent)
         readDemo(intent)
         nav = navSourceFactory(this, intent)
         media = LauncherMediaController(this)
-        val io = LauncherIo.serial()
-        seatHeat = SeatHeatModel(this, vent = false, io = io) { heatTile.bind(it.driver, it.connected) }
-        seatVent = SeatHeatModel(this, vent = true, io = io) { ventTile.bind(it.passenger, it.connected) }
         window.setBackgroundDrawable(ColorDrawable(Sahne.GROUND))
         setContentView(build())
         LauncherStartup.attach(window.decorView)
@@ -143,6 +167,7 @@ class MiniDashActivity : Activity() {
         setIntent(intent)
         LauncherDemo.applyFrom(this, intent)
         LauncherDemo.applyPreview(intent)
+        LauncherDemo.applyMoving(intent)
         readDemo(intent)
         val nextNav = navSourceFactory(this, intent)
         if (nextNav.javaClass != nav.javaClass) {
@@ -160,6 +185,12 @@ class MiniDashActivity : Activity() {
     override fun onStart() {
         super.onStart()
         started = true
+        // Her açılışta sürüş durumu ve tüketim ortalaması sıfırdan: kapalıyken geçen duruş eski "sürüşte"yi taşımasın.
+        motionPolicy.reset(if (DriveMotion.driving) LayoutMode.DRIVE else LayoutMode.PARK)
+        driving = DriveMotion.driving
+        observedMoving = null
+        smoother = ConsumptionSmoother()
+        consumption = ConsumptionSmoother.Display(ConsumptionSmoother.Mode.NONE)
         registerReceiver(timeReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_TIME_TICK)
             addAction(Intent.ACTION_TIME_CHANGED)
@@ -173,9 +204,11 @@ class MiniDashActivity : Activity() {
         media.addListener(mediaListener)
         media.start()
         bindMedia(currentMedia())
-        seatHeat.onVisible()
-        seatVent.onVisible()
         stage.onVisible()
+        phonePanel.onVisible()
+        bindTrip()
+        main.removeCallbacks(motionTick)
+        main.postDelayed(motionTick, MOTION_TICK_MS)
         nav.start(navListener)
     }
 
@@ -196,9 +229,9 @@ class MiniDashActivity : Activity() {
         TripSource.remove(tripListener)
         media.removeListener(mediaListener)
         media.stop()
-        seatHeat.onHidden()
-        seatVent.onHidden()
         stage.onHidden()
+        phonePanel.onHidden()
+        tripPanel.stop()
         nav.stop()
         main.removeCallbacksAndMessages(null)
         super.onStop()
@@ -207,6 +240,11 @@ class MiniDashActivity : Activity() {
     override fun onDestroy() {
         stage.release()
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PhoneSource.REQ_PERMISSIONS) PhoneSource.onPermissionsResult(this)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -264,17 +302,61 @@ class MiniDashActivity : Activity() {
         val key = Triple(range, fuel, low)
         if (key == lastTop) return
         lastTop = key
-        val none = getString(R.string.launcher_unavailable)
-        rangeValue.text = range?.toString() ?: none
-        rangeUnit.visibility = if (range != null) View.VISIBLE else View.GONE
-        fuelValue.text = fuel?.let { getString(R.string.launcher_percent, it) } ?: none
+        // Okunamayan değer tireyle yer tutmaz, gizlenir (veri yokluğunu sahnedeki tek "Araç verisi bekleniyor" satırı söyler).
+        rangeBlock.visibility = if (range == null) View.GONE else View.VISIBLE
+        fuelBlock.visibility = if (fuel == null) View.GONE else View.VISIBLE
+        divider.visibility = if (range == null && fuel == null) View.INVISIBLE else View.VISIBLE
+        rangeValue.text = range?.toString().orEmpty()
+        fuelValue.text = fuel?.let { getString(R.string.launcher_percent, it) }.orEmpty()
         val tone = if (low) Sahne.AMBER else Sahne.NUMERAL
-        rangeValue.setTextColor(if (range == null) Sahne.INK_3 else tone)
-        fuelValue.setTextColor(if (fuel == null) Sahne.INK_3 else tone)
+        rangeValue.setTextColor(tone)
+        fuelValue.setTextColor(tone)
         gauge.set(fuel, low)
-        rangeBlock.contentDescription = getString(R.string.launcher_mini_range) + ", " +
-            (range?.let { getString(R.string.launcher_range_value, it) } ?: none)
+        if (range != null) rangeBlock.contentDescription = getString(R.string.launcher_mini_range) + ", " + getString(R.string.launcher_range_value, range)
         fuelBlock.contentDescription = getString(R.string.launcher_mini_fuel) + ", " + fuelValue.text
+        layoutNow?.let { applyFuelMargin(it) }
+    }
+
+    /** Sürüş durumu: ana ekrandaki kart politikasıyla aynı ([DriveLayoutPolicy]); değişince yolculuk paneli yeniden bağlanır. */
+    private fun motionStep() {
+        val moving = if (LauncherDemo.enabled) LauncherDemo.moving else observedMoving
+        val parked = if (motionPolicy.wantsParkSignal(moving)) DriveSignals.parked() else { DriveSignals.invalidate(); false }
+        motionPolicy.update(System.currentTimeMillis(), moving, parked, canSwitch = true, immediatePark = LauncherDemo.enabled && moving == false)
+        val now = motionPolicy.mode == LayoutMode.DRIVE
+        if (now == driving) return
+        driving = now
+        bindTrip()
+    }
+
+    /** Yolculuk paneli: veri yokken gizli (tire yok); görünürlüğü değişince yan sütun yeniden bölünür. */
+    private fun bindTrip() {
+        if (!::tripPanel.isInitialized) return
+        val content = TripHero.content(driving, trip.connected, trip.tripKm)
+        val shown = MiniSide.tripShown(content)
+        if (shown) {
+            val d = trip
+            tripPanel.bind(content, d, consumption, TripTotals.drivingMinutes(d.drivingRunMin, d.drivingResetMin, d.drivingAltMin, d.engineOnMin))
+        }
+        if (shown != tripShownNow) {
+            tripShownNow = shown
+            applySide()
+        }
+    }
+
+    /**
+     * Yan sütun: yolculuk kalan yüksekliği alır, telefon doğal yüksekliğinde altta ([MiniSide.phoneDp]). Yolculuk gizliyken
+     * telefon üstte kalır (boş kutu büyütülmez).
+     */
+    private fun applySide() {
+        val m = layoutNow ?: return
+        val v = phoneView ?: MiniSide.phone(PhoneSnapshot.EMPTY)
+        val trip = tripShownNow == true
+        tripPanel.view.visibility = if (trip) View.VISIBLE else View.GONE
+        (phonePanel.view.layoutParams as? LinearLayout.LayoutParams)?.apply {
+            height = dp(MiniSide.phoneDp(v, m))
+            topMargin = if (trip) dp(m.gapDp) else 0
+            phonePanel.view.layoutParams = this
+        }
     }
 
     private fun bindNav() {
@@ -369,7 +451,7 @@ class MiniDashActivity : Activity() {
         stats = group(LinearLayout.HORIZONTAL).apply { gravity = Gravity.CENTER_VERTICAL }
         pills = group(LinearLayout.HORIZONTAL).apply { gravity = Gravity.CENTER_VERTICAL }
         body = group(LinearLayout.HORIZONTAL)
-        seats = group(LinearLayout.VERTICAL)
+        side = group(LinearLayout.VERTICAL)
 
         // Saat, menzil, yakıt: eşit genişlikli rakamlar, değer değişince satır kaymaz.
         clock = sahneText(this, 60f, Sahne.NUMERAL, 300, -0.02f).apply { includeFontPadding = false; fontFeatureSettings = "tnum" }
@@ -478,9 +560,9 @@ class MiniDashActivity : Activity() {
             visibility = View.GONE
         }
 
-        // Koltuk tuşları: kısa başlık, değer "kip · seviye".
-        heatTile = SeatToggle(this, getString(R.string.launcher_mini_seat_driver), getString(R.string.launcher_mini_mode_heat), Sahne.AMBER, vent = false) { seatHeat.cycle(driver = true) }
-        ventTile = SeatToggle(this, getString(R.string.launcher_mini_seat_passenger), getString(R.string.launcher_mini_mode_cool), Sahne.COOL, vent = true) { seatVent.cycle(driver = false) }
+        // Yan sütun: yolculuk ve telefon.
+        tripPanel = MiniTripPanel(this)
+        phonePanel = MiniPhonePanel(this) { v -> phoneView = v; applySide() }
 
         root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
             if (r - l != or - ol || b - t != ob - ot) relayout(r - l, b - t)
@@ -502,22 +584,22 @@ class MiniDashActivity : Activity() {
     }
 
     /**
-     * Bölünmüş: üst satır (saat | menzil, yakıt | düğmeler), araç | koltuklar, altta medya şeridi.
-     * Geniş: bilgi sütunu (saat, menzil + yakıt, rota, düğmeler) | araç / medya | koltuklar.
+     * Bölünmüş: üst satır (saat | menzil, yakıt | düğmeler), araç | yan sütun (yolculuk + telefon), altta medya şeridi.
+     * Geniş: bilgi sütunu (saat, menzil + yakıt, rota, düğmeler) | araç / medya | yan sütun.
      * Görünümler aynıdır; yalnızca ebeveyn ve yerleşim parametreleri değişir.
      */
     private fun arrange(wide: Boolean) {
         if (arrangedWide == wide) return
         arrangedWide = wide
-        for (g in listOf(column, info, stats, pills, body, seats)) g.removeAllViews()
+        for (g in listOf(column, info, stats, pills, body, side)) g.removeAllViews()
         stats.orientation = if (wide) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         stats.gravity = if (wide) Gravity.START else Gravity.CENTER_VERTICAL
         (navRow.parent as? ViewGroup)?.removeView(navRow)
         // Boşluk "Müzik aç"ın sağında: o gizliyken "Tam ekran" hizadan kaymaz.
         pills.addView(musicPill, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)).apply { marginEnd = dp(12) })
         pills.addView(fullPill, LinearLayout.LayoutParams(WRAP, dp(MiniLayout.MIN_TOUCH_DP)))
-        seats.addView(heatTile, LinearLayout.LayoutParams(MATCH, 0, 1f))
-        seats.addView(ventTile, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        side.addView(tripPanel.view, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        side.addView(phonePanel.view, LinearLayout.LayoutParams(MATCH, dp(MiniLayout.MIN_TOUCH_DP)))
         if (!wide) {
             column.orientation = LinearLayout.VERTICAL
             info.orientation = LinearLayout.HORIZONTAL
@@ -531,7 +613,7 @@ class MiniDashActivity : Activity() {
             column.addView(info, LinearLayout.LayoutParams(MATCH, 0))
             body.orientation = LinearLayout.HORIZONTAL
             body.addView(stage, LinearLayout.LayoutParams(0, MATCH, 1f))
-            body.addView(seats, LinearLayout.LayoutParams(0, MATCH))
+            body.addView(side, LinearLayout.LayoutParams(0, MATCH))
             column.addView(body, LinearLayout.LayoutParams(MATCH, 0, 1f))
             column.addView(mediaStrip, LinearLayout.LayoutParams(MATCH, 0))
         } else {
@@ -551,7 +633,7 @@ class MiniDashActivity : Activity() {
             body.addView(stage, LinearLayout.LayoutParams(MATCH, 0, 1f))
             body.addView(mediaStrip, LinearLayout.LayoutParams(MATCH, 0))
             column.addView(body, LinearLayout.LayoutParams(0, MATCH, 1f))
-            column.addView(seats, LinearLayout.LayoutParams(0, MATCH))
+            column.addView(side, LinearLayout.LayoutParams(0, MATCH))
         }
     }
 
@@ -566,8 +648,7 @@ class MiniDashActivity : Activity() {
         rangeUnit.textSize = m.valueSp / 2f
         fullPill.setTextShown(m.pillText)
         musicPill.setTextShown(m.pillText)
-        lp(seats).apply { width = dp(m.seatsDp) }
-        lp(ventTile).apply { topMargin = g }
+        lp(side).apply { width = dp(m.sideDp) }
         lp(mediaStrip).apply { height = dp(m.mediaDp) }
         mediaStrip.setPadding(dp(if (m.coverDp > 0) 12 else 20), 0, dp(12), 0)
         artworkBox.visibility = if (m.coverDp > 0) View.VISIBLE else View.GONE
@@ -575,18 +656,14 @@ class MiniDashActivity : Activity() {
         lp(prev).apply { width = dp(m.skipDp); height = dp(m.skipDp) }
         lp(next).apply { width = dp(m.skipDp); height = dp(m.skipDp) }
         lp(play).apply { width = dp(m.playDp); height = dp(m.playDp) }
-        heatTile.setArt(dp(m.seatArtDp), m.seatValueSp)
-        ventTile.setArt(dp(m.seatArtDp), m.seatValueSp)
-        // Bölünmüşte menzil ve yakıt yan yana; genişte üst üste (sütunu doldurur).
-        lp(fuelBlock).apply {
-            marginStart = if (m.wide) 0 else dp(if (m.pillText) 28 else 20)
-            topMargin = if (m.wide) dp(22) else 0
-        }
+        tripPanel.setSizes(m)
+        phonePanel.setSizes(m)
+        applyFuelMargin(m)
         if (!m.wide) {
             lp(info).apply { height = dp(m.headerDp) }
             lp(divider).apply { marginStart = dp(if (m.pillText) 24 else 16); marginEnd = dp(if (m.pillText) 24 else 16) }
             lp(body).apply { topMargin = g }
-            lp(seats).apply { marginStart = g }
+            lp(side).apply { marginStart = g }
             lp(mediaStrip).apply { topMargin = g }
             lp(rangeBlock).apply { marginStart = 0 }
         } else {
@@ -594,11 +671,25 @@ class MiniDashActivity : Activity() {
             lp(stats).apply { topMargin = dp(28) }
             lp(navRow).apply { topMargin = dp(24) }
             lp(body).apply { marginStart = g }
-            lp(seats).apply { marginStart = g }
+            lp(side).apply { marginStart = g }
             lp(mediaStrip).apply { topMargin = g }
         }
         bindNav()
+        applySide()
+        bindTrip()
         column.requestLayout()
+    }
+
+    /** Bölünmüşte menzil ve yakıt yan yana; genişte üst üste. Menzil gizliyken yakıt satır başına geçer. */
+    private fun applyFuelMargin(m: MiniLayout) {
+        // Yerleşim henüz uygulanmadıysa (ilk onStart) blok ebeveynsiz: applyLayout zaten çağırır.
+        if (fuelBlock.layoutParams !is ViewGroup.MarginLayoutParams) return
+        val first = rangeBlock.visibility == View.GONE
+        lp(fuelBlock).apply {
+            marginStart = if (m.wide || first) 0 else dp(if (m.pillText) 28 else 20)
+            topMargin = if (m.wide && !first) dp(22) else 0
+        }
+        fuelBlock.requestLayout()
     }
 
     private fun lp(v: View): ViewGroup.MarginLayoutParams = v.layoutParams as ViewGroup.MarginLayoutParams
@@ -665,106 +756,6 @@ class MiniDashActivity : Activity() {
         }
     }
 
-    /**
-     * Koltuk tuşu: Sahne şeridindeki koltuk görseli (`launcher_art_seat_*`, [SahneArt]; ısıtmada turuncu, soğutmada buz tonlu,
-     * kapalıda sönük koltuk; yolcu koltuğu yatay çevrili), kısa başlık ("Sürücü"), değer "kip · seviye" ("Isıtma · Orta") ve
-     * üç seviye çizgisi. Dokunuş [onTap]'e gider (seviye döngüsü [SeatHeatModel.cycle]'da; yazma kapıları orada). Okunamıyorsa
-     * seviye "—" ve tuş sönük görünür.
-     */
-    private class SeatToggle(
-        context: Context,
-        label: String,
-        private val mode: String,
-        private val activeColor: Int,
-        private val vent: Boolean,
-        onTap: () -> Unit,
-    ) : LinearLayout(context) {
-        private val icon = ImageView(context).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-            // Görsel sürücü koltuğuna bakar; yolcu (soğutma) tuşunda çevrilir.
-            if (vent) scaleX = -1f
-            background = SahneArt.spotlight()
-        }
-        private var artKey: String? = null
-        private val title = sahneText(context, 18f, Sahne.INK_2, 500).apply { text = label; maxLines = 1 }
-        /** Tek satır; dar tuşta kesilmek yerine küçülür ([setArt] üst sınırı verir). */
-        private val value = sahneText(context, 24f, Sahne.INK, 500).apply { maxLines = 1 }
-        private val pips = Array(3) { View(context) }
-        private var shown: Pair<Int?, Boolean>? = null
-
-        init {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = GlassDrawable(context, Sahne.PANEL_RADIUS_DP, shadow = 0.6f, control = true)
-            setPadding(context.dp(18), 0, context.dp(20), 0)
-            minimumHeight = context.dp(MiniLayout.MIN_TOUCH_DP)
-            addView(icon, LayoutParams(context.dp(72), context.dp(72)).apply { marginEnd = context.dp(14) })
-            addView(LinearLayout(context).apply {
-                orientation = VERTICAL
-                addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-                addView(value, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2) })
-            }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-            addView(LinearLayout(context).apply {
-                orientation = VERTICAL
-                gravity = Gravity.CENTER
-                // Üstteki çizgi en yüksek seviye (3), alttaki 1.
-                for (i in 2 downTo 0) addView(pips[i], LayoutParams(context.dp(26), context.dp(6)).apply { topMargin = context.dp(5) })
-            }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(10) })
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onTap() }
-            pressFeedback()
-            bind(null, false)
-        }
-
-        fun setArt(px: Int, valueSp: Float) {
-            value.setAutoSizeTextTypeUniformWithConfiguration(MIN_VALUE_SP, valueSp.toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-            val lp = icon.layoutParams as MarginLayoutParams
-            if (lp.width == px) return
-            lp.width = px
-            lp.height = px
-            lp.marginEnd = px / 5
-            icon.layoutParams = lp
-        }
-
-        fun bind(level: Int?, connected: Boolean) {
-            val key = level to connected
-            if (key == shown) return
-            shown = key
-            val lv = if (connected) level else null
-            val on = (lv ?: 0) > 0
-            val levelText = if (lv == null) context.getString(R.string.launcher_unavailable) else context.getString(SeatHeatModel.levelLabel(lv))
-            value.text = context.getString(R.string.launcher_mini_seat_value, mode, levelText)
-            value.setTextColor(if (on) activeColor else if (lv == null) Sahne.INK_3 else Sahne.INK)
-            val tone = if (!on) StripTone.NORMAL else if (vent) StripTone.COOL else StripTone.HEAT
-            val art0 = SahneArt.seatKey(tone, lv ?: 0)
-            if (art0 != artKey) {
-                artKey = art0
-                val art = SahneArt.drawable(context, art0)
-                if (art != null) {
-                    icon.setImageDrawable(art)
-                    icon.imageTintList = null
-                } else {
-                    icon.setImageResource(R.drawable.ic_sahne_seat)
-                    icon.setTint(if (on) activeColor else Sahne.INK_3)
-                }
-            }
-            icon.colorFilter = SahneArt.filter(lv == null)
-            pips.forEachIndexed { i, p ->
-                p.background = GradientDrawable().apply {
-                    cornerRadius = context.dpF(3f)
-                    setColor(if (lv != null && i < lv) activeColor else Sahne.TRACK)
-                }
-            }
-            contentDescription = "${title.text}: ${value.text}"
-        }
-
-        private companion object {
-            const val MIN_VALUE_SP = 16
-        }
-    }
-
     companion object {
         private const val TAG = "MiniDash"
         private const val WINDOWING_MODE_FULLSCREEN = 1
@@ -775,6 +766,7 @@ class MiniDashActivity : Activity() {
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         private const val FUEL_BAR_DP = 64
         private const val COVER_RADIUS_DP = 14f
+        private const val MOTION_TICK_MS = 500L
 
         /** Demo navigasyon satırı: `--ez launcher_mini_demo_nav true` (yalnızca demo açıkken). */
         const val EXTRA_DEMO_NAV = "launcher_mini_demo_nav"

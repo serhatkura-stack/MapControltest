@@ -134,7 +134,7 @@ class MiniDashLogicTest {
         assertFalse("bölünmüşte harita yanda, rota satırı yok", m.showNav)
         assertTrue(m.clockSp >= 56f)
         assertTrue(m.valueSp >= 36f)
-        assertTrue("koltuk tuşları rahat dokunulur: ${m.seatDp}", m.seatDp >= 120)
+        assertTrue("yan sütun iki paneli taşır: ${m.sideHeightDp}", m.sideHeightDp >= MiniSide.sideNeedDp(m))
     }
 
     @Test fun captionShrinksUsableHeight() {
@@ -151,7 +151,8 @@ class MiniDashLogicTest {
             assertTrue(at, m.skipDp >= MiniLayout.MIN_TOUCH_DP)
             assertTrue(at, m.playDp >= MiniLayout.MIN_TOUCH_DP)
             assertTrue(at, m.mediaDp >= MiniLayout.MIN_TOUCH_DP)
-            assertTrue(at + " koltuk ${m.seatDp}", m.seatDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at, m.callRowDp >= MiniLayout.MIN_TOUCH_DP)
+            assertTrue(at, MiniSide.favoriteRowDp(m) >= MiniLayout.MIN_TOUCH_DP)
         }
     }
 
@@ -162,9 +163,10 @@ class MiniDashLogicTest {
         assertTrue(m.showNav)
         assertEquals(0, m.headerDp)
         assertTrue(m.infoDp in 340..420)
-        assertTrue(m.seatsDp in 420..600)
-        // Bilgi ve koltuk sütunlarından sonra araç sahnesine en az yarı ekran kalır.
-        assertTrue(1920 - m.infoDp - m.seatsDp - 2 * m.paddingDp - 2 * m.gapDp >= 800)
+        assertTrue(m.sideDp in 420..560)
+        // Bilgi ve yan sütunlardan sonra araç sahnesine en az yarı ekran kalır.
+        assertTrue(1920 - m.infoDp - m.sideDp - 2 * m.paddingDp - 2 * m.gapDp >= 800)
+        assertTrue("tam ekranda yan sütun iki paneli taşır", m.sideHeightDp >= MiniSide.sideNeedDp(m))
         assertTrue(m.clockSp > MiniLayout.forSize(960, 606).clockSp)
     }
 
@@ -190,14 +192,102 @@ class MiniDashLogicTest {
         val m = MiniLayout.forSize(640, 610)
         assertFalse(m.pillText)
         assertTrue(m.clockSp < MiniLayout.forSize(960, 610).clockSp)
-        assertTrue(m.seatsDp >= 260)
+        assertTrue(m.sideDp >= 280)
     }
 
-    @Test fun shortWindowThinsMediaBeforeSeats() {
+    @Test fun shortWindowThinsMediaBeforeSidePanels() {
         val m = MiniLayout.forSize(960, 462, captionDp = 42)
         assertEquals(88, m.mediaDp)
         assertEquals(0, m.coverDp)
-        assertTrue(m.seatDp >= MiniLayout.MIN_TOUCH_DP)
+        assertEquals(m.sideHeightDp, 462 - 42 - 2 * m.paddingDp - m.headerDp - m.gapDp - 88 - m.gapDp)
+    }
+
+    @Test fun tiggo7HalfKeepsCoverAndBothPanels() {
+        // Tiggo 7 sol yarı: 960 × 650, başlık 40 dp.
+        val m = MiniLayout.forSize(960, 650, captionDp = 40)
+        assertTrue("kapak kalır", m.coverDp > 0)
+        assertTrue(m.sideHeightDp >= MiniSide.sideNeedDp(m))
+        // Telefon paneli dolu hâlinde yolculuğa en az sığacağı kadar yer kalır.
+        assertTrue(m.sideHeightDp - m.gapDp - MiniSide.phoneMaxDp(m) >= MiniSide.tripMinDp(m))
+    }
+
+    @Test fun tripMinHeightMatchesManropeLines() {
+        // Yazı tipi payı kapalı Manrope satırı 1,366 em: 960 × 650 (başlık 40) → 2·12 + 22 + 6 + 52 (38 sp) + 6 + 27 (20 sp).
+        val m = MiniLayout.forSize(960, 650, captionDp = 40)
+        assertEquals(137, MiniSide.tripMinDp(m))
+        // Tam ekran (büyük): 2·24 + 22 + 6 + 88 (64 sp) + 6 + 36 (26 sp).
+        val big = MiniLayout.forSize(1920, 650)
+        assertEquals(206, MiniSide.tripMinDp(big))
+    }
+
+    // --- Yan sütun: yolculuk ---
+
+    @Test fun tripPanelHiddenWithoutData() {
+        assertFalse(MiniSide.tripShown(TripHero.Content.NO_DATA))
+        assertTrue(MiniSide.tripShown(TripHero.Content.TRIP))
+        assertTrue(MiniSide.tripShown(TripHero.Content.LIVE))
+        assertEquals(emptyList<MiniSide.Stat>(), MiniSide.stats(TripHero.Content.NO_DATA, 12.0, 30, 40, 7.0))
+    }
+
+    @Test fun tripStatsWhileDrivingAndParked() {
+        assertEquals(listOf(MiniSide.Stat.DISTANCE, MiniSide.Stat.DURATION, MiniSide.Stat.AVG_SPEED),
+            MiniSide.stats(TripHero.Content.LIVE, 53.8, 47, 45, 7.9))
+        assertEquals(listOf(MiniSide.Stat.DURATION, MiniSide.Stat.AVG_SPEED, MiniSide.Stat.AVG_CONS),
+            MiniSide.stats(TripHero.Content.TRIP, 53.8, 47, 45, 7.9))
+        // Okunamayan (ya da 0 dk) değer düşer; tire yazılmaz.
+        assertEquals(listOf(MiniSide.Stat.AVG_SPEED), MiniSide.stats(TripHero.Content.LIVE, null, 0, 45, null))
+        assertEquals(emptyList<MiniSide.Stat>(), MiniSide.stats(TripHero.Content.TRIP, 53.8, null, null, null))
+    }
+
+    // --- Yan sütun: telefon ---
+
+    private val ayse = PhoneContact("1", "Ayşe", "0555 000 00 01", starred = true)
+    private val mehmet = PhoneContact("2", "Mehmet", "+90 555 000 00 02", starred = true)
+    private val ev = PhoneContact("3", "Ev", "0555 000 00 03")
+    private val annem = PhoneContact("4", "Annem", "0555 000 00 04")
+    private val bare = PhoneContact("5", "0555 000 00 05", "0555 000 00 05")
+
+    @Test fun phoneOffIsQuietRow() {
+        val v = MiniSide.phone(PhoneSnapshot(connected = false, favorites = listOf(ayse)))
+        assertEquals(MiniSide.Phone.OFF, v.state)
+        assertNull(v.last)
+        assertEquals(MiniLayout.MIN_TOUCH_DP, MiniSide.phoneDp(v, MiniLayout.forSize(960, 606)))
+    }
+
+    @Test fun phoneStatesFollowPanelState() {
+        assertEquals(MiniSide.Phone.PERMISSION, MiniSide.phone(PhoneSnapshot(connected = true, permissionNeeded = true)).state)
+        assertEquals(MiniSide.Phone.LOADING, MiniSide.phone(PhoneSnapshot(connected = true)).state)
+        assertEquals(MiniSide.Phone.EMPTY, MiniSide.phone(PhoneSnapshot(connected = true, loaded = true)).state)
+        // Yalnız isimsiz kayıtlar ve çıplak numaralı kişi: gösterilecek bir şey yok, boş sayılır.
+        val unnamed = PhoneSnapshot(connected = true, loaded = true, favorites = listOf(bare),
+            recents = listOf(PhoneRecent(RecentType.INCOMING, null, "0555 000 00 99", 1L)))
+        assertEquals(MiniSide.Phone.EMPTY, MiniSide.phone(unnamed).state)
+    }
+
+    @Test fun callBackIsLastNamedAndFavoritesSkipIt() {
+        val s = PhoneSnapshot(connected = true, loaded = true, favorites = listOf(ayse, mehmet, ev, annem),
+            recents = listOf(
+                PhoneRecent(RecentType.INCOMING, null, "0555 000 00 99", 3L),
+                PhoneRecent(RecentType.MISSED, "Mehmet", "0555 000 00 02", 2L),
+            ))
+        val v = MiniSide.phone(s)
+        assertEquals(MiniSide.Phone.CONTENT, v.state)
+        assertEquals("Mehmet", v.last?.name)
+        // "+90 555…" ile "0555…" aynı kişi: favorilerde tekrar edilmez; en çok üç.
+        assertEquals(listOf(ayse, ev, annem), v.favorites)
+        val m = MiniLayout.forSize(960, 606)
+        assertEquals(MiniSide.phoneMaxDp(m), MiniSide.phoneDp(v, m))
+    }
+
+    @Test fun phoneHeightShrinksWithRows() {
+        val m = MiniLayout.forSize(960, 606)
+        val onlyFavs = MiniSide.phone(PhoneSnapshot(connected = true, loaded = true, favorites = listOf(ayse)))
+        assertNull(onlyFavs.last)
+        assertEquals(2 * m.panelPadDp + MiniSide.favoriteRowDp(m), MiniSide.phoneDp(onlyFavs, m))
+        val onlyLast = MiniSide.phone(PhoneSnapshot(connected = true, loaded = true,
+            recents = listOf(PhoneRecent(RecentType.OUTGOING, "Ev", "0555 000 00 03", 1L))))
+        assertEquals(2 * m.panelPadDp + m.callRowDp, MiniSide.phoneDp(onlyLast, m))
+        assertTrue(MiniSide.phoneDp(onlyLast, m) < MiniSide.phoneMaxDp(m))
     }
 
     // --- Gerçek navigasyon kaynağı ---

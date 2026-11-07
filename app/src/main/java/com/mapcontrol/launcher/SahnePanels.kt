@@ -177,6 +177,31 @@ internal object PanelFit {
         if (naturalPx <= 0 || innerPx <= 0 || innerPx >= naturalPx) 1f else innerPx.toFloat() / naturalPx
 }
 
+/** Yolculuk öncü satırı: büyük değer, varsa birimi, alt satır ve rengi (ana ekran kartı ve mini gösterge, [TripHero]). */
+internal data class TripHeroLine(val value: String, val unit: String?, val sub: String, val color: Int)
+
+/** Canlı anlık tüketim öncü satırı: tüketim kutucuğuyla aynı metinler ve durumlar ("Düşük hız", "Araç duruyor", bekleniyor). */
+internal fun tripLiveHero(context: Context, display: ConsumptionSmoother.Display): TripHeroLine {
+    val label = context.getString(R.string.launcher_widget_consumption)
+    val unit = context.getString(R.string.launcher_l100_unit)
+    return when (TripHero.live(display)) {
+        TripHero.Live.VALUE -> TripHeroLine(tripOne(display.l100!!), unit, label, Sahne.NUMERAL)
+        TripHero.Live.CAP -> TripHeroLine(context.getString(R.string.launcher_consumption_over_cap), unit, label, Sahne.NUMERAL)
+        TripHero.Live.LOW_SPEED -> TripHeroLine(context.getString(R.string.launcher_consumption_takeoff), null,
+            context.getString(R.string.launcher_consumption_low_speed), Sahne.INK)
+        TripHero.Live.IDLE -> TripHeroLine(context.getString(R.string.launcher_consumption_idle), null, label, Sahne.INK_2)
+        TripHero.Live.WAITING -> TripHeroLine(context.getString(R.string.launcher_unavailable), null,
+            context.getString(R.string.launcher_waiting_data), Sahne.INK_3)
+    }
+}
+
+/** Sürüş süresi metni: "47 dk", "1 sa 12 dk". */
+internal fun tripMinutesText(context: Context, min: Int): String =
+    if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
+
+/** Tek ondalık, yerel ayırıcıyla ("53,8"). */
+internal fun tripOne(v: Double): String = String.format(java.util.Locale.getDefault(), "%,.1f", v)
+
 /**
  * Sahne yolculuk paneli (taslak): başlık, büyük "sıfırlamadan beri" mesafe, iki sütunlu ortalama tüketim / ortalama
  * hız ve altında "Toplam" bölümü (toplam yol, toplam yakıt, sürüş süresi). Veri [TripSource]'tan, yolculuk
@@ -283,12 +308,10 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     /** "Toplam" satırları yerinde güncellenir; yalnızca satır sayısı değişince yeniden kurulur (her turda yerleşim zinciri olmasın). */
     private val totalRows = ArrayList<Pair<TextView, TextView>>()
 
-    /** Öncü satır: büyük değer, varsa birimi, alt satır ve rengi. */
-    private data class Hero(val value: String, val unit: String?, val sub: String, val color: Int)
 
     /** Çapraz geçişin sönme yarısı sürüyor: gelen öncü satır [pendingHero]'da bekler, sönme bitince yazılır. */
     private var fadingOut = false
-    private var pendingHero: Hero? = null
+    private var pendingHero: TripHeroLine? = null
 
     /** İlk çizim veri beklemeden: boş kart çizgisiz, sakin cümleyle. */
     init { bind() }
@@ -325,7 +348,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
         )
         val rows = totalsRows()
         val hero = if (content == TripHero.Content.LIVE) liveHero(km) else
-            Hero(one(km!!), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_trip_since_reset), Sahne.NUMERAL)
+            TripHeroLine(one(km!!), context.getString(R.string.launcher_sahne_km), context.getString(R.string.launcher_trip_since_reset), Sahne.NUMERAL)
         val key = Triple(hero, stats, rows)
         if (key == shown) return
         val from = shownContent
@@ -359,32 +382,16 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     }
 
     /**
-     * Canlı anlık tüketim: tüketim kutucuğuyla aynı metinler ve durumlar. Yolculuk mesafesi kaybolmasın diye alt satırın
-     * sonuna küçük "· Yol 53,8 km" eklenir (yalnız kısa etiketli durumlarda, [TripHero.liveSubDistance]); tek satıra sığmazsa
-     * üç noktayla kısalır. Satır parktaki "Son sıfırlamadan beri" ile aynı
-     * yerde ve boyutta, yerleşim kaymaz.
+     * Canlı anlık tüketim (ortak [tripLiveHero]); yolculuk mesafesi kaybolmasın diye alt satırın sonuna küçük
+     * "· Yol 53,8 km" eklenir (yalnız kısa etiketli durumlarda, [TripHero.liveSubDistance]).
      */
-    private fun liveHero(km: Double?): Hero {
-        val h = liveHeroBase()
+    private fun liveHero(km: Double?): TripHeroLine {
+        val h = tripLiveHero(context, display)
         val distance = TripHero.liveSubDistance(TripHero.live(display), km)?.let { one(it) } ?: return h
         return h.copy(sub = context.getString(R.string.launcher_trip_live_sub, h.sub, distance))
     }
 
-    private fun liveHeroBase(): Hero {
-        val label = context.getString(R.string.launcher_widget_consumption)
-        val unit = context.getString(R.string.launcher_l100_unit)
-        return when (TripHero.live(display)) {
-            TripHero.Live.VALUE -> Hero(one(display.l100!!), unit, label, Sahne.NUMERAL)
-            TripHero.Live.CAP -> Hero(context.getString(R.string.launcher_consumption_over_cap), unit, label, Sahne.NUMERAL)
-            TripHero.Live.LOW_SPEED -> Hero(context.getString(R.string.launcher_consumption_takeoff), null,
-                context.getString(R.string.launcher_consumption_low_speed), Sahne.INK)
-            TripHero.Live.IDLE -> Hero(context.getString(R.string.launcher_consumption_idle), null, label, Sahne.INK_2)
-            TripHero.Live.WAITING -> Hero(context.getString(R.string.launcher_unavailable), null,
-                context.getString(R.string.launcher_waiting_data), Sahne.INK_3)
-        }
-    }
-
-    private fun applyHero(h: Hero) {
+    private fun applyHero(h: TripHeroLine) {
         big.setTextColor(h.color)
         big.setTextSmooth(h.value, animate = false)
         if (h.unit != null) bigUnit.text = h.unit
@@ -397,7 +404,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
     }
 
     /** Öncü satır yarı sürede söner, yeni içerik yazılır, yarı sürede geri gelir; yükseklik değişmez. */
-    private fun fadeTo(h: Hero) {
+    private fun fadeTo(h: TripHeroLine) {
         pendingHero = h
         if (fadingOut) return
         fadingOut = true
@@ -455,9 +462,7 @@ internal class SahneTripPanel(private val context: Context) : SizedWidget, Strip
                     context.getString(R.string.launcher_km_value, String.format(java.util.Locale.getDefault(), "%,d", value as Int))
                 TripTotals.Kind.FUEL -> context.getString(R.string.launcher_totals_short_fuel) to
                     context.getString(R.string.launcher_liter_value, one(value as Double))
-                TripTotals.Kind.TIME -> context.getString(R.string.launcher_totals_short_time) to (value as Int).let { min ->
-                    if (min >= 60) context.getString(R.string.launcher_break_hm, min / 60, min % 60) else context.getString(R.string.launcher_break_m, min)
-                }
+                TripTotals.Kind.TIME -> context.getString(R.string.launcher_totals_short_time) to tripMinutesText(context, value as Int)
             }
         }
     }

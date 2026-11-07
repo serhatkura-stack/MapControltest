@@ -28,11 +28,7 @@
     <string name="launcher_mini_turn_ferry">Ferry</string>
     <string name="launcher_mini_turn_finish">Destination</string>
     <string name="launcher_mini_turn_waypoint">Waypoint</string>
-    <string name="launcher_mini_seat_driver">Driver</string>
-    <string name="launcher_mini_seat_passenger">Passenger</string>
-    <string name="launcher_mini_mode_heat">Heat</string>
-    <string name="launcher_mini_mode_cool">Cooling</string>
     <string name="launcher_mini_open_music">Open music</string>
-    <!-- Koltuk tuşu değeri: kip · seviye ("Isıtma · Orta"). -->
-    <string name="launcher_mini_seat_value" formatted="true">%1$s · %2$s</string>
+    <!-- Yan sütunun telefon satırı: bağlı telefon yokken tek sessiz satır. -->
+    <string name="launcher_mini_phone_off">No phone connected</string>
 </resources>

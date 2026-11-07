@@ -1,5 +1,7 @@
 package com.mapcontrol.launcher
 
+import kotlin.math.roundToInt
+
 /**
  * Mini göstergenin (bölünmüş ekranın bir yarısı, bkz. [MiniDashActivity]) saf kuralları; JVM'de sınanır.
  *
@@ -139,11 +141,12 @@ internal object MiniNav {
  * Pencere boyutuna göre yerleşim (dp); saf kural, JVM'de sınanır. İki biçim vardır:
  *
  * - Bölünmüş yarı (Tiggo 7 sol yarı ~960 × 606 dp, serbest pencere başlığı altında): üstte saat + menzil + yakıt + düğmeler
- *   (tek satır), ortada araç sahnesi | koltuk tuşları sütunu, altta tam genişlikte ince medya şeridi.
+ *   (tek satır), ortada araç sahnesi | yan sütun (yolculuk + telefon), altta tam genişlikte ince medya şeridi.
  * - Geniş ve kısa pencere ([wide]; tam ekran 1920 × 648, Tiggo 8 üst yarısı 1707 × ~470): solda bilgi sütunu (saat, menzil,
- *   yakıt, rota, düğmeler), ortada araç sahnesi ve altında medya şeridi, sağda koltuk tuşları.
+ *   yakıt, rota, düğmeler), ortada araç sahnesi ve altında medya şeridi, sağda yan sütun.
  *
- * Çalan bir şey yokken medya şeridi hiç yer tutmaz (yalnızca üstteki "Müzik aç" düğmesi kalır); araç ve koltuklar büyür.
+ * Yan sütunda üstte yolculuk paneli (kalan yükseklik), altında telefon paneli (doğal yüksekliği, [MiniSide.phoneDp]).
+ * Çalan bir şey yokken medya şeridi hiç yer tutmaz (yalnızca üstteki "Müzik aç" düğmesi kalır); araç ve yan sütun büyür.
  * Dokunma alanları sürüşte de [MIN_TOUCH_DP] altına inmez.
  */
 internal data class MiniLayout(
@@ -158,8 +161,8 @@ internal data class MiniLayout(
     val headerDp: Int,
     /** "Tam ekran" / "Müzik aç" düğmelerinde yazı (dar pencerede yalnızca simge, yine 64 dp kare). */
     val pillText: Boolean,
-    /** Koltuk tuşları sütununun genişliği. */
-    val seatsDp: Int,
+    /** Yan sütunun (yolculuk + telefon) genişliği. */
+    val sideDp: Int,
     /** Geniş biçimde bilgi sütununun genişliği (bölünmüşte 0). */
     val infoDp: Int,
     /** Medya şeridi yüksekliği (çalan bir şey varken). */
@@ -168,12 +171,16 @@ internal data class MiniLayout(
     val coverDp: Int,
     val playDp: Int,
     val skipDp: Int,
-    /** Koltuk görseli kenarı (tuş yüksekliğiyle büyür: uzun tuş boş görünmesin). */
-    val seatArtDp: Int,
-    /** Koltuk değeri ("Isıtma · Orta") yazı boyu. */
-    val seatValueSp: Float,
-    /** Medya şeridi varken her koltuk tuşunun beklenen yüksekliği (yerleşim ağırlıklarla aynı sonucu verir). */
-    val seatDp: Int,
+    /** Medya şeridi varken yan sütunun beklenen yüksekliği (yerleşim ağırlıklarla aynı sonucu verir). */
+    val sideHeightDp: Int,
+    /** Yan sütundaki panellerin iç payı. */
+    val panelPadDp: Int,
+    /** Yolculuk panelinin öncü sayısı ve alt satırdaki değerler. */
+    val tripHeroSp: Float,
+    val tripStatSp: Float,
+    /** Telefon: "Geri ara" satırı yüksekliği ve favori avatarı. */
+    val callRowDp: Int,
+    val favAvatarDp: Int,
     /** Rota satırı yalnızca tam ekranda: bölünmüş ekranda harita zaten yanda, aynı bilgiyi tekrarlamaz. */
     val showNav: Boolean,
 ) {
@@ -202,13 +209,10 @@ internal data class MiniLayout(
             val header = if (wide) 0 else if (compact) 72 else 84
             var media = if (tight) 88 else if (compact) 96 else if (wide && usableH >= 560) 120 else 108
             val contentH = usableH - 2 * padding
-            // Koltuk sütunu: bölünmüşte araçla aynı satırda (medya şeridi altta, tam genişlik), genişte tam yükseklik.
-            fun seat(mediaH: Int): Int =
-                if (wide) (contentH - gap) / 2 else (contentH - header - gap - mediaH - gap - gap) / 2
-            // Koltuklar sığmıyorsa medya şeridi en ince haline iner.
-            if (seat(media) < 96) media = 88
-            val seatH = seat(media)
-            return MiniLayout(
+            // Yan sütun: bölünmüşte araçla aynı satırda (medya şeridi altta, tam genişlik), genişte tam yükseklik.
+            fun side(mediaH: Int): Int = if (wide) contentH else contentH - header - gap - mediaH - gap
+            val big = wide && usableH >= 560
+            val layout = MiniLayout(
                 wide = wide,
                 paddingDp = padding,
                 gapDp = gap,
@@ -216,17 +220,125 @@ internal data class MiniLayout(
                 valueSp = if (wide) 48f else if (compact) 30f else 38f,
                 headerDp = header,
                 pillText = wide || widthDp >= 860,
-                seatsDp = if (wide) (widthDp * 0.29f).toInt().coerceIn(420, 600) else (widthDp * 0.38f).toInt().coerceIn(260, 380),
+                sideDp = if (wide) (widthDp * 0.29f).toInt().coerceIn(420, 560) else (widthDp * 0.38f).toInt().coerceIn(280, 380),
                 infoDp = if (wide) (widthDp * 0.2f).toInt().coerceIn(340, 420) else 0,
                 mediaDp = media,
                 coverDp = if (media >= 96) media - 24 else 0,
                 playDp = if (tight) 72 else 80,
                 skipDp = MIN_TOUCH_DP,
-                seatArtDp = (seatH * 0.5f).toInt().coerceIn(56, 120),
-                seatValueSp = if (seatH >= 200) 28f else 24f,
-                seatDp = seatH,
+                sideHeightDp = side(media),
+                panelPadDp = if (big) 24 else 12,
+                tripHeroSp = if (big) 64f else 38f,
+                tripStatSp = if (big) 26f else 20f,
+                callRowDp = if (big) 80 else MIN_TOUCH_DP,
+                favAvatarDp = if (big) 72 else if (compact) 48 else 52,
                 showNav = wide,
             )
+            // Yan sütun sığmıyorsa medya şeridi en ince haline iner (kapak düşer).
+            if (wide || side(media) >= MiniSide.sideNeedDp(layout)) return layout
+            media = 88
+            return layout.copy(mediaDp = media, coverDp = 0, sideHeightDp = side(media))
         }
     }
+}
+
+/**
+ * Yan sütunun saf kararları (koltuk tuşları yerine; koltuklar ana ekranda kalır): yolculuk paneli ve telefon paneli.
+ *
+ * Yolculuk: araç sürüşteyken öncü sayı canlı anlık tüketimdir ([TripHero], ana ekrandaki yolculuk kartıyla aynı durumlar),
+ * altında bu yolculuğun mesafesi, süresi ve ortalama hızı; dururken öncü sayı yolculuk mesafesi, altında süre, ortalama hız
+ * ve ortalama tüketim. Araç verisi yokken panel hiç görünmez (sahnedeki tek "Araç verisi bekleniyor" satırı yeter; tire yok).
+ *
+ * Telefon: son isimli arama için tek dokunuşla "Geri ara" ve en çok [FAVORITES] favori. Bağlı telefon yokken kutu yok, tek
+ * sessiz satır. Gelen / süren arama ana ekranın arama şeridinde; burada kopyalanmaz.
+ */
+internal object MiniSide {
+    const val FAVORITES = 3
+    /** Favori adının satırı ve avatarla arası (dp). */
+    const val NAME_ROW_DP = 22
+    const val NAME_GAP_DP = 4
+    /** Telefon panelinde "Geri ara" satırı ile favoriler arası. */
+    const val ROW_GAP_DP = 10
+    /** Yolculuk panelinin başlık satırı ve satır araları. */
+    const val TRIP_HEAD_DP = 22
+    /** Başlık ile öncü satır, öncü satır ile değer satırı arası (görünüm de aynısını kullanır). */
+    const val TRIP_GAP_DP = 6
+    /** Manrope satır yüksekliği / yazı boyu (yazı tipi payı kapalıyken: çıkış + iniş = 1,366 em). */
+    const val TRIP_LINE = 1.37f
+
+    enum class Stat { DISTANCE, DURATION, AVG_SPEED, AVG_CONS }
+
+    /** Yolculuk paneli görünür mü: veri yokken gizli. */
+    fun tripShown(content: TripHero.Content): Boolean = content != TripHero.Content.NO_DATA
+
+    /**
+     * Öncü sayının altındaki değerler (sırasıyla; okunamayan düşer). Sürüşte mesafe, süre, ortalama hız (öncü tüketim);
+     * dururken süre, ortalama hız, ortalama tüketim (öncü mesafe).
+     */
+    fun stats(content: TripHero.Content, km: Double?, minutes: Int?, avgSpeedKmh: Int?, avgL100: Double?): List<Stat> = when (content) {
+        TripHero.Content.NO_DATA -> emptyList()
+        TripHero.Content.LIVE -> listOfNotNull(
+            Stat.DISTANCE.takeIf { km != null },
+            Stat.DURATION.takeIf { minutes != null && minutes > 0 },
+            Stat.AVG_SPEED.takeIf { avgSpeedKmh != null },
+        )
+        TripHero.Content.TRIP -> listOfNotNull(
+            Stat.DURATION.takeIf { minutes != null && minutes > 0 },
+            Stat.AVG_SPEED.takeIf { avgSpeedKmh != null },
+            Stat.AVG_CONS.takeIf { avgL100 != null },
+        )
+    }
+
+    /** Telefon panelinin hâli: kutusuz sessiz satır (bağlı değil, yükleniyor, boş), izin satırı ya da içerik. */
+    enum class Phone { OFF, LOADING, EMPTY, PERMISSION, CONTENT }
+
+    /** Gösterilecek telefon içeriği. [last] "Geri ara" kaydı (isimli), [favorites] en çok [FAVORITES] isimli kişi. */
+    data class PhoneView(val state: Phone, val last: PhoneRecent?, val favorites: List<PhoneContact>) {
+        override fun toString(): String = "PhoneView(state=$state, last=${last != null}, fav=${favorites.size})"
+    }
+
+    /**
+     * Telefon durumundan panel. Favoriler "Geri ara" kişisini tekrarlamaz (numara son 10 haneyle karşılaştırılır); ne son
+     * arama ne favori varsa boş sayılır.
+     */
+    fun phone(s: PhoneSnapshot): PhoneView {
+        val state = when (PhoneUiLogic.panelState(s)) {
+            PhoneUiLogic.PanelState.NO_PHONE -> Phone.OFF
+            PhoneUiLogic.PanelState.PERMISSION -> Phone.PERMISSION
+            PhoneUiLogic.PanelState.LOADING -> Phone.LOADING
+            PhoneUiLogic.PanelState.EMPTY -> Phone.EMPTY
+            PhoneUiLogic.PanelState.CONTENT -> Phone.CONTENT
+        }
+        if (state != Phone.CONTENT) return PhoneView(state, null, emptyList())
+        val last = PhoneUiLogic.lastNamedRecent(s.recents)
+        val lastNumber = last?.let { FavoritesRanker.normalizeNumber(it.number) }
+        val favs = s.favorites.filter { PhoneUiLogic.hasName(it.name) && (lastNumber == null || FavoritesRanker.normalizeNumber(it.number) != lastNumber) }
+            .take(FAVORITES)
+        if (last == null && favs.isEmpty()) return PhoneView(Phone.EMPTY, null, emptyList())
+        return PhoneView(Phone.CONTENT, last, favs)
+    }
+
+    /** Favori satırının yüksekliği: avatar + ad. */
+    fun favoriteRowDp(m: MiniLayout): Int = m.favAvatarDp + NAME_GAP_DP + NAME_ROW_DP
+
+    /** Telefon panelinin doğal yüksekliği; içerik yoksa tek sessiz satır ([MiniLayout.MIN_TOUCH_DP]). */
+    fun phoneDp(v: PhoneView, m: MiniLayout): Int {
+        if (v.state != Phone.CONTENT) return MiniLayout.MIN_TOUCH_DP
+        val rows = listOfNotNull(m.callRowDp.takeIf { v.last != null }, favoriteRowDp(m).takeIf { v.favorites.isNotEmpty() })
+        return 2 * m.panelPadDp + rows.sum() + ROW_GAP_DP * (rows.size - 1).coerceAtLeast(0)
+    }
+
+    /** En dolu telefon paneli (Geri ara + favoriler). */
+    fun phoneMaxDp(m: MiniLayout): Int = 2 * m.panelPadDp + m.callRowDp + ROW_GAP_DP + favoriteRowDp(m)
+
+    /**
+     * Yolculuk panelinin en küçük yüksekliği: başlık, öncü sayı ve değer satırı; ikisi de yazı tipi payı kapalı, satır
+     * yüksekliği [TRIP_LINE] (görünümle aynı ölçü: [MiniTripPanel]).
+     */
+    fun tripMinDp(m: MiniLayout): Int =
+        2 * m.panelPadDp + TRIP_HEAD_DP + TRIP_GAP_DP + (m.tripHeroSp * TRIP_LINE).roundToInt() + TRIP_GAP_DP +
+            (m.tripStatSp * TRIP_LINE).roundToInt()
+
+    /** Yan sütunun iki paneli için gereken en az yükseklik. */
+    fun sideNeedDp(m: MiniLayout): Int = tripMinDp(m) + m.gapDp + phoneMaxDp(m)
 }
