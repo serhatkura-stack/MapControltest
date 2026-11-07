@@ -96,6 +96,31 @@ internal object ClimateMath {
      * (`SVHvac/.../model/svhvac/f/e.java:875-880` y(); sesli "klimayı kapat" `b.java:663`).
      */
     fun encodeFan(level: Int): Int = level.coerceIn(1, FAN_MAX)
+
+    /** A/C (HVAC 1) ve otomatik (HVAC 4): 1 aç / 2 kapat; 0 yazılmaz (OEM `HvacModel`, FrostNav ClimateAutomationWrites). */
+    const val AC_ON = 1
+    const val AC_OFF = 2
+
+    /** Açmada güç yazmasından sonra A/C + otomatik için bekleme (OEM SVVrControl a/b.java postDelayed 150L). */
+    const val POWER_FOLLOW_UP_MS = 150L
+
+    /**
+     * Klimayı açma/kapatma yazma planı (HVAC kimliği → ham değer), FrostNav konfor otomasyonuyla birebir
+     * (`vehicle/ClimateAutomationWrites.java` CLIMATE onWrites/climateFollowUpWrites/offWrites; eşitlik JVM testiyle korunur):
+     *  - Aç: önce [first] = 18 ← 1, [POWER_FOLLOW_UP_MS] sonra [followUp] = 1 ← 1, 4 ← 1.
+     *  - Kapat: [first] = 1 ← 2, 18 ← 2, 4 ← 2; [followUp] boş.
+     * Not: sıcaklık/fan yazmadan önceki otomatik açma ([powerOnBeforeWrite]) bilerek yalnız 18 ← 1 kalır (OEM sesli komut
+     * `VRC a/b.java:1285`); orada A/C ve otomatiği açmak kullanıcının o an yazdığı fanı/ayarı ezer.
+     */
+    class PowerPlan(val first: List<Pair<Int, Int>>, val followUp: List<Pair<Int, Int>>)
+
+    fun powerPlan(on: Boolean): PowerPlan = if (on) {
+        PowerPlan(listOf(HvacID.ID_AC_WORKING to POWER_ON),
+            listOf(HvacID.ID_AC_STATE to AC_ON, HvacID.ID_AC_AUTO_STATE to AC_ON))
+    } else {
+        PowerPlan(listOf(HvacID.ID_AC_STATE to AC_OFF, HvacID.ID_AC_WORKING to POWER_OFF, HvacID.ID_AC_AUTO_STATE to AC_OFF),
+            emptyList())
+    }
 }
 
 /**
@@ -158,6 +183,21 @@ internal object ClimateWriter {
                 "(OEM T1E24 auto dock uses $OEM_DOCK_FAN_ID_T1E24; kept pending car test)")
         }
         return send(fanId(quiet), ClimateMath.encodeFan(level))
+    }
+
+    /**
+     * Klimayı açar/kapatır, FrostNav ile aynı sıra ([ClimateMath.powerPlan]). Arka planda çağrılır (açmada 150 ms bekler).
+     * Kapalıyken (yazma kapısı) ya da servis yokken false döner; ilk yazma reddedilirse devam yazmaları gönderilmez.
+     */
+    fun setPower(on: Boolean): Boolean {
+        if (!enabled) return false
+        val plan = ClimateMath.powerPlan(on)
+        for ((id, raw) in plan.first) if (!send(id, raw)) return false
+        if (plan.followUp.isEmpty()) return true
+        android.os.SystemClock.sleep(ClimateMath.POWER_FOLLOW_UP_MS)
+        var ok = true
+        for ((id, raw) in plan.followUp) ok = send(id, raw) && ok
+        return ok
     }
 
     /**

@@ -4,13 +4,19 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import com.desaysv.ivi.extra.project.carinfo.HvacID
+import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
+import com.desaysv.ivi.extra.project.carinfo.proxy.Constants
+import com.desaysv.ivi.extra.project.carinfo.proxy.IServiceConnectListener
+import com.desaysv.ivi.vdb.IVDBusNotify
+import com.desaysv.ivi.vdb.event.VDEvent
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
 import kotlin.math.abs
@@ -159,7 +165,7 @@ internal object ClimatePanelBits {
 
 /**
  * "Klima değişince fabrika paneli: Göster | Gizle" (varsayılan GİZLE). Gizle iken alt çubuktaki sıcaklık/fan OEM'in kendi
- * dock'unun kimlikleriyle yazılır ve [ClimatePanelGuard] kısa süre izler; Göster iken eski panel kimlikleri (10/13/12).
+ * dock'unun kimlikleriyle yazılır ve klima tuşlarına kilit ([ClimatePanelGuard]) kendiliğinden açılan paneli kapatır; Göster iken eski panel kimlikleri (10/13/12).
  */
 internal object ClimatePanelPrefs {
     private const val PREFS_NAME = "launcher_settings"
@@ -174,129 +180,389 @@ internal object ClimatePanelPrefs {
 }
 
 /**
- * Bizim yazmamızdan sonra OEM panelinin kendiliğinden açılmasına dair SAF karar (birim testli).
+ * "Klima tuşlarına kilit": klima durumu değişince OEM panelinin kendiliğinden açılmasına dair SAF karar (birim testli).
  *
  * Neden açılıyor (bizim araç, T1E24): panel SVHvac'tadır ve HVAC 9'un bitlerinden biri gelince açılır
- * (`SVHvac/.../svhvac/view/h.java:547-572` A1; [ClimatePanelBits]). Panel kimliğine (10) yazınca ECU ~85 ms sonra 9=1
- * gönderiyor (6 Kasım günlüğü 15:51:23.637 → .721). OEM alt dock'u (SVSystemUI) sıcaklığı ayrı kimliklere yazar: sürücü 76,
- * yolcu 78 (`SVSystemUI/.../model/svhvac/e/c.java:393-400`, `:431-438`); fan için bkz. [ClimateWriter.fanId]. Gizle'de bunlar
- * kullanılır; panel yine açılırsa [ClimatePanel.close] (CLOSE_HVAC_BT, OEM'in aşağı kaydırma kapatmasıyla aynı yazma).
+ * (`SVHvac/.../svhvac/view/h.java:547-572` A1; [ClimatePanelBits]). Fiziksel klima tuşları, OEM alt dock'u ve bizim dock
+ * yazmalarımız ECU'nun 9=1 göndermesine yol açar (7 Kasım araç testi: güç açma, AC, sıcaklık, iç/dış hava, AUTO, fan, ön
+ * buz çözme açar; klima kapatma ve arka cam ısıtma açmaz). Panel açılışı değişen değerden ~0,5 sn ÖNCE de gelebilir.
+ *
+ * Kural: panel göründü VE (değişiklikten sonraki [CHANGE_MATCH_MS] ya da açılıştan sonraki [SHOW_BEFORE_CHANGE_MS] içinde bir
+ * klima değeri değişti ya da dock yazmamız oldu) VE kullanıcı paneli bilerek açmadı → kapat. Son değişiklikten sonra [SETTLE_MS] (ve her kapatmadan sonra [RESHOW_MS]) boyunca yeniden
+ * açılışlar da kapatılır; pencere başına en çok [MAX_CLOSES]. Çevresinde değişiklik olmayan açılış (OEM uygulaması, sesli
+ * komut, OEM'in kendi yukarı kaydırması) olduğu gibi bırakılır. Araca hiçbir şey yazılmaz; kapatmayı OEM servisi yapar
+ * ([ClimatePanel.close]).
  */
 internal object ClimatePanelPolicy {
-    /** Yazmadan sonra panelin açılmasını bekleme süresi (araç gidiş-dönüşü + SystemUI animasyonu). */
-    const val GUARD_MS = 4_000L
-    const val POLL_MS = 200L
+    /** Değer değişikliğinden sonra bu süre içinde gelen açılış tuşa basıştan sayılır. */
+    const val CHANGE_MATCH_MS = 2_000L
 
     /**
-     * Kapatma isteğinden sonra yeniden bakmadan önce bekleme: ECU ~130 ms'de 9=0 gönderir (6 Kasım günlüğü 15:48:51.722 →
-     * .849), panelin kapanma animasyonu 800 ms sürer ve `hvacshow` ancak animasyon bitince "false" olur (`view/h.java:219`,
-     * `:810`). Daha erken bakılırsa kapanmakta olan panel için 9 ← 2 boş yere yinelenirdi.
+     * Açılış değişiklikten ÖNCE geldiyse (tuşta panel değerden ~0,5 sn önce açılıyor; 7 Kasım: en çok ~0,67 sn) ancak bu
+     * süre içinde gelen değişiklik tuşa basış sayılır. Daha geç değişiklik OEM'den/sesle açılmış panelin içinde kullanıcının
+     * kendi ayarıdır: o panel kapatılmaz.
      */
-    const val CLOSE_SETTLE_MS = 1_500L
+    const val SHOW_BEFORE_CHANGE_MS = 1_000L
 
-    /** Bir koruma penceresinde en çok bu kadar kapatma (döngüye girmesin). */
-    const val MAX_CLOSES = 3
+    /** Son değişiklikten sonra yeniden açılışların kapatıldığı süre (her yeni değişiklik uzatır). */
+    const val SETTLE_MS = 2_500L
 
-    enum class Decision { WAIT, CLOSE, KEEP_EXPLICIT_OPEN, KEEP_ALREADY_OPEN, EXPIRED, LIMIT, UNCLOSABLE }
+    /** Kapatmadan sonra yeniden açılış bu süre içinde gelirse yine kapatılır (7 Kasım: 0,4–1,3 sn sonra yeniden açıldı). */
+    const val RESHOW_MS = 1_500L
 
     /**
-     * [explicitOpenSinceArm]: kullanıcı korumadan sonra paneli bilerek açtı (yukarı kaydırma) → asla kapatma.
-     * [shownAtArm]: yazmadan önce panel zaten açıktı → kullanıcının paneli, kapatma.
-     * [closeCanAct]: [ClimatePanelBits.closeCanAct]; panel açık ama CLOSE_HVAC_BT'nin temizleyeceği bit yoksa (arka sıra
-     * ya da bilinmeyen neden) kapatma boşa gider → UNCLOSABLE, koruma günlüğe yazıp biter. CLOSE_PANEL'e DÜŞÜLMEZ:
-     * statik `isHvacShow`'u kapalı bırakır (bkz. [ClimatePanel.close]). Araç kontrolü: config 151 ve 138 = 0 olmalı.
+     * Kapatma isteğinden sonra bu süre içindeki açılış sinyali aynı panelin kapanışıdır: ECU ~130 ms'de 9=0 gönderir
+     * (6 Kasım günlüğü 15:48:51.722 → .849), `hvacshow` ise 800 ms'lik kapanma animasyonu bitince "false" olur
+     * (`view/h.java:219`, `:810`). İki kaynağın aynı açılış için ikinci kenarı yeniden kapatma doğurmasın.
      */
-    fun decide(
-        explicitOpenSinceArm: Boolean,
-        shownAtArm: Boolean,
-        showingNow: Boolean,
-        nowMs: Long,
-        deadlineMs: Long,
-        closes: Int,
-        closeCanAct: Boolean = true,
-    ): Decision = when {
-        explicitOpenSinceArm -> Decision.KEEP_EXPLICIT_OPEN
-        shownAtArm -> Decision.KEEP_ALREADY_OPEN
-        nowMs > deadlineMs -> Decision.EXPIRED
-        !showingNow -> Decision.WAIT
-        !closeCanAct -> Decision.UNCLOSABLE
-        closes >= MAX_CLOSES -> Decision.LIMIT
-        else -> Decision.CLOSE
+    const val CLOSING_MS = 600L
+
+    /** Kapatmadan sonra bir kez daha bakış (ECU + animasyon bitti): kaçmış yeniden açılış varsa kapatılır. */
+    const val RECHECK_MS = 1_100L
+
+    /** Bilerek açmadan sonra panelin görünmesi için tanınan süre; bu sürede görünürse kapanana kadar korunur. */
+    const val EXPLICIT_GRACE_MS = 3_000L
+
+    /** Bir pencerede en çok bu kadar kapatma (OEM ile kavgaya girmesin). */
+    const val MAX_CLOSES = 6
+
+    enum class Decision {
+        /** Paneli kapat ([ClimatePanel.close]). */
+        CLOSE,
+        /** Açıldı ama çevresinde değişiklik yok (henüz): [SHOW_BEFORE_CHANGE_MS] içinde değişiklik gelirse kapatılır. */
+        PENDING,
+        /** Ayar "Göster": hiçbir şey yapılmaz. */
+        KEEP_PREF_SHOW,
+        /** Kullanıcı paneli bilerek açtı (alt çubukta yukarı kaydırma): asla kapatma. */
+        KEEP_EXPLICIT_OPEN,
+        /** Az önce kapatıldı; aynı panelin ikinci sinyali. */
+        KEEP_CLOSING,
+        /** Panel açık ama CLOSE_HVAC_BT'nin temizleyeceği bit yok (arka sıra ya da bilinmeyen neden). */
+        UNCLOSABLE,
+        /** Pencere başına kapatma sınırı doldu. */
+        LIMIT,
+        /** Yapılacak bir şey yok (aynı açılışın yinelenen sinyali, kapalı panel, pencere dışı). */
+        NONE,
     }
 
     /**
-     * Sonraki bakışa kadar bekleme: kapatmanın oturma süresi ([settleUntilMs]) sürüyorsa onun sonuna kadar, değilse
-     * [POLL_MS]. Yeni bir yazma (arm) oturma süresini kısaltamaz; yoksa kapanmakta olan panel yeniden kapatılır.
+     * Kilit durumu (tek iş parçacığından sürülür; zaman ms, monoton saat). Olaylar: [change] (izlenen HVAC değeri değişti ya
+     * da dock yazması), [explicitOpen], [shown] (panel kapalıdan açığa geçti; HVAC 9 bit 0 ya da `hvacshow` kenarı),
+     * [hidden], [recheck] (kapatmadan [RECHECK_MS] sonra). `showPref`: [ClimatePanelPrefs.showOnChange];
+     * `canAct`: [ClimatePanelBits.closeCanAct] (HVAC 9 okunamadıysa `null` → true).
      */
-    fun nextCheckDelay(nowMs: Long, settleUntilMs: Long): Long = maxOf(POLL_MS, settleUntilMs - nowMs)
+    class Lock {
+        private val never = Long.MIN_VALUE / 4
+        private var lastChangeAt = never
+        private var lastCloseAt = never
+        private var lastShowAt = never
+        private var pendingShowAt = never
+        private var explicitAt = never
+        private var explicitShown = false
+        private var visible = false
+
+        /** Bu kavgadaki (ardışık yeniden açılışlar) kapatma sayısı; ayrı tuş basışlarında sıfırlanır. */
+        var closes = 0
+            private set
+
+        fun inWindow(t: Long): Boolean = t - lastChangeAt <= SETTLE_MS || t - lastCloseAt <= RESHOW_MS
+
+        /** Son değişiklikten bu yana geçen süre (günlük için; hiç yoksa -1). */
+        fun sinceChange(t: Long): Long = if (lastChangeAt == never) -1 else t - lastChangeAt
+
+        private fun explicitActive(t: Long): Boolean = t - explicitAt <= EXPLICIT_GRACE_MS || explicitShown
+
+        /** Bilerek açma. [visibleNow]: panel zaten açıksa o panel korunur. */
+        fun explicitOpen(t: Long, visibleNow: Boolean) {
+            explicitAt = t
+            explicitShown = visibleNow
+            pendingShowAt = never
+        }
+
+        /** Klima değeri değişti (tuş, OEM dock, bizim dock). [visibleNow]: panel şu an açık mı. */
+        fun change(t: Long, visibleNow: Boolean, showPref: Boolean, canAct: Boolean): Decision {
+            if (!inWindow(t)) closes = 0
+            lastChangeAt = t
+            val pendingMatch = visibleNow && t - pendingShowAt in 0..SHOW_BEFORE_CHANGE_MS
+            if (!pendingMatch) return Decision.NONE
+            pendingShowAt = never
+            return decideClose(t, showPref, canAct)
+        }
+
+        /**
+         * Panel açığa geçti. Arada [hidden] yoksa (aynı açılışın ikinci kaynaktan gelen kenarı) [Decision.NONE].
+         * [fromHv9]: HVAC 9 bit 0 yükselişi; ancak düşüşünden ([hidden]) sonra gelebildiği için her zaman yeni açılıştır ve
+         * [CLOSING_MS] süzgecinden geçmez. Yavaş `hvacshow` kenarı ise kapatmanın kendi animasyonuna denk gelebilir, süzülür.
+         */
+        fun shown(t: Long, showPref: Boolean, canAct: Boolean, fromHv9: Boolean = false): Decision {
+            if (visible) return Decision.NONE
+            // Ayrı bir tuş basışı (kavga değil): kapatma sınırı yeniden başlar. AUTO değerleri sürekli değiştirse de sınır dolmaz.
+            if (t - lastCloseAt > RESHOW_MS) closes = 0
+            visible = true
+            lastShowAt = t
+            if (t - explicitAt <= EXPLICIT_GRACE_MS) explicitShown = true
+            return when {
+                showPref -> Decision.KEEP_PREF_SHOW
+                explicitActive(t) -> Decision.KEEP_EXPLICIT_OPEN
+                inWindow(t) -> decideClose(t, showPref, canAct, settleSecondEdge = !fromHv9)
+                else -> {
+                    if (pendingShowAt == never) pendingShowAt = t
+                    Decision.PENDING
+                }
+            }
+        }
+
+        /**
+         * Panel kapandı. Bilerek açılan panelin koruması burada biter: kullanıcı onu 3 sn içinde kapatsa bile sonraki tuş
+         * açılışı kapatılır. Kaydırma yapıldı ama panel henüz görünmediyse süre ([EXPLICIT_GRACE_MS]) korunur.
+         */
+        fun hidden(t: Long) {
+            visible = false
+            pendingShowAt = never
+            if (explicitShown) explicitAt = never
+            explicitShown = false
+        }
+
+        /** Kapatmadan sonra bakış: panel hâlâ/yeniden açıksa ve pencere sürüyorsa yeniden kapat. */
+        fun recheck(t: Long, visibleNow: Boolean, showPref: Boolean, canAct: Boolean): Decision {
+            if (!visibleNow || !inWindow(t)) return Decision.NONE
+            visible = true
+            if (showPref) return Decision.KEEP_PREF_SHOW
+            if (explicitActive(t)) return Decision.KEEP_EXPLICIT_OPEN
+            return decideClose(t, showPref, canAct, settleSecondEdge = false)
+        }
+
+        private fun decideClose(t: Long, showPref: Boolean, canAct: Boolean, settleSecondEdge: Boolean = true): Decision = when {
+            showPref -> Decision.KEEP_PREF_SHOW
+            explicitActive(t) -> Decision.KEEP_EXPLICIT_OPEN
+            settleSecondEdge && t - lastCloseAt < CLOSING_MS -> Decision.KEEP_CLOSING
+            !canAct -> Decision.UNCLOSABLE
+            closes >= MAX_CLOSES -> Decision.LIMIT
+            else -> {
+                closes++
+                lastCloseAt = t
+                pendingShowAt = never
+                Decision.CLOSE
+            }
+        }
+    }
+
+    /**
+     * İzlenen HVAC kimlikleri: tuşa basışla değişen ve paneli açtıran klima durumu. Arka cam ısıtma (80) paneli açmaz,
+     * izlenmez. Panel görünürlüğü ayrıca [HvacID.ID_AC_DISPLAY_ACTIVE] (9) ile izlenir.
+     */
+    val CONTROL_IDS = intArrayOf(
+        HvacID.ID_AC_STATE,
+        HvacID.ID_AC_DUAL_MODE,
+        HvacID.ID_AC_AUTO_STATE,
+        HvacID.ID_AC_MODE_ADJUST,
+        HvacID.ID_AC_CIRCULATION_MODE,
+        HvacID.ID_AC_TEMPERATURE_DRIVER,
+        HvacID.ID_AC_BLOW_SPEED_LEVEL,
+        HvacID.ID_AC_TEMPERATURE_COPILOT,
+        HvacID.ID_AC_WORKING,
+        HvacID.ID_AC_MAX_FRONT_DEFOREST,
+        HvacID.ID_AC_FRONT_GLASS_HEAT,
+    )
+
+    /** Abonelikte istenen tüm kimlikler: kontrol değerleri + HVAC 9. */
+    val SUBSCRIBE_IDS: IntArray = CONTROL_IDS + HvacID.ID_AC_DISPLAY_ACTIVE
+
+    /**
+     * Değer gerçekten değişti mi: ilk görülen değer taban çizgisidir (abonelikte gelen ilk bildirim tuşa basış değildir),
+     * aynı değerin yinelenen bildirimi değişiklik değildir.
+     */
+    fun isChange(previous: IntArray?, now: IntArray): Boolean = previous != null && !previous.contentEquals(now)
 }
 
 /**
- * Gizle ayarında alt çubuktan yazmadan hemen önce kurulur ([arm]); [ClimatePanelPolicy.GUARD_MS] boyunca `hvacshow`'u
- * izler, panel kendiliğinden açılırsa arayüzden kapatır. Kararlar `ClimatePanel` etiketiyle günlüğe yazılır.
+ * Klima tuşlarına kilit (olay güdümlü; boştayken yoklama yok). Uygulama süreci yaşadığı sürece ([start], ana ekran
+ * etkinliği kurulurken) çalışır; önde Google Haritalar gibi başka bir uygulama varken de.
+ *
+ * Sinyaller (yeni izin gerekmez):
+ *  - VDBus HVAC aboneliği ([ClimatePanelPolicy.SUBSCRIBE_IDS]): klima değerlerinin değişimi ve HVAC 9 bit 0 kenarı (panel
+ *    ECU'nun 9=1'iyle açılır; aynı bildirimi OEM de dinler, o yüzden en erken sinyal budur).
+ *  - `Settings.System` görünürlük anahtarları ([ClimatePanelBits.SHOW_KEYS]) için ContentObserver: SVHvac panel açılınca
+ *    "true" yazar; anında gelir ve VDBus aboneliği düşmüşse de çalışır.
+ *  - Bizim dock yazmamız ([arm]): yazmadan önce değişiklik olarak sayılır.
+ * Karar [ClimatePanelPolicy.Lock]'ta; her karar `ClimatePanel` etiketiyle tek satır günlüğe yazılır (yalnızca sayı/kimlik).
+ * Tüm durum tek bir arka iş parçacığında değişir.
  */
 internal object ClimatePanelGuard {
     private const val TAG = "ClimatePanel"
-    private val main = Handler(Looper.getMainLooper())
-    private var app: Context? = null
-    private var armedAt = 0L
-    private var deadline = 0L
-    private var shownAtArm = false
-    private var closes = 0
-    private var settleUntil = 0L
-    private var explicitOpenAt = Long.MIN_VALUE
-    private val tick = Runnable { check() }
+    private val lock = ClimatePanelPolicy.Lock()
+    @Volatile private var app: Context? = null
+    @Volatile private var worker: Handler? = null
+    private val values = HashMap<Int, IntArray>()
+    private var hv9: Int? = null
+    private var settingsShown = false
+    private var subscribed = false
+
+    /** Abonelik HVAC 9'u bildirim olarak getirdi mi; getirmiyorsa taze okuma önbelleğe yazılmaz (kimse sıfırlamaz). */
+    private var hv9Live = false
 
     private fun now() = SystemClock.elapsedRealtime()
 
-    /** Bilerek açıldı: süren koruma hemen biter, panel açık kalır. */
+    private val notify = object : IVDBusNotify.Stub() {
+        override fun onVDBusNotify(event: VDEvent?) {
+            if (event == null || event.id != VDEventCarInfo.MODULE_HVAC) return
+            val payload = event.payload ?: return
+            val id = payload.getInt(Constants.CMD_ID, -1)
+            val v = payload.getIntArray(Constants.VALUE) ?: return
+            if (v.isEmpty()) return
+            worker?.post { onHvac(id, v) }
+        }
+    }
+
+    private val connectListener = IServiceConnectListener { state -> if (state == 1) worker?.post { subscribe(force = true) } }
+
+    /** Ana ekran kurulurken; birden çok çağrı zararsız. */
+    @Synchronized
+    fun start(context: Context) {
+        if (worker != null) return
+        val ctx = context.applicationContext
+        app = ctx
+        val thread = HandlerThread("ClimatePanelLock").apply { start() }
+        val h = Handler(thread.looper)
+        worker = h
+        val observer = object : ContentObserver(h) {
+            override fun onChange(selfChange: Boolean) = onSettings()
+        }
+        try {
+            ClimatePanelBits.SHOW_KEYS.forEach { ctx.contentResolver.registerContentObserver(Settings.System.getUriFor(it), false, observer) }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "lock observer failed: ${e.javaClass.simpleName}")
+        }
+        h.post {
+            settingsShown = ClimatePanel.isShowing(ctx)
+            runCatching { CarInfoProxy.getInstance().regServiceConnectListener(connectListener) }
+            if (!runCatching { CarInfoProxy.getInstance().isServiceConnnected }.getOrDefault(false)) {
+                runCatching { CarInfoProxy.getInstance().init(ctx) }
+            }
+            subscribe(force = false)
+        }
+    }
+
+    /** Ana ekrana dönüşte: araç uykusunda düşmüş olabilecek abonelik tazelenir. */
+    fun refresh() {
+        worker?.post { subscribe(force = true) }
+    }
+
+    private fun subscribe(force: Boolean) {
+        val proxy = CarInfoProxy.getInstance()
+        if (!runCatching { proxy.isServiceConnnected }.getOrDefault(false)) return
+        if (subscribed && !force) return
+        try {
+            if (subscribed) proxy.unRegCallBack(VDEventCarInfo.MODULE_HVAC, notify)
+            proxy.regCallBack(VDEventCarInfo.MODULE_HVAC, notify, ClimatePanelPolicy.SUBSCRIBE_IDS)
+            if (!subscribed) Log.i(TAG, "lock subscribed ids=${ClimatePanelPolicy.SUBSCRIBE_IDS.size}")
+            subscribed = true
+            rebaseline()
+        } catch (t: Throwable) {
+            Log.w(TAG, "lock subscribe failed: ${t.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * (Yeniden) abonelikte taban çizgisi bugünkü değerlerdir: araç uykusundan kalan eski değerler ilk bildirimde tuşa basış
+     * sayılmasın. Okunamayan kimlik silinir; ona gelen ilk bildirim taban olur.
+     */
+    private fun rebaseline() {
+        ClimatePanelPolicy.CONTROL_IDS.forEach { id ->
+            val v = CarSignals.read(VDEventCarInfo.MODULE_HVAC, id)
+            if (v != null && v.isNotEmpty()) values[id] = v else values.remove(id)
+        }
+    }
+
+    /** Bilerek açıldı (alt çubukta yukarı kaydırma): panel kapanana kadar korunur. */
     fun noteExplicitOpen() {
-        explicitOpenAt = now()
-        if (deadline > 0L) {
-            Log.i(TAG, "guard end reason=explicit-open closes=$closes")
-            disarm()
-        }
-    }
-
-    /** Ana iş parçacığında, yazmadan ÖNCE çağrılır. Süre dolmadan yeniden kurulursa yalnızca süre uzar. */
-    fun arm(context: Context, what: String) {
         val t = now()
-        app = context.applicationContext
-        if (deadline <= t) {
-            armedAt = t
-            shownAtArm = ClimatePanel.isShowing(context)
-            closes = 0
-            settleUntil = 0L
+        val h = worker ?: return
+        h.post {
+            lock.explicitOpen(t, visible())
+            Log.i(TAG, "lock explicit-open visible=${visible()}")
         }
-        deadline = t + ClimatePanelPolicy.GUARD_MS
-        Log.i(TAG, "write what=$what mode=hide ids=dock guard=arm shownAtArm=$shownAtArm")
-        main.removeCallbacks(tick)
-        main.postDelayed(tick, ClimatePanelPolicy.nextCheckDelay(t, settleUntil))
     }
 
-    private fun disarm() {
-        main.removeCallbacks(tick)
-        deadline = 0L
+    /** Gizle ayarında alt çubuktan yazmadan hemen ÖNCE: dock yazması değişiklik sayılır. */
+    fun arm(context: Context, what: String) {
+        start(context)
+        val t = now()
+        Log.i(TAG, "write what=$what mode=hide ids=dock lock=change")
+        worker?.post { onChange(t, "dock") }
     }
 
-    private fun check() {
-        val ctx = app ?: return disarm()
-        val showing = ClimatePanel.isShowing(ctx)
-        // HVAC 9 yalnızca panel açık görünürken okunur (eşzamanlı VDBus çağrısı; her 200 ms'lik bakışta değil).
-        val hv9 = if (showing) ClimatePanel.readHv9() else null
-        val canAct = ClimatePanelBits.closeCanAct(hv9)
-        when (val d = ClimatePanelPolicy.decide(explicitOpenAt >= armedAt, shownAtArm, showing, now(), deadline, closes, canAct)) {
-            ClimatePanelPolicy.Decision.WAIT -> main.postDelayed(tick, ClimatePanelPolicy.POLL_MS)
-            ClimatePanelPolicy.Decision.CLOSE -> {
-                closes++
-                Log.i(TAG, "guard close n=$closes outcome=${ClimatePanel.close(ctx, hv9)}")
-                settleUntil = now() + ClimatePanelPolicy.CLOSE_SETTLE_MS
-                main.postDelayed(tick, ClimatePanelPolicy.CLOSE_SETTLE_MS)
-            }
-            else -> {
-                Log.i(TAG, "guard end reason=${d.name.lowercase()} closes=$closes hv9=${ClimatePanelBits.describe(hv9)}")
-                disarm()
-            }
+    private fun visible(): Boolean = settingsShown || ClimatePanelBits.frontRow(hv9)
+
+    private fun showPref(): Boolean = app?.let { runCatching { ClimatePanelPrefs.showOnChange(it) }.getOrDefault(false) } ?: false
+
+    private fun onHvac(id: Int, v: IntArray) {
+        if (id == HvacID.ID_AC_DISPLAY_ACTIVE) {
+            hv9Live = true
+            val wasFront = ClimatePanelBits.frontRow(hv9)
+            hv9 = if (v.size == 1) v[0] else v.fold(0) { acc, b -> (acc shl 8) or (b and 0xFF) }
+            val front = ClimatePanelBits.frontRow(hv9)
+            // HVAC 9 bit 0 düşüşü panelin kapandığıdır; `hvacshow` 800 ms'lik animasyon boyunca "true" kalsa da. Böylece
+            // kapatmadan hemen sonraki yeniden açılış (bit 0 yeniden yükselir) yeni açılış olarak hemen kapatılır.
+            if (front && !wasFront) onShown("hv9") else if (wasFront && !front) lock.hidden(now())
+            return
         }
+        if (id !in ClimatePanelPolicy.CONTROL_IDS) return
+        val previous = values[id]
+        values[id] = v
+        if (ClimatePanelPolicy.isChange(previous, v)) onChange(now(), "hvac$id")
+    }
+
+    private fun onSettings() {
+        val ctx = app ?: return
+        val wasVisible = visible()
+        val was = settingsShown
+        settingsShown = ClimatePanel.isShowing(ctx)
+        if (settingsShown && !was) onShown("settings") else if (wasVisible && !visible()) lock.hidden(now())
+    }
+
+    private fun onChange(t: Long, src: String) {
+        val d = lock.change(t, visible(), showPref(), ClimatePanelBits.closeCanAct(hv9))
+        if (d != ClimatePanelPolicy.Decision.NONE) act(d, "change", src, t)
+    }
+
+    private fun onShown(src: String) {
+        val t = now()
+        val d = lock.shown(t, showPref(), ClimatePanelBits.closeCanAct(hv9), fromHv9 = src == "hv9")
+        if (d != ClimatePanelPolicy.Decision.NONE) act(d, "show", src, t)
+    }
+
+    /**
+     * Kapatmadan sonra taze okuma (bildirim gecikmiş ya da kaçmış olabilir). Okunan durum bildirimlerle aynı kenar
+     * mantığından geçer: kapanış kaçmışsa [ClimatePanelPolicy.Lock.hidden] yine çağrılır. HVAC 9 bildirimi hiç gelmiyorsa
+     * taze okuma yalnızca bu bakışın kararında kullanılır, önbelleğe yazılmaz (yoksa kimse 0'a döndürmez).
+     */
+    private fun recheck() {
+        val t = now()
+        val ctx = app ?: return
+        val wasVisible = visible()
+        val fresh = ClimatePanel.readHv9()
+        if (fresh != null && hv9Live) hv9 = fresh
+        settingsShown = ClimatePanel.isShowing(ctx)
+        val nowVisible = visible()
+        if (wasVisible && !nowVisible) lock.hidden(t)
+        val showing = if (fresh != null) ClimatePanelBits.frontRow(fresh) else nowVisible
+        if (!wasVisible && nowVisible) {
+            onShown("read")
+            return
+        }
+        val d = lock.recheck(t, showing, showPref(), ClimatePanelBits.closeCanAct(fresh ?: hv9))
+        if (d != ClimatePanelPolicy.Decision.NONE) act(d, "recheck", "read", t)
+    }
+
+    private fun act(d: ClimatePanelPolicy.Decision, on: String, src: String, t: Long) {
+        val ctx = app ?: return
+        val outcome = if (d == ClimatePanelPolicy.Decision.CLOSE) {
+            worker?.postDelayed({ recheck() }, ClimatePanelPolicy.RECHECK_MS)
+            ClimatePanel.close(ctx, hv9)
+        } else {
+            "-"
+        }
+        Log.i(TAG, "lock decision=${d.name.lowercase()} on=$on src=$src n=${lock.closes} dtChange=${lock.sinceChange(t)} hv9=${ClimatePanelBits.describe(hv9)} outcome=$outcome")
     }
 }

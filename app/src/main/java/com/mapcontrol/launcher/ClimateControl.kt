@@ -119,8 +119,8 @@ internal class ClimateControl(
     }
 
     /**
-     * Ayar "Klima değişince fabrika paneli": Gizle (varsayılan) → OEM dock kimlikleri + panel koruması ([ClimatePanelGuard],
-     * yazmadan ÖNCE kurulur ki panelin önceki durumu bilinsin); Göster → panel kimlikleri, koruma yok.
+     * Ayar "Klima değişince fabrika paneli": Gizle (varsayılan) → OEM dock kimlikleri + klima tuşlarına kilit ([ClimatePanelGuard];
+     * yazma ÖNCE değişiklik olarak bildirilir ki hemen ardından açılan panel kapatılsın); Göster → panel kimlikleri, koruma yok.
      */
     private fun quietWrite(what: String): Boolean {
         val quiet = !ClimatePanelPrefs.showOnChange(context)
