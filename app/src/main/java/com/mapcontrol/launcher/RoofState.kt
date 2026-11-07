@@ -322,6 +322,38 @@ class RoofFollower(private val tauMs: Float = CarAnimSpec.ROOF_CORRECT_MS.toFloa
 /** [RoofState] değişimlerini [RoofFollower]'lara aktarır (saf; Sahne aracı ve testler aynı yolu kullanır). */
 object RoofFeed {
 
+    /**
+     * Yeni tavan durumu [state] (önceki [prev]) iki izleyiciye: [anim] false (detay, animasyon kapalı) ise hedefe atlar;
+     * ilk okuma hareket halindeyse perde tahmini yerden ilerler, duruyorsa doğrudan yerinde; sonra yalnız değişen büyüklük
+     * bildirilir. [CarStageView.setRoof] ve testler bunu çağırır.
+     */
+    fun apply(shadeF: RoofFollower, glassF: RoofFollower, prev: RoofState?, state: RoofState?, anim: Boolean, now: Long) {
+        if (state == null) {
+            shadeF.snap(0f)
+            glassF.snap(0f)
+            return
+        }
+        val target = state.shade
+        when {
+            target == null -> shadeF.snap(0f)
+            !anim -> shadeF.snap(target)
+            prev?.shade == null -> {
+                shadeF.snap(if (state.shadeMs > 0) shadeStart(target, state.shadeMs) else target)
+                if (state.shadeMs > 0) shade(shadeF, state, now)
+            }
+            target != prev.shade || state.shadeMs != prev.shadeMs -> shade(shadeF, state, now)
+        }
+        when {
+            !anim || prev == null -> glassF.snap(state.glass)
+            state.glass != prev.glass || state.glassDir != prev.glassDir -> {
+                // Kapalıdan açılışın ilk adımı (havalandırmadan değil): araç bu adımdan sonra durup havalandırmaya geçer
+                // (7 Kasım: posi 2 op 3, 0,6 sn sonra op 1 ve 12), kayma ancak havalandırmadan sonra başlar.
+                val first = state.glassDir > 0 && state.glass < RoofDecode.GLASS_STEP + RoofDecode.OPEN_EPS && !prev.tilt
+                glass(glassF, state, now, if (first) 0f else RoofDecode.GLASS_LEAD_STEPS)
+            }
+        }
+    }
+
     /** Perde: hareket ediyorsa ([RoofState.shadeMs] > 0) tahmini yerden hedefe ölçülen sürenin hızıyla, değilse yerleşme. */
     fun shade(f: RoofFollower, s: RoofState, now: Long) {
         val target = s.shade ?: return
@@ -341,14 +373,16 @@ object RoofFeed {
         if (target >= 0.5f) CarAnimSpec.clamp01(1f - ms.toFloat() / RoofDecode.SHADE_OPEN_MS)
         else CarAnimSpec.clamp01(ms.toFloat() / RoofDecode.SHADE_CLOSE_MS)
 
-    /** Ön cam: hareket ederken okunan adımdan adım hızıyla, en çok [RoofDecode.GLASS_LEAD_STEPS] adım öteye; değilse yerleşme. */
-    fun glass(f: RoofFollower, s: RoofState, now: Long) {
+    /**
+     * Ön cam: hareket ederken okunan adımdan adım hızıyla, en çok [lead] adım öteye (0 = okunanda bekler); değilse yerleşme.
+     */
+    fun glass(f: RoofFollower, s: RoofState, now: Long, lead: Float = RoofDecode.GLASS_LEAD_STEPS) {
         val d = s.glassDir
         if (d == 0) {
             f.report(s.glass, 0, 0f, s.glass, now)
             return
         }
-        val cap = CarAnimSpec.clamp01(s.glass + d * RoofDecode.GLASS_STEP * RoofDecode.GLASS_LEAD_STEPS)
+        val cap = CarAnimSpec.clamp01(s.glass + d * RoofDecode.GLASS_STEP * lead)
         f.report(s.glass, d, RoofDecode.GLASS_STEP / RoofDecode.GLASS_STEP_MS, cap, now)
     }
 }

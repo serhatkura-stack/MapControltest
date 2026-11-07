@@ -269,6 +269,56 @@ class RoofStateTest {
     }
 
     @Test
+    fun firstOpeningStepHasNoLead() {
+        // 7 Kasım (10:57:29): posi 1 op 3, 2 ms sonra posi 2 op 3, 0,58 sn sonra posi 2 op 1 ve havalandırma (12), 1,1 sn
+        // sonra havalandırmadan posi 2 op 3 ile gerçek kayma.
+        val tracker = RoofTracker()
+        val shade = RoofFollower()
+        val glass = RoofFollower()
+        var prev: RoofState? = null
+        var t = 0L
+        var maxGlass = 0f
+        fun feed(dur: Int, posi: Int, op: Int) {
+            val st = tracker.update(6, posi, op, 0, false, t)!!
+            RoofFeed.apply(shade, glass, prev, st, true, t)
+            prev = st
+            val end = t + dur
+            while (t < end) { maxGlass = maxOf(maxGlass, glass.at(t)); t += 16 }
+        }
+        feed(1_000, 1, 2)
+        feed(2, 1, 3)
+        feed(584, 2, 3)
+        feed(1, 2, 1)
+        feed(1_120, 12, 1)
+        // Okunan ilk adımı (0,1) aşıp geri kaymaz; havalandırmada kapalı çizilir.
+        assertTrue("cam en çok $maxGlass", maxGlass <= RoofDecode.GLASS_STEP + 1e-4f)
+        assertEquals(0f, glass.shown, eps)
+        // Havalandırmadan sonraki ilk adım gerçek kayma: pay var, bir sonraki adımı beklemeden ilerler.
+        feed(400, 2, 3)
+        assertTrue("havalandırmadan sonra ${glass.shown}", glass.shown > RoofDecode.GLASS_STEP)
+    }
+
+    @Test
+    fun applySnapsWithoutAnimationAndStartsMovingShadeFromEstimate() {
+        val shade = RoofFollower()
+        val glass = RoofFollower()
+        // Animasyon kapalı: hedefe atlar, kare istenmez.
+        RoofFeed.apply(shade, glass, null, RoofState(1f, RoofDecode.SHADE_OPEN_MS / 2, glass = 0.3f, glassDir = 1), false, 0)
+        assertEquals(1f, shade.shown, eps)
+        assertEquals(0.3f, glass.shown, eps)
+        assertFalse(shade.active(0) || glass.active(0))
+        // İlk okuma hareket halinde: perde tahmini yerden (yarı yol) ilerler.
+        RoofFeed.apply(shade, glass, null, RoofState(1f, RoofDecode.SHADE_OPEN_MS / 2), true, 0)
+        assertEquals(0.5f, shade.at(0), 0.01f)
+        assertTrue(shade.active(16))
+        assertTrue(shade.at(RoofDecode.SHADE_OPEN_MS / 4) > 0.7f)
+        // Sinyal kayboldu: ikisi de kapalıya.
+        RoofFeed.apply(shade, glass, RoofState(1f, 0L), null, true, 0)
+        assertEquals(0f, shade.shown, eps)
+        assertEquals(0f, glass.shown, eps)
+    }
+
+    @Test
     fun simulatedCarLogPlaysSmoothly() {
         // Debug demo taklidi: araç günlüğündeki sıra tracker ve çizimden geçince kare başına sıçrama olmaz, sonunda kapalı.
         val tracker = RoofTracker()
@@ -280,13 +330,7 @@ class RoofStateTest {
         var maxGlass = 0f
         for (s in RoofDemo.SIM_STEPS) {
             val st = tracker.update(s[1], s[2], s[3], 0, false, t)!!
-            if (prev == null) {
-                shade.snap(st.shade!!)
-                glass.snap(st.glass)
-            } else {
-                if (st.shade != prev.shade || st.shadeMs != prev.shadeMs) RoofFeed.shade(shade, st, t)
-                if (st.glass != prev.glass || st.glassDir != prev.glassDir) RoofFeed.glass(glass, st, t)
-            }
+            RoofFeed.apply(shade, glass, prev, st, true, t)
             prev = st
             val end = t + s[0]
             var a = shade.at(t)

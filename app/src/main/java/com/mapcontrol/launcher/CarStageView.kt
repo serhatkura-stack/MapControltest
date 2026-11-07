@@ -335,27 +335,7 @@ class CarStageView(context: Context) : ViewGroup(context) {
         val prev = roof
         roof = state
         if (state != null && roofArt == null) roofArt = RoofArt.get(context)
-        if (state == null) {
-            shadeMotion.snap(0f)
-            glassMotion.snap(0f)
-        } else {
-            val shade = state.shade
-            when {
-                shade == null -> shadeMotion.snap(0f)
-                // Hareketsiz çizim (detay, animasyon kapalı): kareler ilerlemez, hedef gösterilir.
-                !anim -> shadeMotion.snap(shade)
-                // İlk okuma hareket halindeyse (ör. açılıyor) çizim tahmini yerden ilerler; duruyorsa doğrudan yerinde.
-                prev?.shade == null -> {
-                    shadeMotion.snap(if (state.shadeMs > 0) RoofFeed.shadeStart(shade, state.shadeMs) else shade)
-                    if (state.shadeMs > 0) RoofFeed.shade(shadeMotion, state, now)
-                }
-                shade != prev.shade || state.shadeMs != prev.shadeMs -> RoofFeed.shade(shadeMotion, state, now)
-            }
-            when {
-                !anim || prev == null -> glassMotion.snap(state.glass)
-                state.glass != prev.glass || state.glassDir != prev.glassDir -> RoofFeed.glass(glassMotion, state, now)
-            }
-        }
+        RoofFeed.apply(shadeMotion, glassMotion, prev, state, anim, now)
         roofLayer.visibility = if (state != null) VISIBLE else GONE
         // Tavan var / yok değişince eski buz mavisi tavan camı da değişir (gövde katmanı); yoksa yalnız tavan katmanı.
         if ((prev == null) != (state == null)) invalidate() else roofLayer.invalidate()
