@@ -96,6 +96,13 @@ internal object TripDecode {
      */
     fun totalKm(raw: Int?): Int? = raw?.takeIf { it in 1..9_999_999 }
 
+    /**
+     * Toplam km önce 150'den, geçersizse 71'den. 150 bu araç yazılımının ReadOnlyID'sinde yok ve OEM uygulamalarınca okunmuyor;
+     * yanıt verirse 0/geçersiz dönebilir. Eskiden `ro(150) ?: ro(71)` yalnızca null'da 71'e düşüyordu: 150 boş-ama-null-olmayan
+     * döndüğünde araçta göstergeyle eşleşen 71 hiç okunmuyor, "Toplam"da km satırı kayboluyordu (2026-11-07, yalnızca "Süre").
+     */
+    fun totalKm(primaryRaw: Int?, fallbackRaw: Int?): Int? = totalKm(primaryRaw) ?: totalKm(fallbackRaw)
+
     /** Toplam yakıt (ReadOnly 153 `ID_TOTAL_FUEL`): birim OEM kodunda yok; ham/10 litre varsayıldı (SUM_FUEL gibi). Doğrulanmadı. */
     fun totalFuelL(raw: Int?): Double? = raw?.takeIf { it in 1..9_999_999 }?.let { it / 10.0 }
 
@@ -275,7 +282,7 @@ internal object TripSource {
                 serviceDays = ro(ReadOnlyID.ID_ICMT_DAY)?.takeIf { it in 0..9_999 },
                 pm25In = hvac(HvacID.ID_AC_PM25_INCAR)?.takeIf { it in 0..999 },
                 pm25Out = hvac(HvacID.ID_AC_PM25_OUTCAR)?.takeIf { it in 0..999 },
-                totalKm = TripDecode.totalKm(ro(ReadOnlyIds.TOTAL_MILEAGE) ?: ro(ReadOnlyID.ID_GRAND_TOTAL_KM)),
+                totalKm = TripDecode.totalKm(ro(ReadOnlyIds.TOTAL_MILEAGE), ro(ReadOnlyID.ID_GRAND_TOTAL_KM)),
                 totalFuelL = TripDecode.totalFuelL(ro(ReadOnlyIds.TOTAL_FUEL)),
                 drivingRunMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RUNNING)),
                 drivingResetMin = TripDecode.drivingMinutes(CarSignals.read(RO, ReadOnlyIds.DRIVING_TIME_AFTER_RESET)),

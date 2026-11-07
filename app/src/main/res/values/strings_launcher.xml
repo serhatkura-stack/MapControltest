@@ -218,6 +218,10 @@
     <string name="launcher_wifi_none">No networks found</string>
     <string name="launcher_wifi_need_location">Location permission is needed to see networks</string>
     <string name="launcher_wifi_grant">Allow</string>
+    <string name="launcher_wifi_location_off">Location is off. Turn it on to see networks</string>
+    <string name="launcher_wifi_location_settings">Turn on</string>
+    <string name="launcher_wifi_open_settings">Open settings</string>
+    <string name="launcher_wifi_permission_denied">Location permission was not granted</string>
     <string name="launcher_wifi_settings">Wi-Fi settings</string>
     <string name="launcher_wifi_park_for_password">Stop the car to enter a password</string>
     <string name="launcher_wifi_password_title">Wi-Fi password</string>

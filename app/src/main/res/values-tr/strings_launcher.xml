@@ -216,8 +216,12 @@
     <string name="launcher_wifi_networks">Ağlar</string>
     <string name="launcher_wifi_scanning">Taranıyor…</string>
     <string name="launcher_wifi_none">Ağ bulunamadı</string>
-    <string name="launcher_wifi_need_location">Ağları görmek için konum izni gerekiyor</string>
+    <string name="launcher_wifi_need_location">Ağları görmek için konum izni gerekli</string>
     <string name="launcher_wifi_grant">İzin ver</string>
+    <string name="launcher_wifi_location_off">Konum kapalı. Ağları görmek için konumu açın</string>
+    <string name="launcher_wifi_location_settings">Konumu aç</string>
+    <string name="launcher_wifi_open_settings">Ayarları aç</string>
+    <string name="launcher_wifi_permission_denied">Konum izni verilmedi</string>
     <string name="launcher_wifi_settings">Wi-Fi ayarları</string>
     <string name="launcher_wifi_park_for_password">Şifre girmek için aracı durdurun</string>
     <string name="launcher_wifi_password_title">Wi-Fi şifresi</string>

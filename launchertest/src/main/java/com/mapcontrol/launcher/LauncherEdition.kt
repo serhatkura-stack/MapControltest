@@ -84,6 +84,7 @@ private class TestWifiBackend(context: Context) : WifiBackend {
     }
 
     override fun hasLocationPermission() = true
+    override fun isLocationOn() = true
     override fun startScan() = false
     override fun scanResults(): List<WifiScan> = emptyList()
 

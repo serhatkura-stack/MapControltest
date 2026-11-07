@@ -119,6 +119,8 @@ private class AppWifiBackend(private val context: Context) : WifiBackend {
     override fun hasLocationPermission() =
         context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    override fun isLocationOn() = WifiController.isLocationOn(context)
+
     override fun startScan() = try { controller.startScan() } catch (e: RuntimeException) { false }
 
     override fun scanResults(): List<WifiScan> = controller.scanResults().map {

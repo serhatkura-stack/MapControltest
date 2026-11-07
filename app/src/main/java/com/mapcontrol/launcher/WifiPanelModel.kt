@@ -16,6 +16,8 @@ internal interface WifiBackend {
     /** Arka planda açar/kapatır, bitince ana iş parçacığında [done] çağrılır. */
     fun setEnabled(on: Boolean, done: () -> Unit)
     fun hasLocationPermission(): Boolean
+    /** Sistem konumu açık mı (Settings.Secure.LOCATION_MODE != 0); kapalıyken Android tarama sonucu vermez. */
+    fun isLocationOn(): Boolean
     fun startScan(): Boolean
     fun scanResults(): List<WifiScan>
     /** Bağlı ağ: (ad ya da bilinmiyorsa null, seviye); bağlı değilse null. */
@@ -63,4 +65,28 @@ internal object WifiListShaper {
 
     /** Kaydırma yalnızca park halinde (sürüşte kaydırma yok). */
     fun scrollAllowed(driving: Boolean): Boolean = !driving
+}
+
+/**
+ * Ağ listesinin önündeki engel (saf, JVM'de sınanır). Android 9+ tarama ve sonuç için hem ACCESS_FINE_LOCATION hem de açık
+ * sistem konumu ister; eksikse WifiService sessizce boş liste döner ("startScan not allowed ... has no location permission").
+ */
+internal object WifiAccess {
+    enum class Gate { LIST, NEED_PERMISSION, LOCATION_OFF }
+
+    /** Önce izin (verilmeden konum ayarı işe yaramaz), sonra sistem konumu. */
+    fun gate(hasPermission: Boolean, locationOn: Boolean): Gate = when {
+        !hasPermission -> Gate.NEED_PERMISSION
+        !locationOn -> Gate.LOCATION_OFF
+        else -> Gate.LIST
+    }
+
+    enum class PermissionAction { REQUEST, OPEN_APP_SETTINGS }
+
+    /**
+     * İzin düğmesinin işi: daha önce sorulup reddedildiyse ve sistem artık gerekçe göstermiyorsa ("Bir daha sorma" ya da
+     * politika) pencere açılmaz, uygulama ayrıntıları açılır; aksi halde çalışma anında izin istenir.
+     */
+    fun permissionAction(askedBefore: Boolean, showRationale: Boolean): PermissionAction =
+        if (askedBefore && !showRationale) PermissionAction.OPEN_APP_SETTINGS else PermissionAction.REQUEST
 }

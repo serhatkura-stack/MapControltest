@@ -53,6 +53,26 @@ public class WifiController {
     private final Context context;
     private final WifiManager wifiManager;
 
+    /** Tarama ve sonuçlar için gereken çalışma anı izni (Android 9+ WifiService konum izni ister). */
+    public static boolean hasLocationPermission(Context context) {
+        return context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Sistem konumu açık mı: {@code Settings.Secure.LOCATION_MODE} 0 (kapalı) değilse açık. Okunamazsa açık sayılır
+     * (yanlış "Konum kapalı" uyarısı göstermemek için).
+     */
+    @SuppressWarnings("deprecation")
+    public static boolean isLocationOn(Context context) {
+        try {
+            return android.provider.Settings.Secure.getInt(context.getContentResolver(),
+                    android.provider.Settings.Secure.LOCATION_MODE) != android.provider.Settings.Secure.LOCATION_MODE_OFF;
+        } catch (android.provider.Settings.SettingNotFoundException | RuntimeException e) {
+            return true;
+        }
+    }
+
     public WifiController(Context context) {
         this.context = context.getApplicationContext();
         this.wifiManager = (WifiManager) this.context.getSystemService(Context.WIFI_SERVICE);

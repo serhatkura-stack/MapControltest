@@ -65,4 +65,21 @@ class TripDecodeTest {
         assertNull(TripDecode.avgSpeedKmh(0))
         assertNull(TripDecode.tripKm(null))
     }
+
+    /** 150 boş-ama-null-olmayan dönerse 71'e düşülmeli (araçta 71 = [0,0,43,24] = 11032 km, göstergeyle eşleşti). */
+    @Test fun totalKmFallsBackWhenPrimaryInvalid() {
+        val grand = (43 shl 8) or 24
+        assertEquals(11032, TripDecode.totalKm(0, grand))
+        assertEquals(11032, TripDecode.totalKm(-1, grand))
+        assertEquals(11032, TripDecode.totalKm(null, grand))
+        assertEquals(12000, TripDecode.totalKm(12000, grand))
+        assertNull(TripDecode.totalKm(0, 0))
+        assertNull(TripDecode.totalKm(null, null))
+    }
+
+    @Test fun totalsRowsDropMissing() {
+        assertEquals(listOf(TripTotals.Kind.TIME), TripTotals.rows(null, null, 6).map { it.first })
+        assertEquals(listOf(TripTotals.Kind.ODOMETER, TripTotals.Kind.TIME), TripTotals.rows(11032, null, 6).map { it.first })
+        assertTrue(TripTotals.rows(null, null, null).isEmpty())
+    }
 }

@@ -33,6 +33,9 @@ public class WifiTabBuilder {
         void log(String message);
     }
 
+    /** MainActivity.onRequestPermissionsResult bu kodu {@link #onLocationPermissionResult()}'a iletir. */
+    public static final int LOCATION_PERMISSION_REQUEST = 4721;
+
     private final Context context;
     private final WifiCallback callback;
 
@@ -263,6 +266,12 @@ public class WifiTabBuilder {
             return;
         }
 
+        // İzinsiz ya da sistem konumu kapalıyken WifiService taramayı reddeder ve liste sessizce boş kalır
+        // (araç günlüğü: "startScan not allowed ... has no location permission"); bunun yerine nedeni ve düğmesi gösterilir.
+        if (showLocationGateIfNeeded()) {
+            return;
+        }
+
         try {
             displayWifiNetworks();
             callback.log("Wi-Fi ağları taranıyor...");
@@ -287,6 +296,62 @@ public class WifiTabBuilder {
             btnScanWifi.setEnabled(true);
             btnScanWifi.setText(R.string.wifi_refresh);
         }
+    }
+
+    /** Konum izni ya da sistem konumu eksikse listenin yerine açıklama + düğme koyar ve true döner. */
+    private boolean showLocationGateIfNeeded() {
+        boolean permission = WifiController.hasLocationPermission(context);
+        boolean locationOn = WifiController.isLocationOn(context);
+        if (permission && locationOn) {
+            return false;
+        }
+        if (wifiListContainer == null) {
+            return true;
+        }
+        wifiListContainer.removeAllViews();
+        TextView msg = new TextView(context);
+        msg.setText(permission ? R.string.launcher_wifi_location_off : R.string.launcher_wifi_need_location);
+        msg.setTextColor(UiStyles.color(context, R.color.textLoading));
+        UiStyles.setTextSize(msg, R.dimen.text_size_small);
+        msg.setPadding(8, 8, 8, 8);
+        wifiListContainer.addView(msg);
+        Button action = new Button(context);
+        action.setText(permission ? R.string.launcher_wifi_location_settings : R.string.launcher_wifi_grant);
+        applyControlButtonStyle(action, UiStyles.color(context, R.color.oemAccent));
+        action.setOnClickListener(v -> {
+            if (!permission && context instanceof android.app.Activity) {
+                ((android.app.Activity) context).requestPermissions(new String[]{
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_PERMISSION_REQUEST);
+            } else {
+                openLocationSettings(permission
+                        ? new android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        : new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.fromParts("package", context.getPackageName(), null)));
+            }
+        });
+        wifiListContainer.addView(action, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                UiStyles.dimenPx(context, R.dimen.button_height)));
+        callback.log(permission ? "Wi-Fi taraması: sistem konumu kapalı" : "Wi-Fi taraması: konum izni yok");
+        return true;
+    }
+
+    private void openLocationSettings(android.content.Intent intent) {
+        try {
+            context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {
+            try {
+                context.startActivity(new android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (RuntimeException ignored) {
+            }
+        }
+    }
+
+    /** Konum izni penceresi kapanınca (MainActivity) liste yeniden denenir; reddedildiyse açıklama satırı kalır. */
+    public void onLocationPermissionResult() {
+        scanWifiNetworks();
     }
 
     private void displayWifiNetworks() {

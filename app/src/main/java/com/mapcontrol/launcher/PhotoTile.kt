@@ -414,7 +414,7 @@ class PhotoTile(
         private const val THUMB_H_DP = 112
         private const val THUMB_REQ_W = 240
         private const val THUMB_REQ_H = 160
-        const val REQ_STORAGE = 4711
+        const val REQ_STORAGE = 4713
 
         /** Açık fotoğraf seçici varsa onu yeniden tarar; depolama izni verilince Activity çağırır. */
         @Volatile var pickerRefresh: (() -> Unit)? = null

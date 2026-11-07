@@ -2068,6 +2068,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == WifiTabBuilder.LOCATION_PERMISSION_REQUEST && wifiTabBuilder != null) {
+            wifiTabBuilder.onLocationPermissionResult();
+            return;
+        }
         if (requestCode == DmsFaceRecognitionTabBuilder.CAMERA_PERMISSION_REQUEST
                 && dmsFaceRecognitionTabBuilder != null) {
             boolean granted = grantResults.length > 0
