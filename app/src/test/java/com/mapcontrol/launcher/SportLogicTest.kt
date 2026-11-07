@@ -348,68 +348,39 @@ class SportLogicTest {
         assertEquals(800, s.peakRpm)
     }
 
-    @Test fun eightyToHundredTwentyIsInterpolated() {
-        val s = SportSession()
-        s.update(0, 70, 3_000)
-        s.update(1_000, 90, 4_000) // 80 geçişi t=500
-        s.update(5_000, 110, 4_500)
-        s.update(6_000, 130, 5_000) // 120 geçişi t=5 500
-        assertEquals(5_000L, s.best80to120Ms)
-    }
-
-    @Test fun eightyToHundredTwentyCancels() {
-        val s = SportSession()
-        s.update(0, 70, 3_000)
-        s.update(1_000, 90, 4_000)
-        s.update(2_000, 74, 3_000) // 75'in altı: iptal
-        s.update(3_000, 125, 5_000)
-        assertNull(s.best80to120Ms)
-        // Süre aşımı (20 sn).
-        s.update(4_000, 70, 3_000)
-        s.update(5_000, 85, 3_500)
-        s.update(30_000, 121, 4_000)
-        assertNull(s.best80to120Ms)
-        // Yavaşlarken 80'e inmek başlatmaz; tek adımda 120'yi aşmak da ölçülmez.
-        s.update(31_000, 79, 3_000)
-        s.update(32_000, 125, 5_000)
-        assertNull(s.best80to120Ms)
-    }
-
-    @Test fun eightyToHundredTwentyKeepsBest() {
-        val s = SportSession()
-        s.update(0, 70, 3_000)
-        s.update(1_000, 90, 4_000)
-        s.update(9_000, 130, 4_000) // 80@500 → 120@7 000: 6 500
-        s.update(10_000, 70, 3_000)
-        s.update(11_000, 90, 4_000) // 80@10 500
-        s.update(15_000, 130, 4_000) // 120@14 000: 3 500
-        assertEquals(3_500L, s.best80to120Ms)
-        s.update(16_000, 70, 3_000)
-        s.update(17_000, 90, 4_000)
-        s.update(30_000, 121, 4_000)
-        assertEquals(3_500L, s.best80to120Ms)
-    }
-
     // --- Küçük kadran seçimi ---
 
     @Test fun dialDefaultsAndDecode() {
         assertEquals(listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = true))
-        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = false))
-        assertEquals(listOf(SportDial.CLOCK, SportDial.PASS80, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,p80,range,max", true))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.AVG_SPEED, SportDial.INSTANT, SportDial.MAX), SportDials.decode(null, hasG = false))
+        assertEquals(listOf(SportDial.CLOCK, SportDial.AVG_SPEED, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,avg,range,max", true))
         // G sensör yoksa düşer; tekrarlar ve bilinmeyenler düşer, boşluk varsayılanla dolar.
-        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode("g,g,xx", false))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.AVG_SPEED, SportDial.INSTANT, SportDial.MAX), SportDials.decode("g,g,xx", false))
         // Kaldırılan motor suyu ("cool") kayıtta kaldıysa o yuva sıradaki varsayılana geçer.
-        assertEquals(listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX), SportDials.decode("z100,cool,inst,max", false))
+        assertEquals(listOf(SportDial.ZERO100, SportDial.AVG_SPEED, SportDial.INSTANT, SportDial.MAX), SportDials.decode("z100,cool,inst,max", false))
         assertEquals(listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode("z100,cool,inst,max", true))
-        assertEquals(listOf(SportDial.CLOCK, SportDial.PASS80, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,cool,range,max", false))
+        assertEquals(listOf(SportDial.CLOCK, SportDial.AVG_SPEED, SportDial.RANGE, SportDial.MAX), SportDials.decode("clock,cool,range,max", false))
         assertNull(SportDial.of("cool"))
         val d = SportDials.decode("max,max,max,max", true)
         assertEquals(4, d.toSet().size)
         assertEquals(SportDial.MAX, d[0])
         assertFalse(SportDial.G in SportDials.offered(false))
         assertEquals(SportDial.values().size, SportDials.offered(true).size)
-        val all = SportDials.decode("clock,p80,range,max", true)
+        val all = SportDials.decode("clock,avg,range,max", true)
         assertEquals(all, SportDials.decode(SportDials.encode(all), true))
+    }
+
+    @Test fun removedDialsMigrateToDistinctValidDials() {
+        assertNull(SportDial.of("spd"))
+        assertNull(SportDial.of("out"))
+        assertNull(SportDial.of("p80"))
+        for (hasG in listOf(true, false)) {
+            val d = SportDials.decode("z100,spd,out,p80", hasG)
+            assertEquals(4, d.size)
+            assertEquals(4, d.toSet().size)
+            assertTrue(d.all { it in SportDials.offered(hasG) })
+            assertEquals(SportDial.ZERO100, d[0])
+        }
     }
 
     @Test fun choosingAUsedDialSwaps() {
@@ -507,8 +478,7 @@ class SportLogicTest {
         assertTrue(SportGeometry.RPM_LABEL_Y < 0.95f)
         // Alt boşluk: ibre 0'da 135°, 8 000'de 45°; hız bölgesi (aşağı, 90°) hiç süpürülmez.
         assertTrue(SportMath.needleDeg(0f) >= 135f - 1e-3f && SportMath.needleDeg(SportMath.RPM_MAX.toFloat()) <= 405f + 1e-3f)
-        assertTrue(SportDial.SPEED in SportDials.offered(false))
-        assertEquals("km/sa", SportGeometry.unit(SportDial.SPEED))
+        assertEquals("km/sa", SportGeometry.SPEED_UNIT_TEXT)
     }
 
     @Test fun mediaContentKeepsTiggo7ScaleAndShrinksOnlyWhenSmaller() {

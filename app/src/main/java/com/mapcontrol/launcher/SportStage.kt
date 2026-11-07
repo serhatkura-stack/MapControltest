@@ -25,6 +25,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.TypedValue
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -96,7 +97,6 @@ internal object SportDemo {
     const val GEAR_NUMBER = 4
     const val INSTANT_L100 = 9.8
     const val ZERO100_MS = 9_600L
-    const val PASS80_MS = 6_400L
     const val MAX_KMH = 142
 
     /** Rölanti taklidinde (`launcher_demo_noise`) araç P'de duruyor: hız 0, devir rölanti ([LauncherDemo.rpm]). */
@@ -162,7 +162,7 @@ internal class SportStageView(
     }
     private val speedUnit = sahneText(activity, 14f, SportInk.INK_3, 500, 0.12f, dayBump = false).apply {
         gravity = Gravity.CENTER; includeFontPadding = false; maxLines = 1
-        text = SportGeometry.unit(SportDial.SPEED)
+        text = SportGeometry.SPEED_UNIT_TEXT
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
     private val speedReadout = SpeedReadout()
@@ -198,7 +198,6 @@ internal class SportStageView(
     private var rpmMode = false
     /** Hızlı kaynaktan görülen en yüksek devir (oturumun tepe devri silinince, yani yeni sürüşte sıfırlanır). */
     private var fastPeakRpm = 0
-    private var speedText: String = SpeedReadout.DASH
     private val slots = ArrayList<Slot>()
     private val media = SportMediaDial(activity)
     private val car = CarStageView(activity).apply {
@@ -211,9 +210,39 @@ internal class SportStageView(
         })
     }
     private val carLight = CarLightView(activity)
+    /** Araç kadranında motor torku halkası (ReadOnly 106; iz durağan çizimde). */
+    private val torqueRing = TorqueRing(activity)
+    /** ReadOnly 106 değişim aralıkları (tikte okunur, 500 ms çözünürlük; yalnız günlük). */
+    private val torque106Arrivals = ArrivalLog()
+    /** Son okunan ham 106 ("sport-io" iş parçacığı yazar, ana iş parçacığı okur); okunamadıysa null. */
+    @Volatile private var torqueRaw: Int? = null
+    private val torquePending = java.util.concurrent.atomic.AtomicBoolean(false)
+    /**
+     * 106 tek okuma (VDBus.getOnce, bağlayıcı çağrısı): ana iş parçacığını bekletmesin diye "sport-io"da ([CarSpeedReader.io]),
+     * tik başına en çok bir. "sport-art"ta değil: orada saniyeler süren çizim halkayı dondurur, okuma da çizimi geciktirir.
+     */
+    private val torqueRead = Runnable {
+        torqueRaw = try {
+            if (com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy.getInstance().isServiceConnnected)
+                CarSignals.readInt(com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo.MODULE_READONLY_INFO, ReadOnlyID.ID_MEAN_EFFECTIVE_TORQUE)
+            else null
+        } catch (t: Throwable) { null }
+        main.post(torquePost)
+    }
+    private val torquePost = Runnable {
+        torquePending.set(false)
+        if (visibleNow && !LauncherDemo.enabled) bindTorque(SystemClock.elapsedRealtime(), torqueRaw)
+    }
+    /** Art arda geçersiz 106 okuması; [TORQUE_MAX_MISS]'e dek son geçerli değer tutulur (tek kayıp halkayı söndürmez). */
+    private var torqueMiss = 0
+    private var torqueShown: Float? = null
+    /** Bu sürüşün en yüksek torku (Nm); yeni sürüşte ([SportSession] tepe devri doluyken silinince) sıfırlanır. */
+    private var torquePeakNm = 0
+    /** Son görülen [SportSession.peakRpm] doluydu mu: yalnız dolu → boş geçişi yeni sürüş sayılır (devir yokken sıfırlanmaz). */
+    private var torqueSawPeakRpm = false
     private val glows = ArrayList<GlowView>()
     /** Geçişte solup beliren canlı görünümler (yalnız geçişte okunur). */
-    private val live: List<View> get() = listOf(gear, speed, speedUnit, peak, media, car, carLight) + slots.flatMap { it.liveViews }
+    private val live: List<View> get() = listOf(gear, speed, speedUnit, peak, media, torqueRing, car, carLight) + slots.flatMap { it.liveViews }
 
     private var visibleNow = false
     private var sweeping = false
@@ -286,6 +315,8 @@ internal class SportStageView(
         setWillNotDraw(false)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         addView(media)
+        // Tork halkası aracın altında: araç gövdesi (kapı açılışı dahil) halkanın üstünde kalır.
+        addView(torqueRing)
         addView(car)
         addView(carLight)
         addView(gear)
@@ -335,6 +366,10 @@ internal class SportStageView(
         rpmReadout.reset()
         layoutGate.restart(wantRpm)
         if (!LauncherDemo.enabled) {
+            // Eski tork gösterilmez (dakikalar sonra rölantide 200 Nm görünmesin): halka boş başlar, ilk geçerli okumayla dolar.
+            torqueShown = null
+            torqueMiss = TORQUE_MAX_MISS + 1
+            torqueRing.clear()
             carSpeed.start()
             vhal.start()
             if (RPM_FIRST_ENABLED) rpmFrames.start()
@@ -361,6 +396,10 @@ internal class SportStageView(
         rpmFrames.stop()
         main.removeCallbacks(rpmPost)
         rpmPending.set(false)
+        main.removeCallbacks(torquePost)
+        CarSpeedReader.io.removeCallbacks(torqueRead)
+        torquePending.set(false)
+        torqueRing.stop()
         media.onHidden()
         car.setActive(false)
         TripSource.remove(tripListener)
@@ -466,7 +505,6 @@ internal class SportStageView(
         val instant: Double?
         val best: Long?
         val maxKmh: Int?
-        val pass: Long?
         val last: Long?
         val lastAt: Long
         val lastBest: Boolean
@@ -485,7 +523,6 @@ internal class SportStageView(
             instant = SportDemo.INSTANT_L100
             best = SportDemo.ZERO100_MS
             maxKmh = SportDemo.MAX_KMH
-            pass = SportDemo.PASS80_MS
             last = null
             lastAt = 0L
             lastBest = false
@@ -495,6 +532,9 @@ internal class SportStageView(
             range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
             gaugeKmh = kmh
             if (wantRpm != LauncherDemo.sportFastRpm) setWant(LauncherDemo.sportFastRpm)
+            // Demo torku: yumuşak gaz dalgası (ekran görüntülerinde halka görünsün); gerçek yoldan ([SportTorque]) geçer.
+            torqueRing.set(SportTorque.fractionOfNm(SportTorque.demoNm(SystemClock.uptimeMillis(), idle, LauncherDemo.still)))
+            torqueRing.setPeak(if (idle) null else SportTorque.fractionOfNm(SportTorque.DEMO_PEAK_NM))
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
@@ -525,6 +565,8 @@ internal class SportStageView(
                 rpmSource = pick.source
                 android.util.Log.i(VhalSportReader.TAG, "devir kaynağı=${pick.source.key}")
             }
+            // Motor torku (106) normal veri katmanında değil: tikte bir kez arka planda okunur, sonuç [torquePost] ile gelir.
+            if (snap.connected) { if (torquePending.compareAndSet(false, true)) CarSpeedReader.io.post(torqueRead) } else bindTorque(now, null)
             val gs = snap.gearSignal.takeIf { snap.connected && VehicleMetricsSnapshot.isValid(it) }
             gearText = SportMath.gearText(gs)
             watchPark(gs)
@@ -538,7 +580,6 @@ internal class SportStageView(
             instant = instantDisplay.l100
             best = s.best0to100Ms
             maxKmh = s.maxSpeedKmh
-            pass = s.best80to120Ms
             last = s.last0to100Ms
             lastAt = s.lastResultAt
             lastBest = s.lastWasBest
@@ -599,7 +640,6 @@ internal class SportStageView(
                     }
                 }
                 SportDial.MAX -> setText(v, maxKmh?.toString() ?: DASH)
-                SportDial.SPEED -> setText(v, speedText)
                 SportDial.AVG_SPEED -> setText(v, trip.avgSpeedKmh?.toString() ?: DASH)
                 SportDial.TRIP_TIME -> {
                     val min = TripTotals.drivingMinutes(trip.drivingRunMin, trip.drivingResetMin, trip.drivingAltMin, trip.engineOnMin)
@@ -607,9 +647,6 @@ internal class SportStageView(
                     slot.unit?.let { setText(it, SportFormat.durationUnit(min)) }
                 }
                 SportDial.RANGE -> setText(v, range?.toString() ?: DASH)
-                // Üst çubuktaki araç sıcaklığıyla aynı kaynak (TripSource, HVAC 19, 5 sn katmanı); yeni araç okuması yok.
-                SportDial.OUTSIDE -> setText(v, SportFormat.outside(if (demo) LauncherDemo.trip().outsideC else trip.outsideC) ?: DASH)
-                SportDial.PASS80 -> setText(v, SportFormat.seconds(pass) ?: DASH)
                 SportDial.G, SportDial.CLOCK -> Unit
             }
         }
@@ -748,6 +785,7 @@ internal class SportStageView(
         carSpeed.posts.set(0)
         vhal.speedEvents.set(0)
         rpm62Arrivals.reset()
+        torque106Arrivals.reset()
     }
 
     private fun logSummary(now: Long, kmh: Int) {
@@ -764,7 +802,7 @@ internal class SportStageView(
         if (!LauncherDemo.enabled) {
             // Devir kaynaklarının varış aralıkları (yalnız sayı): 773 akıyor mu, 62'den hızlı mı?
             android.util.Log.i(VhalSportReader.TAG, "özet ${now - logAt}ms 773 ${vhal.rpmArrivals.takeLine()} son=${vhal.rpm ?: "-"} | " +
-                "62 değişim ${rpm62Arrivals.takeLine()} | 519 ${vhal.speedArrivals.takeLine()} olay=${vhal.speedEvents.getAndSet(0)} | " +
+                "62 değişim ${rpm62Arrivals.takeLine()} | 106 değişim ${torque106Arrivals.takeLine()} | 519 ${vhal.speedArrivals.takeLine()} olay=${vhal.speedEvents.getAndSet(0)} | " +
                 "kaynak=${rpmSource.key} doğrulandı=$vhalRpmTrusted | çerçeve=${rpmFrames.live(now)} düzen=${if (rpmMode) "rpm" else "hız"}")
         }
         logAt = now
@@ -772,12 +810,33 @@ internal class SportStageView(
         needleMoves = 0
     }
 
+    /** Ham 106 → tork halkası; geçersiz okuma [TORQUE_MAX_MISS] tike dek son değeri korur, sonra halka söner. */
+    private fun bindTorque(now: Long, raw: Int?) {
+        torque106Arrivals.markIfChanged(now, raw)
+        val nm = AwdMath.engineNm(raw)
+        if (nm == null) {
+            torqueMiss = minOf(torqueMiss + 1, TORQUE_MAX_MISS + 1)
+            if (torqueMiss <= TORQUE_MAX_MISS && torqueShown != null) return
+            torqueShown = null
+            torqueRing.set(null)
+            return
+        }
+        torqueMiss = 0
+        val peakRpmSet = SportSessionStore.session.peakRpm != null
+        if (torqueSawPeakRpm && !peakRpmSet) torquePeakNm = 0
+        torqueSawPeakRpm = peakRpmSet
+        if (nm > torquePeakNm) torquePeakNm = nm
+        val f = SportTorque.fractionOfNm(nm)
+        torqueShown = f
+        torqueRing.set(f)
+        torqueRing.setPeak(if (torquePeakNm > SportTorque.NOISE_NM) SportTorque.fractionOfNm(torquePeakNm) else null)
+    }
+
     /** Dijital hız: yalnız tam sayı değişince ve en çok ~4 Hz ([SpeedReadout]). */
     private fun showSpeed(now: Long, kmh: Int) {
         speedReadout.next(now, kmh)?.let { t ->
-            speedText = t
             speed.text = t
-            speed.contentDescription = if (t == SpeedReadout.DASH) null else "$t ${SportGeometry.unit(SportDial.SPEED)}"
+            speed.contentDescription = if (t == SpeedReadout.DASH) null else "$t ${SportGeometry.SPEED_UNIT_TEXT}"
         }
     }
 
@@ -1196,6 +1255,7 @@ internal class SportStageView(
         }
         val lr = (g.car.r * 2).toInt()
         carLight.measure(exactly(lr), exactly(lr))
+        torqueRing.measure(exactly(lr), exactly(lr))
         glows.forEach { v ->
             val s = (v.dial.r * 2 + v.pad * 2).toInt()
             v.measure(exactly(s), exactly(s))
@@ -1257,6 +1317,7 @@ internal class SportStageView(
             centerAt(s.mark, d.cx, d.cy)
         }
         centerAt(carLight, g.car.cx, g.car.cy)
+        centerAt(torqueRing, g.car.cx, g.car.cy)
         glows.forEach { centerAt(it, it.dial.cx, it.dial.cy) }
     }
 
@@ -1304,6 +1365,8 @@ internal class SportStageView(
         const val FLASH_SCALE = 1.12f
         const val SLOT_FADE_MS = 180L
         const val DEMO_SUMMARY_MS = 2_500L
+        /** 106 okunamazsa son geçerli torkun tutulduğu tik sayısı (~1,5 sn). */
+        const val TORQUE_MAX_MISS = 3
 
         // Giriş zamanlaması (karartma kalktıktan sonra): çerçeve parıltısı, ibre süpürmesi, değerler.
         const val OUTRO_FADE_MS = 300L
@@ -1721,5 +1784,220 @@ internal class ProgressRing(context: Context) : View(context) {
         paint.strokeWidth = r * SportGeometry.PROGRESS_W * 1.15f
         rect.set(r - rr, r - rr, r + rr, r + rr)
         canvas.drawArc(rect, -90f, 360f * fraction, false, paint)
+    }
+}
+
+/**
+ * Araç kadranında motor torku halkası (ReadOnly 106, [SportTorque]): alt boşluklu 270° yay, sol alttan saat yönünde dolar;
+ * düşük torkta sönük koyu turuncu (gümüş çerçeveden ayrışır), ~100 Nm'den spor turuncusu, tam gazda sıcak turuncu (renk
+ * yay boyunca sabit, dolgu ilerledikçe sıcak uç görünür). İz durağan çizimde ([SportArt] araç kadranı). Okumalar seyrek
+ * gelse de (0,5–2 sn) yay kare başına fizikle izler: kritik sönümlü yay, taşma yok, çıkışta hızlı ([SportTorque.ATTACK_W]),
+ * inişte yavaş ([SportTorque.RELEASE_W]); okumalar arasında durmaz. Akış yalnız hareket sürerken döner; görünen değer
+ * ~0,5° ya da 1/64 saydamlık değişince çizilir, çizimde nesne üretimi yok. Geçersiz veri: yay boşalarak söner (uydurma değer
+ * yok). İnce tepe çentiği bu sürüşün en yüksek torku; yeni tepeye yay ucu varınca geçer. Yazı, rakam, rozet yok ("parça ışır").
+ */
+internal class TorqueRing(context: Context) : View(context) {
+    private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+    private val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+    private val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; color = SportInk.RED_HOT }
+    private val rect = RectF()
+    private val tickPts = FloatArray(4)
+
+    /** Hedef derece (0..270); -1: veri yok (sönük). */
+    private var targetDeg = -1
+    private var peakDeg = -1
+    private var shown = 0f
+    private var vel = 0f
+    private var shownAlpha = 0f
+    private var targetF = 0f
+    private var targetA = 0f
+    /** Son çizilen nicem (yarım derece, 1/64 saydamlık): akışta yalnız bunlar değişince yeniden çizilir. */
+    private var drawnQ = -1
+    private var drawnQa = -1
+    /** Akış sürerken gelen yeni tepe: yay ucu oraya varınca ([stepFrame]) çentik geçer, uçtan önde koşmaz. */
+    private var pendingPeakDeg = NO_PEAK
+    private var running = false
+    private var lastFrameNs = 0L
+    private val frame = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (!running) return
+            val dt = if (lastFrameNs == 0L) 0f else (frameTimeNanos - lastFrameNs) / 1e9f
+            lastFrameNs = frameTimeNanos
+            stepFrame(dt)
+            if (running) Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    private fun redrawIfMoved() {
+        val q = Math.round(shown * SportTorque.SWEEP_DEG * 2f)
+        val qa = Math.round(shownAlpha * 64f)
+        if (q == drawnQ && qa == drawnQa) return
+        drawnQ = q
+        drawnQa = qa
+        invalidate()
+    }
+
+    /** Bir kare ilerlet: yay [SportTorque.springStep] ile, saydamlık üstel yaklaşımla; durulunca döngü biter. */
+    private fun stepFrame(dtSec: Float) {
+        val dt = dtSec.coerceIn(0f, SportTorque.MAX_DT)
+        val before = shown
+        shown = SportTorque.springStep(before, vel, targetF, dt).coerceIn(0f, 1f)
+        vel = SportTorque.springVelocity(before, vel, targetF, dt)
+        val da = targetA - shownAlpha
+        shownAlpha = if (Math.abs(da) < 0.01f) targetA else shownAlpha + da * (1f - Math.exp((-dt * ALPHA_RATE).toDouble()).toFloat())
+        val pend = pendingPeakDeg
+        val settled = SportTorque.isSettled(shown, vel, targetF) && shownAlpha == targetA
+        if (pend != NO_PEAK && (settled || shown * SportTorque.SWEEP_DEG >= pend - 0.5f)) applyPendingPeak()
+        if (settled) {
+            shown = targetF
+            vel = 0f
+            haltLoop()
+        }
+        redrawIfMoved()
+    }
+
+    private fun startLoop() {
+        if (running || !isAttachedToWindow) return
+        running = true
+        lastFrameNs = 0L
+        Choreographer.getInstance().postFrameCallback(frame)
+    }
+
+    private fun haltLoop() {
+        if (!running) return
+        running = false
+        Choreographer.getInstance().removeFrameCallback(frame)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!SportTorque.isSettled(shown, vel, targetF) || shownAlpha != targetA) startLoop()
+    }
+
+    override fun onDetachedFromWindow() {
+        haltLoop()
+        super.onDetachedFromWindow()
+    }
+
+    private fun applyPendingPeak() {
+        val d = pendingPeakDeg
+        if (d == NO_PEAK) return
+        pendingPeakDeg = NO_PEAK
+        if (d == peakDeg) return
+        peakDeg = d
+        placeTick()
+        invalidate()
+    }
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    override fun hasOverlappingRendering(): Boolean = false
+
+    /** Doluluk 0..1; null: veri yok (yay boşalarak söner). Aynı dereceyse iş yok. */
+    fun set(fraction: Float?) {
+        val deg = fraction?.let { SportTorque.degrees(it) } ?: -1
+        if (deg == targetDeg) return
+        targetDeg = deg
+        targetF = if (deg < 0) 0f else deg / SportTorque.SWEEP_DEG
+        targetA = if (deg < 0) 0f else 1f
+        startLoop()
+    }
+
+    /** Bu sürüşün tepe torku (doluluk); null: çentik yok. Akış sürerken yükselen tepe yay ucu varınca yerine geçer. */
+    fun setPeak(fraction: Float?) {
+        val deg = fraction?.let { SportTorque.degrees(it) }?.takeIf { it > 0 } ?: -1
+        pendingPeakDeg = deg
+        if (running && deg > peakDeg) return
+        applyPendingPeak()
+    }
+
+    /** Görünmez olunca: süren akış durur, son değer yerinde kalır. */
+    fun stop() {
+        if (!running) return
+        haltLoop()
+        shown = targetF
+        vel = 0f
+        shownAlpha = targetA
+        applyPendingPeak()
+        invalidate()
+    }
+
+    /** Akışsız boşalt (ekran yeniden açılınca eski değer görünmesin); tepe çentiği saklanır ama boş yayla çizilmez. */
+    fun clear() {
+        haltLoop()
+        applyPendingPeak()
+        targetDeg = -1
+        shown = 0f
+        vel = 0f
+        shownAlpha = 0f
+        targetF = 0f
+        targetA = 0f
+        drawnQ = -1
+        drawnQa = -1
+        invalidate()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        val r = w / 2f
+        val rr = r * SportGeometry.PROGRESS_R
+        rect.set(r - rr, r - rr, r + rr, r + rr)
+        arc.strokeWidth = r * SportGeometry.PROGRESS_W * 1.15f
+        halo.strokeWidth = arc.strokeWidth * 2.6f
+        tick.strokeWidth = maxOf(1.5f, arc.strokeWidth * 0.45f)
+        // Renk yay boyunca: gradyan [START_DEG − PRE]'den başlar; dikiş (sıcak → soğuk) alt boşlukta kalır, yuvarlak uçlar
+        // dikişe değmez.
+        val a0 = PRE_DEG / 360f
+        val a1 = (PRE_DEG + SportTorque.SWEEP_DEG) / 360f
+        val colors = intArrayOf(COOL, COOL, SportInk.RED, SportInk.RED_HOT, SportInk.RED_HOT)
+        val stops = floatArrayOf(0f, a0, a0 + (a1 - a0) * RED_AT, a1, 1f)
+        val shader = android.graphics.SweepGradient(r, h / 2f, colors, stops).apply {
+            setLocalMatrix(android.graphics.Matrix().apply { setRotate(SportTorque.START_DEG - PRE_DEG, r, h / 2f) })
+        }
+        arc.shader = shader
+        halo.shader = shader
+        placeTick()
+    }
+
+    /** Tepe çentiğinin uçları (yalnız tepe ya da boyut değişince hesaplanır). */
+    private fun placeTick() {
+        if (peakDeg < 0 || width == 0) return
+        val r = width / 2f
+        val rr = r * SportGeometry.PROGRESS_R
+        val a = Math.toRadians((SportTorque.START_DEG + peakDeg).toDouble())
+        val ca = Math.cos(a).toFloat()
+        val sa = Math.sin(a).toFloat()
+        val half = arc.strokeWidth * 1.4f
+        tickPts[0] = r + ca * (rr - half); tickPts[1] = height / 2f + sa * (rr - half)
+        tickPts[2] = r + ca * (rr + half); tickPts[3] = height / 2f + sa * (rr + half)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val a = shownAlpha
+        if (a <= 0.004f) return
+        val sweep = SportTorque.SWEEP_DEG * shown
+        if (sweep >= 0.5f) {
+            halo.alpha = (HALO_ALPHA * a).toInt()
+            canvas.drawArc(rect, SportTorque.START_DEG, sweep, false, halo)
+            arc.alpha = (255 * a).toInt()
+            canvas.drawArc(rect, SportTorque.START_DEG, sweep, false, arc)
+        }
+        if (peakDeg > 0) {
+            tick.alpha = (TICK_ALPHA * a).toInt()
+            canvas.drawLine(tickPts[0], tickPts[1], tickPts[2], tickPts[3], tick)
+        }
+    }
+
+    companion object {
+        /** Saydamlık yaklaşma hızı (1/sn): boşalırken/dolarken ~0,25 sn'de oturur. */
+        const val ALPHA_RATE = 12f
+        private const val NO_PEAK = Int.MIN_VALUE
+        /** Yay boyunca [SportInk.RED]'e varılan pay (~105 Nm): gündelik sürüşte de turuncu okunur. */
+        const val RED_AT = 0.35f
+        /** Gradyanın yay başından önceki payı (derece): yuvarlak uç dikişe değmesin. */
+        const val PRE_DEG = 10f
+        /** Düşük torkun rengi: sönük koyu turuncu (gri olsa gümüş çerçeveye, [SportInk.METAL_MID], karışır). */
+        const val COOL = 0xFF7A3A1C.toInt()
+        const val HALO_ALPHA = 0x2E
+        const val TICK_ALPHA = 0xB3
     }
 }

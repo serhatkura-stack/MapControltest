@@ -179,6 +179,12 @@ internal object SportArt {
         val rf = d.r - bw - 2f
         face(c, d.cx, d.cy, rf, lift = 0.75f)
         tickRing(c, d.cx, d.cy, rf - 4f, 120, rf * 0.035f, 0x38)
+        // Motor torku halkasının izi (medya ilerleme izinin eşi; alt boşluklu yay). Dolgu canlı çizilir ([TorqueRing]).
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = d.r * SportGeometry.PROGRESS_W; color = 0x1FFFFFFF
+        }
+        val tr = d.r * SportGeometry.PROGRESS_R
+        c.drawArc(RectF(d.cx - tr, d.cy - tr, d.cx + tr, d.cy + tr), SportTorque.START_DEG, SportTorque.SWEEP_DEG, false, track)
         val carLen = g.carLength()
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         // Üstten düşen ışık havuzu (aracın arkasında yüz biraz aydınlık; araç üstündeki ışık [CarLightView]).
@@ -506,23 +512,19 @@ internal class SportGeometry(
             SportDial.G -> "G"
             SportDial.INSTANT -> "Anlık"
             SportDial.MAX -> "Maks"
-            SportDial.SPEED -> "Hız"
             SportDial.AVG_SPEED -> "Ortalama"
             SportDial.TRIP_TIME -> "Süre"
             SportDial.RANGE -> "Menzil"
-            SportDial.OUTSIDE -> "Dış"
-            SportDial.PASS80 -> "80–120"
             SportDial.CLOCK -> ""
         }
 
         /** Birim (canlı yazı; süre "dk"/"sa" arasında değişir). */
         fun unit(kind: SportDial): String = when (kind) {
-            SportDial.ZERO100, SportDial.PASS80 -> "sn"
+            SportDial.ZERO100 -> "sn"
             SportDial.INSTANT -> "L/100"
-            SportDial.MAX, SportDial.AVG_SPEED, SportDial.SPEED -> "km/sa"
+            SportDial.MAX, SportDial.AVG_SPEED -> "km/sa"
             SportDial.TRIP_TIME -> "dk"
             SportDial.RANGE -> "km"
-            SportDial.OUTSIDE -> "°C"
             SportDial.G, SportDial.CLOCK -> ""
         }
 
@@ -532,12 +534,9 @@ internal class SportGeometry(
             SportDial.G -> "G-metre"
             SportDial.INSTANT -> "Anlık tüketim"
             SportDial.MAX -> "Maks hız"
-            SportDial.SPEED -> "Hız"
             SportDial.AVG_SPEED -> "Ortalama hız"
             SportDial.TRIP_TIME -> "Yolculuk süresi"
             SportDial.RANGE -> "Menzil"
-            SportDial.OUTSIDE -> "Dış sıcaklık"
-            SportDial.PASS80 -> "80–120"
             SportDial.CLOCK -> "Analog saat"
         }
 
@@ -546,6 +545,7 @@ internal class SportGeometry(
         const val SPEED_Y = 0.31f
         const val SPEED_SIZE = 0.34f
         const val SPEED_UNIT_Y = 0.485f
+        const val SPEED_UNIT_TEXT = "km/sa"
         const val SPEED_UNIT_SIZE = 0.058f
         const val GEAR_Y = 0.655f
         const val GEAR_HW = 0.165f

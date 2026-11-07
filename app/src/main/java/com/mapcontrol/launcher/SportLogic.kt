@@ -153,9 +153,6 @@ class SportSession {
     /** Biten 0–100 ölçümü sayacı (kadran yeni sonucu bundan anlar ve kısa parlar). */
     var results = 0
         private set
-    /** Bu sürüşün en iyi 80–120 geçiş süresi (ms). */
-    var best80to120Ms: Long? = null
-        private set
     /** Bu sürüşün en yüksek devri (özet kartı; kadrandaki tepe işareti artık en yüksek hız). */
     var peakRpm: Int? = null
         private set
@@ -183,17 +180,12 @@ class SportSession {
         best0to100Ms = null
         last0to100Ms = null
         lastWasBest = false
-        best80to120Ms = null
         peakRpm = null
         runStart = null
-        passStart = null
     }
 
-    /** Sürmekte olan 80–120 ölçümünün başlangıcı (80'i geçiş anı, aradeğerli). */
-    private var passStart: Long? = null
-
     private fun stateHash(): Long =
-        results * 1_000_003L + (maxSpeedKmh ?: -1) * 7_919L + (best80to120Ms ?: -1L) * 31L + (peakRpm ?: -1) * 131L + (best0to100Ms ?: -1L)
+        results * 1_000_003L + (maxSpeedKmh ?: -1) * 7_919L + (peakRpm ?: -1) * 131L + (best0to100Ms ?: -1L)
 
     /** Yeni örnek: [now] ms (monoton), hız km/sa (bilinmiyorsa null), devir (bilinmiyorsa null). Bir şey değiştiyse true. */
     fun update(now: Long, speedKmh: Int?, rpm: Int?): Boolean {
@@ -211,7 +203,6 @@ class SportSession {
         if (speedKmh == null) {
             // Bilinmeyen hız ölçümü bozar: iptal.
             runStart = null
-            passStart = null
             lastSpeed = null
             return before != stateHash()
         }
@@ -262,45 +253,15 @@ class SportSession {
                 }
             }
         }
-        pass(now, speedKmh, prev, prevAt)
         lastSpeed = speedKmh
         lastAt = now
         return before != stateHash()
-    }
-
-    /**
-     * 80–120 geçişi: hız artarken [PASS_FROM] eşiğini geçince başlar (önceki örnekle aradeğer), [PASS_TO]'ya ulaşınca
-     * biter. Hız [PASS_CANCEL]'ın altına düşer ya da [PASS_MAX_MS] geçerse iptal. Seyrek örnekte tek adımda 80'in altından
-     * 120'nin üstüne sıçrama ölçülmez. Sürüşün en iyisi tutulur.
-     */
-    private fun pass(now: Long, speed: Int, prev: Int?, prevAt: Long) {
-        val ps = passStart
-        if (ps == null) {
-            if (prev != null && prev < PASS_FROM && speed >= PASS_FROM && speed < PASS_TO && speed > prev)
-                passStart = prevAt + ((now - prevAt) * (PASS_FROM - prev).toDouble() / (speed - prev)).toLong()
-            return
-        }
-        when {
-            speed < PASS_CANCEL || now - ps > PASS_MAX_MS -> passStart = null
-            speed >= PASS_TO -> {
-                val at = if (prev != null && prev < PASS_TO && speed > prev)
-                    prevAt + ((now - prevAt) * (PASS_TO - prev).toDouble() / (speed - prev)).toLong()
-                else now
-                val run = at - ps
-                if (run in 1..PASS_MAX_MS && run < (best80to120Ms ?: Long.MAX_VALUE)) best80to120Ms = run
-                passStart = null
-            }
-        }
     }
 
     companion object {
         const val TARGET_KMH = 100
         const val MAX_RUN_MS = 30_000L
         const val NEW_DRIVE_OFF_MS = 120_000L
-        const val PASS_FROM = 80
-        const val PASS_TO = 120
-        const val PASS_CANCEL = 75
-        const val PASS_MAX_MS = 20_000L
     }
 }
 
@@ -310,14 +271,9 @@ enum class SportDial(val key: String) {
     G("g"),
     INSTANT("inst"),
     MAX("max"),
-    /** Anlık hız (gösterge hızı; büyük hız kadranının ortasında da yazar). */
-    SPEED("spd"),
     AVG_SPEED("avg"),
     TRIP_TIME("time"),
     RANGE("range"),
-    /** Aracın ölçtüğü dış sıcaklık (HVAC 19, üst çubuktaki sayıyla aynı kaynak: [TripData.outsideC]). */
-    OUTSIDE("out"),
-    PASS80("p80"),
     CLOCK("clock");
 
     companion object {
@@ -336,12 +292,12 @@ object SportDials {
     fun offered(hasG: Boolean): List<SportDial> = SportDial.values().filter { hasG || it != SportDial.G }
 
     /**
-     * Varsayılan: 0–100, G, Anlık, Maks. Sensör yoksa G'nin yerinde 80–120. Motor suyu artık listede yok (okunan değer
+     * Varsayılan: 0–100, G, Anlık, Maks. Sensör yoksa G'nin yerinde Ortalama hız. Motor suyu artık listede yok (okunan değer
      * derece değil, [CoolantStatus]): kayıttaki eski "cool" bilinmeyen anahtar sayılır, yuvası varsayılanla dolar.
      */
     fun defaults(hasG: Boolean): List<SportDial> =
         if (hasG) listOf(SportDial.ZERO100, SportDial.G, SportDial.INSTANT, SportDial.MAX)
-        else listOf(SportDial.ZERO100, SportDial.PASS80, SportDial.INSTANT, SportDial.MAX)
+        else listOf(SportDial.ZERO100, SportDial.AVG_SPEED, SportDial.INSTANT, SportDial.MAX)
 
     fun encode(dials: List<SportDial>): String = dials.joinToString(",") { it.key }
 
@@ -512,9 +468,6 @@ object SportFormat {
     fun duration(min: Int?): String? = min?.takeIf { it >= 0 }?.let { if (it < 60) it.toString() else "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
     fun durationUnit(min: Int?): String = if (min != null && min >= 60) "sa" else "dk"
 
-    /** Dış sıcaklık: tam dereceye yuvarlanır (üst çubuktaki sayı gibi, "17", "-3"); bilinmiyorsa null. */
-    fun outside(c: Double?): String? = c?.let { Math.round(it).toInt().toString() }
-
     /** Onda bir hassasiyet, virgülle ("9,6"). */
     fun tenths(v: Double): String {
         val t = Math.round(v * 10).toLong()
@@ -653,4 +606,86 @@ class SpeedPostGate(private val band: Float = BAND_KMH) {
         /** Kadranda ~0,6°: gözle seçilmez, ibre hareketi akıcı kalır. */
         const val BAND_KMH = 0.5f
     }
+}
+
+/**
+ * Araç kadranındaki motor torku halkasının çözümü (saf, JVM'de sınanır). Kaynak ReadOnly 106 `ID_MEAN_EFFECTIVE_TORQUE`;
+ * ham değer [AwdMath.engineNm] ile çözülür (Nm = ham − 2000; kod tek yerde). Tiggo 7 (7 Kasım sürüşü): rölantide ~2000
+ * (0 Nm), sert gazda ~2287..2509, motor freninde ~1956..1964 (negatif); motorun tepe torku ~290 Nm.
+ *
+ * Tam ölçek [FULL_SCALE_NM]; doluluk 0..1'e kırpılır. Motor freni (negatif) ve rölanti kıpırtısı ([NOISE_NM] ve altı) boş
+ * halkadır; geçersiz/okunamayan değer null (halka söner, uydurma değer yok). Halka [SWEEP_DEG] derecelik yaydır, alt boşluklu,
+ * sol alttan ([START_DEG], tuval açısı) saat yönünde dolar; gösterilen değer tam dereceye yuvarlanır ([degrees]) ve yalnız
+ * derece değişince çizilir.
+ */
+internal object SportTorque {
+    const val FULL_SCALE_NM = 300
+    /** Rölantide ham değer 2000±5 oynar: bu kadarı boş halka sayılır (rölantide halka kıpırdamaz). */
+    const val NOISE_NM = 8
+    const val SWEEP_DEG = 270f
+    /** Yayın başı (tuval açısı, +x 0°, saat yönü artı): sol alt; boşluk altta ortalı. */
+    const val START_DEG = 135f
+
+    /** Yükselirken (hedef gösterilenin üstünde) yayın doğal frekansı (rad/sn): ~0,6–0,8 sn'de oturur. */
+    const val ATTACK_W = 7f
+    /** Alçalırken (bırakma) doğal frekans (rad/sn): ~1,2–1,6 sn'de oturur; okumalar (~1 sn) arasında durmaz. */
+    const val RELEASE_W = 3.5f
+    /** Kare süresi üst sınırı (sn): takılan kare yayı sıçratmasın. */
+    const val MAX_DT = 0.05f
+    private const val SETTLE_POS = 0.002f
+    private const val SETTLE_VEL = 0.01f
+
+    private fun omega(shown: Float, target: Float) = if (target > shown) ATTACK_W else RELEASE_W
+
+    /**
+     * Kritik sönümlü yay, tam çözüm (kararlı, taşmaz; durgundan başlayan basamakta tekdüze yaklaşır): e = (e0 + (v0 + w·e0)·t)·e^(−w·t),
+     * e = gösterilen − hedef. [dt] 0..[MAX_DT]'ye kırpılır. Yeni gösterilen değeri verir; hızı [springVelocity] verir (aynı girdilerle).
+     */
+    fun springStep(shown: Float, vel: Float, target: Float, dt: Float): Float {
+        val t = dt.coerceIn(0f, MAX_DT)
+        val w = omega(shown, target)
+        val e0 = shown - target
+        val ex = Math.exp((-w * t).toDouble()).toFloat()
+        return target + (e0 + (vel + w * e0) * t) * ex
+    }
+
+    /** [springStep]'in eşi: aynı eski gösterilen değerle yeni hız. (Çağrıda [shown] adımdan ÖNCEKİ değer olmalıdır.) */
+    fun springVelocity(shown: Float, vel: Float, target: Float, dt: Float): Float {
+        val t = dt.coerceIn(0f, MAX_DT)
+        val w = omega(shown, target)
+        val e0 = shown - target
+        val ex = Math.exp((-w * t).toDouble()).toFloat()
+        return (vel - w * (vel + w * e0) * t) * ex
+    }
+
+    /** Yay oturdu mu (konum ve hız çok küçük): kare döngüsü durur. */
+    fun isSettled(shown: Float, vel: Float, target: Float): Boolean =
+        Math.abs(target - shown) < SETTLE_POS && Math.abs(vel) < SETTLE_VEL
+
+    /** Ham 106 → halka doluluğu 0..1; geçersizse null. */
+    fun fraction(raw: Int?): Float? = AwdMath.engineNm(raw)?.let { fractionOfNm(it) }
+
+    /** Nm → doluluk 0..1 (negatif ve rölanti kıpırtısı 0). */
+    fun fractionOfNm(nm: Int): Float = if (nm <= NOISE_NM) 0f else (nm.toFloat() / FULL_SCALE_NM).coerceIn(0f, 1f)
+
+    /** Doluluğun yaydaki tam derecesi (0..[SWEEP_DEG]); çizim yalnız bu değişince yenilenir. */
+    fun degrees(fraction: Float): Int = Math.round(fraction.coerceIn(0f, 1f) * SWEEP_DEG)
+
+    /**
+     * Demo torku (Nm): 5 sn'lik yumuşak dalga, ~30 → ~240 → ~30 (gaz verip bırakma). Rölanti taklidinde ([idle]) 0,
+     * durgun ekranda ([still], otomatik test) sabit [DEMO_STILL_NM].
+     */
+    fun demoNm(nowMs: Long, idle: Boolean, still: Boolean): Int {
+        if (idle) return 0
+        if (still) return DEMO_STILL_NM
+        val x = (nowMs % DEMO_PERIOD_MS).toDouble() / DEMO_PERIOD_MS
+        return Math.round(DEMO_LOW_NM + (DEMO_HIGH_NM - DEMO_LOW_NM) * (0.5 - 0.5 * Math.cos(2 * Math.PI * x))).toInt()
+    }
+
+    const val DEMO_PERIOD_MS = 5_000L
+    const val DEMO_LOW_NM = 30
+    const val DEMO_HIGH_NM = 240
+    const val DEMO_STILL_NM = 210
+    /** Demoda bu sürüşün tepe torku işareti. */
+    const val DEMO_PEAK_NM = 262
 }

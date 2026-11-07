@@ -23,7 +23,7 @@ internal object LauncherDemo {
     var enabled = false
         private set
 
-    /** Demo sürüş modu (ham değer 0..6); `--ei launcher_demo_drive_mode N` ile verilir, yoksa Normal. */
+    /** Demo sürüş modu (ham değer 0..7, 6 tanımsız); `--ei launcher_demo_drive_mode N` ile verilir, yoksa Normal. */
     const val EXTRA_DRIVE_MODE = "launcher_demo_drive_mode"
 
     @Volatile
@@ -81,7 +81,7 @@ internal object LauncherDemo {
         private set
 
     /**
-     * Spor küçük kadran seçimi (`--es launcher_demo_sport_dials "clock,p80,cool,range"`; anahtarlar [SportDial.key]):
+     * Spor küçük kadran seçimi (`--es launcher_demo_sport_dials "clock,avg,cool,range"`; anahtarlar [SportDial.key]):
      * kayıtlı seçimin yerine geçer (seçicide yapılan değişiklik de demo süresince buraya yazılır).
      * `--ez launcher_demo_sport_summary true` spor ekranı açılınca sürüş özeti kartını bir kez gösterir.
      */
@@ -194,7 +194,7 @@ internal object LauncherDemo {
     /** İstek sürüş modu içeriyorsa (yalnızca demo açıkken) alır; uygulanacak mod döner, yoksa null. */
     fun applyDriveMode(intent: Intent?): Int? {
         if (!enabled || intent?.hasExtra(EXTRA_DRIVE_MODE) != true) return null
-        driveMode = intent.getIntExtra(EXTRA_DRIVE_MODE, 1).coerceIn(0, 6)
+        driveMode = intent.getIntExtra(EXTRA_DRIVE_MODE, 1).coerceIn(0, 7)
         return driveMode
     }
 

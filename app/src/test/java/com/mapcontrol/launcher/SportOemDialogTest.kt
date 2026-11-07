@@ -119,19 +119,52 @@ class SportOemDialogTest {
         assertFalse(c.update(2_000, S, true, false, focusLost = true))
     }
 
-    // --- Dış sıcaklık kadranı ---
+    // --- Widget'ımızın istediği değişim: her mod için kapatılır ---
 
-    @Test fun outsideDialFormatAndChoice() {
-        assertEquals("17", SportFormat.outside(17.0))
-        assertEquals("18", SportFormat.outside(17.5))
-        assertEquals("-3", SportFormat.outside(-3.4))
-        assertNull(SportFormat.outside(null))
-        assertEquals(SportDial.OUTSIDE, SportDial.of("out"))
-        assertTrue(SportDial.OUTSIDE in SportDials.offered(false))
-        assertEquals(listOf(SportDial.OUTSIDE, SportDial.G, SportDial.INSTANT, SportDial.MAX), SportDials.decode("out,g,inst,max", true))
-        // Varsayılan dört kadran değişmedi (dış sıcaklık seçilerek eklenir).
-        assertFalse(SportDial.OUTSIDE in SportDials.defaults(true))
-        assertEquals("°C", SportGeometry.unit(SportDial.OUTSIDE))
-        assertEquals("Dış", SportGeometry.label(SportDial.OUTSIDE))
+    @Test fun ownRequestClosesEveryModeChangeEvenWithoutSport() {
+        val c = OemDriveDialogCloser(300)
+        assertFalse(c.update(0, N, allowed = false, sportShown = false))
+        // Eko'ya geçiş: spor kapısı kapalı (allowed false) ama istek bizden.
+        assertFalse(c.update(1_000, E, allowed = false, sportShown = false, ownRequestAt = 900, ownRequests = 1, ownAllowed = true))
+        assertTrue(c.update(1_300, E, allowed = false, sportShown = false, ownRequestAt = 900, ownRequests = 1, ownAllowed = true))
+        // Aynı istek ikinci değişimi (ör. araç geri döndü) kapatmaz.
+        assertFalse(c.update(2_000, N, allowed = false, sportShown = false, ownRequestAt = 900, ownRequests = 1, ownAllowed = true))
+        assertFalse(c.update(2_400, N, allowed = false, sportShown = false, ownRequestAt = 900, ownRequests = 1, ownAllowed = true))
+    }
+
+    @Test fun ownRequestOutsideWindowOrNotAllowedDoesNothing() {
+        val c = OemDriveDialogCloser(300)
+        c.update(0, N, allowed = false, sportShown = false)
+        // İstek çok eski: değişim bizim sayılmaz.
+        c.update(10_000, E, allowed = false, sportShown = false, ownRequestAt = 10_000 - OemDriveDialogCloser.OWN_WINDOW_MS - 1, ownRequests = 1)
+        assertFalse(c.update(10_400, E, allowed = false, sportShown = false, ownRequestAt = 10_000 - OemDriveDialogCloser.OWN_WINDOW_MS - 1, ownRequests = 1))
+        // Düzenleme açıkken (ownAllowed false) kapatılmaz.
+        c.update(20_000, N, allowed = false, sportShown = false, ownRequestAt = 19_900, ownRequests = 2, ownAllowed = false)
+        assertFalse(c.update(20_400, N, allowed = false, sportShown = false, ownRequestAt = 19_900, ownRequests = 2, ownAllowed = false))
+    }
+    @Test fun fastTapsCloseEachOwnChange() {
+        val c = OemDriveDialogCloser(300)
+        assertFalse(c.update(0, E, allowed = false, sportShown = false))
+        // İki hızlı dokunuş (Eko→Normal→Spor): iki istek, iki değişim; ikinci değişimin penceresi de kapanır.
+        assertFalse(c.update(1_100, N, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+        assertFalse(c.update(1_300, S, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+        assertTrue(c.update(1_600, S, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+        // Üçüncü değişim (istek yok): kapatılmaz.
+        assertFalse(c.update(2_000, N, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+        assertFalse(c.update(2_400, N, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+    }
+
+    @Test fun leftoverRequestDoesNotLeakIntoNextWindow() {
+        val c = OemDriveDialogCloser(300)
+        c.update(0, E, allowed = false, sportShown = false)
+        // İki istek tek değişimde birleşti: bir istek artık kaldı.
+        c.update(1_100, S, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true)
+        assertTrue(c.update(1_400, S, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true))
+        // Pencere doldu (artık istek kullanılmış sayılır); yeni tek istek yalnız bir değişimi kapatır.
+        c.update(7_000, S, allowed = false, sportShown = false, ownRequestAt = 1_000, ownRequests = 2, ownAllowed = true)
+        c.update(8_100, E, allowed = false, sportShown = false, ownRequestAt = 8_000, ownRequests = 3, ownAllowed = true)
+        assertTrue(c.update(8_400, E, allowed = false, sportShown = false, ownRequestAt = 8_000, ownRequests = 3, ownAllowed = true))
+        c.update(9_000, N, allowed = false, sportShown = false, ownRequestAt = 8_000, ownRequests = 3, ownAllowed = true)
+        assertFalse(c.update(9_400, N, allowed = false, sportShown = false, ownRequestAt = 8_000, ownRequests = 3, ownAllowed = true))
     }
 }
