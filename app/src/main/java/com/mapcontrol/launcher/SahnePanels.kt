@@ -25,9 +25,10 @@ import com.mapcontrol.R
  */
 internal object SahnePanelFactory {
     /** [calm]: Sürüş düzeni; hareketli öğeler (canlı çubuk geçmişi) çizilmez, yalnızca büyük değer ve tek alt satır. */
-    fun create(activity: Activity, slot: SahneSlot, calm: Boolean = false): SizedWidget = when (slot.type) {
-        // Medya kartının arka yüzü telefon ([MediaPhoneFlip]); ayrı telefon paneli yok.
-        WidgetType.MEDIA -> MediaPhoneFlip(activity)
+    fun create(activity: Activity, slot: SahneSlot, calm: Boolean = false, phonePanel: Boolean = false): SizedWidget = when (slot.type) {
+        // Medya kartının arka yüzü telefon ([MediaPhoneFlip]); düzende ayrı telefon paneli varsa ([phonePanel], yalnız
+        // Tiggo 8'in dört panelli biçimi) kart yalnız medyadır: sayfa simgesi ve kaydırma yok.
+        WidgetType.MEDIA -> MediaPhoneFlip(activity, phonePage = !phonePanel)
         WidgetType.TRIP -> SahneTripPanel(activity)
         WidgetType.NAVIGATION -> NavigationPanel(activity)
         WidgetType.PHONE -> PhonePanel(activity)

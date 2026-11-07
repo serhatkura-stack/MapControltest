@@ -306,7 +306,10 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
         pressFeedback()
     }
 
-    /** "Ev" / "İş" kısayolu: ikon, ad ve alt satır (ayarlıysa "Rota başlat", değilse "Ayarlamak için basılı tut"). */
+    /**
+     * "Ev" / "İş" kısayolu: ikon, ad ve alt satır (ayarlıysa "Rota başlat", değilse kısa "Ayarla": uzun ipucu Tiggo 7/8 kutusunda
+     * kesiliyordu, 7 Kasım). Ayarsız kutuya dokunmak da konum düzenleyicisini açar (ipucuyla tutarlı); basılı tutmak hep düzenler.
+     */
     private inner class PlaceTile(private val place: String, icon: Int, private val label: Int) {
         private val sub = sahneText(context, SahneType.SUB, Sahne.INK_3, 400).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val view = LinearLayout(context).apply {
@@ -324,7 +327,10 @@ internal class NavigationPanel(private val context: Context) : SizedWidget {
             addView(sub, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP))
             isClickable = true
             isFocusable = true
-            setOnClickListener { openPlace(place, context.getString(label)) }
+            setOnClickListener {
+                if (NavPlaces.get(context, place) == null) editPlace(place, context.getString(label))
+                else openPlace(place, context.getString(label))
+            }
             setOnLongClickListener { editPlace(place, context.getString(label)); true }
             pressFeedback()
         }

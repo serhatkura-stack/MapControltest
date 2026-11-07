@@ -176,8 +176,9 @@ class MediaFlipLogicTest {
         val decoded = SahneSlots.decode(SahneSlots.encode(layout(WidgetType.MEDIA, WidgetType.PHONE)))!!
         assertEquals(WidgetType.MEDIA, decoded.left?.type)
         assertEquals(WidgetType.TRIP, decoded.right?.type)
-        assertFalse(SahneForm.fitsPanel(WidgetType.PHONE))
+        // Tiggo 7'de telefon paneli sunulmaz; Tiggo 8'in dört panelinde sunulur (7 Kasım).
         assertFalse(WidgetType.PHONE in SahneForm.offered(SahneSlotKind.PANEL))
+        assertTrue(WidgetType.PHONE in SahneForm.offered(SahneSlotKind.PANEL, quad = true))
     }
 
     @Test

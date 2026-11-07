@@ -6,7 +6,7 @@
     <string name="launcher_nav_open_map">Haritayı aç</string>
     <string name="launcher_nav_not_installed">Yandex Haritalar yüklü değil</string>
     <string name="launcher_nav_route_hint">Rota başlat</string>
-    <string name="launcher_nav_set_hint">Ayarlamak için basılı tut</string>
+    <string name="launcher_nav_set_hint">Ayarla</string>
     <string name="launcher_nav_access_message">Sonraki dönüşü burada görmek için bildirim erişimine izin verin.</string>
     <string name="launcher_nav_access_button">Ayarları aç</string>
     <string name="launcher_nav_arrival" formatted="true">Varış %1$s</string>

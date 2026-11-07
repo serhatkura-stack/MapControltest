@@ -6,7 +6,7 @@
     <string name="launcher_nav_open_map">Open map</string>
     <string name="launcher_nav_not_installed">Yandex Maps is not installed</string>
     <string name="launcher_nav_route_hint">Start route</string>
-    <string name="launcher_nav_set_hint">Hold to set</string>
+    <string name="launcher_nav_set_hint">Tap to set</string>
     <string name="launcher_nav_access_message">To see the next turn here, allow notification access.</string>
     <string name="launcher_nav_access_button">Open settings</string>
     <string name="launcher_nav_arrival" formatted="true">Arrive %1$s</string>

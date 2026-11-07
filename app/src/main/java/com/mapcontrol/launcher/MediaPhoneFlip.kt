@@ -42,7 +42,8 @@ import com.mapcontrol.R
  * isteyen bir sahiptir (`wantsData = false`: rehber/geçmiş okunmaz).
  */
 @SuppressLint("ViewConstructor")
-internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, PhoneListener {
+/** [phonePage] false: düzende ayrı telefon paneli var (Tiggo 8); kart hep medyada kalır, telefon sayfası sunulmaz. */
+internal class MediaPhoneFlip(private val activity: Activity, private val phonePage: Boolean = true) : SizedWidget, PhoneListener {
 
     private val context: Context = activity
     val media = MediaCard(activity, sahne = true)
@@ -106,7 +107,7 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
 
     init {
         media.onPlayingChanged = { refreshGlow() }
-        connected = PhoneSource.snapshot().connected
+        connected = phonePage && PhoneSource.snapshot().connected
         val f = MediaFlipLogic.shown(saved, connected)
         setPos(MediaFlipLogic.page(f).toFloat())
         showFace(f)
@@ -150,7 +151,8 @@ internal class MediaPhoneFlip(private val activity: Activity) : SizedWidget, Pho
     // --- Bağlantı ---
 
     override fun onPhoneChanged(snapshot: PhoneSnapshot) {
-        val c = snapshot.connected
+        // Telefon sayfası kapalıysa ([phonePage]) bağlantı hiç yokmuş gibi: kart medyada, simge ve kaydırma yok.
+        val c = phonePage && snapshot.connected
         if (c == wasConnected) return
         // Kayıtlı sayfa burada hiç değişmez; kopma yalnız bellekteki "medyada tut" bayrağını koyar.
         held = MediaFlipLogic.holdAfter(held, wasConnected, c)
