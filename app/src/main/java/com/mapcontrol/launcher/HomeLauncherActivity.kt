@@ -1009,7 +1009,7 @@ class HomeLauncherActivity : Activity() {
             broughtFor.clear()
             callMinimized = false
         }
-        if (!PhoneUiLogic.shouldBringToFront(prev, next, defaultHome, next in broughtFor)) return
+        if (!PhoneUiLogic.shouldBringToFront(prev, next, isHomeForCalls(), next in broughtFor)) return
         broughtFor += next
         window.decorView.removeCallbacks(bringTask)
         window.decorView.postDelayed(bringTask, BRING_TO_FRONT_DELAY_MS)
@@ -1020,7 +1020,7 @@ class HomeLauncherActivity : Activity() {
      * ekran süreci Android 10/11'de arka plan etkinlik başlatma kısıtından muaf (araçta doğrulanacak).
      */
     private fun bringToFrontForCall() {
-        if (isFinishing || isDestroyed || !callWatching || !defaultHome) return
+        if (isFinishing || isDestroyed || !callWatching || !isHomeForCalls()) return
         val call = PhoneSource.snapshot().call
         if (!call.inCall) return
         if (resumed) {
@@ -1036,6 +1036,12 @@ class HomeLauncherActivity : Activity() {
             android.util.Log.w(CALL_TAG, "arama: öne getirilemedi ${t.javaClass.simpleName}")
         }
     }
+
+    /**
+     * Arama sayfası için "ana ekran biz miyiz": sistem varsayılanı biz ya da FrostNav launcher modu açık (araçta varsayılan HOME
+     * OEM launcher kalıyor, Ana ekran tuşunu FrostNav yakalıyor; 7 Kasım araç testi: PhoneCallActivity açık kaldı).
+     */
+    private fun isHomeForCalls(): Boolean = defaultHome || com.mapcontrol.util.LauncherModeManager.isEnabled(this)
 
     /** Varsayılan HOME biz miyiz: PackageManager sorgusu arka planda (Binder ana iş parçacığında değil). */
     private fun refreshDefaultHome() {
