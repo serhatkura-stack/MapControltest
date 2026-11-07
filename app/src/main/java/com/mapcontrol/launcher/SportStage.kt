@@ -606,7 +606,9 @@ internal class SportStageView(
     /** Küçük devir okuması: yalnız taze değerde görünür; metin yalnız 100 dev/dk adımında değişir. */
     private fun bindRpm(now: Long, rpm: Int?, arrivedAt: Long? = null) {
         val v = if (LauncherDemo.enabled) rpm else rpmReadout.next(now, rpm, arrivedAt)
-        val show = v != null && !sweeping
+        // Devir yalnız hızlı kaynak (VDBus 773) doğrulanınca gösterilir; ReadOnly 62 ~5 sn'de bir değiştiği için
+        // ekranda yanıltıcı (7 Kasım, kullanıcı: "devir alamadık"). Demoda gösterilmez.
+        val show = v != null && !sweeping && !LauncherDemo.enabled && rpmSource == SportVhalMath.RpmSource.VHAL
         if (v != null) setText(rpmText, activity.getString(R.string.launcher_sport_rpm, v))
         if (show == rpmShown) return
         rpmShown = show
@@ -1018,7 +1020,8 @@ internal class SportStageView(
         gear.setTextSize(TypedValue.COMPLEX_UNIT_PX, win.height() * 0.72f)
         gear.measure(exactly(win.width().toInt()), exactly(win.height().toInt()))
         val wrap = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        speed.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedSize)
+        // İbre zaten hızı gösteriyor: dijital hız ikincil okuma (kullanıcı: "hız iki kez görünüyor").
+        speed.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedSize * SECONDARY_SPEED_SCALE)
         speed.measure(exactly((g.rpmFace * 1.1f).toInt()), wrap)
         speedUnit.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedUnitSize)
         speedUnit.measure(exactly((g.rpmFace * 0.6f).toInt()), wrap)
@@ -1088,7 +1091,7 @@ internal class SportStageView(
         centerAt(gear, win.centerX(), win.centerY())
         // Rakamların görsel ortası (büyük harf yüksekliği) hedefte: satır kutusu yazı tipi boşluklarıyla kayar.
         val fm = speed.paint.fontMetrics
-        centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * SportGeometry.CAP / 2f)
+        centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * SECONDARY_SPEED_SCALE * SportGeometry.CAP / 2f)
         centerAt(speedUnit, g.rpm.cx, g.speedUnitY)
         centerAt(rpmText, g.rpm.cx, g.rpmTextY)
         g.sub(SportDial.G)?.let { gRangePx = it.r * SportGeometry.G_RANGE }
@@ -1138,6 +1141,8 @@ internal class SportStageView(
         @Volatile var askedSpeedPermission = false
         /** G noktasını oynatan en küçük kayma (dp). */
         const val G_DEADBAND_DP = 2
+        /** Dijital hızın tasarım boyuna oranı (ibre birincil okuma). */
+        const val SECONDARY_SPEED_SCALE = 0.5f
         /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */
         const val RESULT_SHOW_MS = 10_000L
         const val FLASH_MS = 1_400L
