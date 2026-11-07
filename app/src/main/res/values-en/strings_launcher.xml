@@ -7,6 +7,16 @@
     <string name="launcher_nav_dialog_cancel">Cancel</string>
     <string name="launcher_media_idle_hint">Open a music app to start</string>
     <string name="launcher_media_prev">Previous</string>
+    <string name="launcher_media_radio">Radio</string>
+    <string name="launcher_media_source_title">Audio source</string>
+    <string name="launcher_media_source_change">Change audio source</string>
+    <string name="launcher_media_source_bt">Bluetooth</string>
+    <string name="launcher_media_source_fm">Radio FM</string>
+    <string name="launcher_media_source_am">Radio AM</string>
+    <string name="launcher_media_source_usb">USB</string>
+    <string name="launcher_media_source_current">Playing now</string>
+    <string name="launcher_phone_priority">Phone priority</string>
+    <string name="launcher_phone_priority_hint">When music starts on the phone, the car switches to Bluetooth (otherwise the radio keeps the sound and the phone stops).</string>
     <string name="launcher_percent" formatted="true">%1$d%%</string>
     <string name="launcher_locked">Locked</string>
     <string name="launcher_unlocked">Unlocked</string>

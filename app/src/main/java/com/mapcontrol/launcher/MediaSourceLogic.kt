@@ -1,0 +1,156 @@
+package com.mapcontrol.launcher
+
+/**
+ * Telefon önceliği kararı (saf, JVM'de sınanır; [OemAudioSource] kilit altında kullanır).
+ *
+ * 7 Kasım araç (tur7-1048): kaynak AM (10) iken telefonda Oynat'a basıldı. `com.android.bluetooth` A2DP oturumu PLAYING
+ * oldu (OEM BT servisi `BTSer-MediaCON onPlaybackStateChanged: playState=3`, SVVDSBluetooth `j/e.java:425-433`; aynı oturumu
+ * `j/e.java:789` MediaBrowser ile izliyor), ama OEM BT servisi odak 42'yi yalnızca `carAudioType` listesindeyse ister
+ * (`i/e.java:337-347`, liste `b/b.java:17` boş): istemedi, `checkAudioFocus` 1000 ms sonra (`i/e.java:227-243`, postDelayed
+ * 1000) telefonu duraklattı (AVRCP PAUSE, keyCode 70). OEM telefonu öne almıyor; bu sınıf "geç" kararını verir.
+ *
+ * Yalnızca BT oturumunun duraklamış → çalıyor geçişinde (ilk gözlem geçiş sayılmaz) ve şunların hiçbiri yoksa geçilir:
+ * ayar kapalı, kaynak bilinmiyor ya da zaten 13, arama sürüyor, son [ownMs] içinde kendi Oynat'ımız (geçişi biz yaptık),
+ * son [userPickMs] içinde kullanıcı başka kaynak seçti (bizim seçici ya da OEM'de `CURRENT_SOURCE_TYPE` değişimi), son
+ * geçişten [debounceMs] geçmedi.
+ */
+internal class PhonePriority(
+    private val debounceMs: Long = DEBOUNCE_MS,
+    private val userPickMs: Long = USER_PICK_MS,
+    private val ownMs: Long = OWN_MS,
+) {
+    enum class Decision { NO_TRANSITION, SWITCH, DISABLED, UNKNOWN_SOURCE, ALREADY_BT, IN_CALL, OWN_PLAY, USER_PICK, DEBOUNCE }
+
+    /** Son bilinen BT oturumu çalıyor mu (bilinmiyorsa null). */
+    private var btPlaying: Boolean? = null
+    private var lastSwitch = Long.MIN_VALUE / 2
+    private var lastUserPick = Long.MIN_VALUE / 2
+    private var lastOwn = Long.MIN_VALUE / 2
+
+    /** Kendi kartımız / seçicimiz BT'yi çaldırdı (Oynat, İleri/Geri, seçicide Bluetooth). */
+    fun onOwnPlay(now: Long) {
+        lastOwn = now
+    }
+
+    /** Kullanıcı BT dışı bir kaynak seçti (bizim seçici) ya da OEM kaynağı canlı olarak 13 dışına geçti. */
+    fun onUserPick(now: Long) {
+        lastUserPick = now
+    }
+
+    /** BT oturumu yok: bir sonraki çalma (yeniden bağlanınca) geçiş sayılır. */
+    fun onBtGone() {
+        if (btPlaying != null) btPlaying = false
+    }
+
+    /** [enabled] ve [inCall] yalnızca geçişte sorulur (BT oturumu ~500 ms'de bir durum yollar). */
+    fun onBtState(playing: Boolean, now: Long, oemSource: Int?, enabled: () -> Boolean, inCall: () -> Boolean): Decision {
+        val prev = btPlaying
+        btPlaying = playing
+        if (!playing || prev != false) return Decision.NO_TRANSITION
+        return when {
+            !enabled() -> Decision.DISABLED
+            oemSource == null -> Decision.UNKNOWN_SOURCE
+            oemSource == OemAudioSource.BT_MUSIC -> Decision.ALREADY_BT
+            inCall() -> Decision.IN_CALL
+            now - lastOwn < ownMs -> Decision.OWN_PLAY
+            now - lastUserPick < userPickMs -> Decision.USER_PICK
+            now - lastSwitch < debounceMs -> Decision.DEBOUNCE
+            else -> {
+                lastSwitch = now
+                Decision.SWITCH
+            }
+        }
+    }
+
+    companion object {
+        const val DEBOUNCE_MS = 5_000L
+        const val USER_PICK_MS = 10_000L
+        const val OWN_MS = 5_000L
+    }
+}
+
+/**
+ * Radyo oturumunun kartta gösterimi (saf). svaudioapp `RadioMediaSessionBrowserService.java:107-116,151-155`: FM/AM'de
+ * TITLE = ham frekans (`String.valueOf(getRadioFrequency())`; RDS istasyon adı varsa o), ARTIST = "am" / "fm"
+ * (`RadioMessage.getRadioMessageSource`, DAB'da "dab" değil topluluk etiketi). Ham frekans kHz'dir: FM'de
+ * `getCalculateFrequency` 1000'e böler (89700 → 89.7 MHz), AM'de olduğu gibi (522 kHz) (`RadioMessage.java:127-137`).
+ */
+internal object RadioDisplay {
+
+    enum class Band { FM, AM, DAB }
+
+    class Shown(val band: Band, val title: String, val subtitle: String?)
+
+    /** OEM kaynak türü → bant (VDValueMedia.MediaType FM 9, AM 10, DAB 24). */
+    fun bandOfSource(type: Int?): Band? = when (type) {
+        9 -> Band.FM
+        10 -> Band.AM
+        24 -> Band.DAB
+        else -> null
+    }
+
+    private fun bandOfLabel(artist: String?): Band? = when (artist?.trim()?.lowercase()) {
+        "fm" -> Band.FM
+        "am" -> Band.AM
+        "dab" -> Band.DAB
+        else -> null
+    }
+
+    /**
+     * [pkg] OEM ses uygulaması değilse null (radyo değil). Bant önce ARTIST etiketinden; yoksa (DAB ya da etiketsiz) OEM
+     * kaynağından ([oemSource]) — ama USB müziği de aynı paketten çalar, bu yüzden kaynak yalnızca radyo türündeyse.
+     */
+    fun of(pkg: String?, title: String?, artist: String?, oemSource: Int?): Shown? {
+        if (!MediaSourcePick.isOemAudio(pkg)) return null
+        val label = bandOfLabel(artist)
+        val band = label ?: bandOfSource(oemSource) ?: return null
+        val t = title?.trim().orEmpty()
+        val raw = t.toIntOrNull()
+        // Etiket bandı söylediyse ARTIST alt satıra yazılmaz ("fm" bir kaynak adı, istasyon metni değil).
+        val extra = if (label != null) null else artist?.trim()?.takeIf { it.isNotEmpty() }
+        return when {
+            raw != null && band != Band.DAB -> Shown(band, frequency(band, raw), extra)
+            t.isNotEmpty() -> Shown(band, t, if (label != null) bandName(band) else extra)
+            else -> Shown(band, bandName(band), extra)
+        }
+    }
+
+    fun bandName(band: Band) = band.name
+
+    /** "FM 89,7" (kHz → MHz, en çok iki ondalık, en az bir), "AM 522 kHz". Aralık dışı FM değeri olduğu gibi yazılır. */
+    fun frequency(band: Band, raw: Int): String = when (band) {
+        Band.FM -> if (raw in 10_000..200_000) "FM " + mhz(raw) else "FM $raw"
+        Band.AM -> "AM $raw kHz"
+        Band.DAB -> "DAB $raw"
+    }
+
+    private fun mhz(khz: Int): String {
+        val whole = khz / 1000
+        val frac = khz % 1000
+        val digits = String.format(java.util.Locale.ROOT, "%03d", frac).trimEnd('0').ifEmpty { "0" }.take(2)
+        return "$whole,$digits"
+    }
+}
+
+/**
+ * Kartın kaynak seçicisi (saf). Türler OEM'de doğrulandı: SVVDSMedia `svmediasourceinfo/b/c.java:150-170` 9 → FM
+ * (`d/af.java` bant 1), 10 → AM (`d/ab.java` bant 5), 3 → USB0 müziği (`d/m.java:103-116`), 13 → BT müziği; OPEN_SOURCE
+ * reason 8 radyoda SVVDSRadio `b/c/k.java:86-110` ile FM_SOURCE / AM_SOURCE'u açar. USB yalnızca medya servisi bağlı
+ * derse (`MEDIA_SOURCE_EXT_INFO` connectState 2/3, VDValueMedia.MediaConnectState; SVSystemUI `j/h/f/h.java:128-134`).
+ */
+internal object SourceChoice {
+
+    const val FM = 9
+    const val AM = 10
+    const val USB0 = 3
+
+    /** VDValueMedia.MediaConnectState: 1 bağlı değil, 2 bağlı (taranıyor), 3 bağlı (tarandı). */
+    fun usbConnected(connectState: Int?): Boolean = connectState == 2 || connectState == 3
+
+    /** Seçicide gösterilecek türler, sırayla: Bluetooth, FM, AM, (USB bağlıysa) USB. */
+    fun entries(usbAvailable: Boolean): List<Int> =
+        if (usbAvailable) listOf(OemAudioSource.BT_MUSIC, FM, AM, USB0) else listOf(OemAudioSource.BT_MUSIC, FM, AM)
+
+    /** Satır işaretli mi: OEM kaynağı bu tür. */
+    fun isCurrent(entry: Int, current: Int?): Boolean = current == entry
+}

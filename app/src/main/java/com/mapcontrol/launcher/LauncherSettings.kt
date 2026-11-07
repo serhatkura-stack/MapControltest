@@ -193,6 +193,17 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setText(R.string.pref_call_screen_hint)
         }, fullWidth())
 
+        // Telefon önceliği (varsayılan açık): telefonda Oynat'a basılınca araç kaynağı Bluetooth'a geçer ([PhonePriority]).
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_phone_priority, MediaPrefs.phonePriority(activity)) { value ->
+            d.dismiss()
+            MediaPrefs.setPhonePriority(activity, value)
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_phone_priority_hint)
+        }, fullWidth())
+
         // Gösterge haritası (deneysel): yalnızca gösterge ekranı varsa. Varsayılan kapalı.
         if (ClusterMap.hasCluster(activity)) addClusterMapControls(d)
 

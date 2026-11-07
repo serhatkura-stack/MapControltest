@@ -59,6 +59,8 @@ internal object LauncherDemo {
         if (enabled) still = intent.getBooleanExtra(EXTRA_STILL, false)
         if (enabled && intent.hasExtra(EXTRA_ARTIST)) artist = intent.getStringExtra(EXTRA_ARTIST)
         if (enabled && intent.hasExtra(EXTRA_SOURCE)) source = intent.getStringExtra(EXTRA_SOURCE)
+        if (enabled && intent.hasExtra(EXTRA_OEM_SOURCE)) oemSource = intent.getIntExtra(EXTRA_OEM_SOURCE, 0).takeIf { it > 0 }
+        if (enabled && intent.hasExtra(EXTRA_USB)) usb = intent.getBooleanExtra(EXTRA_USB, false)
     }
 
     /**
@@ -117,6 +119,22 @@ internal object LauncherDemo {
 
     @Volatile
     var source: String? = null
+        private set
+
+    /**
+     * Demo OEM ses kaynağı ve USB (müzik kartı radyo görünümü ve kaynak seçicisi için; araçta VDBus'tan gelir):
+     * `--ei launcher_demo_oem_source 9` (FM 9, AM 10, BT 13, USB 3), `--ez launcher_demo_usb true`. Radyo örneği:
+     * `--es launcher_demo_source com.desaysv.svaudioapp --es launcher_demo_title 89700 --es launcher_demo_artist fm`.
+     * Seçicide yapılan seçim yalnızca demo kaynağını değiştirir (araca komut gitmez).
+     */
+    const val EXTRA_OEM_SOURCE = "launcher_demo_oem_source"
+    const val EXTRA_USB = "launcher_demo_usb"
+
+    @Volatile
+    var oemSource: Int? = null
+
+    @Volatile
+    var usb = false
         private set
 
     /** Demo kablosuz şarj: varsayılan telefon pedde şarj oluyor; `--ez launcher_demo_charging false` pedi boş gösterir. */

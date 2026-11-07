@@ -1,6 +1,7 @@
 package com.mapcontrol.launcher
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,6 +11,7 @@ import com.desaysv.ivi.vdb.client.bind.VDServiceDef
 import com.desaysv.ivi.vdb.event.id.bt.VDEventBT
 import com.desaysv.ivi.vdb.event.id.bt.bean.VDBTMusicPlay
 import com.desaysv.ivi.vdb.event.id.media.VDEventMedia
+import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaExtInfo
 import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaPlay
 import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaPlayActionInfo
 import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaType
@@ -185,7 +187,8 @@ internal class SourceFollow {
  *   (REASON_SOURCE_LIST) bizim svaudioapp'te yok sayılır. disPlayView=2 ile OEM ekranı açılmaz (`:128`).
  * - Geçerli kaynak `CURRENT_SOURCE_TYPE` (393217), yük `media.bean.VDMediaType` (`SourceTypeEventHandle.java:35-42`).
  *
- * Yalnızca kullanıcı Oynat'a bastığında çalışır; binder çağrıları arka plandadır. Günlük etiketi `MediaSource`
+ * Kullanıcı Oynat'a ya da seçicide bir kaynağa bastığında, bir de telefonda Oynat'a basılınca ("Telefon önceliği",
+ * [onBtPlayback]) çalışır; binder çağrıları arka plandadır. Günlük etiketi `MediaSource`
  * (yalnızca kaynak numarası, yol ve süre; başlık/ad/adres yok).
  */
 internal object OemAudioSource {
@@ -243,6 +246,13 @@ internal object OemAudioSource {
     /**
      * OEM başlatıcı kartının İleri/Geri yükü (`AudioSourceManager.java:334-349`); kart tıklaması bilgi eklemez
      * (`NormalMediaCard.java:358-378` playNext()/playPre() argümansız).
+     *
+     * Radyoda (9/10) OEM kartıyla aynı zincir, 7 Kasım günlüğüyle doğrulandı: medya servisi 5/4'ü `FM_AM_PLAY_STATUS`
+     * NEXT_CHANNEL 7 / PREV_CHANNEL 6'ya çevirir (`svmediasourceinfo/d/ac.java:68-75`), SVVDSRadio svaudioapp'e "next"/"pre"
+     * yollar (`b/c/k.java:125-132`), svaudioapp çoklu kipte `MULTI_SEEK_FORWARD/BACKWARD` → istasyon LİSTESİNDE sonraki/önceki
+     * (`RadioControlAction.java:668-698`; araçta `RadioControlTool dealMessage: radioAction = MULTI_SEEK_FORWARD` görüldü).
+     * Liste boşsa (AM hiç taranmamış, frekans 522 kHz'de kaldı) OEM kartında da istasyon değişmez. Frekans adımı
+     * (NEXT_FREQUENCY 9 / PREV_FREQUENCY 8) SVVDSRadio'da boş (`b/c/k.java:21-26`): başka bir yol yok.
      */
     fun skipPayload(type: Int, next: Boolean): VDMediaPlay = VDMediaPlay().apply {
         putMediaType(type)
@@ -255,6 +265,7 @@ internal object OemAudioSource {
      * (zararsız: oturum zaten çalıyorsa onPlay bir şey yapmaz). VDBus yoksa yalnızca [play].
      */
     fun playBluetooth(context: Context, play: Runnable) {
+        markOwnPlay()
         ensureBus(context)
         io.execute {
             val t0 = SystemClock.elapsedRealtime()
@@ -305,6 +316,7 @@ internal object OemAudioSource {
             session.run()
             return
         }
+        if (bt) markOwnPlay() // duraklamış telefonda İleri çalmayı başlatabilir: telefon önceliği bunu kendi geçişi sayar
         io.execute {
             val t0 = SystemClock.elapsedRealtime()
             val type = if (bt) VDServiceDef.ServiceType.BT else VDServiceDef.ServiceType.MEDIA
@@ -392,6 +404,8 @@ internal object OemAudioSource {
                 Log.w(TAG, "subscribe: ${t.javaClass.simpleName}")
             }
             startBind(VDServiceDef.ServiceType.MEDIA)
+            // BT servisi de önceden bağlanır: telefon önceliği OEM'in 1 sn'lik duraklatma süresi içinde gitmeli.
+            startBind(VDServiceDef.ServiceType.BT)
             connect(VDServiceDef.ServiceType.MEDIA)?.let { readSource(it) }
         }
     }
@@ -419,7 +433,144 @@ internal object OemAudioSource {
         // Sonraki her değişim (bildirim ya da aboneliğin kaçırdığını yakalayan okuma) geçiştir ([SourceFollow]).
         if (!sourceFollow.onSource(type)) return
         Log.i(TAG, "source: $old -> $type live=$live")
+        // Kullanıcı OEM uygulamasında (ya da bizim seçicide) BT dışı kaynak seçti: telefon önceliği bir süre karışmaz.
+        if (old != null && type != BT_MUSIC) phonePriority.onUserPick(SystemClock.elapsedRealtime())
         main.post { sourceListeners.forEach { it.onOemSourceChanged(type) } }
+    }
+
+    // --- Telefon önceliği ---
+
+    /** Kilit: `this` ([update] ile aynı). */
+    private val phonePriority = PhonePriority()
+
+    @Synchronized
+    private fun markOwnPlay() = phonePriority.onOwnPlay(SystemClock.elapsedRealtime())
+
+    /**
+     * `com.android.bluetooth` A2DP oturumunun çalma durumu (LauncherMediaController her gözlemde çağırır; [playing] null:
+     * BT oturumu yok). Duraklamış → çalıyor geçişinde [PhonePriority] "geç" derse kartın Oynat'ıyla aynı BT geçişi gider
+     * ([sendBtSwitch]); telefon zaten çaldığı için oturuma ayrıca oynat gönderilmez. Ana iş parçacığında çağrılır.
+     */
+    fun onBtPlayback(context: Context, playing: Boolean?) {
+        val now = SystemClock.elapsedRealtime()
+        var source: Int? = null
+        val decision = synchronized(this) {
+            source = sourceFollow.source
+            if (playing == null) {
+                phonePriority.onBtGone()
+                null
+            } else {
+                phonePriority.onBtState(playing, now, source, { MediaPrefs.phonePriority(context) }, { inCall(context) })
+            }
+        } ?: return
+        if (decision == PhonePriority.Decision.NO_TRANSITION) return
+        if (decision != PhonePriority.Decision.SWITCH) {
+            Log.i(TAG, "phone-priority: skip=$decision oemSource=$source")
+            return
+        }
+        if (ensureBus(context) == null) {
+            Log.i(TAG, "phone-priority: no VDBus oemSource=$source")
+            return
+        }
+        val from = source
+        io.execute { sendBtSwitch("phone-priority", from) }
+    }
+
+    /** Arama ya da sesli görüşme sürüyor mu (ses kipi normal değil). */
+    private fun inCall(context: Context): Boolean = try {
+        val mode = (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.mode
+        mode != null && mode != AudioManager.MODE_NORMAL
+    } catch (t: Throwable) {
+        false
+    }
+
+    /**
+     * io: kartın Oynat'ındaki BT geçişi, oturum oynatı olmadan: BT servisi bağlıysa `MUSIC_PLAY{1,0}` (OEM BT servisi odak
+     * 42'yi ister; telefon bu arada duraklatıldıysa yeniden çalar, `j/e.java:822-844`), yoksa `OPEN_SOURCE{13, reason 8}`.
+     */
+    private fun sendBtSwitch(tag: String, source: Int?) {
+        val t0 = SystemClock.elapsedRealtime()
+        startBind(VDServiceDef.ServiceType.BT)
+        startBind(VDServiceDef.ServiceType.MEDIA)
+        val btBus = connect(VDServiceDef.ServiceType.BT)
+        val media = if (btBus == null) connect(VDServiceDef.ServiceType.MEDIA) else null
+        val path = MediaSourcePick.path(source, btBus != null, media != null)
+        val sent = try {
+            when (path) {
+                MediaSourcePick.Path.BT_PLAY -> btBus?.set(VDBTMusicPlay.createEvent(VDEventBT.MUSIC_PLAY, btPlayPayload()))
+                MediaSourcePick.Path.OPEN_SOURCE ->
+                    media?.set(VDMediaPlay.createEvent(VDEventMedia.MEDIA_SOURCE_PLAY_STATUS, switchPayload()))
+                else -> Unit
+            }
+            path == MediaSourcePick.Path.BT_PLAY || path == MediaSourcePick.Path.OPEN_SOURCE
+        } catch (t: Throwable) {
+            Log.w(TAG, "$tag: path=$path failed ${t.javaClass.simpleName}")
+            false
+        }
+        Log.i(TAG, "$tag: oemSource=$source path=$path sent=$sent ${SystemClock.elapsedRealtime() - t0}ms")
+    }
+
+    // --- Kaynak seçici ---
+
+    /**
+     * Kart seçicisinden BT dışı kaynak ([type]: FM 9, AM 10, USB0 3): OEM kartı / SystemUI gibi `MEDIA_SOURCE_PLAY_STATUS
+     * {type, playAction 6, reason 8}` (`AudioSourceManager.java:719-727`, SVSystemUI `j/h/f/h.java:136-147`), ama arka planda
+     * (disPlayView 2; intent görünümü yalnızca ön planda anlamlı, `svmediasourceinfo/f/b.java:107-109`). Telefon önceliği
+     * bir süre karışmaz. Yalnızca kullanıcı dokunuşuyla çağrılır.
+     */
+    fun openSource(context: Context, type: Int) {
+        synchronized(this) { phonePriority.onUserPick(SystemClock.elapsedRealtime()) }
+        if (ensureBus(context) == null) {
+            Log.i(TAG, "pick: target=$type no VDBus")
+            return
+        }
+        io.execute {
+            val t0 = SystemClock.elapsedRealtime()
+            startBind(VDServiceDef.ServiceType.MEDIA)
+            val media = connect(VDServiceDef.ServiceType.MEDIA)
+            val sent = try {
+                media?.set(VDMediaPlay.createEvent(VDEventMedia.MEDIA_SOURCE_PLAY_STATUS, switchPayload(type)))
+                media != null
+            } catch (t: Throwable) {
+                Log.w(TAG, "pick: target=$type failed ${t.javaClass.simpleName}")
+                false
+            }
+            Log.i(TAG, "pick: target=$type path=OPEN_SOURCE sent=$sent ${SystemClock.elapsedRealtime() - t0}ms")
+        }
+    }
+
+    /** Seçicide Bluetooth ama oynatılacak BT oturumu yok: oturumsuz BT geçişi ([sendBtSwitch]). */
+    fun openBluetoothSource(context: Context) {
+        markOwnPlay()
+        if (ensureBus(context) == null) return
+        val from = currentSource
+        io.execute { sendBtSwitch("pick", from) }
+    }
+
+    /**
+     * USB0 müziği bağlı mı (salt okuma): SVSystemUI `j/h/f/h.java:128-134` gibi `getOnce(MEDIA_SOURCE_EXT_INFO{mediaType 3})`
+     * → connectState ([SourceChoice.usbConnected]). Sonuç ana iş parçacığında [result]'a; okunamazsa false.
+     */
+    fun checkUsb(context: Context, result: (Boolean) -> Unit) {
+        if (ensureBus(context) == null) {
+            result(false)
+            return
+        }
+        io.execute {
+            startBind(VDServiceDef.ServiceType.MEDIA)
+            val state = connect(VDServiceDef.ServiceType.MEDIA)?.let { b ->
+                try {
+                    val q = VDMediaExtInfo().apply { putMediaType(SourceChoice.USB0) }
+                    VDMediaExtInfo.getValue(b.getOnce(VDMediaExtInfo.createEvent(VDEventMedia.MEDIA_SOURCE_EXT_INFO, q)))?.connectState
+                } catch (t: Throwable) {
+                    Log.w(TAG, "usb read: ${t.javaClass.simpleName}")
+                    null
+                }
+            }
+            val ok = SourceChoice.usbConnected(state)
+            Log.i(TAG, "usb: connectState=$state available=$ok")
+            main.post { result(ok) }
+        }
     }
 
     /** VDBus init ana iş parçacığında (PhoneBackends/FavoriteKey gibi); bağlanma ve binder çağrıları arka planda. */
@@ -457,5 +608,20 @@ internal object OemAudioSource {
             Log.w(TAG, "bind $type: ${t.javaClass.simpleName}")
             null
         }
+    }
+}
+
+/** Müzik kartı seçenekleri (profil başına). */
+internal object MediaPrefs {
+    private const val PREFS_NAME = "launcher_settings"
+    private const val KEY_PHONE_PRIORITY = "media_phone_priority"
+
+    /** "Telefon önceliği": telefondan çalınca OEM kaynağı Bluetooth'a geçer ([PhonePriority]); varsayılan AÇIK. */
+    fun phonePriority(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(Profiles.key(context, KEY_PHONE_PRIORITY), true)
+
+    fun setPhonePriority(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(Profiles.key(context, KEY_PHONE_PRIORITY), on).apply()
     }
 }

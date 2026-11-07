@@ -7,6 +7,16 @@
     <string name="launcher_nav_dialog_cancel">Vazgeç</string>
     <string name="launcher_media_idle_hint">Başlatmak için bir müzik uygulaması aç</string>
     <string name="launcher_media_prev">Önceki</string>
+    <string name="launcher_media_radio">Radyo</string>
+    <string name="launcher_media_source_title">Ses kaynağı</string>
+    <string name="launcher_media_source_change">Ses kaynağını değiştir</string>
+    <string name="launcher_media_source_bt">Bluetooth</string>
+    <string name="launcher_media_source_fm">Radyo FM</string>
+    <string name="launcher_media_source_am">Radyo AM</string>
+    <string name="launcher_media_source_usb">USB</string>
+    <string name="launcher_media_source_current">Şu an çalıyor</string>
+    <string name="launcher_phone_priority">Telefon önceliği</string>
+    <string name="launcher_phone_priority_hint">Telefondan çalınca Bluetooth\'a geç (kapalıyken radyo sesi tutar, telefon durur).</string>
     <string name="launcher_percent" formatted="true">%%%1$d</string>
     <string name="launcher_locked">Kilitli</string>
     <string name="launcher_unlocked">Kilit açık</string>

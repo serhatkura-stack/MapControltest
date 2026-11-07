@@ -1,8 +1,12 @@
 package com.mapcontrol.launcher
 
+import android.app.Activity
+import android.app.Dialog
 import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.graphics.Outline
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -11,6 +15,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.TouchDelegate
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
@@ -86,7 +91,13 @@ class MediaCard(
     private val artworkGap = gap(context, 32)
 
     // --- Metinler ---
-    private val sourceLabel = text(context, LauncherTheme.LABEL_SP).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
+    /** Kaynak adı; dokununca kaynak seçici ([openSourcePicker]). Dokunma alanı kart üzerinden büyütülür ([updateSourceTouch]). */
+    private val sourceLabel = text(context, LauncherTheme.LABEL_SP).also { v ->
+        theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) }
+        v.isClickable = true
+        v.contentDescription = context.getString(R.string.launcher_media_source_change)
+        v.setOnClickListener { if (mode != Mode.NO_ACCESS) openSourcePicker() }
+    }
     private val titleView = text(context, LauncherTheme.TITLE_SP, bold = true).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT) } }
     private val artistView = text(context, 28f).also { v -> theme.bind { v.setTextColor(LauncherTheme.TEXT_SECONDARY) } }
 
@@ -254,6 +265,17 @@ class MediaCard(
     private var lastSession: Boolean? = null
     private var lastContentHeight = 0
     private var layoutCompact = false
+
+    // --- Radyo görünümü ve kaynak seçici ---
+    private var lastRadio: RadioDisplay.Band? = null
+    private var lastShowProgress: Boolean? = null
+    private val sourceTouch = Rect()
+    private var sourcePicker: Dialog? = null
+
+    init {
+        // Kaynak satırı küçük yazı: dokunma alanı kartın kendisinde, yazının çevresinde büyütülür.
+        view.viewTreeObserver.addOnGlobalLayoutListener { updateSourceTouch() }
+    }
 
     // --- İlerleme durumu ---
     private var basePositionMs = 0L
@@ -445,9 +467,16 @@ class MediaCard(
         if (modeChanged) {
             mode = newMode
             updateContainers()
-            progressBox.visibility = if (newMode == Mode.SESSION) View.VISIBLE else View.INVISIBLE
             // Mod değişince ikincil satırların görünürlüğü yeniden hesaplanır.
             lastSession = null
+        }
+        // Radyo (svaudioapp FM/AM/DAB oturumu): frekans başlıkta, kaynak "Radyo", ilerleme ve süreler yok.
+        val radio = if (newMode == Mode.SESSION) RadioDisplay.of(state.source, state.title, state.artist, oemSource()) else null
+        val showProgress = newMode == Mode.SESSION && radio == null
+        if (showProgress != lastShowProgress) {
+            lastShowProgress = showProgress
+            progressBox.visibility = if (showProgress) View.VISIBLE else View.INVISIBLE
+            if (sahne) placeKnob()
         }
         val noAccess = newMode == Mode.NO_ACCESS
         val showPlayOnly = newMode == Mode.IDLE && resumePkg != null
@@ -464,12 +493,12 @@ class MediaCard(
             Mode.IDLE -> resumePkg
             Mode.NO_ACCESS -> null
         }
-        val rawTitle = when (newMode) {
+        val rawTitle = if (radio != null) radio.title else when (newMode) {
             Mode.SESSION -> state.title
             Mode.IDLE -> context.getString(R.string.launcher_media_idle_title)
             Mode.NO_ACCESS -> context.getString(R.string.launcher_media_title_neutral)
         }
-        val rawArtist = when (newMode) {
+        val rawArtist = if (radio != null) radio.subtitle else when (newMode) {
             Mode.SESSION -> state.artist
             Mode.IDLE -> context.getString(
                 if (resumePkg != null) R.string.launcher_media_idle_resume else R.string.launcher_media_idle_hint,
@@ -479,12 +508,26 @@ class MediaCard(
         // Bluetooth üstverisi sonda boşluk / satır sonu taşıyabiliyor: boş ikinci satır sanatçıyı aşağı itmesin.
         val title = oneLine(rawTitle)
         val artist = oneLine(rawArtist)
-        val textChanged = modeChanged || source != lastSource || title != lastTitle || artist != lastArtist
+        val radioBand = radio?.band
+        val textChanged = modeChanged || source != lastSource || title != lastTitle || artist != lastArtist || radioBand != lastRadio
         if (textChanged) {
+            val radioChanged = radioBand != lastRadio
             lastSource = source
             lastTitle = title
             lastArtist = artist
-            sourceLabel.text = if (source.isNullOrEmpty()) "" else appLabel(source)
+            lastRadio = radioBand
+            val sourceName = when {
+                radio != null -> context.getString(R.string.launcher_media_radio)
+                source.isNullOrEmpty() -> ""
+                else -> appLabel(source)
+            }
+            // Seçici açılabilir (izin varken): kaynak adının yanında küçük ok.
+            sourceLabel.text = if (sourceName.isEmpty() || newMode == Mode.NO_ACCESS) sourceName else "$sourceName  ▾"
+            if (radioChanged) {
+                placeholderIcon.setImageResource(
+                    if (radio != null) R.drawable.ic_mdi_radio else if (sahne) R.drawable.ic_sahne_note else R.drawable.ic_mdi_music_note,
+                )
+            }
             titleView.text = title ?: ""
             artistView.text = artist ?: ""
             compactTitle.text = title ?: ""
@@ -494,7 +537,7 @@ class MediaCard(
             if (sahne) artistView.maxLines = if (newMode == Mode.NO_ACCESS) 2 else 1
             fitSahneTitle()
             stripNow = StripState(
-                if (source.isNullOrEmpty()) context.getString(R.string.launcher_widget_media) else appLabel(source),
+                if (sourceName.isEmpty()) context.getString(R.string.launcher_widget_media) else sourceName,
                 title ?: "", R.drawable.ic_mdi_music_note,
                 if (newMode == Mode.SESSION) StripTone.NORMAL else StripTone.MUTED, detail = artist,
             )
@@ -640,6 +683,116 @@ class MediaCard(
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
     } catch (e: Exception) {
         pkg
+    }
+
+    // --- Kaynak seçici ---
+
+    /** OEM ses kaynağı (`CURRENT_SOURCE_TYPE`; demoda `launcher_demo_oem_source`). */
+    private fun oemSource(): Int? = if (LauncherDemo.enabled) LauncherDemo.oemSource else OemAudioSource.currentSource
+
+    /** Kaynak yazısının dokunma alanı: yazının çevresinde [SOURCE_TOUCH_PAD_DP], en az [SOURCE_TOUCH_MIN_W_DP] genişlik. */
+    private fun updateSourceTouch() {
+        val root = view as? ViewGroup ?: return
+        if (sourceLabel.visibility != View.VISIBLE || sourceLabel.width == 0 || !sourceLabel.isAttachedToWindow ||
+            sourceLabel.text.isNullOrEmpty() || mode == Mode.NO_ACCESS) {
+            if (root.touchDelegate != null) root.touchDelegate = null
+            sourceTouch.setEmpty()
+            return
+        }
+        val r = Rect(0, 0, sourceLabel.width, sourceLabel.height)
+        try {
+            root.offsetDescendantRectToMyCoords(sourceLabel, r)
+        } catch (e: IllegalArgumentException) {
+            return // yazı bu kartın altında değil (yerleşim değişiyor)
+        }
+        val pad = context.dp(SOURCE_TOUCH_PAD_DP)
+        r.inset(-pad, -pad)
+        r.right = maxOf(r.right, r.left + context.dp(SOURCE_TOUCH_MIN_W_DP))
+        if (r == sourceTouch && root.touchDelegate != null) return
+        sourceTouch.set(r)
+        root.touchDelegate = TouchDelegate(Rect(r), sourceLabel)
+    }
+
+    private fun activityOf(c: Context): Activity? {
+        var x: Context? = c
+        while (x is ContextWrapper) {
+            if (x is Activity) return x
+            x = x.baseContext
+        }
+        return null
+    }
+
+    /**
+     * Kaynak seçici: Bluetooth (bağlı telefonun adı), Radyo FM, Radyo AM, USB (OEM bağlı derse; sonradan eklenir); geçerli
+     * kaynak işaretli. Seçim [OemAudioSource] üzerinden OEM'e gider (Bluetooth: kartın Oynat yolu; diğerleri OPEN_SOURCE).
+     * Satırlar 96dp. Demoda araca bir şey gitmez, yalnızca demo kaynağı değişir.
+     */
+    private fun openSourcePicker() {
+        val activity = activityOf(context) ?: return
+        if (sourcePicker?.isShowing == true) return
+        val current = oemSource()
+        val demo = LauncherDemo.enabled
+        // Telefon adı yalnızca ekranda gösterilir (günlüğe yazılmaz).
+        val phone = if (demo) PhoneDemo.DEVICE_NAME else HfpLink.deviceName()
+        sourcePicker = showLauncherSheet(activity, R.string.launcher_media_source_title, widthDp = PICKER_WIDTH_DP) { d ->
+            val list = this
+            fun add(type: Int) {
+                if (list.childCount > 2) list.addView(gap(activity, 12, vertical = true))
+                list.addView(sourceRow(activity, type, SourceChoice.isCurrent(type, current), if (type == OemAudioSource.BT_MUSIC) phone else null) {
+                    d.dismiss()
+                    pickSource(type)
+                }, sheetFullWidth())
+            }
+            SourceChoice.entries(usbAvailable = false).forEach { add(it) }
+            if (demo) {
+                if (LauncherDemo.usb) add(SourceChoice.USB0)
+            } else {
+                OemAudioSource.checkUsb(context) { ok -> if (ok && d.isShowing) add(SourceChoice.USB0) }
+            }
+        }
+    }
+
+    private fun pickSource(type: Int) {
+        if (LauncherDemo.enabled) {
+            LauncherDemo.oemSource = type
+            bind(LauncherDemo.media())
+            return
+        }
+        if (type == OemAudioSource.BT_MUSIC) controller.selectBluetooth() else OemAudioSource.openSource(context, type)
+    }
+
+    private fun sourceRow(activity: Activity, type: Int, current: Boolean, hint: String?, onClick: () -> Unit): View {
+        val (iconRes, labelRes) = when (type) {
+            OemAudioSource.BT_MUSIC -> R.drawable.ic_mdi_bluetooth to R.string.launcher_media_source_bt
+            SourceChoice.FM -> R.drawable.ic_mdi_radio to R.string.launcher_media_source_fm
+            SourceChoice.AM -> R.drawable.ic_mdi_radio to R.string.launcher_media_source_am
+            else -> R.drawable.ic_mdi_usb to R.string.launcher_media_source_usb
+        }
+        val label = activity.getString(labelRes)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(activity, LauncherTheme.CONTROL, PICKER_RADIUS_DP, if (current) LauncherTheme.ACCENT else 0)
+            minimumHeight = activity.dp(PICKER_ROW_DP)
+            val p = activity.dp(24)
+            setPadding(p, 0, p, 0)
+            addView(icon(activity, iconRes, 36, if (current) LauncherTheme.ACCENT else LauncherTheme.TEXT_SECONDARY))
+            addView(gap(activity, 20))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(text(activity, LauncherTheme.BODY_SP, medium = true).apply { text = label })
+                if (!hint.isNullOrBlank()) {
+                    addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { text = hint })
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (current) addView(icon(activity, R.drawable.ic_mdi_check, 32, LauncherTheme.ACCENT))
+            isClickable = true
+            isFocusable = true
+            isSelected = current
+            contentDescription = if (current) label + ", " + activity.getString(R.string.launcher_media_source_current) else label
+            setOnClickListener { onClick() }
+            pressFeedback()
+        }
     }
 
     // --- Sahne yerleşimi ---
@@ -823,7 +976,7 @@ class MediaCard(
         if (w <= 0) return
         val half = context.dp(KNOB_DP) / 2f
         knob.translationX = w * (lastFillPermille.coerceAtLeast(0) / 1000f) - half
-        knob.visibility = if (mode == Mode.SESSION) View.VISIBLE else View.INVISIBLE
+        knob.visibility = if (lastShowProgress == true) View.VISIBLE else View.INVISIBLE
     }
 
     /** Kaynağın küçük uygulama ikonu (kapak bilgisinin yanında); arka planda çözülür, değişince yenilenir. */
@@ -849,6 +1002,13 @@ class MediaCard(
         /** Sahne: kapak kenarı ve ilerleme topuzu (dp). */
         const val ART_DP = 156
         const val KNOB_DP = 14
+        /** Kaynak yazısının dokunma alanı (yazının çevresine) ve en az genişliği. */
+        const val SOURCE_TOUCH_PAD_DP = 20
+        const val SOURCE_TOUCH_MIN_W_DP = 220
+        /** Kaynak seçici: pencere genişliği, satır yüksekliği (büyük dokunma hedefi) ve köşe. */
+        const val PICKER_WIDTH_DP = 640
+        const val PICKER_ROW_DP = 96
+        const val PICKER_RADIUS_DP = 16f
         /** Sürelerin en geniş biçimi (dakika 3 haneye kadar): sabit genişlik bundan ölçülür. */
         const val TIME_WIDEST = "888:88"
         val WHITESPACE = Regex("\\s+")

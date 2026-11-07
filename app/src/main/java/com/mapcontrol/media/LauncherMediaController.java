@@ -119,6 +119,10 @@ public final class LauncherMediaController {
 
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
+            MediaController active = activeController;
+            if (active != null && MediaSourcePick.INSTANCE.isBluetooth(active.getPackageName())) {
+                OemAudioSource.INSTANCE.onBtPlayback(appContext, isPlayingState(state));
+            }
             notifyState();
             scheduleProgressTick(state);
             // Seçili oturum durdu: başka çalan varsa ona geç.
@@ -140,11 +144,27 @@ public final class LauncherMediaController {
      * oturum listesi değişmedi ve kart radyoda kaldı.
      */
     private final List<MediaController> watched = new ArrayList<>();
+    private final List<MediaController.Callback> watchedCallbacks = new ArrayList<>();
 
     private final MediaController.Callback watcherCallback = new MediaController.Callback() {
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
-            if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
+            if (isPlayingState(state)) {
+                mainHandler.post(LauncherMediaController.this::refreshActiveController);
+            }
+        }
+    };
+
+    /**
+     * Seçili olmayan Bluetooth oturumu: her durum değişimi telefon önceliğine gider (duraklama da; yoksa sonraki Oynat
+     * geçiş sayılmaz), çalmaya başlayınca kart yeniden seçer ({@link OemAudioSource#onBtPlayback}).
+     */
+    private final MediaController.Callback btWatcherCallback = new MediaController.Callback() {
+        @Override
+        public void onPlaybackStateChanged(PlaybackState state) {
+            boolean playing = isPlayingState(state);
+            OemAudioSource.INSTANCE.onBtPlayback(appContext, playing);
+            if (playing) {
                 mainHandler.post(LauncherMediaController.this::refreshActiveController);
             }
         }
@@ -156,12 +176,17 @@ public final class LauncherMediaController {
             return;
         }
         for (MediaController c : controllers) {
-            if (c == activeController) {
+            // Liste her okunuşta yeni örnekler verir: seçili oturum kimliğiyle (token) ayıklanır.
+            if (c == activeController || (activeController != null
+                    && c.getSessionToken().equals(activeController.getSessionToken()))) {
                 continue;
             }
+            MediaController.Callback cb = MediaSourcePick.INSTANCE.isBluetooth(c.getPackageName())
+                    ? btWatcherCallback : watcherCallback;
             try {
-                c.registerCallback(watcherCallback, mainHandler);
+                c.registerCallback(cb, mainHandler);
                 watched.add(c);
+                watchedCallbacks.add(cb);
             } catch (Exception ignored) {
                 // oturum kapanmış olabilir
             }
@@ -169,14 +194,15 @@ public final class LauncherMediaController {
     }
 
     private void unwatchOthers() {
-        for (MediaController c : watched) {
+        for (int i = 0; i < watched.size(); i++) {
             try {
-                c.unregisterCallback(watcherCallback);
+                watched.get(i).unregisterCallback(watchedCallbacks.get(i));
             } catch (Exception ignored) {
                 // no-op
             }
         }
         watched.clear();
+        watchedCallbacks.clear();
     }
 
     private final Runnable progressTick = () -> {
@@ -526,6 +552,7 @@ public final class LauncherMediaController {
         // İzin yeni açıldıysa listener'ı kaydet
         registerSessionsListener();
         List<MediaController> all = loadControllers();
+        feedBluetooth(all);
         // Hiçbiri çalmıyorsa seçili oturum (hâlâ listedeyse) korunur: duraklatılan müzik radyoya atlamaz. BT oturumu varken
         // OEM radyosunun boş ("am") oturumu karta seçilmez (MediaSourcePick).
         MediaController next = pickController(all, activeController);
@@ -588,8 +615,48 @@ public final class LauncherMediaController {
     }
 
     private static boolean isPlaying(@Nullable MediaController controller) {
-        PlaybackState state = controller != null ? controller.getPlaybackState() : null;
+        return isPlayingState(controller != null ? controller.getPlaybackState() : null);
+    }
+
+    static boolean isPlayingState(@Nullable PlaybackState state) {
         return state != null && state.getState() == PlaybackState.STATE_PLAYING;
+    }
+
+    /**
+     * Telefon önceliği: Bluetooth oturumunun güncel durumu (yoksa null). 7 Kasım araç: telefonda Oynat'a basılınca bu
+     * oturum PLAYING oldu (OEM BT servisi de aynı oturumu izliyor: {@code BTSer-MediaCON onPlaybackStateChanged: playState=3}).
+     */
+    private void feedBluetooth(@Nullable List<MediaController> controllers) {
+        if (controllers == null) {
+            return;
+        }
+        MediaController bt = findBluetooth(controllers);
+        OemAudioSource.INSTANCE.onBtPlayback(appContext, bt != null ? Boolean.valueOf(isPlaying(bt)) : null);
+    }
+
+    /** Bir Bluetooth (A2DP) oturumu var mı (seçicide Bluetooth satırı için). */
+    public boolean hasBluetoothSession() {
+        return findBluetooth(loadControllers()) != null;
+    }
+
+    /**
+     * Seçicide Bluetooth: oturum varsa kartın Oynat'ıyla aynı yol ({@link OemAudioSource#playBluetooth}); yoksa oturumsuz
+     * BT geçişi ({@link OemAudioSource#openBluetoothSource}). Yalnızca kullanıcı dokunuşuyla.
+     */
+    public void selectBluetooth() {
+        MediaController bt = findBluetooth(loadControllers());
+        if (bt == null) {
+            OemAudioSource.INSTANCE.openBluetoothSource(appContext);
+            return;
+        }
+        final MediaController target = bt;
+        OemAudioSource.INSTANCE.playBluetooth(appContext, () -> {
+            try {
+                target.getTransportControls().play();
+            } catch (Exception ignored) {
+                // oturum bu arada kapanmış olabilir
+            }
+        });
     }
 
     private static boolean hasMetadata(MediaController controller) {
