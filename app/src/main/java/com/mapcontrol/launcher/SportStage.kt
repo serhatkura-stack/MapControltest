@@ -364,6 +364,7 @@ internal class SportStageView(
         car.setActive(false)
         TripSource.remove(tripListener)
         sensors?.unregisterListener(sensorListener)
+        sensors?.unregisterListener(gravityOnce)
         main.removeCallbacks(tick)
         main.removeCallbacks(gPost)
         main.removeCallbacks(unflash)
@@ -924,6 +925,24 @@ internal class SportStageView(
             gSentX = 0f; gSentY = 0f; gSentText = ""
         }
         sensors?.registerListener(sensorListener, s, GFilter.SAMPLING_US, io)
+        if (BuildConfig.DEBUG && s === linearSensor && accelSensor != null) {
+            sensors?.registerListener(gravityOnce, accelSensor, SensorManager.SENSOR_DELAY_NORMAL, io)
+        }
+    }
+
+    /**
+     * Yalnız debug, girişte bir kez: ham TYPE_ACCELEROMETER (yerçekimi dahil). Doğrusal ivme yerçekimini taşımadığından
+     * montajın hangi eksende döndüğünü söylemez; frende -z ölçüldü. Yerçekimi y ≈ +9,8 ise ünite dikey eksende dönük
+     * (x de ters: yanal işaret yanlış), y ≈ -9,8 ise yatay eksende (x doğru). Etiket SportG.
+     */
+    private val gravityOnce = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            sensors?.unregisterListener(this)
+            android.util.Log.i("SportG", String.format(java.util.Locale.US,
+                "yerçekimi x=%.2f y=%.2f z=%.2f", e.values[0], e.values[1], e.values[2]))
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
 
     private fun bindG() {

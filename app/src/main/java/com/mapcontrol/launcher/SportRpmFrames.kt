@@ -74,8 +74,10 @@ internal object SpiRpmParse {
 }
 
 /**
- * Hızlı devir: spor ekranı görünürken `logcat -s Spi2Ethenet:I` alt sürecini okur ([SpiRpmParse]) ve son devri varış
- * anıyla yayınlar. READ_LOGS yoksa (`adb shell pm grant <paket> android.permission.READ_LOGS`) hiç başlamaz; devir o zaman
+ * Hızlı devir: spor ekranı görünürken `logcat -b main -s Spi2Ethenet:I` alt sürecini okur ([SpiRpmParse]) ve son devri
+ * varış anıyla yayınlar. `-b main`: Spi2Ethenet yalnız main tamponunda (6 Kasım döküm); `-s` süzmesi istemci tarafında
+ * olduğundan öteki tamponların satırları alt sürece hiç gelmez. `-T 1` başlarken tampondaki son satırı yeniden basar
+ * (dakikalarca eski olabilir): her başlatmada ilk devir çerçevesi atılır. READ_LOGS yoksa (`adb shell pm grant <paket> android.permission.READ_LOGS`) hiç başlamaz; devir o zaman
  * yavaş kaynaktan (ReadOnly 62). [stop] alt süreci öldürür. [onRpm] okuyucu iş parçacığında, yalnız devir [BAND_RPM]'den
  * çok değişince çağrılır. Ölçüm: `adb logcat -s SportRpm` ("frame n=… ort=…ms", 10 sn'de bir).
  */
@@ -87,7 +89,9 @@ internal class RpmFrameReader(private val context: Context, private val onRpm: (
     @Volatile private var running = false
     /** Her [start] yeni kuşak: eski iş parçacığı [stop]tan sonra hemen yeniden başlatılırsa ikinci süreç açmaz. */
     @Volatile private var gen = 0
-    @Volatile private var proc: Process? = null
+    /** [proc] ve [gen]/[running] birlikte bu kilitle değişir: [stop] yayımlanmış her süreci görür, geç kalan eski süreç yayımlanmaz. */
+    private val lock = Any()
+    private var proc: Process? = null
     private var thread: Thread? = null
     private var sentRpm = -1
 
@@ -100,9 +104,8 @@ internal class RpmFrameReader(private val context: Context, private val onRpm: (
             if (!warned) { warned = true; Log.i(TAG, "READ_LOGS yok: hızlı devir kapalı") }
             return
         }
-        running = true
         sentRpm = -1
-        val my = ++gen
+        val my = synchronized(lock) { running = true; ++gen }
         val t = Thread({ loop(my) }, "sport-rpm").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 }
         thread = t
         t.start()
@@ -110,10 +113,12 @@ internal class RpmFrameReader(private val context: Context, private val onRpm: (
 
     fun stop() {
         if (!running) return
-        running = false
-        gen++
-        proc?.destroy()
-        proc = null
+        synchronized(lock) {
+            running = false
+            gen++
+            proc?.destroy()
+            proc = null
+        }
         thread?.interrupt()
         thread = null
     }
@@ -125,19 +130,21 @@ internal class RpmFrameReader(private val context: Context, private val onRpm: (
         while (alive(my) && tries < MAX_TRIES) {
             tries++
             val p = try {
-                ProcessBuilder("logcat", "-v", "raw", "-T", "1", "-s", "$SOURCE_TAG:I").redirectErrorStream(true).start()
+                ProcessBuilder("logcat", "-b", "main", "-v", "raw", "-T", "1", "-s", "$SOURCE_TAG:I")
+                    .redirectErrorStream(true).start()
             } catch (t: Throwable) {
                 Log.w(TAG, "logcat başlatılamadı: ${t.javaClass.simpleName}")
                 return
             }
-            if (!alive(my)) { p.destroy(); return }
-            proc = p
-            if (!alive(my)) { p.destroy(); return }
+            // Yalnız kendi kuşağı hâlâ geçerliyse yayımla; değilse (araya stop/start girdi) yeni kuşağın sürecine dokunmadan öldür.
+            val published = synchronized(lock) { if (alive(my)) { proc = p; true } else false }
+            if (!published) { p.destroy(); return }
             try {
                 read(my, BufferedReader(InputStreamReader(p.inputStream), 8_192))
             } catch (_: Throwable) {
             } finally {
                 p.destroy()
+                synchronized(lock) { if (proc === p) proc = null }
             }
             if (alive(my)) try { Thread.sleep(RETRY_MS) } catch (_: InterruptedException) { return }
         }
@@ -148,12 +155,16 @@ internal class RpmFrameReader(private val context: Context, private val onRpm: (
         var winCpu = Debug.threadCpuTimeNanos()
         var frames = 0
         var lines = 0
+        // `-T 1`in yeniden bastığı eski satır: ilk devir çerçevesi canlı sayılmaz (taze olsa bile kayıp ~25 ms).
+        var skipFirst = true
         while (alive(my)) {
             val line = r.readLine() ?: return
             lines++
             val v = SpiRpmParse.rpm(line)
             val now = SystemClock.elapsedRealtime()
-            if (v >= 0) {
+            if (v >= 0 && skipFirst) {
+                skipFirst = false
+            } else if (v >= 0) {
                 frames++
                 rpm = v
                 rpmAt = now
