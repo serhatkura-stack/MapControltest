@@ -27,7 +27,7 @@ import kotlin.math.roundToInt
 /**
  * 4x4 güç dağılımı: ön / arka aks payını gösterir. Yalnızca okur; araca hiçbir şey yazılmaz.
  *
- * Tiggo 7 (2026-10-30 yol kaydı, LauncherProbe) sinyalleri, ikisi de 2 bayt [hi, lo]:
+ * Tiggo 7 (2026-10-30 yol kaydı) sinyalleri, ikisi de 2 bayt [hi, lo]:
  *  - 107 `ID_ESTIMATED_COUPLING_TORQUE`: arka aksa giden AWD kaplin torku. Rölantide/sabit hızda 0..11, ivmelenmede 100..665.
  *    Kayıtta ara sıra tam 1200 görüldü (sonraki örnekte 0'a düşüyor): doygunluk/ön dolum geçişi sayılır, GEÇERSİZ kabul edilir.
  *  - 106 `ID_MEAN_EFFECTIVE_TORQUE`: motor torku, ofsetli kodlama. Rölantide 2000±5, yük altında 2040..2287, motor freninde ~1964.

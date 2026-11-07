@@ -21,13 +21,11 @@ import com.mapcontrol.vehicle.VehicleMetricsSnapshot
  *
  * Ek hata ayıklama ekstraları (yalnızca launcher_cluster_test mevcutken):
  *  `--ei launcher_cluster_x <px>` / `--ei launcher_cluster_y <px>`: pencere sol-üst konumu (canlı).
- *  `--ez launcher_cluster_grid true`: tüm ekranı kaplayan kalibrasyon ızgarası.
  */
 object ClusterCardDebug {
     const val EXTRA = "launcher_cluster_test"
     const val EXTRA_X = "launcher_cluster_x"
     const val EXTRA_Y = "launcher_cluster_y"
-    const val EXTRA_GRID = "launcher_cluster_grid"
     private const val TAG = ClusterSurface.TAG
 
     private val main = Handler(Looper.getMainLooper())
@@ -58,7 +56,6 @@ object ClusterCardDebug {
                         if (intent.hasExtra(EXTRA_X)) intent.getIntExtra(EXTRA_X, 0) else null,
                         if (intent.hasExtra(EXTRA_Y)) intent.getIntExtra(EXTRA_Y, 0) else null,
                     )
-                    setGrid(intent.getBooleanExtra(EXTRA_GRID, false))
                 }
             }
         }

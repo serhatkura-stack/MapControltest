@@ -7,7 +7,6 @@ import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.graphics.Rect
-import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
@@ -48,7 +47,6 @@ class ClusterSurface(context: Context) {
 
     private var windowManager: WindowManager? = null
     private var root: FrameLayout? = null
-    private var gridView: View? = null
     private var cardLp: WindowManager.LayoutParams? = null
     private var attachedDisplayId = -1
     private var scale = 1f
@@ -61,7 +59,6 @@ class ClusterSurface(context: Context) {
 
     private var overrideX: Int? = null
     private var overrideY: Int? = null
-    private var gridOn = false
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
@@ -107,20 +104,12 @@ class ClusterSurface(context: Context) {
         }
     }
 
-    /** Hata ayıklama: kalibrasyon ızgarasını aç/kapat. */
-    fun setGrid(on: Boolean) {
-        gridOn = on
-        if (!wanted) return
-        if (on) attachGrid() else detachGrid()
-    }
-
     fun hide() {
         if (!wanted) return
         wanted = false
         handler.removeCallbacksAndMessages(null)
         renderScheduled = false
         displayManager?.unregisterDisplayListener(displayListener)
-        detachGrid()
         detachView()
         shown = null
     }
@@ -150,7 +139,6 @@ class ClusterSurface(context: Context) {
 
     private fun reattach() {
         if (!wanted) return
-        detachGrid()
         detachView()
         attachIfNeeded()
         shown = null
@@ -209,7 +197,6 @@ class ClusterSurface(context: Context) {
             attachedDisplayId = displayId
             Log.i(TAG, "attach OK display=$displayId token=${frame.windowToken} attached=${frame.isAttachedToWindow}")
             handler.postDelayed({ logVisibility(frame, "card") }, 1000L)
-            if (gridOn) attachGrid()
         } catch (e: Throwable) {
             Log.e(TAG, "attach FAILED: ${e.javaClass.name}: ${e.message}", e)
             detachView()
@@ -250,85 +237,6 @@ class ClusterSurface(context: Context) {
             }
         }
         attachedDisplayId = -1
-    }
-
-    // ---- Kalibrasyon ızgarası ----
-
-    private fun attachGrid() {
-        if (gridView != null) return
-        try {
-            val display = findDisplay() ?: return
-            val size = Point().also { display.getRealSize(it) }
-            val ctx = appContext.createDisplayContext(display)
-            val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val v = GridView(ctx, size.x, size.y, scale.coerceAtLeast(0.5f))
-            val lp = WindowManager.LayoutParams(
-                size.x, size.y,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                OVERLAY_FLAGS or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT,
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = 0; y = 0
-                title = "ClusterGrid"
-            }
-            OverlayWindows.add("ClusterCardGrid", wm, v, lp)
-            gridView = v
-            gridWm = wm
-            Log.i(TAG, "grid attached ${size.x}x${size.y}")
-            handler.postDelayed({ logVisibility(v, "grid") }, 1000L)
-        } catch (e: Throwable) {
-            Log.e(TAG, "grid attach FAILED: ${e.javaClass.name}: ${e.message}", e)
-        }
-    }
-
-    private var gridWm: WindowManager? = null
-
-    private fun detachGrid() {
-        val v = gridView ?: return
-        gridView = null
-        try {
-            gridWm?.removeViewImmediate(v)
-            Log.i(TAG, "grid detached")
-        } catch (e: Exception) {
-            Log.e(TAG, "grid detach failed: ${e.message}", e)
-        }
-        gridWm = null
-    }
-
-    private class GridView(ctx: Context, private val w: Int, private val h: Int, private val sc: Float) : View(ctx) {
-        private val line = Paint().apply { color = Color.argb(150, 255, 255, 255); strokeWidth = 1f }
-        private val major = Paint().apply { color = Color.argb(230, 255, 214, 0); strokeWidth = 2f }
-        private val safe = Paint().apply {
-            color = Color.argb(255, 0, 230, 118); strokeWidth = 3f; style = Paint.Style.STROKE
-        }
-        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE; textSize = 20f * sc; setShadowLayer(3f, 0f, 0f, Color.BLACK)
-        }
-
-        init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-
-        override fun onDraw(c: Canvas) {
-            var x = 0
-            while (x <= w) {
-                val m = x % 480 == 0
-                c.drawLine(x.toFloat(), 0f, x.toFloat(), h.toFloat(), if (m) major else line)
-                c.drawText("$x", x + 4f, 24f * sc, text)
-                c.drawText("$x", x + 4f, h - 8f, text)
-                x += GRID_STEP
-            }
-            var y = 0
-            while (y <= h) {
-                val m = y % 360 == 0
-                c.drawLine(0f, y.toFloat(), w.toFloat(), y.toFloat(), if (m) major else line)
-                c.drawText("$y", 4f, y + 22f * sc, text)
-                c.drawText("$y", w - 70f * sc, y + 22f * sc, text)
-                y += GRID_STEP
-            }
-            c.drawRect(RectF(SAFE_X.toFloat(), SAFE_Y.toFloat(), (SAFE_X + SAFE_W).toFloat(), (SAFE_Y + SAFE_H).toFloat()), safe)
-            c.drawText("SAFE 480,145 - 1440,470", SAFE_X + 10f, SAFE_Y + SAFE_H - 10f, text)
-            c.drawText("${w}x${h}", w / 2f - 40f, 70f * sc, text)
-        }
     }
 
     // ---- Kart görünümü ----
@@ -430,7 +338,6 @@ class ClusterSurface(context: Context) {
         private const val MIN_INTERVAL_MS = 1000L
         private const val REF_W = 1920
         private const val REF_H = 720
-        private const val GRID_STEP = 120
         // Güvenli bölge (1920x720): x 480-1440, y 145-470
         private const val SAFE_X = 480
         private const val SAFE_Y = 145
