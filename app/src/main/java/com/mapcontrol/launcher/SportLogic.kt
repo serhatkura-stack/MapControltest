@@ -382,16 +382,18 @@ data class SportSummary(
 }
 
 /**
- * G-metre süzgeci (saf, JVM'de sınanır). Girdi m/s², Android cihaz ekseni: x ekranın sağı, y yukarısı, z ekrandan
- * sürücüye doğru (ekran sürücüye baktığı için +z aracın arkası). Ekran yatay doğal yönde, öne bakan konsolda varsayılır.
+ * G-metre süzgeci (saf, JVM'de sınanır). Girdi m/s², Android cihaz ekseni: x ekranın sağı, y yukarısı, z ekranın
+ * normali. Bu araçtaki (Tiggo 7) montajda +z aracın **önü**: 7 Kasım araç ölçümünde frende ham doğrusal ivme
+ * z = -6,42 / -5,07 / -3,62 m/s² okundu (fren = araç geriye ivmelenir → -z geriye).
  *  - [linear] false (yalnız TYPE_ACCELEROMETER): yerçekimi alçak geçiren süzgeçle kestirilip çıkarılır; ekranın eğimi
  *    böylece sıfırlanır. Araç dururken ([still]) hızlı öğrenir ([GRAVITY_TAU_STILL_S]), giderken neredeyse sabit tutulur
  *    ([GRAVITY_TAU_MOVING_S]): uzun fren ya da viraj yerçekimi sanılıp noktadan silinmez (Tur 6: "G çok az oynuyor").
  *  - Sonuç [DISPLAY_TAU_S] ile yumuşatılır (titreşim ve yol pürüzü).
  * Çıktı g biriminde ve **hissedilen kuvvet** yönünde (ivmenin tersi; G-metre noktası yolcuyu iten yöne gider):
  *  - [lateral] sağa itiş +: sola dönüşte araç sola ivmelenir (ivme -x), yolcu sağa itilir, değer +.
- *  - [longitudinal] öne itiş +: frende araç geriye ivmelenir (ivme +z), yolcu öne itilir, değer +; gazda -.
- * Ekranın öne/arkaya eğimi z eksenine y'nin bir kısmını karıştırır (küçük hata). Eşleme araçta doğrulanmadı (Tur 6).
+ *  - [longitudinal] öne itiş +: frende araç geriye ivmelenir (ivme -z), yolcu öne itilir, değer +, nokta yukarı;
+ *    gazda -, nokta aşağı. Araçta doğrulandı (7 Kasım: fren ~0,4 g, eski işaretle nokta aşağı gidiyordu).
+ * Ekranın öne/arkaya eğimi z eksenine y'nin bir kısmını karıştırır (küçük hata). Yanal işaret araçta henüz doğrulanmadı.
  */
 class GFilter(private val linear: Boolean) {
     private val gravity = FloatArray(3)
@@ -436,10 +438,10 @@ class GFilter(private val linear: Boolean) {
     }
 
     private fun push(lx: Float, lz: Float, a: Float) {
-        // Hissedilen kuvvet ivmenin tersi. Yanal: ivme -x (sola dönüş) → sağa itiş +. Boyuna: ivme +z (geriye, fren)
-        // zaten öne itişe denk; işaret aynı kalır.
+        // Hissedilen kuvvet ivmenin tersi. Yanal: ivme -x (sola dönüş) → sağa itiş +. Boyuna: +z aracın önü (araçta
+        // ölçüldü), fren ivmesi -z → öne itiş + (nokta yukarı).
         val latG = -lx / G
-        val lonG = lz / G
+        val lonG = -lz / G
         lateral += a * (latG - lateral)
         longitudinal += a * (lonG - longitudinal)
     }

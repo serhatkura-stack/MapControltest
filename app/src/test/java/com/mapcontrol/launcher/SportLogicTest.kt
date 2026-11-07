@@ -271,8 +271,17 @@ class SportLogicTest {
         assertTrue(f.lateral in 0.05f..0.5f) // tek örnek sıçratmaz
         repeat(60) { t += 66_666_000L; f.add(t, -GFilter.G, 0f, -GFilter.G / 2) }
         assertEquals(1f, f.lateral, 0.02f)
-        assertEquals(-0.5f, f.longitudinal, 0.02f)
+        assertEquals(0.5f, f.longitudinal, 0.02f)
         assertEquals(1.118f, f.magnitude, 0.03f)
+    }
+
+    @Test fun brakingMovesTheDotUp() {
+        val f = GFilter(linear = true)
+        var t = 0L
+        repeat(60) { f.add(t, 0f, 0f, -6.42f); t += 66_666_000L }
+        assertTrue(f.longitudinal > 0f)
+        // SportStage: ty = -dialUnit(longitudinal) * range; eksi y ekranda yukarı.
+        assertTrue(-GFilter.dialUnit(f.longitudinal) < 0f)
     }
 
     @Test fun gSignsFollowFeltForce() {
@@ -284,10 +293,11 @@ class SportLogicTest {
         assertEquals(0.5f, settle(-0.5f * GFilter.G, 0f).lateral, 0.02f)
         // Sağa dönüş (ivme +x): sola itiş (-).
         assertEquals(-0.4f, settle(0.4f * GFilter.G, 0f).lateral, 0.02f)
-        // Fren (araç geriye ivmelenir, +z sürücüye/arkaya): öne itiş (+), ekranda nokta yukarı.
-        assertEquals(0.6f, settle(0f, 0.6f * GFilter.G).longitudinal, 0.02f)
-        // Gaz (ivme öne, -z): arkaya itiş (-), nokta aşağı.
-        assertEquals(-0.3f, settle(0f, -0.3f * GFilter.G).longitudinal, 0.02f)
+        // Fren (araçta ölçüldü: z = -6,42 m/s², +z aracın önü): öne itiş (+), ekranda nokta yukarı.
+        assertEquals(0.655f, settle(0f, -6.42f).longitudinal, 0.02f)
+        assertEquals(0.6f, settle(0f, -0.6f * GFilter.G).longitudinal, 0.02f)
+        // Gaz (ivme öne, +z): arkaya itiş (-), nokta aşağı.
+        assertEquals(-0.3f, settle(0f, 0.3f * GFilter.G).longitudinal, 0.02f)
     }
 
     // --- Biçim ---
