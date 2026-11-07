@@ -22,6 +22,10 @@ public final class MapControlApplication extends Application {
         guardLauncherCrashLoop();
         AppLocaleManager.applyStoredLocale(this);
         ClusterTrackRelay.install(this);
+        try {
+            com.mapcontrol.launcher.DriveScreen.INSTANCE.recoverStale(this);
+        } catch (Throwable ignored) {
+        }
         int nightPref = getSharedPreferences("MapControlPrefs", MODE_PRIVATE)
                 .getInt("nightModeSetting", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
         AppCompatDelegate.setDefaultNightMode(nightPref);

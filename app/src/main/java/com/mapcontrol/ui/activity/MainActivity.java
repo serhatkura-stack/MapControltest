@@ -299,6 +299,17 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+        // Launcher modunda FrostNav simgesinden açılış bizim ana ekranımızda başlar (HomePolicy.appStartScreen); ana ekranın
+        // ayarlar düğmesi (sekme isteği) ve diğer özel istekler ayarları açar.
+        Intent startIntent = getIntent();
+        boolean ownRequest = startIntent != null
+                && (startIntent.hasExtra(EXTRA_OPEN_TAB)
+                || startIntent.hasExtra(EXTRA_OPEN_PROJECTION_TARGET_PICKER));
+        if (com.mapcontrol.launcher.HomeKey.openLauncherOnAppStart(
+                this, startIntent, ownRequest, savedInstanceState != null)) {
+            finish();
+            return;
+        }
 
         handler = new Handler(Looper.getMainLooper());
         // Güncelleme/yeniden kurulum alias'ı manifest varsayılanına (kapalı) döndürür; tercihle eşitle.

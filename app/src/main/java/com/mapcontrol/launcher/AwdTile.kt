@@ -16,8 +16,8 @@ import android.widget.LinearLayout
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
@@ -93,6 +93,44 @@ internal object AwdMath {
 }
 
 /**
+ * Okuma ve çizim temposu (saf karar, JVM testli). Araçta (2026-11-07 gfxinfo) kutu sürekli 20 fps çiziyor ve
+ * her görünürlükte yeni bir yürütücüyle 250 ms'de bir okuyordu; değer çoğu zaman (park, sabit hız) hiç değişmiyor.
+ *  - Okuma: pay son [FAST_WINDOW_POLLS] okumada değiştiyse [FAST_POLL_MS], yoksa [SLOW_POLL_MS] (park/sabit sürüş).
+ *  - Akış noktaları: yalnızca pay son değiştikten sonra [FLOW_HOLD_MS] boyunca ve en çok ~10 fps ([FRAME_MS]) akar;
+ *    sonra şema sabit kalır (aks kalınlığı ve parlaklığı payı göstermeye devam eder, "parça yanar").
+ */
+internal object AwdPacing {
+    const val FAST_POLL_MS = 250L
+    const val SLOW_POLL_MS = 1000L
+    /** Son değişimden sonra bu kadar okuma boyunca hızlı tempoda kalınır (~1 sn). */
+    const val FAST_WINDOW_POLLS = 4
+    const val FRAME_MS = 100L // ~10 fps
+    const val FLOW_HOLD_MS = 1500L
+
+    /** Bir sonraki okumaya kadar bekleme; [unchangedPolls] pay değişmeden geçen ardışık okuma sayısı. */
+    fun pollDelayMs(unchangedPolls: Int): Long =
+        if (unchangedPolls < FAST_WINDOW_POLLS) FAST_POLL_MS else SLOW_POLL_MS
+
+    /** Bir okumanın sonucu: ekrana yansıtılsın mı ve yeni değişmezlik sayacı. */
+    data class Step(val bind: Boolean, val unchangedPolls: Int)
+
+    /**
+     * Okuma sonrası karar. [notBoundYet]: bu oturumda henüz ekrana yansıtılmadı; o zaman ilk geçerli okuma her zaman
+     * yansır (gizle→göster sonrası eski değer kalmasın). Okuma yoksa (servis bağlı değil) sayaç artar; bağlantı
+     * beklenirken de 1 sn tempoya düşülür.
+     */
+    fun step(notBoundYet: Boolean, read: Boolean, changed: Boolean, unchangedPolls: Int): Step = when {
+        !read -> Step(false, unchangedPolls + 1)
+        notBoundYet || changed -> Step(true, 0)
+        else -> Step(false, unchangedPolls + 1)
+    }
+
+    /** Akan noktalar çizilsin mi (ve sonraki kare istensin mi). */
+    fun animateFlow(running: Boolean, compact: Boolean, rearTarget: Float, nowMs: Long, lastChangeMs: Long): Boolean =
+        running && !compact && rearTarget > 0f && nowMs - lastChangeMs in 0..FLOW_HOLD_MS
+}
+
+/**
  * Demo için yumuşak salınım: arka pay 0 → %40 → 0, 6 sn döngü. Dönen değer (motor Nm, kaplin Nm) gerçek yoldan geçer.
  */
 internal object AwdDemo {
@@ -149,7 +187,33 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable, S
 
     private var compact = false
     private var rear: Int? = null
-    private var executor: ScheduledExecutorService? = null
+    /**
+     * Kutu başına tek yürütücü (her görünürlükte yenisi açılmaz). Gizliyken iş planlanmaz; çekirdek iş parçacığı
+     * boşta [IDLE_THREAD_S] sn sonra kendiliğinden kapanır, [release] tamamen kapatır.
+     */
+    private val executor: ScheduledThreadPoolExecutor by lazy {
+        ScheduledThreadPoolExecutor(1).apply {
+            setKeepAliveTime(IDLE_THREAD_S, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(true)
+            removeOnCancelPolicy = true
+        }
+    }
+    private var executorStarted = false
+    private var released = false
+    /** Ana iş parçacığında: okuma açık mı. */
+    private var polling = false
+    @Volatile private var pollFuture: ScheduledFuture<*>? = null
+    /** Okuma oturumu: gizlenince artar, eski oturumun kendini yeniden planlaması durur. */
+    @Volatile private var pollSession = 0
+
+    /**
+     * Yalnız yürütücü iş parçacığında: son okunan pay, kaç okumadır değişmediği ve son okunan oturum.
+     * Oturum durumu burada tutulur (ana iş parçacığında sıfırlanmaz); eski oturumun geç kalan okuması yeni oturumu bozamaz.
+     */
+    private var lastPolled: Int? = null
+    private var unchangedPolls = 0
+    private var seenSession = -1
+    private var boundSession = -1
 
     // Okuma kaçırılırsa son geçerli değer kısa süre tutulur; sürekli kaçırılırsa bilinmiyor (0) olur.
     private var heldEngine: Int? = null
@@ -202,32 +266,52 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable, S
         flow.running = false
     }
 
-    override fun release() = onHidden()
+    override fun release() {
+        onHidden()
+        released = true
+        if (executorStarted) executor.shutdownNow()
+    }
 
     private fun startPolling() {
-        if (executor != null) return
-        val ex = Executors.newSingleThreadScheduledExecutor()
-        executor = ex
-        ex.scheduleWithFixedDelay({ poll() }, 0L, POLL_MS, TimeUnit.MILLISECONDS)
+        if (released || polling) return
+        polling = true
+        executorStarted = true
+        // Yeni oturumun ilk okuması her zaman ekrana yansır (poll içinde, AwdPacing.step).
+        val session = ++pollSession
+        pollFuture = executor.schedule({ poll(session) }, 0L, TimeUnit.MILLISECONDS)
     }
 
     private fun stopPolling() {
-        executor?.shutdownNow()
-        executor = null
+        polling = false
+        pollSession++
+        pollFuture?.cancel(false)
+        pollFuture = null
     }
 
-    private fun poll() {
-        // Yakalanmayan hata scheduleWithFixedDelay'i sessizce iptal eder; döngü sürsün.
+    /** Tek okuma; ardından değişime göre [AwdPacing.pollDelayMs] sonra kendini yeniden planlar. */
+    private fun poll(session: Int) {
+        if (session != pollSession) return
+        // Hata döngüyü öldürmesin: her durumda yeniden planlanır.
         try {
-            val (engine, coupling) = if (LauncherDemo.enabled) {
-                AwdDemo.reading(SystemClock.uptimeMillis())
-            } else {
-                readCar() ?: return
+            val reading = if (LauncherDemo.enabled) AwdDemo.reading(SystemClock.uptimeMillis()) else readCar()
+            // Yeni oturum: hızlı tempoyla başla.
+            if (session != seenSession) { seenSession = session; unchangedPolls = 0 }
+            val pct = reading?.let { AwdMath.rearPercentOrNull(it.first, it.second) }
+            val step = AwdPacing.step(session != boundSession, reading != null, pct != lastPolled, unchangedPolls)
+            unchangedPolls = step.unchangedPolls
+            if (step.bind) {
+                boundSession = session
+                lastPolled = pct
+                main.post { if (session == pollSession) bind(pct) }
             }
-            val pct = AwdMath.rearPercentOrNull(engine, coupling)
-            main.post { bind(pct) }
         } catch (t: Throwable) {
             Log.w("AwdTile", "poll başarısız", t)
+        }
+        if (session != pollSession) return
+        try {
+            pollFuture = executor.schedule({ poll(session) }, AwdPacing.pollDelayMs(unchangedPolls), TimeUnit.MILLISECONDS)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // release() yürütücüyü kapattı.
         }
     }
 
@@ -286,14 +370,16 @@ internal class AwdTile(private val context: Context) : SizedWidget, Themeable, S
         const val COMPACT_PAD_DP = 12
         const val FULL_MIN_COLS = 4
         const val FULL_MIN_ROWS = 4
-        const val POLL_MS = 250L
+        /** Ardışık kaçırma sınırı; hızlı tempoda ~2 sn, yavaşta ~8 sn son geçerli değer tutulur. */
         const val MAX_MISS = 8
+        const val IDLE_THREAD_S = 5L
     }
 }
 
 /**
  * Üstten görünüm şeması ve güç akışı (burun yukarıda). Merkezden iki aksa, oradan tekerleklere çizgiler gider; kalınlık ve parlaklık
- * aksın payıyla ölçeklenir. Pay değişince 300 ms yumuşak geçer; ince noktalar çizgiler boyunca yalnızca arka pay > 0 iken ~20 fps akar.
+ * aksın payıyla ölçeklenir. Pay değişince 300 ms yumuşak geçer; ince noktalar arka pay > 0 iken yalnızca pay değiştikten sonra kısa süre
+ * ~10 fps akar ([AwdPacing.animateFlow]); değer sabitken şema durağandır ve yeniden çizilmez.
  * [compact] iken şema yerine yatay ön/arka çubuğu çizilir (animasyon döngüsü yok).
  */
 internal class AwdFlowView(context: Context) : View(context) {
@@ -345,6 +431,8 @@ internal class AwdFlowView(context: Context) : View(context) {
         }
     }
     private var from = 0f
+    /** Payın son değiştiği an (uptime); akış noktaları bundan sonra [AwdPacing.FLOW_HOLD_MS] boyunca akar. */
+    private var lastChangeMs = Long.MIN_VALUE / 2
 
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -361,6 +449,7 @@ internal class AwdFlowView(context: Context) : View(context) {
     fun setRear(percent: Int) {
         val next = percent.coerceIn(0, 100) / 100f
         if (next == target) return
+        lastChangeMs = SystemClock.uptimeMillis()
         animator.cancel()
         from = shown
         target = next
@@ -378,9 +467,12 @@ internal class AwdFlowView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         if (width == 0 || height == 0) return
         if (compact) drawBar(canvas) else drawChassis(canvas)
-        // Nokta animasyonu: yalnızca görünürken ve arka pay varken, düşük kare hızında.
-        if (!compact && running && target > 0f) postInvalidateDelayed(FRAME_MS)
+        // Nokta animasyonu: yalnızca görünürken, arka pay varken ve pay yakın zamanda değiştiyse; ~10 fps. Sabit değerde döngü yok.
+        if (flowing()) postInvalidateDelayed(AwdPacing.FRAME_MS)
     }
+
+    private fun flowing(): Boolean =
+        AwdPacing.animateFlow(running, compact, target, SystemClock.uptimeMillis(), lastChangeMs)
 
     private fun drawBar(c: Canvas) {
         val h = min(height.toFloat(), context.dpF(BAR_H_DP))
@@ -477,7 +569,7 @@ internal class AwdFlowView(context: Context) : View(context) {
         c.drawLine(cx, hubY, cx, axleY, line)
         c.drawLine(cx, axleY, cx - inner, axleY, line)
         c.drawLine(cx, axleY, cx + inner, axleY, line)
-        if (!running || target <= 0f || share <= 0.02f) return
+        if (share <= 0.02f || !flowing()) return
         // Akan noktalar: merkezden tekerleğe doğru, yol boyunca eşit aralıklı, faza göre kayar.
         val seg1 = abs(axleY - hubY)
         val total = seg1 + inner
@@ -507,7 +599,6 @@ internal class AwdFlowView(context: Context) : View(context) {
 
     private companion object {
         const val SHARE_MS = 300L
-        const val FRAME_MS = 50L // ~20 fps
         const val FLOW_PERIOD_MS = 1200L
         const val DOTS = 3
         const val MIN_ALPHA = 70

@@ -49,8 +49,12 @@ public final class DisplayHelper {
     /** Cluster ekranındaki boot splash animasyonları. */
     private static final List<android.animation.Animator> bootSplashAnimators = new ArrayList<>();
     /** Uygulama içi açılış/onboarding splash animasyonları (cluster'dan ayrı tutulur). */
-    /** Splash animasyonlarının en fazla oynayacağı süre; sonrasında son karede sabit kalır. */
-    private static final long SPLASH_ANIMATION_MAX_MS = 8_000L;
+    /**
+     * Splash giriş animasyonunun oynayacağı süre; sonrasında tüm sonsuz animatörler iptal edilir ve
+     * overlay son karede sabit kalır. Cluster splash'i projeksiyon açılana kadar (araçta 23 dk görüldü)
+     * ekranda durabildiği için sürekli çizim RenderThread/GPU'yu boşuna meşgul ediyordu.
+     */
+    static final long SPLASH_ANIMATION_MAX_MS = 4_000L;
     private static final List<android.animation.Animator> appSplashAnimators = new ArrayList<>();
 
     private DisplayHelper() {}
@@ -736,7 +740,9 @@ public final class DisplayHelper {
         out.addAll(own);
         // Sonsuz animasyon sürekli çizim demek: cluster splash'i saatlerce ekranda kalabiliyor ve
         // RenderThread ~%55 CPU harcıyordu. Giriş animasyonu kısa süre oynar, sonra son karede donar.
-        root.postDelayed(() -> {
+        // View.postDelayed yerine ana Looper Handler'ı: görünümün pencereye bağlanma zamanından bağımsız
+        // olarak süre dolunca kesin çalışır (görünümün run-queue'su bağlanma olmazsa hiç boşalmaz).
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             cancelAll(own);
             out.removeAll(own);
         }, SPLASH_ANIMATION_MAX_MS);
@@ -936,6 +942,8 @@ public final class DisplayHelper {
         private final int transparentOuter;
         private final int centerAlpha;
         private final int midAlpha;
+        private final android.graphics.Rect shaderBounds = new android.graphics.Rect();
+        private Shader shader;
 
         RadialHaloDrawable(int accent, int transparentOuter, int centerAlpha, int midAlpha) {
             this.accent = accent;
@@ -955,10 +963,15 @@ public final class DisplayHelper {
                     Color.red(accent), Color.green(accent), Color.blue(accent));
             int mid = Color.argb(midAlpha,
                     Color.red(accent), Color.green(accent), Color.blue(accent));
-            paint.setShader(new RadialGradient(cx, cy, r,
-                    new int[]{center, mid, transparentOuter},
-                    new float[]{0f, 0.55f, 1f},
-                    Shader.TileMode.CLAMP));
+            // Gölgelendirici yalnız sınırlar değişince kurulur (her karede yeni RadialGradient ayırmaz).
+            if (shader == null || !b.equals(shaderBounds)) {
+                shader = new RadialGradient(cx, cy, r,
+                        new int[]{center, mid, transparentOuter},
+                        new float[]{0f, 0.55f, 1f},
+                        Shader.TileMode.CLAMP);
+                shaderBounds.set(b);
+                paint.setShader(shader);
+            }
             canvas.drawCircle(cx, cy, r, paint);
         }
 
@@ -975,6 +988,7 @@ public final class DisplayHelper {
         private final Paint pinShadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final int accent;
         private final int radarWaveAlphaMax;
+        private final android.graphics.Path pinPath = new android.graphics.Path();
         private float progress = 0f;
 
         RadarPinView(Context ctx, int accent) {
@@ -1031,7 +1045,9 @@ public final class DisplayHelper {
             float pinR = dp(getContext(), 13);
             float pinTipY = cy + pinR * 1.55f;
             float pinTopY = cy - pinR;
-            android.graphics.Path pin = new android.graphics.Path();
+            // Path her karede yeniden ayrılmaz; alan yeniden kullanılır (rewind).
+            final android.graphics.Path pin = pinPath;
+            pin.rewind();
             pin.addCircle(cx, cy, pinR, android.graphics.Path.Direction.CW);
             pin.moveTo(cx - pinR * 0.78f, cy + pinR * 0.55f);
             pin.lineTo(cx, pinTipY);

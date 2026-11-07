@@ -95,8 +95,15 @@ grant_permission "pm grant com.mapcontrol android.permission.BIND_ACCESSIBILITY_
 # AccessibilityService otomatik etkinleştirme
 echo "🔧 AccessibilityService etkinleştiriliyor..."
 # Dikkat: Sınıf com.mapcontrol.service.GlobalBackService — .GlobalBackService (service olmadan) YANLIŞSIR.
-grant_permission "settings put secure enabled_accessibility_services com.mapcontrol/com.mapcontrol.service.GlobalBackService" "AccessibilityService"
-grant_permission "cmd accessibility enable-service com.mapcontrol/com.mapcontrol.service.GlobalBackService" "AccessibilityService (cmd)"
+# Mevcut erişilebilirlik hizmetlerini silmeden ekle (settings put listeyi tümden değiştirir), sonra erişilebilirliği aç.
+ACC_COMPONENT="com.mapcontrol/com.mapcontrol.service.GlobalBackService"
+ACC_CURRENT=$(adb shell settings get secure enabled_accessibility_services 2>/dev/null | tr -d '\r')
+case "$ACC_CURRENT" in
+    *"$ACC_COMPONENT"*) echo "  ✓ AccessibilityService (zaten kayıtlı)" ;;
+    null|"") grant_permission "settings put secure enabled_accessibility_services $ACC_COMPONENT" "AccessibilityService" ;;
+    *) grant_permission "settings put secure enabled_accessibility_services '$ACC_CURRENT:$ACC_COMPONENT'" "AccessibilityService" ;;
+esac
+grant_permission "settings put secure accessibility_enabled 1" "Erişilebilirlik açık"
 
 # NotificationListener — medya oturumu (BT / YouTube) için zorunlu
 # Manuel Ayarlar > Bildirim erişimi yerine yüklemede verilir.

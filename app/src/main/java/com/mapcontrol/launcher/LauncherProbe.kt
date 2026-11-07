@@ -69,8 +69,7 @@ internal object LauncherProbe {
     private const val POLL_MS = 2_000L
     private const val WATCH_MS = 15 * 60_000L
 
-    /** Açıkken ([EXTRA]=true) aktivite her oluşturulduğunda tarama yeniden başlar; süre bu kadar sürer. */
-    private const val ACTIVE_MS = 3 * 60 * 60_000L
+    /** Eski sürümün "3 saat boyunca her açılışta yeniden başla" kaydı; artık yalnızca silinir. */
     private const val PREFS = "launcher_probe"
     private const val KEY_UNTIL = "active_until"
 
@@ -110,28 +109,44 @@ internal object LauncherProbe {
     @Volatile
     private var runToken = 0L
 
+    /** [applyFrom] kararı: ne yapılacak. */
+    internal enum class Action { NONE, START, STOP }
+
     /**
-     * Her onCreate'te çağrılır. `--ez launcher_probe true` gelirse "aktif" süresini (şimdi + 3 sa)
-     * SharedPreferences'a yazar; süre dolmadıkça aktivite yeniden oluşunca tarama kendiliğinden başlar.
-     * `--ez launcher_probe false` süreyi siler ve çalışan taramayı durdurur.
+     * Saf karar (JVM testli). Tarama yalnızca debug derlemede ve açık `--ez launcher_probe true` niyetiyle, o niyet
+     * başına BİR KEZ başlar. Kendiliğinden yeniden başlama yoktur: eskiden 3 saatlik kayıt yüzünden aktivite her
+     * oluştuğunda tarama yeniden açılıyordu. Geri yüklenen aktivite ([restored]) ya da son uygulamalardan açılış
+     * ([fromHistory]) eski niyeti yeniden taşır, sayılmaz. `false` çalışan taramayı durdurur.
      */
-    fun applyFrom(activity: Activity, intent: Intent?) {
+    internal fun decide(debuggable: Boolean, extra: Boolean?, restored: Boolean, fromHistory: Boolean, running: Boolean): Action {
+        if (!debuggable || extra == null) return Action.NONE
+        if (!extra) return Action.STOP
+        if (restored || fromHistory || running) return Action.NONE
+        return Action.START
+    }
+
+    /**
+     * onCreate ve onNewIntent'te çağrılır. Tarama ekstrası okunduktan sonra niyetten silinir (yeniden oluşturmada tekrar
+     * başlamaz). Eski sürümün kalıcı "aktif" kaydı her çağrıda temizlenir.
+     */
+    fun applyFrom(activity: Activity, intent: Intent?, restored: Boolean = false) {
         if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         val context = activity.applicationContext
         sendNavAreaIfRequested(intent)
         clusterGridIfRequested(activity, intent)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (intent != null && intent.hasExtra(EXTRA)) {
-            if (intent.getBooleanExtra(EXTRA, false)) {
-                prefs.edit().putLong(KEY_UNTIL, System.currentTimeMillis() + ACTIVE_MS).apply()
-            } else {
-                prefs.edit().remove(KEY_UNTIL).apply()
+        if (prefs.contains(KEY_UNTIL)) prefs.edit().remove(KEY_UNTIL).apply()
+        val extra = if (intent != null && intent.hasExtra(EXTRA)) intent.getBooleanExtra(EXTRA, false) else null
+        intent?.removeExtra(EXTRA)
+        val fromHistory = intent != null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        when (decide(debuggable = true, extra = extra, restored = restored, fromHistory = fromHistory, running = running)) {
+            Action.START -> start(context)
+            Action.STOP -> {
                 runToken = 0L
                 running = false
-                return
             }
+            Action.NONE -> Unit
         }
-        if (prefs.getLong(KEY_UNTIL, 0L) > System.currentTimeMillis() && !running) start(context)
     }
 
     /** [ClusterGrid.EXTRA] varsa göstergeye kalibrasyon ızgarasını açar/kapatır; ekstra silinir. */
