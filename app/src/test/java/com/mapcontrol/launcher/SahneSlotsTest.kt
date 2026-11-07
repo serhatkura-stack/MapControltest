@@ -285,16 +285,16 @@ class SahneSlotsTest {
 
     @Test
     fun oldLockSlotBecomesDriveModeWhenFree() {
-        // Eski Park varsayılanı: kilit 5. yuvada, sürüş modu yok → kilit yerine sürüş modu.
-        val old = "v2|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,rear_speaker~rear_speaker~," +
+        // Eski Park varsayılanı: kilit 5. yuvada, sürüş modu yok → kilit yerine sürüş modu. (Eski kayıtta arka hoparlör ayrıca ekranı kapata döner: legacyQuadRecordDropsRearSpeakerOnce.)
+        val old = "v2|media~media~|trip~trip~|seat_driver~seat_driver~,trunk~trunk~,screen_off~screen_off~," +
             "app~app_pair~a.b+c.d,lock~lock~,seat_passenger~seat_passenger~"
         val d = SahneSlots.decode(old)!!
         assertEquals(
-            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.REAR_SPEAKER, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
+            listOf(WidgetType.SEAT_DRIVER, WidgetType.TRUNK, WidgetType.SCREEN_OFF, WidgetType.APP, WidgetType.DRIVE_MODE, WidgetType.SEAT_PASSENGER),
             d.strip.map { it?.type },
         )
         assertEquals("drive_mode", d.strip[4]?.id)
-        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d"), rearSpeaker = true), d)
+        assertEquals(SahneSlots.defaultPark(listOf("a.b", "c.d"), rearSpeaker = false), d)
         assertEquals(d, SahneSlots.decode(SahneSlots.encode(d)))
     }
 
@@ -551,5 +551,38 @@ class SahneSlotsTest {
         // Yolculuk paneli yoksa tüketim yedek olabilir.
         val noTrip = SahneSlots.set(d, SahneSlotRef(SahneSlotKind.PANEL, 1), SahneSlot("nav_turn", WidgetType.NAVIGATION))
         assertEquals(WidgetType.CONSUMPTION, SahneSlots.forTiggo7(noTrip).strip[2]?.type)
+    }
+
+    @Test
+    fun legacyQuadRecordDropsRearSpeakerOnce() {
+        // v2 dört panelli Tiggo 8 kaydı: arka hoparlör ekranı kapata döner, telefon sağ alta gelir; v3 yeniden yazımı ikisini taşır.
+        val v2 = "v2|media~media~|nav_turn~nav_turn~|rear_speaker~rear_speaker~,,,,,|trip~trip~|consumption~consumption~"
+        val d = SahneSlots.decode(v2)!!
+        assertFalse(WidgetType.REAR_SPEAKER in d.types())
+        assertEquals(WidgetType.SCREEN_OFF, d.strip[0]?.type)
+        assertEquals(WidgetType.PHONE, d.rightLower?.type)
+        val v3 = SahneSlots.encode(d)
+        assertTrue(v3.startsWith("v3|"))
+        assertFalse(v3.contains("rear_speaker"))
+        assertEquals(d, SahneSlots.decode(v3))
+        // Ekranı kapat zaten şeritteyse mola hatırlatıcı gelir.
+        val both = SahneSlots.decode("v2|media~media~|nav_turn~nav_turn~|rear_speaker~r~,screen_off~s~,,,,|trip~trip~|phone_call~p~")!!
+        assertEquals(WidgetType.BREAK_REMINDER, both.strip[0]?.type)
+    }
+
+    @Test
+    fun v3RecordKeepsRearSpeakerInDecode() {
+        // Geçiş yalnız eski kayıtlara: v3 kaydında tür kalır (gösterimde UNVERIFIED korur).
+        val d = SahneSlots.decode("v3|media~media~|nav_turn~nav_turn~|rear_speaker~r~,,,,,|trip~trip~|phone_call~p~")!!
+        assertEquals(WidgetType.REAR_SPEAKER, d.strip[0]?.type)
+    }
+
+    @Test
+    fun rearSpeakerNotOfferedWhileUnverified() {
+        if (WidgetType.REAR_SPEAKER !in SahneForm.UNVERIFIED) return
+        for (quad in listOf(true, false)) {
+            assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.STRIP, quad))
+            assertFalse(WidgetType.REAR_SPEAKER in SahneForm.offered(SahneSlotKind.PANEL, quad))
+        }
     }
 }

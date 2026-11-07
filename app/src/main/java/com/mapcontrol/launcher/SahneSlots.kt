@@ -331,7 +331,9 @@ object SahneSlots {
             if (quad) slot(parts[4]) else null, if (quad) slot(parts[5]) else null)))
         val clean = fallbackPanels(raw, sanitize(raw))
         val trip = if (v1) migrateTripConsumption(clean) else clean
-        return if (legacy) migrateQuadPhone(trip) else trip
+        // v1/v2 kayıt: şeritteki arka hoparlör bir kerelik yedeğe döner (7 Kasım kararı: Tiggo 8'de de ekranı kapat; Tiggo 7'de
+        // zaten gizli). v3 olarak geri yazılınca bayrak sonradan açılsa da eski kayıtlarda geri gelmez.
+        return if (legacy) migrateQuadPhone(replaceHidden(trip, setOf(WidgetType.REAR_SPEAKER))) else trip
     }
 
     /**

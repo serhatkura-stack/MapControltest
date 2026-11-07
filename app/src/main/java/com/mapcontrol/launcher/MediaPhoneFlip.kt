@@ -40,14 +40,17 @@ import com.mapcontrol.R
  * Yaşam döngüsü: medya kartı ekran görünürken hep çalışır (ışıma için çalma durumu); telefon paneli yalnız telefon
  * sayfası (kısmen de olsa) görünürken [PhoneSource]'u dinler. Bağlantı durumu için kart, arama şeridi gibi yalnız durum
  * isteyen bir sahiptir (`wantsData = false`: rehber/geçmiş okunmaz).
+ *
+ * @param phonePage false: düzende ayrı telefon paneli var (Tiggo 8); kart hep medyada kalır, telefon sayfası sunulmaz ve
+ *   arka yüz (telefon paneli) hiç kurulmaz.
  */
 @SuppressLint("ViewConstructor")
-/** [phonePage] false: düzende ayrı telefon paneli var (Tiggo 8); kart hep medyada kalır, telefon sayfası sunulmaz. */
 internal class MediaPhoneFlip(private val activity: Activity, private val phonePage: Boolean = true) : SizedWidget, PhoneListener {
 
     private val context: Context = activity
     val media = MediaCard(activity, sahne = true)
-    private val phone = PhonePanel(activity, headerEndInsetDp = PHONE_HEADER_INSET_DP)
+    /** Telefon sayfası; [phonePage] false iken hiç gösterilmeyeceği için kurulmaz. */
+    private val phone: PhonePanel? = if (phonePage) PhonePanel(activity, headerEndInsetDp = PHONE_HEADER_INSET_DP) else null
     private val store = CardFaceStore(activity)
 
     /** Kayıtlı (son seçilen) sayfa. */
@@ -101,7 +104,7 @@ internal class MediaPhoneFlip(private val activity: Activity, private val phoneP
         }
         clipToOutline = true
         addView(media.view.also { it.background = null; it.elevation = 0f }, FrameLayout.LayoutParams(MATCH, MATCH))
-        addView(phone.view.also { it.background = null; it.elevation = 0f; it.visibility = View.INVISIBLE }, FrameLayout.LayoutParams(MATCH, MATCH))
+        phone?.let { addView(it.view.also { it.background = null; it.elevation = 0f; it.visibility = View.INVISIBLE }, FrameLayout.LayoutParams(MATCH, MATCH)) }
         addView(button, FrameLayout.LayoutParams(context.dp(PageButton.TOUCH_DP), context.dp(PageButton.TOUCH_DP), Gravity.TOP or Gravity.END))
     }
 
@@ -144,7 +147,7 @@ internal class MediaPhoneFlip(private val activity: Activity, private val phoneP
         onHidden()
         media.onPlayingChanged = null
         media.release()
-        phone.release()
+        phone?.release()
         onFaceShown = null
     }
 
@@ -218,9 +221,9 @@ internal class MediaPhoneFlip(private val activity: Activity, private val phoneP
         pos = p
         val w = frame.width.toFloat()
         media.view.translationX = -p * w
-        phone.view.translationX = (1f - p) * w
+        phone?.view?.translationX = (1f - p) * w
         media.view.visibility = if (p < 1f - EPS) View.VISIBLE else View.INVISIBLE
-        phone.view.visibility = if (p > EPS) View.VISIBLE else View.INVISIBLE
+        phone?.view?.visibility = if (p > EPS) View.VISIBLE else View.INVISIBLE
         // Köşe simgesi yerinde durur; kayarken gelen sayfanın başlığıyla üst üste binmesin diye ortada söner, uçta
         // çekilirken de (içerik altına kayar) taşmayla birlikte söner.
         val f = p.coerceIn(0f, 1f)
@@ -244,7 +247,7 @@ internal class MediaPhoneFlip(private val activity: Activity, private val phoneP
         val want = visible && (face == CardFace.PHONE || pos > EPS)
         if (want == phoneListening) return
         phoneListening = want
-        if (want) phone.onVisible() else phone.onHidden()
+        if (want) phone?.onVisible() else phone?.onHidden()
     }
 
     private fun refreshGlow(animate: Boolean = true) = button.setGlow(MediaFlipLogic.iconGlows(face, media.isPlaying), animate)
