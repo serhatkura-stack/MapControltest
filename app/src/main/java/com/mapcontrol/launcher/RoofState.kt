@@ -7,8 +7,9 @@ package com.mapcontrol.launcher
  * [shade] perdenin açıklığı: 0 kapalı (kumaş tavan döşemesi görünür) .. 1 tam açık (cam + hafif gökyüzü yansıması); kısmi
  * değerde öndeki pay açılmıştır (perde öne doğru değil arkaya toplanır). null = perde sinyali yok, taban görseli olduğu gibi.
  * [shadeMs] bu hedefe varış süresi: 0 = kısa yumuşak geçiş; > 0 = perde şu an hareket ediyor, kalan yolun tahmini süresi
- * (çizim doğrusal ve seyrek adımla izler, [CarAnimSpec.ROOF_STEP_MS]).
- * [glass] ön cam panelin açıklığı (0 kapalı .. 1 tam geri kaymış); [tilt] havalandırma (arka kenar kalkık).
+ * (çizim her karede sürekli izler, [RoofFollower]).
+ * [glass] ön cam panelin araçtan son okunan açıklığı (0 kapalı .. 1 tam geri kaymış; hareket sırasında %10'luk adımlarla
+ * gelir); [tilt] havalandırma (arka kenar kalkık). [glassDir] camın hareketi (SPF_OPERATE): +1 açılıyor, -1 kapanıyor, 0 duruyor.
  * [edgeAlert] tavan açıkken hızlı gidiliyor ya da yağmur var: açık kenar hafif kehribar yanar.
  */
 data class RoofState(
@@ -17,6 +18,7 @@ data class RoofState(
     val glass: Float = 0f,
     val tilt: Boolean = false,
     val edgeAlert: Boolean = false,
+    val glassDir: Int = 0,
 ) {
     /** Cam açık sayılır mı (kenar ışığı ve ice vurgusu için). */
     val glassOpen: Boolean get() = glass > RoofDecode.OPEN_EPS || tilt
@@ -54,6 +56,18 @@ object RoofDecode {
     const val SHADE_CLOSE_MS = 13_500L
     /** Geçmişi bilinmeyen "yarıda durdu" okuması (ör. açılışta ilk değer 6) için varsayılan açıklık. */
     const val SHADE_UNKNOWN_MID = 0.5f
+
+    // --- ID_CAR_SPF_OPERATE: 7 Kasım araç günlüğü: cam açılırken 3, kapanırken 5; durunca 7 (açık), 2 (kapalı), 4 (yarıda) ---
+    const val OPERATE_OPENING = 3
+    const val OPERATE_CLOSING = 5
+    /**
+     * Cam hareket ederken SPF_POSI %10'luk adımlarla gelir, adım başına ≈ 0,9 sn (7 Kasım: 2 → 8 arası 0,87..1,01 sn). Çizim
+     * adımların arasını bu hızla doldurur ([RoofFollower]).
+     */
+    const val GLASS_STEP = 0.1f
+    const val GLASS_STEP_MS = 900L
+    /** Hareket sürerken çizimin son okunan adımın ötesine gidebileceği pay (adım gecikirse orada bekler). */
+    const val GLASS_LEAD_STEPS = 1.2f
 
     /** Kenar ışığı: bu hızda yanar, [EDGE_SPEED_OFF_KMH] altına inince söner (eşikte yanıp sönmesin). */
     const val EDGE_SPEED_ON_KMH = 90
@@ -111,6 +125,16 @@ object RoofDecode {
             3, 6, 7 -> Glass(1f)
             2, 5 -> Glass(0f)
             else -> null
+        }
+    }
+
+    /** Camın hareket yönü: SPF_OPERATE 3 açılıyor (+1), 5 kapanıyor (-1); havalandırmada ve diğer kodlarda 0. */
+    fun glassDir(operate: Int?, glass: Glass?): Int {
+        if (glass == null || glass.tilt) return 0
+        return when (operate) {
+            OPERATE_OPENING -> 1
+            OPERATE_CLOSING -> -1
+            else -> 0
         }
     }
 
@@ -176,53 +200,156 @@ class RoofTracker(
                 }
             }
         }
-        RoofDecode.glass(posi, operate)?.let { glass = it }
+        val read = RoofDecode.glass(posi, operate)
+        read?.let { glass = it }
         val g = glass
+        // Yön yalnız SPF_POSI okunduysa (adım değeri); yalnız SPF_OPERATE'ten gelen tahmin adım değildir.
+        val gDir = if (read != null && RoofDecode.valid(posi)) RoofDecode.glassDir(operate, read) else 0
         if (shadeTarget == null && g == null) {
             alert = false
             return null
         }
         val open = g != null && (g.fraction > RoofDecode.OPEN_EPS || g.tilt)
         alert = RoofDecode.edgeAlert(open, speedKmh, raining, alert)
-        return RoofState(shadeTarget, shadeMs, g?.fraction ?: 0f, g?.tilt == true, alert)
+        return RoofState(shadeTarget, shadeMs, g?.fraction ?: 0f, g?.tilt == true, alert, gDir)
     }
 }
 
 /**
- * Tek tavan büyüklüğünün çizimdeki hareketi (saf): [set] yeni hedef; süre 0 ise [CarAnimSpec.ROOF_EASE_MS]'lik yumuşak
- * geçiş, > 0 ise gerçek hareketi izleyen doğrusal ilerleme. Yarıda gelen hedef o anki değerden başlar.
+ * Tek tavan büyüklüğünün çizimdeki (gösterilen) konumu (saf, zaman dışarıdan verilir). Araç konumu seyrek ve adım adım
+ * bildirir (cam %10'luk adımlarla ≈ 0,9 sn arayla, perde yalnız başladı / durdu); çizim bu adımlara atlamaz:
+ *
+ * - Hareket sürerken ([report] `dir` ≠ 0) beklenen konum son bildirilen değerden ölçülen hızla sürekli ilerler ve `cap`'te
+ *   (bir sonraki beklenen adımın biraz ötesi ya da hedef) bekler. Gösterilen konum beklenene yumuşak yaklaşır: aradaki fark
+ *   [tauMs] zaman sabitiyle üstel söner (kare hızından bağımsız). Hareket yönünde asla geri gitmez (bildirim gerideyse
+ *   gösterilen bekler, beklenen yetişince yine ilerler); yön değişince aynı kural yeni yönde geçerlidir.
+ * - Hareket durunca (`dir` = 0) gösterilen konum bildirilen değere yerleşir: hareketin ardından [CarAnimSpec.ROOF_SETTLE_MS],
+ *   duran bir değer değişince [CarAnimSpec.ROOF_EASE_MS] yumuşak geçiş.
+ *
+ * [at] durumu [now]'a ilerletir (aynı ya da geri zamanla çağrı bir şey değiştirmez); [active] bir sonraki karenin gerekip
+ * gerekmediğini söyler (hareket bitince ya da beklenen konum sınırda durunca false: boşta kare çizilmez). Nesne ayrılmaz.
  */
-class RoofMotion {
-    private var from = 0f
-    var target = 0f
+class RoofFollower(private val tauMs: Float = CarAnimSpec.ROOF_CORRECT_MS.toFloat()) {
+    /** Son hesaplanan gösterilen konum. */
+    var shown = 0f
         private set
+    /** Son bildirilen değer (hareketin çıkış noktası ya da yerleşme hedefi). */
+    var reported = 0f
+        private set
+    /** Hareket yönü (+1 / -1), duruyorsa 0. */
+    var dir = 0
+        private set
+    private var lastT = Long.MIN_VALUE
+    private var moved = 0f
+    // Hareket: beklenen = reported + dir × rate × (t - baseT), cap'i aşmaz; gösterilen = beklenen + err (err üstel söner).
+    private var baseT = 0L
+    private var rate = 0f
+    private var cap = 0f
+    private var err = 0f
+    // Yerleşme: from → reported, start'tan dur ms.
+    private var from = 0f
     private var start = 0L
     private var dur = 0L
-    private var linear = false
 
     fun snap(v: Float) {
-        from = v; target = v; dur = 0L
+        shown = v; reported = v; from = v; dir = 0; dur = 0L; err = 0f; moved = 0f; lastT = Long.MIN_VALUE
     }
 
-    fun set(to: Float, motionMs: Long, now: Long) {
-        from = at(now)
-        target = to
-        start = now
-        linear = motionMs > 0
-        dur = if (linear) motionMs else CarAnimSpec.ROOF_EASE_MS
-        if (Math.abs(to - from) < 0.0005f) dur = 0L
+    /**
+     * Yeni bildirim: [value] araçtan okunan (ya da tahmin edilen) konum; [dir] hareket yönü (0 = duruyor); [rate] hareket
+     * hızı (birim / ms); [cap] hareket sürerken gösterilebilecek en uç değer.
+     */
+    fun report(value: Float, dir: Int, rate: Float, cap: Float, now: Long) {
+        val cur = at(now)
+        val wasMoving = this.dir != 0
+        reported = value
+        if (dir != 0) {
+            this.dir = if (dir > 0) 1 else -1
+            this.rate = rate
+            this.cap = cap
+            baseT = now
+            err = cur - value
+        } else {
+            this.dir = 0
+            from = cur
+            start = now
+            dur = when {
+                Math.abs(value - cur) < 0.0005f -> 0L
+                wasMoving -> CarAnimSpec.ROOF_SETTLE_MS
+                else -> CarAnimSpec.ROOF_EASE_MS
+            }
+            if (dur == 0L) shown = value
+        }
     }
 
-    fun done(now: Long): Boolean = dur <= 0L || now - start >= dur
-
-    /** Hareket gerçek perdeyi izliyor (seyrek adım yeter). */
-    fun tracking(now: Long): Boolean = linear && !done(now)
+    /** Hareketin beklenen konumu (cap'i aşmaz). */
+    private fun expected(now: Long): Float {
+        val e = reported + dir * rate * (now - baseT)
+        return if (dir > 0) minOf(e, cap) else maxOf(e, cap)
+    }
 
     fun at(now: Long): Float {
-        if (done(now)) return target
-        val u = CarAnimSpec.clamp01((now - start).toFloat() / dur)
-        val f = if (linear) u else CarAnimSpec.smooth(u, 0f, 1f)
-        return from + (target - from) * f
+        val dt = if (lastT == Long.MIN_VALUE) 0L else now - lastT
+        if (dt < 0L) return shown
+        lastT = now
+        val prev = shown
+        if (dir != 0) {
+            if (dt > 0L) err *= Math.exp(-dt / tauMs.toDouble()).toFloat()
+            val e = expected(now)
+            var p = e + err
+            if (dir > 0 && p < prev) p = prev
+            if (dir < 0 && p > prev) p = prev
+            p = CarAnimSpec.clamp01(p)
+            err = p - e
+            shown = p
+        } else {
+            shown = if (dur <= 0L || now - start >= dur) reported
+            else from + (reported - from) * CarAnimSpec.smooth((now - start).toFloat() / dur, 0f, 1f)
+        }
+        moved = Math.abs(shown - prev)
+        return shown
+    }
+
+    /** Bir sonraki karede gösterilen konum değişecek mi (değilse kare istenmez; yeni bildirim yeniden başlatır). */
+    fun active(now: Long): Boolean {
+        if (dir == 0) return dur > 0L && now - start < dur
+        val e = expected(now)
+        val capped = if (dir > 0) e >= cap else e <= cap
+        return !capped || moved > 1e-5f
+    }
+}
+
+/** [RoofState] değişimlerini [RoofFollower]'lara aktarır (saf; Sahne aracı ve testler aynı yolu kullanır). */
+object RoofFeed {
+
+    /** Perde: hareket ediyorsa ([RoofState.shadeMs] > 0) tahmini yerden hedefe ölçülen sürenin hızıyla, değilse yerleşme. */
+    fun shade(f: RoofFollower, s: RoofState, now: Long) {
+        val target = s.shade ?: return
+        if (s.shadeMs <= 0L) {
+            f.report(target, 0, 0f, target, now)
+            return
+        }
+        val opening = target >= 0.5f
+        val start = shadeStart(target, s.shadeMs)
+        val dir = if (opening) 1 else -1
+        val rate = 1f / (if (opening) RoofDecode.SHADE_OPEN_MS else RoofDecode.SHADE_CLOSE_MS)
+        f.report(start, dir, rate, target, now)
+    }
+
+    /** Hareketin bildirildiği andaki tahmini açıklık: hedef ve kalan süreden ([RoofTracker] ile aynı süreler). */
+    fun shadeStart(target: Float, ms: Long): Float =
+        if (target >= 0.5f) CarAnimSpec.clamp01(1f - ms.toFloat() / RoofDecode.SHADE_OPEN_MS)
+        else CarAnimSpec.clamp01(ms.toFloat() / RoofDecode.SHADE_CLOSE_MS)
+
+    /** Ön cam: hareket ederken okunan adımdan adım hızıyla, en çok [RoofDecode.GLASS_LEAD_STEPS] adım öteye; değilse yerleşme. */
+    fun glass(f: RoofFollower, s: RoofState, now: Long) {
+        val d = s.glassDir
+        if (d == 0) {
+            f.report(s.glass, 0, 0f, s.glass, now)
+            return
+        }
+        val cap = CarAnimSpec.clamp01(s.glass + d * RoofDecode.GLASS_STEP * RoofDecode.GLASS_LEAD_STEPS)
+        f.report(s.glass, d, RoofDecode.GLASS_STEP / RoofDecode.GLASS_STEP_MS, cap, now)
     }
 }
 
@@ -251,5 +378,30 @@ object RoofDemo {
         if (!any) return null
         val open = glass > RoofDecode.OPEN_EPS || tilt
         return RoofState(shade, 0L, glass, tilt, alert && open)
+    }
+
+    /** `--es launcher_demo_roof sim`: araçtaki adımlı bildirimlerin taklidi ([SIM_STEPS], yalnız debug demo). */
+    const val SIM = "sim"
+
+    fun isSim(raw: String?): Boolean = raw?.trim()?.lowercase(java.util.Locale.ROOT) == SIM
+
+    /**
+     * 7 Kasım araç günlüğündeki sıra (ham değerler): { sonraki adıma kadar ms, SUNSHADE, SPF_POSI, SPF_OPERATE }. Perde açılır
+     * (2 → 5, ≈ 11 sn), cam 2..8 adımla açılır (≈ 0,9 sn arayla, kısa havalandırma dahil; 3 → 7), cam kapanır (5 → 2),
+     * perde kapanır (4 → 1, ≈ 13,5 sn). Sonda başa döner.
+     */
+    val SIM_STEPS: List<IntArray> = buildList {
+        add(intArrayOf(1_500, 1, 1, 2))
+        add(intArrayOf(11_200, 2, 1, 2))
+        add(intArrayOf(2_000, 5, 1, 2))
+        add(intArrayOf(580, 5, 2, 3))
+        add(intArrayOf(1_100, 5, 12, 1))
+        for (p in 2..7) add(intArrayOf(if (p == 2) 400 else 900, 5, p, 3))
+        add(intArrayOf(500, 5, 8, 3))
+        add(intArrayOf(2_500, 5, 8, 7))
+        for (p in 8 downTo 2) add(intArrayOf(if (p == 8) 500 else 900, 5, p, 5))
+        add(intArrayOf(1_500, 5, 1, 2))
+        add(intArrayOf(13_700, 4, 1, 2))
+        add(intArrayOf(2_000, 1, 1, 2))
     }
 }

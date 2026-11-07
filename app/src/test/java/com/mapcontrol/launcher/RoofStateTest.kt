@@ -139,23 +139,174 @@ class RoofStateTest {
     }
 
     @Test
-    fun motionEasesThenTracksLinearly() {
-        val m = RoofMotion()
-        m.snap(0f)
-        assertTrue(m.done(0))
-        m.set(1f, 0L, 0)
-        assertEquals(0f, m.at(0), eps)
-        assertEquals(0.5f, m.at(CarAnimSpec.ROOF_EASE_MS / 2), eps)
-        assertEquals(1f, m.at(CarAnimSpec.ROOF_EASE_MS), eps)
-        assertFalse(m.tracking(10))
-        // Gerçek hareket: doğrusal, yarıda gelen hedef o anki yerden başlar.
-        m.snap(0f)
-        m.set(1f, 10_000L, 0)
-        assertTrue(m.tracking(1_000))
-        assertEquals(0.25f, m.at(2_500), eps)
-        m.set(0f, 0L, 2_500)
-        assertEquals(0.25f, m.at(2_500), eps)
-        assertEquals(0f, m.at(2_500 + CarAnimSpec.ROOF_EASE_MS), eps)
+    fun trackerReportsGlassDirectionFromOperate() {
+        val t = RoofTracker()
+        assertEquals(1, t.update(6, 4, 3, 0, false, 0)!!.glassDir)
+        assertEquals(-1, t.update(6, 4, 5, 0, false, 100)!!.glassDir)
+        // Durdu (7 açık, 2 kapalı, 4 yarıda): yön yok.
+        assertEquals(0, t.update(6, 8, 7, 0, false, 200)!!.glassDir)
+        assertEquals(0, t.update(6, 5, 4, 0, false, 300)!!.glassDir)
+        // Havalandırma hareketi cam kayması değildir; konum okunamazsa da yön verilmez.
+        assertEquals(0, t.update(6, 12, 3, 0, false, 400)!!.glassDir)
+        assertEquals(0, t.update(6, 0, 3, 0, false, 500)!!.glassDir)
+    }
+
+    @Test
+    fun followerEasesWhenStillAndGoesIdle() {
+        val f = RoofFollower()
+        f.snap(0f)
+        assertFalse(f.active(0))
+        f.report(1f, 0, 0f, 1f, 0)
+        assertTrue(f.active(10))
+        assertEquals(0.5f, f.at(CarAnimSpec.ROOF_EASE_MS / 2), eps)
+        assertEquals(1f, f.at(CarAnimSpec.ROOF_EASE_MS), eps)
+        assertFalse(f.active(CarAnimSpec.ROOF_EASE_MS))
+        // Aynı değer tekrar: hiçbir şey başlamaz.
+        f.report(1f, 0, 0f, 1f, 1_000)
+        assertFalse(f.active(1_000))
+    }
+
+    /** Cam açılırken araçtaki gibi adım bildirimleri ([intervals] ms arayla 0,1 adım) ve 16 ms karelerle gösterilen konumlar. */
+    private fun glassRun(f: RoofFollower, from: Float, dir: Int, steps: Int, intervals: LongArray, t0: Long): Pair<FloatArray, Long> {
+        val out = ArrayList<Float>()
+        var t = t0
+        var next = t0
+        var k = 0
+        var v = from
+        // Son bildirimden sonra bir aralık daha kare (hareket sürüyor, durma bildirimi henüz yok).
+        while (k <= steps || t < next) {
+            if (k <= steps && t >= next) {
+                RoofFeed.glass(f, RoofState(null, glass = v, glassDir = dir), t)
+                v += dir * RoofDecode.GLASS_STEP
+                next += intervals[k % intervals.size]
+                k++
+            }
+            out.add(f.at(t))
+            t += 16
+        }
+        return out.toFloatArray() to t
+    }
+
+    @Test
+    fun steppedGlassReportsGiveMonotonicSmoothMotion() {
+        val f = RoofFollower()
+        f.snap(0.1f)
+        // Araç günlüğündeki gibi düzensiz aralıklar (0,4 .. 1,0 sn).
+        val (xs, _) = glassRun(f, 0.1f, 1, 6, longArrayOf(400, 900, 910, 870, 1_010, 910), 0)
+        var maxDelta = 0f
+        var still = 0
+        var maxStill = 0
+        for (i in 1 until xs.size) {
+            val d = xs[i] - xs[i - 1]
+            assertTrue("geri gitmez: kare $i ${xs[i - 1]} -> ${xs[i]}", d >= -1e-6f)
+            maxDelta = maxOf(maxDelta, d)
+            if (d < 1e-5f) still++ else still = 0
+            maxStill = maxOf(maxStill, still)
+        }
+        // Akıcı: kare başına sıçrama yok (bir adım 0,1 iken kare başı en çok ~0,006) ve hareket ortasında duraklama yok.
+        assertTrue("kare başı en çok $maxDelta", maxDelta < 0.006f)
+        assertTrue("en uzun duraklama $maxStill kare", maxStill <= 3)
+        // Okunan konumun yakınında kalır.
+        assertTrue(xs.last() > 0.65f && xs.last() < 0.85f)
+    }
+
+    @Test
+    fun stopSettlesToReportedValue() {
+        val f = RoofFollower()
+        f.snap(0.1f)
+        val (xs, t) = glassRun(f, 0.1f, 1, 6, longArrayOf(900), 0)
+        assertTrue(xs.last() > 0.7f)
+        // Durdu: okunan değere (0,7) ROOF_SETTLE_MS içinde yerleşir, sonra kare istenmez.
+        RoofFeed.glass(f, RoofState(null, glass = 0.7f, glassDir = 0), t)
+        assertTrue(f.active(t + 16))
+        assertEquals(0.7f, f.at(t + CarAnimSpec.ROOF_SETTLE_MS), eps)
+        assertFalse(f.active(t + CarAnimSpec.ROOF_SETTLE_MS))
+    }
+
+    @Test
+    fun movingFollowerGoesIdleWhenReportsStop() {
+        // Bildirim gelmezse beklenen konum bir sonraki adımın biraz ötesinde durur ve kare istemez.
+        val f = RoofFollower()
+        f.snap(0.3f)
+        RoofFeed.glass(f, RoofState(null, glass = 0.3f, glassDir = 1), 0)
+        var t = 0L
+        while (t < 5_000) { f.at(t); t += 16 }
+        assertEquals(0.3f + RoofDecode.GLASS_STEP * RoofDecode.GLASS_LEAD_STEPS, f.shown, 1e-3f)
+        assertFalse(f.active(t))
+    }
+
+    @Test
+    fun directionChangeReversesWithoutJump() {
+        val f = RoofFollower()
+        f.snap(0.1f)
+        val (up, t) = glassRun(f, 0.1f, 1, 3, longArrayOf(900), 0)
+        val top = up.last()
+        // Araç yarıda döndü: 0,4'ten kapanıyor.
+        val (down, _) = glassRun(f, 0.4f, -1, 3, longArrayOf(900), t)
+        assertTrue(Math.abs(down.first() - top) < 0.01f)
+        for (i in 1 until down.size) assertTrue("geri açılmaz: ${down[i - 1]} -> ${down[i]}", down[i] <= down[i - 1] + 1e-6f)
+        assertTrue(down.last() < 0.15f)
+    }
+
+    @Test
+    fun shadeFollowsEstimatedMotionContinuously() {
+        val f = RoofFollower()
+        f.snap(0f)
+        // Açılıyor: kapalıdan, tam açılma süresiyle (11 sn) sürekli.
+        RoofFeed.shade(f, RoofState(1f, RoofDecode.SHADE_OPEN_MS), 0)
+        assertEquals(0.5f, f.at(RoofDecode.SHADE_OPEN_MS / 2), 0.01f)
+        assertTrue(f.active(RoofDecode.SHADE_OPEN_MS / 2))
+        assertEquals(1f, f.at(RoofDecode.SHADE_OPEN_MS + 2_000), 0.001f)
+        // Yarıda durdu (tahmin %40): okunan tahmine yerleşir.
+        f.snap(0.3f)
+        RoofFeed.shade(f, RoofState(0.4f, 0L), 0)
+        assertEquals(0.4f, f.at(CarAnimSpec.ROOF_EASE_MS), eps)
+        // Kapanıyor: %40'tan, kalan süre 0,4 × kapanma.
+        val ms = (0.4f * RoofDecode.SHADE_CLOSE_MS).toLong()
+        RoofFeed.shade(f, RoofState(0f, ms), 1_000)
+        assertEquals(0.4f, f.at(1_000), 0.001f)
+        assertEquals(0.2f, f.at(1_000 + ms / 2), 0.01f)
+    }
+
+    @Test
+    fun simulatedCarLogPlaysSmoothly() {
+        // Debug demo taklidi: araç günlüğündeki sıra tracker ve çizimden geçince kare başına sıçrama olmaz, sonunda kapalı.
+        val tracker = RoofTracker()
+        val shade = RoofFollower()
+        val glass = RoofFollower()
+        var prev: RoofState? = null
+        var t = 0L
+        var maxShade = 0f
+        var maxGlass = 0f
+        for (s in RoofDemo.SIM_STEPS) {
+            val st = tracker.update(s[1], s[2], s[3], 0, false, t)!!
+            if (prev == null) {
+                shade.snap(st.shade!!)
+                glass.snap(st.glass)
+            } else {
+                if (st.shade != prev.shade || st.shadeMs != prev.shadeMs) RoofFeed.shade(shade, st, t)
+                if (st.glass != prev.glass || st.glassDir != prev.glassDir) RoofFeed.glass(glass, st, t)
+            }
+            prev = st
+            val end = t + s[0]
+            var a = shade.at(t)
+            var b = glass.at(t)
+            while (t < end) {
+                t += 16
+                val a2 = shade.at(t)
+                val b2 = glass.at(t)
+                maxShade = maxOf(maxShade, Math.abs(a2 - a))
+                maxGlass = maxOf(maxGlass, Math.abs(b2 - b))
+                a = a2
+                b = b2
+            }
+        }
+        assertTrue("perde kare başı $maxShade", maxShade < 0.01f)
+        // Cam: kısa havalandırma geçişi (0,1 → 0) dahil kare başı küçük.
+        assertTrue("cam kare başı $maxGlass", maxGlass < 0.02f)
+        assertEquals(0f, shade.shown, eps)
+        assertEquals(0f, glass.shown, eps)
+        assertFalse(shade.active(t) || glass.active(t))
     }
 
     @Test

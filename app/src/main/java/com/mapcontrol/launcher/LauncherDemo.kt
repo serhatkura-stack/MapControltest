@@ -48,6 +48,7 @@ internal object LauncherDemo {
         val debuggable = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         enabled = debuggable && intent.getBooleanExtra(EXTRA, false)
         if (!enabled) main.removeCallbacks(cycle)
+        if (!enabled) main.removeCallbacks(roofSim)
         if (!enabled) NavigationSource.setDemo(false)
         if (!enabled) resetSportPreview()
         if (enabled && intent.hasExtra(VehicleProfile.EXTRA_PROFILE)) VehicleProfile.demoOverride = VehicleProfile.parse(intent.getStringExtra(VehicleProfile.EXTRA_PROFILE))
@@ -182,7 +183,8 @@ internal object LauncherDemo {
     /**
      * Panoramik tavan önizlemesi: `--es launcher_demo_roof "shade=30,glass=40"` (yüzde; perde 0 kapalı .. 100 açık, ön panel
      * 0 kapalı .. 100 tam geri). İsteğe bağlı `tilt` (havalandırma), `alert` / `rain` / `speed=120` (açık kenar kehribar).
-     * Boş değer tavanı demo dışı bırakır (taban görseli). Bkz. [RoofDemo.parse].
+     * Boş değer tavanı demo dışı bırakır (taban görseli). Bkz. [RoofDemo.parse]. `sim`: araçtaki adımlı bildirimlerin
+     * döngülü taklidi (perde açılır, cam adım adım açılıp kapanır, perde kapanır; [roofSim]).
      */
     const val EXTRA_ROOF = "launcher_demo_roof"
 
@@ -273,8 +275,16 @@ internal object LauncherDemo {
             onBodyChanged?.let { main.post(it) }
         }
         if (intent.hasExtra(EXTRA_ROOF)) {
-            roof = RoofDemo.parse(intent.getStringExtra(EXTRA_ROOF))
-            onBodyChanged?.let { main.post(it) }
+            main.removeCallbacks(roofSim)
+            val v = intent.getStringExtra(EXTRA_ROOF)
+            if (RoofDemo.isSim(v)) {
+                roofSimStep = 0
+                roofSimTracker = RoofTracker()
+                main.post(roofSim)
+            } else {
+                roof = RoofDemo.parse(v)
+                onBodyChanged?.let { main.post(it) }
+            }
         }
         if (intent.hasExtra(EXTRA_DOORS_CYCLE)) setDoorsCycle(intent.getBooleanExtra(EXTRA_DOORS_CYCLE, false))
         if (intent.hasExtra(EXTRA_CLIMATE)) climate = intent.getStringExtra(EXTRA_CLIMATE).orEmpty().split(',').map { it.trim().toDoubleOrNull() }
@@ -362,6 +372,24 @@ internal object LauncherDemo {
         openParts = emptySet()
         onBodyChanged?.let { main.post(it) }
         main.postDelayed(cycle, DOORS_CYCLE_STEP_MS)
+    }
+
+    /**
+     * Tavan adım taklidi (`--es launcher_demo_roof sim`): araç günlüğündeki ham değerler ([RoofDemo.SIM_STEPS]) gerçek
+     * aralıklarla [RoofTracker]'dan geçirilir; Sahne aracı araçtaki gibi seyrek adım alır (akıcılığı emülatörde görmek için).
+     * Başka bir `launcher_demo_roof` değeri taklidi durdurur.
+     */
+    private var roofSimStep = 0
+    private var roofSimTracker = RoofTracker()
+    private val roofSim = object : Runnable {
+        override fun run() {
+            val steps = RoofDemo.SIM_STEPS
+            val s = steps[roofSimStep % steps.size]
+            roofSimStep++
+            roof = roofSimTracker.update(s[1], s[2], s[3], 0, false, android.os.SystemClock.uptimeMillis())
+            onBodyChanged?.run()
+            main.postDelayed(this, s[0].toLong())
+        }
     }
 
     private fun open(key: String) = if (key in openParts) 1 else 0

@@ -179,9 +179,12 @@ object CarAnimSpec {
     const val ROOF_ART_SCALE = 2f
     /** Ön panelin tam açıkken arkaya kayma yolu (panel genişliğinin ~%82'si; geri kalanı çerçevenin altında kalır). */
     const val ROOF_GLASS_TRAVEL = 118f
-    /** Kısa yumuşak geçiş (yeni konum okununca) ve gerçek hareketi izlerken çizim adımı (~8 kare/sn yeter). */
+    /** Duran tavanda yeni konum okununca kısa yumuşak geçiş ([RoofFollower]). */
     const val ROOF_EASE_MS = 420L
-    const val ROOF_STEP_MS = 120L
+    /** Hareket durunca gösterilen konumun okunan değere yerleşme süresi. */
+    const val ROOF_SETTLE_MS = 200L
+    /** Hareket sürerken gösterilen konumun beklenen konuma yaklaşma zaman sabiti (adım bildirimi gelince yumuşak düzeltme). */
+    const val ROOF_CORRECT_MS = 300L
     /** Kenar ışığının kutu payı ve yoğunluğu (sakin: en dolu yerinde ~%55 kehribar). */
     const val ROOF_EDGE_PAD = 9f
     const val ROOF_EDGE_ALPHA = 0.55f
