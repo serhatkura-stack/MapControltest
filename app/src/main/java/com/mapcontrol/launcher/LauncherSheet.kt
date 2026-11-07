@@ -20,25 +20,34 @@ fun showLauncherSheet(
     @StringRes title: Int,
     widthDp: Int = SHEET_WIDTH_DP,
     fullScreen: Boolean = false,
+    header: (LinearLayout.(Dialog) -> Unit)? = null,
     build: LinearLayout.(Dialog) -> Unit,
 ): Dialog {
     val dialog = Dialog(activity)
     dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-    val panel = card(activity).apply {
+    // Tam ekranda köşesiz ve daha dar kenarlı: tüm pencereyi (alt çubuğun üstü dahil) kaplar, arkası görünmez.
+    val panel = card(activity, paddingDp = if (fullScreen) FULL_SCREEN_PAD_DP else LauncherTheme.PADDING_DP).apply {
+        if (fullScreen) background = rounded(activity, LauncherTheme.CARD, 0f)
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(text(activity, LauncherTheme.SECTION_SP, bold = true).apply { setText(title) },
                 weightLp(1f).apply { height = ViewGroup.LayoutParams.WRAP_CONTENT })
+            // Başlık satırına ek öğeler (ör. seçicide "Şu an: X" ve "Kaldır"): kapat düğmesinden önce.
+            header?.invoke(this, dialog)
             addView(iconButton(activity, R.drawable.ic_mdi_close, activity.getString(R.string.launcher_close)) { dialog.dismiss() })
         }, sheetFullWidth())
-        addView(gap(activity, 24, vertical = true))
+        addView(gap(activity, if (fullScreen) FULL_SCREEN_HEADER_GAP_DP else 24, vertical = true))
         build(dialog)
     }
     dialog.setContentView(panel)
     dialog.window?.apply {
         setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        if (fullScreen) setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        if (fullScreen) {
+            // Kenar payı kalmasın: pencere tüm ekranı (alt çubuğun üstü dahil) kaplar.
+            decorView.setPadding(0, 0, 0, 0)
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
         else setLayout(activity.dp(widthDp), ViewGroup.LayoutParams.WRAP_CONTENT)
         setGravity(Gravity.CENTER)
     }
@@ -70,3 +79,7 @@ fun Dialog.hideOemBarIfNeeded(context: android.content.Context) {
 fun sheetFullWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
 private const val SHEET_WIDTH_DP = 760
+
+/** Tam ekran sayfanın kenar boşluğu ve başlık altı boşluğu (seçici ızgarası bunlarla hesaplanır). */
+const val FULL_SCREEN_PAD_DP = 24
+const val FULL_SCREEN_HEADER_GAP_DP = 16

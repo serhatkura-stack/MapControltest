@@ -20,6 +20,8 @@
     <!-- Foreground Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.READ_LOGS"/>
+    <!-- Bölünmüş ekran: önceden açık başka uygulama görevini sınırlarıyla öne almak (moveTaskToFront, normal izin). -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
     
     <!-- Location permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

@@ -352,98 +352,109 @@ class SahneScreen(
         requestLayout()
     }
 
-    /** Yuva seçici: yuvaya uyan türler, 5 sütun; yerleştirilemeyenler soluk ve nedeni yazılı. Dolu yuvada "Kaldır". */
+    /**
+     * Yuva seçici: tam ekran (alt çubuğun üstü dahil), kaydırma yok; yuvaya uyan tüm türler tek ekranda küçük kutularla
+     * ([PickerGrid]: sütun/satır sayısı öğe sayısı ve ekran ölçüsünden). Yerleştirilemeyenler soluk ve nedeni yazılı.
+     * Dolu yuvada başlık satırında "Şu an: X" ve "Kaldır".
+     */
     private fun openPicker(ref: SahneSlotRef) {
         if (!canEdit() || activity.isFinishing || activity.isDestroyed) return
         val current = SahneSlots.get(stored, ref)
         val types = SahneForm.offered(ref.kind, quad)
         val title = if (ref.kind == SahneSlotKind.PANEL) R.string.launcher_sahne_pick_panel else R.string.launcher_sahne_pick_strip
-        val d = showLauncherSheet(activity, title, PICKER_WIDTH_DP) { dialog ->
-            if (current != null) {
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                        text = context.getString(R.string.launcher_sahne_in_slot, context.getString(current.type.label))
-                    }, weightLp(1f).apply { height = ViewGroup.LayoutParams.WRAP_CONTENT })
-                    addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
-                        setText(R.string.launcher_edit_remove)
-                        gravity = Gravity.CENTER
-                        background = rounded(context, LauncherTheme.CONTROL, Sahne.CONTROL_RADIUS_DP)
-                        setPadding(context.dp(28), 0, context.dp(28), 0)
-                        isClickable = true
-                        setOnClickListener { dialog.dismiss(); apply(ref, null) }
-                        pressFeedback()
-                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP)))
-                }, sheetFullWidth())
-                addView(gap(context, 16, vertical = true))
-            }
-            val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            types.chunked(PICKER_COLUMNS).forEachIndexed { r, row ->
-                if (r > 0) grid.addView(gap(context, 12, vertical = true))
-                grid.addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    for (c in 0 until PICKER_COLUMNS) {
-                        if (c > 0) addView(gap(context, 12))
-                        val type = row.getOrNull(c)
-                        val lp = LinearLayout.LayoutParams(0, context.dp(PICKER_TILE_DP), 1f)
-                        if (type == null) addView(View(context), lp) else addView(pickerTile(ref, type, current) { dialog.dismiss() }, lp)
-                    }
-                }, sheetFullWidth())
-            }
-            // Kaydırma ipucu: liste devam ediyorsa altta 48dp solma (sayfa renginde); sona gelince kalkar.
-            val fade = View(context).apply {
-                background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(LauncherTheme.CARD and 0x00FFFFFF, LauncherTheme.CARD))
-                isClickable = false
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
-            val scroll = android.widget.ScrollView(context).apply {
-                isVerticalScrollBarEnabled = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                addView(grid, sheetFullWidth())
-                setOnScrollChangeListener { v, _, _, _, _ -> fade.visibility = if (v.canScrollVertically(1)) View.VISIBLE else View.GONE }
-            }
-            addView(FrameLayout(context).apply {
-                addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                addView(fade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(48), Gravity.BOTTOM))
-                scroll.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                    fade.visibility = if (v.canScrollVertically(1)) View.VISIBLE else View.GONE
-                }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(PICKER_LIST_DP)))
+        val header: (LinearLayout.(Dialog) -> Unit)? = if (current == null) null else { dialog ->
+            addView(text(context, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                text = context.getString(R.string.launcher_sahne_in_slot, context.getString(current.type.label))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = context.dp(20)
+            })
+            addView(text(context, LauncherTheme.BODY_SP, LauncherTheme.TEXT, medium = true).apply {
+                setText(R.string.launcher_edit_remove)
+                gravity = Gravity.CENTER
+                background = rounded(context, LauncherTheme.CONTROL, Sahne.CONTROL_RADIUS_DP)
+                setPadding(context.dp(28), 0, context.dp(28), 0)
+                isClickable = true
+                setOnClickListener { dialog.dismiss(); apply(ref, null) }
+                pressFeedback()
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, context.dp(LauncherTheme.TOUCH_MIN_DP)).apply {
+                marginEnd = context.dp(16)
+            })
+        }
+        val d = showLauncherSheet(activity, title, fullScreen = true, header = header) { dialog ->
+            val grid = PickerGridLayout(context)
+            types.forEach { grid.addView(pickerTile(ref, it, current) { dialog.dismiss() }) }
+            addView(grid, weightLp(1f, vertical = true))
         }
         d.setOnDismissListener { onSheet(null) }
         onSheet(d)
     }
 
-    /** Seçici kutusu: tek ikon dili (ince çizgili Sahne ikonları), tek başlık ölçüsü ve her kutuda ayrılmış alt satır. */
+    /**
+     * Seçici ızgarası: verilen alanı [PickerGrid.fit] ile böler, kutuları tam ölçüde yerleştirir (kaydırma yok). Izgara
+     * sola ve yukarı yaslıdır; az öğede (panel seçici) kutular [PickerGrid.MAX_TILE_W_DP] genişlikte kalır.
+     */
+    private class PickerGridLayout(context: android.content.Context) : ViewGroup(context) {
+        private var fit = PickerFit(0, 0, 0, 0, true)
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            val h = MeasureSpec.getSize(heightMeasureSpec)
+            val density = resources.displayMetrics.density
+            fit = PickerGrid.fit(childCount, (w / density).toInt(), (h / density).toInt())
+            val cw = MeasureSpec.makeMeasureSpec(context.dp(fit.tileW), MeasureSpec.EXACTLY)
+            val ch = MeasureSpec.makeMeasureSpec(context.dp(fit.tileH), MeasureSpec.EXACTLY)
+            for (i in 0 until childCount) getChildAt(i).measure(cw, ch)
+            setMeasuredDimension(w, h)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            if (fit.cols == 0) return
+            val gap = context.dp(PickerGrid.GAP_DP)
+            val tw = context.dp(fit.tileW)
+            val th = context.dp(fit.tileH)
+            for (i in 0 until childCount) {
+                val x = (i % fit.cols) * (tw + gap)
+                val y = (i / fit.cols) * (th + gap)
+                getChildAt(i).layout(x, y, x + tw, y + th)
+            }
+        }
+    }
+
+    /**
+     * Seçici kutusu: ikon ve ad tek satırda, altında küçük ikinci satır ("Zaten ekranda" / "Şu an") yalnız gerektiğinde.
+     * Tek ikon dili (ince çizgili Sahne ikonları), tek başlık ölçüsü.
+     */
     private fun pickerTile(ref: SahneSlotRef, type: WidgetType, current: SahneSlot?, dismiss: () -> Unit): View {
         val here = current?.type == type
         val ok = !here && SahneForm.canPlace(stored, ref, type)
         val ink = if (ok || here) LauncherTheme.TEXT else LauncherTheme.TEXT_SECONDARY
+        val sub = when {
+            here -> activity.getString(R.string.launcher_sahne_in_this_slot)
+            !ok -> activity.getString(R.string.launcher_edit_on_screen)
+            else -> ""
+        }
         return LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = rounded(context, LauncherTheme.CONTROL, Sahne.CONTROL_RADIUS_DP, if (here) LauncherTheme.ACCENT else 0)
-            setPadding(context.dp(18), context.dp(14), context.dp(18), context.dp(14))
+            setPadding(context.dp(14), 0, context.dp(12), 0)
             addView(icon(context, sahneIconFor(type.icon), PICKER_ICON_DP, ink))
-            addView(gap(context, 8, vertical = true))
-            addView(text(context, PICKER_TITLE_SP, ink, medium = true, maxLines = 2).apply {
-                setText(type.label)
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(gap(context, 2, vertical = true))
-            val sub = when {
-                here -> context.getString(R.string.launcher_sahne_in_this_slot)
-                !ok -> context.getString(R.string.launcher_edit_on_screen)
-                else -> ""
-            }
-            // Alt satır her kutuda yer kaplar (boşsa görünmez): başlıklar aynı hizada kalır.
-            addView(text(context, PICKER_SUB_SP, LauncherTheme.TEXT_SECONDARY).apply {
-                text = sub
-                visibility = if (sub.isEmpty()) View.INVISIBLE else View.VISIBLE
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(text(context, PICKER_TITLE_SP, ink, medium = true).apply {
+                    setText(type.label)
+                    // Tek satır: uzun ad (ör. "Uygulama kısayolu") kesilmesin diye yazı kutuya sığana dek küçülür.
+                    setAutoSizeTextTypeUniformWithConfiguration(PICKER_TITLE_MIN_SP, PICKER_TITLE_SP.toInt(), 1,
+                        android.util.TypedValue.COMPLEX_UNIT_SP)
+                }, sheetFullWidth())
+                if (sub.isNotEmpty()) addView(text(context, PICKER_SUB_SP, LauncherTheme.TEXT_SECONDARY).apply {
+                    text = sub
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, sheetFullWidth())
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = context.dp(10) })
             alpha = if (ok || here) 1f else DISABLED_ALPHA
-            contentDescription = context.getString(type.label)
+            contentDescription = if (sub.isEmpty()) context.getString(type.label) else context.getString(type.label) + ", " + sub
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -681,13 +692,10 @@ class SahneScreen(
         const val NATURAL_PANEL_H_DP = 378
         const val EMPTY_ALPHA = 0.45f
         const val DISABLED_ALPHA = 0.45f
-        const val PICKER_COLUMNS = 5
-        const val PICKER_WIDTH_DP = 1280
-        const val PICKER_TILE_DP = 156
-        const val PICKER_LIST_DP = 420
-        const val PICKER_ICON_DP = 32
-        const val PICKER_TITLE_SP = 22f
-        const val PICKER_SUB_SP = 20f
+        const val PICKER_ICON_DP = 26
+        const val PICKER_TITLE_SP = 21f
+        const val PICKER_TITLE_MIN_SP = 15
+        const val PICKER_SUB_SP = 17f
         const val CHIP_PANEL_DP = 52
         const val CHIP_STRIP_DP = 30
     }
