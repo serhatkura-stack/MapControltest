@@ -380,18 +380,25 @@ class SahneScreen(
                 marginEnd = context.dp(16)
             })
         }
-        val d = showLauncherSheet(activity, title, fullScreen = true, header = header) { dialog ->
+        val d = showLauncherSheet(activity, title, fullScreen = true, edgeToEdge = true, header = header) { dialog ->
             val grid = PickerGridLayout(context)
             types.forEach { grid.addView(pickerTile(ref, it, current) { dialog.dismiss() }) }
-            addView(grid, weightLp(1f, vertical = true))
+            // Normalde ızgara alana sığar ve kaydırma olmaz; çok fazla seçenekte (sığmazsa) kalanlar kaydırılarak erişilir.
+            addView(android.widget.ScrollView(context).apply {
+                isVerticalScrollBarEnabled = true
+                overScrollMode = View.OVER_SCROLL_NEVER
+                isFillViewport = true
+                addView(grid, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }, weightLp(1f, vertical = true))
         }
         d.setOnDismissListener { onSheet(null) }
         onSheet(d)
     }
 
     /**
-     * Seçici ızgarası: verilen alanı [PickerGrid.fit] ile böler, kutuları tam ölçüde yerleştirir (kaydırma yok). Izgara
-     * sola ve yukarı yaslıdır; az öğede (panel seçici) kutular [PickerGrid.MAX_TILE_W_DP] genişlikte kalır.
+     * Seçici ızgarası: verilen alanı (kaydırıcının görünen yüksekliği) [PickerGrid.fit] ile böler, kutuları tam ölçüde
+     * yerleştirir. Izgara alanın ortasında durur; az öğede (panel seçici) kutular [PickerGrid.MAX_TILE_W_DP] genişlikte
+     * kalır. Sığmazsa ([PickerFit.fits] false) içerik kadar uzar ve dıştaki kaydırıcı devreye girer.
      */
     private class PickerGridLayout(context: android.content.Context) : ViewGroup(context) {
         private var fit = PickerFit(0, 0, 0, 0, true)
@@ -404,17 +411,24 @@ class SahneScreen(
             val cw = MeasureSpec.makeMeasureSpec(context.dp(fit.tileW), MeasureSpec.EXACTLY)
             val ch = MeasureSpec.makeMeasureSpec(context.dp(fit.tileH), MeasureSpec.EXACTLY)
             for (i in 0 until childCount) getChildAt(i).measure(cw, ch)
-            setMeasuredDimension(w, h)
+            setMeasuredDimension(w, if (fit.fits) h else maxOf(h, contentH()))
         }
+
+        private fun contentH() = if (fit.rows == 0) 0 else fit.rows * context.dp(fit.tileH) + (fit.rows - 1) * context.dp(PickerGrid.GAP_DP)
+
+        private fun contentW() = if (fit.cols == 0) 0 else fit.cols * context.dp(fit.tileW) + (fit.cols - 1) * context.dp(PickerGrid.GAP_DP)
 
         override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
             if (fit.cols == 0) return
             val gap = context.dp(PickerGrid.GAP_DP)
             val tw = context.dp(fit.tileW)
             val th = context.dp(fit.tileH)
+            // Boş alan kalmasın diye blok ortalanır (Tiggo 7'de iki satır ekranın üst köşesinde kalıyordu).
+            val x0 = maxOf(0, (r - l - contentW()) / 2)
+            val y0 = maxOf(0, (b - t - contentH()) / 2)
             for (i in 0 until childCount) {
-                val x = (i % fit.cols) * (tw + gap)
-                val y = (i / fit.cols) * (th + gap)
+                val x = x0 + (i % fit.cols) * (tw + gap)
+                val y = y0 + (i / fit.cols) * (th + gap)
                 getChildAt(i).layout(x, y, x + tw, y + th)
             }
         }
@@ -445,9 +459,11 @@ class SahneScreen(
                 addView(text(context, PICKER_TITLE_SP, ink, medium = true).apply {
                     setText(type.label)
                     // Tek satır: uzun ad (ör. "Uygulama kısayolu") kesilmesin diye yazı kutuya sığana dek küçülür.
+                    // Otomatik küçültme sabit yükseklik ister (wrap_content'te güvenilmez): bir satırlık yükseklik verilir.
                     setAutoSizeTextTypeUniformWithConfiguration(PICKER_TITLE_MIN_SP, PICKER_TITLE_SP.toInt(), 1,
                         android.util.TypedValue.COMPLEX_UNIT_SP)
-                }, sheetFullWidth())
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, android.util.TypedValue.applyDimension(
+                    android.util.TypedValue.COMPLEX_UNIT_SP, PICKER_TITLE_SP * PICKER_TITLE_LINE, resources.displayMetrics).toInt()))
                 if (sub.isNotEmpty()) addView(text(context, PICKER_SUB_SP, LauncherTheme.TEXT_SECONDARY).apply {
                     text = sub
                     ellipsize = android.text.TextUtils.TruncateAt.END
@@ -458,6 +474,8 @@ class SahneScreen(
             isClickable = true
             isFocusable = true
             setOnClickListener {
+                // Yuvadaki türe dokunmak seçiciyi kapatır (değişiklik yok); yerleştirilemeyen tür hiçbir şey yapmaz.
+                if (here) { dismiss(); return@setOnClickListener }
                 if (!ok) return@setOnClickListener
                 dismiss()
                 place(ref, type)
@@ -695,6 +713,7 @@ class SahneScreen(
         const val PICKER_ICON_DP = 26
         const val PICKER_TITLE_SP = 21f
         const val PICKER_TITLE_MIN_SP = 15
+        const val PICKER_TITLE_LINE = 1.4f
         const val PICKER_SUB_SP = 17f
         const val CHIP_PANEL_DP = 52
         const val CHIP_STRIP_DP = 30

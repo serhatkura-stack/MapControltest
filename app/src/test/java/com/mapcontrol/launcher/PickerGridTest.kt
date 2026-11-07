@@ -52,6 +52,13 @@ class PickerGridTest {
         assertTrue(f.fits)
     }
 
+    @Test fun moreColumnsThanCapUsedBeforeGivingUp() {
+        // 8 sütunda 5 satır 330dp'ye sığmaz; genişlik 10 sütuna izin verir, 4 satırla sığar.
+        val f = PickerGrid.fit(40, 2400, 330)
+        assertTrue(f.cols > PickerGrid.MAX_COLS)
+        assertTrue(f.fits)
+    }
+
     @Test fun tooManyItemsReportsNoFit() {
         val f = PickerGrid.fit(80, t7W, t7H)
         assertFalse(f.fits)

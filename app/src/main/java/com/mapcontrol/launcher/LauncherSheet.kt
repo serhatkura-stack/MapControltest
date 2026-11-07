@@ -20,14 +20,17 @@ fun showLauncherSheet(
     @StringRes title: Int,
     widthDp: Int = SHEET_WIDTH_DP,
     fullScreen: Boolean = false,
+    edgeToEdge: Boolean = false,
     header: (LinearLayout.(Dialog) -> Unit)? = null,
     build: LinearLayout.(Dialog) -> Unit,
 ): Dialog {
     val dialog = Dialog(activity)
     dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-    // Tam ekranda köşesiz ve daha dar kenarlı: tüm pencereyi (alt çubuğun üstü dahil) kaplar, arkası görünmez.
-    val panel = card(activity, paddingDp = if (fullScreen) FULL_SCREEN_PAD_DP else LauncherTheme.PADDING_DP).apply {
-        if (fullScreen) background = rounded(activity, LauncherTheme.CARD, 0f)
+    // Kenarsız tam ekran (yalnız [edgeToEdge] isteyenler, ör. yuva seçici): köşesiz ve daha dar kenarlı; tüm pencereyi
+    // (alt çubuğun üstü dahil) kaplar, arkası görünmez. Diğer tam ekran sayfalar (ör. veri denetimi) eski görünümünde kalır.
+    val edge = fullScreen && edgeToEdge
+    val panel = card(activity, paddingDp = if (edge) FULL_SCREEN_PAD_DP else LauncherTheme.PADDING_DP).apply {
+        if (edge) background = rounded(activity, LauncherTheme.CARD, 0f)
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -37,7 +40,7 @@ fun showLauncherSheet(
             header?.invoke(this, dialog)
             addView(iconButton(activity, R.drawable.ic_mdi_close, activity.getString(R.string.launcher_close)) { dialog.dismiss() })
         }, sheetFullWidth())
-        addView(gap(activity, if (fullScreen) FULL_SCREEN_HEADER_GAP_DP else 24, vertical = true))
+        addView(gap(activity, if (edge) FULL_SCREEN_HEADER_GAP_DP else 24, vertical = true))
         build(dialog)
     }
     dialog.setContentView(panel)
@@ -45,7 +48,7 @@ fun showLauncherSheet(
         setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         if (fullScreen) {
             // Kenar payı kalmasın: pencere tüm ekranı (alt çubuğun üstü dahil) kaplar.
-            decorView.setPadding(0, 0, 0, 0)
+            if (edge) decorView.setPadding(0, 0, 0, 0)
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         else setLayout(activity.dp(widthDp), ViewGroup.LayoutParams.WRAP_CONTENT)
