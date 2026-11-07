@@ -9,6 +9,8 @@
     <string name="launcher_trunk_open">Açık</string>
     <string name="launcher_trunk_percent">%%%1$d açık</string>
     <string name="launcher_trunk_unverified">Henüz doğrulanmadı</string>
+    <string name="launcher_write_unverified">Araçta henüz doğrulanmadı</string>
+    <string name="launcher_write_park_only">Araç dururken ve P\'deyken çalışır</string>
     <string name="launcher_trunk_stop_unknown">Durdurma henüz doğrulanmadı</string>
     <string name="launcher_trunk_close_title">Bagaj kapansın mı?</string>
     <string name="launcher_trunk_close_message">Arkada kimse olmadığından emin olun.</string>

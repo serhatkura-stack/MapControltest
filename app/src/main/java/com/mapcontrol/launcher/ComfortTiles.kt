@@ -151,8 +151,8 @@ internal abstract class ComfortTile(protected val context: Context) : SizedWidge
 /**
  * Bagaj kapağı: yandan bakışla araç siluetinde kapağın açılma açısı ve yüzde. Dokun = kapalıysa aç; açıksa "Bagaj kapansın mı?"
  * onayıyla kapat; hareket halindeyse durdur (yalnızca durdurma değeri doğrulandıysa). Okuma 3 sn'de bir, hareket halinde 500 ms.
- * Yazma [ComfortWriter.TRUNK_WRITE_VERIFIED] true iken gider (sürüş kilidi yok; araç reddederse geri okuma gösterir); o zamana dek
- * kutucuk salt-okurdur ve dokunuş "henüz doğrulanmadı" ipucu gösterir.
+ * Yazma [ComfortWriter.TRUNK_WRITE_VERIFIED] true iken ve yalnızca araç dururken, vites P'deyken gider (park kapısı,
+ * [WidgetWritePolicy]); aksi halde komut gönderilmez ve kısa bir neden gösterilir.
  */
 internal class TrunkTile(context: Context) : ComfortTile(context) {
 
@@ -321,6 +321,8 @@ internal class TrunkTile(context: Context) : ComfortTile(context) {
                     TrunkWriteResult.DISABLED -> showToast(R.string.launcher_trunk_unverified)
                     TrunkWriteResult.STALE -> showToast(R.string.launcher_trunk_stale)
                     TrunkWriteResult.TOO_SOON -> Unit
+                    // Park kapısı reddetti; neden [WidgetWriter] tarafından gösterildi.
+                    TrunkWriteResult.REFUSED -> Unit
                 }
             }
         }

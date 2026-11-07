@@ -31,7 +31,7 @@ import kotlin.math.abs
  *    (OEM klima paneli yalnız çubukta yukarı kaydırmayla; uzun basış 6 Kasım araç testinde kaldırıldı);
  *  - fan: yatay sürükleme 1..10, dokunuş kapat/aç, altında ince 10 noktalı kademe göstergesi.
  *
- * Bırakınca değer "işlenir" ([commit]): yazma doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
+ * Bırakınca değer "işlenir" ([commit]): seçili yol doğrulanmadıkça ([ClimateWriter.enabled] false) ekran ~1,5 sn sonra
  * aracın gerçek değerine döner ve sakin bir bilgi mesajı çıkar; araca hiçbir şey gitmez. Sürekli animasyon yok;
  * yalnızca kısa (≤200 ms) renk/alfa geçişleri.
  */
@@ -113,7 +113,7 @@ internal class ClimateControl(
     private fun commitTemp(side: ClimateSide, celsius: Double) {
         if (side == ClimateSide.DRIVER) pendingDriver = celsius else pendingPassenger = celsius
         afterCommit()
-        if (!ClimateWriter.enabled) return
+        if (!writable()) return
         val quiet = quietWrite("temp_${side.name.lowercase()}")
         io.runSafely { ClimateWriter.setTemperature(side, celsius, quiet) }
     }
@@ -122,6 +122,9 @@ internal class ClimateControl(
      * Ayar "Klima değişince fabrika paneli": Gizle (varsayılan) → OEM dock kimlikleri + klima tuşlarına kilit ([ClimatePanelGuard];
      * yazma ÖNCE değişiklik olarak bildirilir ki hemen ardından açılan panel kapatılsın); Göster → panel kimlikleri, koruma yok.
      */
+    /** Seçili yol (ayar: dock ya da panel kimlikleri) araçta doğrulanmış mı ([ClimateWriter.enabled]). */
+    private fun writable(): Boolean = ClimateWriter.enabled(quiet = !ClimatePanelPrefs.showOnChange(context))
+
     private fun quietWrite(what: String): Boolean {
         val quiet = !ClimatePanelPrefs.showOnChange(context)
         if (quiet) ClimatePanelGuard.arm(context, what) else android.util.Log.i("ClimatePanel", "write what=$what mode=show ids=panel guard=off")
@@ -134,7 +137,7 @@ internal class ClimateControl(
         afterCommit()
         // Fan 0 araca yazılmaz ve klimayı kapatmaz: OEM panel/dock/sesli komut da fanı 1'de durdurur, kapatma ayrı (18 ← 2),
         // bkz. ClimateMath.encodeFan. Arayüz 0/kapalı gösterebilir.
-        if (level <= 0 || !ClimateWriter.enabled) return
+        if (level <= 0 || !writable()) return
         val quiet = quietWrite("fan")
         io.runSafely { ClimateWriter.setFan(level, quiet) }
     }
@@ -146,7 +149,7 @@ internal class ClimateControl(
     private fun afterCommit() {
         render()
         main.removeCallbacks(revert)
-        if (ClimateWriter.enabled) {
+        if (writable()) {
             main.postDelayed(revert, CONFIRM_MS)
             return
         }

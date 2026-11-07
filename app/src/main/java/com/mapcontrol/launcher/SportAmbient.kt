@@ -78,14 +78,13 @@ internal object SportAmbientLogic {
 /**
  * Spor ambiyansının araç tarafı. Seçenek açıkken ya da geri yazma beklerken sürüş modu [VehicleMetricsRepository]
  * olaylarından izlenir (yeni yoklama yok); mod [STABLE_MS] kararlı kalınca [SportAmbientLogic.decide] arka planda
- * uygulanır. Yazma diğer widget yazmalarıyla aynı kapıdan geçer ([enabled]): [AMBIENT_WRITE_VERIFIED] false iken gerçek
- * sürümde araca HİÇBİR ŞEY gitmez; test sürümünde yalnızca "widget'lardan yaz" anahtarı açıkken beyaz listeden
- * ([WidgetWritePolicy] "SportAmbient") gider. Demo modunda hiçbir şey okunmaz ya da yazılmaz. Kapı kapalıyken durum
- * değişmez: bekleyen geri yazma kapı açılınca yapılır.
+ * uygulanır. Yazma diğer widget yazmalarıyla aynı kapıdan geçer ([enabled], [WidgetWritePolicy] "SportAmbient"):
+ * [AMBIENT_WRITE_VERIFIED] false iken araca HİÇBİR ŞEY gitmez. Demo modunda hiçbir şey okunmaz ya da yazılmaz. Kapı
+ * kapalıyken durum değişmez: bekleyen geri yazma kapı açılınca yapılır.
  */
 internal object SportAmbient {
 
-    /** Ambiyans rengi yazması araçta DOĞRULANMADI (CS 11 kodlaması Tiggo 8 yazılımından). Tur 6'dan sonra true yapılır. */
+    /** Ambiyans rengi yazması araçta DOĞRULANMADI (CS 11 kodlaması Tiggo 8 yazılımından); doğrulanınca true yapılır. */
     const val AMBIENT_WRITE_VERIFIED = false
 
     const val STABLE_MS = 2_000L

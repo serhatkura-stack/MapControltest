@@ -26,10 +26,10 @@ internal enum class TrunkAction { OPEN, CLOSE_CONFIRM, STOP, STOP_UNKNOWN, NONE 
 
 /**
  * Kapılı bagaj yazmasının sonucu. [STALE]: araç durumu dokunuşun varsaydığından farklı (OEM kuralı ters yönü seçti), hiçbir şey
- * gönderilmedi. [TOO_SOON]: son komuttan beri OEM'in 1 sn tıklama kilidi dolmadı, sessizce yok sayıldı. Sürüş kilidi yoktur:
- * araç hareket halindeyken komutu kendisi reddederse geri okuma bunu gösterir.
+ * gönderilmedi. [TOO_SOON]: son komuttan beri OEM'in 1 sn tıklama kilidi dolmadı, sessizce yok sayıldı. [REFUSED]: yazma
+ * kapısı reddetti (araç durmuyor ya da vites P değil, bkz. [WidgetWritePolicy]); neden kullanıcıya gösterildi, hiçbir şey gitmedi.
  */
-internal enum class TrunkWriteResult { SENT, DISABLED, STALE, TOO_SOON }
+internal enum class TrunkWriteResult { SENT, DISABLED, STALE, TOO_SOON, REFUSED }
 
 /** Bagaj kapağının saf hesapları (JVM'de sınanır): ham okuma → durum ve yüzde, dokunuş kararı, yazma komutu. */
 internal object TrunkMath {
@@ -96,7 +96,7 @@ internal object TrunkMath {
     /** OEM bagaj tıklama kilidi: iki komut arası en az bu kadar (OEM ayarlarında da 1 sn). */
     const val DEBOUNCE_MS = 1_000L
 
-    /** CarSetting 92 yazma değerleri (OEM): 1 = aç, 2 = kapat. */
+    /** CarSetting 92 yazma değerleri (OEM, araçta doğrulandı): 1 = aç, 2 = kapat. */
     const val CMD_OPEN = 1
     const val CMD_CLOSE = 2
 
@@ -110,7 +110,7 @@ internal object TrunkMath {
         return if (cs92 == 2 || plgPosition == 0) CMD_OPEN else CMD_CLOSE
     }
 
-    /** Yazma komutu: CarSetting 92 ← [CMD_OPEN] / [CMD_CLOSE]. Araçta DOĞRULANMADI. */
+    /** Yazma komutu: CarSetting 92 ← [CMD_OPEN] / [CMD_CLOSE] (araçta doğrulandı; yalnızca park halinde gider). */
     fun command(open: Boolean): ComfortCmd =
         ComfortCmd(VDEventCarInfo.MODULE_CAR_SETTING, CarSettingID.ID_CAR_REAR_DOOR_CONTROL, if (open) CMD_OPEN else CMD_CLOSE)
 
@@ -119,8 +119,9 @@ internal object TrunkMath {
 }
 
 /**
- * Konfor widget'larının (bagaj, arka hoparlör) yazma noktası. [COMFORT_WRITE_VERIFIED] ve ilgili
- * özellik bayrağı ya da [LauncherEdition.WRITES_ON] (hep true) kapıyı açar. Araca ulaşan tek yol `LauncherEdition.sendItemValue` → [WidgetWriter].
+ * Konfor widget'larının (bagaj, arka hoparlör) yazma noktası. [COMFORT_WRITE_VERIFIED], ilgili özellik bayrağı VE
+ * [LauncherEdition.WRITES_ON] birlikte kapıyı açar. Araca ulaşan tek yol `LauncherEdition.sendItemValue` → [WidgetWriter]
+ * (bagaj orada ayrıca park kapısından geçer).
  * Kapı [ClimateWriter.canWrite] ile aynıdır.
  */
 internal object ComfortWriter {
@@ -128,8 +129,11 @@ internal object ComfortWriter {
     /** Ana anahtar: araç testinden sonra true yapılır. Özellik bayrakları da true olmalı. */
     const val COMFORT_WRITE_VERIFIED = true
 
-    /** Bagaj kapağı yazması araçta DOĞRULANMADI: false iken kutucuk salt-okur, dokunuş "henüz doğrulanmadı" ipucu gösterir. */
-    const val TRUNK_WRITE_VERIFIED = false
+    /**
+     * Bagaj kapağı yazması (CarSetting 92: 1 aç, 2 kapat) araçta doğrulandı: geri okumada kapak açıklığı (RO 98) komut yönünde
+     * değişti. Yalnızca araç dururken ve vites P'deyken gider ([WidgetWritePolicy], park kapısı).
+     */
+    const val TRUNK_WRITE_VERIFIED = true
 
     /** Hareketteki bagajı durduran CarSetting 92 değeri; araçta bulunamadı (2 denenecek). Null iken dokunuş yalnızca ipucu gösterir. */
     val TRUNK_STOP_VALUE: Int? = null
@@ -138,8 +142,8 @@ internal object ComfortWriter {
     val trunkStopKnown: Boolean get() = TRUNK_STOP_VALUE != null
 
     /**
-     * OEM komutlarından türetilen yeni kutucukların yazması (arka hoparlör) araçta DOĞRULANMADI:
-     * yazmalar her zaman açık olduğundan beyaz listeden geçerek ([WidgetWritePolicy]) gider.
+     * OEM komutlarından türetilen yeni kutucukların yazması (arka hoparlör) araçta DOĞRULANMADI: doğrulanana dek kapalı
+     * ([WidgetWritePolicy.gate]); kutucuk şeritte gizli.
      */
     const val REAR_SPEAKER_WRITE_VERIFIED = false
 
@@ -159,10 +163,13 @@ internal object ComfortWriter {
         return true
     }
 
-    /** Bagaj yazması (saf, birim testli): [enabled] false ise DISABLED ve [send] çağrılmaz. Hız sorulmaz (sürüş kilidi yok). */
-    fun writeTrunk(enabled: Boolean, commands: List<ComfortCmd>, send: (ComfortCmd) -> Unit): TrunkWriteResult {
+    /**
+     * Bagaj yazması (saf, birim testli): [enabled] false ise DISABLED ve [send] çağrılmaz. [send] false dönerse (yazma kapısı
+     * reddetti: araç durmuyor ya da vites P değil) REFUSED ve kalan komutlar gönderilmez.
+     */
+    fun writeTrunk(enabled: Boolean, commands: List<ComfortCmd>, send: (ComfortCmd) -> Boolean): TrunkWriteResult {
         if (!enabled) return TrunkWriteResult.DISABLED
-        commands.forEach(send)
+        for (c in commands) if (!send(c)) return TrunkWriteResult.REFUSED
         return TrunkWriteResult.SENT
     }
 
@@ -206,14 +213,13 @@ internal object ComfortWriter {
      */
     fun setFader(balance: Int, fade: Int): Boolean {
         if (!rearSpeakerEnabled) return false
-        LauncherEdition.sendSoundField(balance.coerceIn(0, SoundFieldMath.MAX), fade.coerceIn(0, SoundFieldMath.MAX))
-        return true
+        return LauncherEdition.sendSoundField(balance.coerceIn(0, SoundFieldMath.MAX), fade.coerceIn(0, SoundFieldMath.MAX))
     }
 
-    private fun sendToCar(cmd: ComfortCmd) {
+    private fun sendToCar(cmd: ComfortCmd): Boolean {
         val proxy = CarInfoProxy.getInstance()
-        if (!proxy.isServiceConnnected) return
-        LauncherEdition.sendItemValue(proxy, cmd.module, cmd.id, cmd.value)
+        if (!proxy.isServiceConnnected) return false
+        return LauncherEdition.sendItemValue(proxy, cmd.module, cmd.id, cmd.value)
     }
 }
 

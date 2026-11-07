@@ -79,20 +79,21 @@ class ComfortMathTest {
         assertEquals(TrunkAction.NONE, TrunkMath.tapAction(TrunkState.UNKNOWN, true))
     }
 
-    @Test fun trunkWriteIsOffUntilVerifiedNoDrivingLock() {
-        // Doğrulanmadı ama yazmalar her zaman açık: beyaz listeden geçerek gider; durdurma değeri bilinmiyor.
-        assertFalse(ComfortWriter.TRUNK_WRITE_VERIFIED)
+    @Test fun trunkWriteVerifiedAndRefusalStopsSending() {
+        // Doğrulandı (CS 92: 1 aç / 2 kapat); durdurma değeri bilinmiyor. Park kapısı WidgetWriter'da (WidgetWritePolicyTest).
+        assertTrue(ComfortWriter.TRUNK_WRITE_VERIFIED)
         assertTrue(ComfortWriter.trunkEnabled)
         assertFalse(ComfortWriter.trunkStopKnown)
         assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.stopTrunk())
         val sent = ArrayList<ComfortCmd>()
         val cmd = listOf(TrunkMath.command(true))
-        assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.writeTrunk(false, cmd) { sent += it })
+        assertEquals(TrunkWriteResult.DISABLED, ComfortWriter.writeTrunk(false, cmd) { sent += it; true })
         assertTrue(sent.isEmpty())
-        // Sürüş kilidi yok: doğrulandığında hız sorulmadan gider.
-        assertEquals(TrunkWriteResult.SENT, ComfortWriter.writeTrunk(true, cmd) { sent += it })
+        // Kapı reddederse (send false) REFUSED.
+        assertEquals(TrunkWriteResult.REFUSED, ComfortWriter.writeTrunk(true, cmd) { false })
+        assertEquals(TrunkWriteResult.SENT, ComfortWriter.writeTrunk(true, cmd) { sent += it; true })
         assertEquals(cmd, sent)
-        assertEquals(listOf("SENT", "DISABLED", "STALE", "TOO_SOON"), TrunkWriteResult.values().map { it.name })
+        assertEquals(listOf("SENT", "DISABLED", "STALE", "TOO_SOON", "REFUSED"), TrunkWriteResult.values().map { it.name })
     }
 
     @Test fun trunkCommandValues() {

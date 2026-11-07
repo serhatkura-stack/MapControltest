@@ -30,8 +30,8 @@ internal object LauncherEdition {
     const val READ_ONLY = false
 
     /**
-     * Widget yazmaları her zaman açık (test anahtarı kaldırıldı): doğrulanmamış özellikler de gider. Her komut yine
-     * [WidgetWriter] üzerinden beyaz listeden ([WidgetWritePolicy]) geçer ve `WidgetWrite` etiketiyle günlüğe yazılır.
+     * Widget yazmaları açık. Yine de yalnızca araçta doğrulanmış girdiler gider ([WidgetWritePolicy.gate]: doğrulanmış VE
+     * açık); bagaj, kilit ve sürüş modu ayrıca park kapısından geçer. Her komut `WidgetWrite` etiketiyle günlüğe yazılır.
      */
     const val WRITES_ON = true
 
@@ -57,26 +57,21 @@ internal object LauncherEdition {
     const val SEAT_VENT_WRITE_VERIFIED = true
 
     /** Koltuk soğutma seviyesi (0..3). Kodlama ısıtmayla aynı (sürücüde araçta doğrulandı). */
-    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
-        if (!SEAT_VENT_WRITE_VERIFIED) return
+    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int): Boolean {
+        if (!SEAT_VENT_WRITE_VERIFIED) return false
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION
         // Kodlama ısıtmayla aynı (SeatHeatModel.encode: 0 kapalı → 1, 1..3 → 2..4), ClimateAutomationEngine.wireSeatLevel gibi.
-        WidgetWriter.send(proxy, VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
+        return WidgetWriter.send(proxy, VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
     }
 
     /** Beyaz liste + `WidgetWrite` günlüğü ([WidgetWriter]). */
-    fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
+    fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int): Boolean =
         WidgetWriter.send(proxy, module, id, value)
-    }
 
     /** Ses alanı (arka hoparlör): [balance] sol-sağ, [fade] ön-arka, 0..20. Çağıran kapıyı ([ComfortWriter.rearSpeakerEnabled]) zaten denetledi. */
-    fun sendSoundField(balance: Int, fade: Int) {
-        WidgetWriter.sendSoundField(balance, fade)
-    }
+    fun sendSoundField(balance: Int, fade: Int): Boolean = WidgetWriter.sendSoundField(balance, fade)
 
-    fun setCentralLock(context: Context, locked: Boolean) {
-        WidgetWriter.sendLock(context, locked)
-    }
+    fun setCentralLock(context: Context, locked: Boolean): Boolean = WidgetWriter.sendLock(context, locked)
 
     /**
      * FrostNav'ı doğrudan "Ana ekran" sekmesinde açar. Launcher kendi görev ilişkisinde (taskAffinity) çalışır;

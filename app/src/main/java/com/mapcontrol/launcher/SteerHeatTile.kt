@@ -182,14 +182,14 @@ internal class SteerHeatTile(private val activity: Activity) : SizedWidget, Them
             val current = readNow()
             val now = SystemClock.elapsedRealtime()
             val action = SteerHeatLogic.decide(current, want, now, lastSentMs)
-            if (action == SteerHeatLogic.Action.SEND) {
-                lastSentMs = now
+            // Yazma kapısı reddederse (direksiyon ısıtma araçta henüz doğrulanmadı) neden gösterilir, iyimser durum kurulmaz.
+            val sent = action == SteerHeatLogic.Action.SEND &&
                 LauncherEdition.sendItemValue(CarInfoProxy.getInstance(), VDEventCarInfo.MODULE_CAR_SETTING,
                     CarSettingID.ID_CAR_STEER_WHEEL_HEAT, ComfortPlan.STEER_WHEEL_TOGGLE)
-            }
+            if (sent) lastSentMs = now
             main.post {
                 read = current ?: read
-                if (action == SteerHeatLogic.Action.SEND) {
+                if (sent) {
                     pending = want
                     main.removeCallbacks(dropPending)
                     main.postDelayed(dropPending, CONFIRM_MS)

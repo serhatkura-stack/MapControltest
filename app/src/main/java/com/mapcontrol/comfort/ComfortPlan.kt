@@ -56,7 +56,10 @@ object ComfortPlan {
     /** VrID.ID_VR_TRUNK: bagaj kapağı yazma ADAYI (DOĞRULANMADI); perde VR 124 örneğiyle 1 aç, 2 kapat denenecek. */
     const val ID_VR_TRUNK = 121
 
-    /** CarSettingID.ID_CAR_REAR_DOOR_CONTROL. Okuma (ölçüldü): 2 durdu, 3 açılıyor, 4 kapanıyor. Yazma yedek ADAY: 3 aç, 4 kapat, 2 durdur. */
+    /**
+     * CarSettingID.ID_CAR_REAR_DOOR_CONTROL. Okuma (ölçüldü): 2 durdu, 3 açılıyor, 4 kapanıyor. Yazma (araçta doğrulandı,
+     * launcher ile aynı): 1 aç, 2 kapat. Durdurma değeri bilinmiyor; yazılmaz.
+     */
     const val ID_REAR_DOOR_CONTROL = 92
 
     /** ReadOnlyID.ID_PLG_POSITION: bagaj kapağı açıklığı (ölçüldü): 0 kapalı .. ~81 tam açık. */
@@ -67,9 +70,8 @@ object ComfortPlan {
 
     const val TRUNK_OPEN_VR = 1
     const val TRUNK_CLOSE_VR = 2
-    const val TRUNK_OPEN_CS = 3
-    const val TRUNK_CLOSE_CS = 4
-    const val TRUNK_STOP_CS = 2
+    const val TRUNK_OPEN_CS = 1
+    const val TRUNK_CLOSE_CS = 2
 
     /** Arka buğu (Hvac 80) KAPATMA adayı: 0 ve tekrar 1 kapatmadı (araçta ölçüldü); 2 denenecek. */
     const val DEFROST_OFF_CANDIDATE = 2
@@ -102,7 +104,6 @@ object ComfortPlan {
         add(Write(MODULE_VR, ID_VR_TRUNK, TRUNK_CLOSE_VR))
         add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS))
         add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_CLOSE_CS))
-        add(Write(MODULE_CAR_SETTING, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS))
         // Ön cam 65 ve maks. buğu 24: yalnızca OEM değerleri (1 aç, 2 kapat); 0 yazılmaz.
         for (v in listOf(1, FRONT_DEFROST_OFF)) {
             add(Write(MODULE_HVAC, ID_FRONT_GLASS_HEAT, v))
@@ -246,7 +247,7 @@ object ComfortPlan {
         "info", "hidden_info", "hidden_watch", "shade_time", "shade_open", "shade_close", "shade_open_vr", "shade_close_vr",
         "shade_open_stop", "shade_stop", "shade_stop_vr", "defrost_front", "defrost_front_max", "defrost_rear",
         "wheel_heat",
-        "trunk_info", "trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs", "trunk_stop_cs", "trunk_open_stop_cs",
+        "trunk_info", "trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs",
     )
 
     /** hidden_watch süresi: --ei watch_s (yoksa 60 sn), 10..600 sn aralığına sıkıştırılır. */
@@ -257,7 +258,7 @@ object ComfortPlan {
     private fun send(module: Int, id: Int, value: Int) = Step.Send(validate(Write(module, id, value)))
 
     /**
-     * `--es c <ad> [--ei v 0|1 (defrost_front/defrost_front_max: 0 ya da 2 = kapat → 2; defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop, trunk_open_stop_cs)] [--ei stop 3|6|0] [--ei watch_s 10..600 (hidden_watch; varsayılan 60, aralık dışı sıkıştırılır)]` ekstralarını komuta çevirir.
+     * `--es c <ad> [--ei v 0|1 (defrost_front/defrost_front_max: 0 ya da 2 = kapat → 2; defrost_rear: 0|1|2)] [--ei after_ms N (shade_open_stop)] [--ei stop 3|6|0] [--ei watch_s 10..600 (hidden_watch; varsayılan 60, aralık dışı sıkıştırılır)]` ekstralarını komuta çevirir.
      * Bilinmeyen ad, eksik/geçersiz v, geçersiz stop veya after_ms için [IllegalArgumentException].
      */
     fun parse(c: String?, v: Int? = null, afterMs: Int? = null, stop: Int? = null, watchS: Int? = null): Command {
@@ -314,15 +315,6 @@ object ComfortPlan {
             "trunk_close_vr" -> trunkCmd(c, listOf(send(MODULE_VR, ID_VR_TRUNK, TRUNK_CLOSE_VR)))
             "trunk_open_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS)))
             "trunk_close_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_CLOSE_CS)))
-            "trunk_stop_cs" -> trunkCmd(c, listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS)))
-            "trunk_open_stop_cs" -> {
-                val after = afterMs ?: DEFAULT_AFTER_MS
-                require(after in 0..MAX_AFTER_MS) { "--ei after_ms 0..$MAX_AFTER_MS olmalı (geldi: $after)" }
-                trunkCmd(
-                    c,
-                    listOf(send(cs, ID_REAR_DOOR_CONTROL, TRUNK_OPEN_CS), Step.Wait(after.toLong()), send(cs, ID_REAR_DOOR_CONTROL, TRUNK_STOP_CS)),
-                )
-            }
             "defrost_front" -> writeCmd(c, listOf(send(hv, ID_FRONT_GLASS_HEAT, frontDefrost())), listOf(FRONT_GLASS_HEAT))
             "defrost_front_max" -> writeCmd(c, listOf(send(hv, ID_MAX_FRONT_DEFOREST, frontDefrost())), listOf(MAX_FRONT_DEFOREST))
             "defrost_rear" -> writeCmd(c, listOf(send(hv, ID_REAR_DEFROST, onOffOrTwo())), listOf(REAR_DEFROST))

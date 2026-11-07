@@ -10,15 +10,15 @@ import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 /**
  * Launcher test sürümü: MapControl Ayarlar'ı ve FrostNav yoktur. Bu dosya :app'teki LauncherEdition.kt'nin yerini alır; imzalar aynıdır.
  *
- * Widget yazmaları her zaman açıktır (eski "araca yaz (test)" anahtarı kaldırıldı): komutlar [WidgetWriter] üzerinden gider,
- * her biri beyaz listeden ([WidgetWritePolicy]) geçer (sürüş kilidi yok) ve `WidgetWrite` etiketiyle günlüğe yazılır.
+ * Widget yazmaları açıktır: komutlar [WidgetWriter] üzerinden gider, her biri beyaz liste, doğrulama ve gerekiyorsa park
+ * kapısından ([WidgetWritePolicy]) geçer ve `WidgetWrite` etiketiyle günlüğe yazılır.
  */
 internal object LauncherEdition {
     /** FrostNav launcher modu açık mı (Ana ekran tuşunu FrostNav yakalıyor; sistem varsayılan HOME OEM olabilir). */
     fun launcherModeOn(context: Context): Boolean = false
 
 
-    /** Widget yazmaları her zaman açık (kapılar açık, beyaz liste şartıyla). */
+    /** Widget yazmaları açık; yalnızca doğrulanmış girdiler gider, bagaj/kilit/sürüş modu park kapısıyla ([WidgetWritePolicy]). */
     const val WRITES_ON = true
 
     /** Ayarlardaki deneysel "Gösterge haritası" satırı. Ayrı test uygulaması: deneme için açık. */
@@ -44,23 +44,18 @@ internal object LauncherEdition {
     fun init(context: Context) = Unit
 
     /** Kodlama ısıtmayla aynı (SeatHeatModel.encode). */
-    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int) {
+    fun sendSeatVentLevel(proxy: CarInfoProxy, driver: Boolean, level: Int): Boolean {
         val id = if (driver) CarSettingID.ID_CAR_DRIVER_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION
-        WidgetWriter.send(proxy, VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
+        return WidgetWriter.send(proxy, VDEventCarInfo.MODULE_CAR_SETTING, id, SeatHeatModel.encode(level))
     }
 
-    fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int) {
+    fun sendItemValue(proxy: CarInfoProxy, module: Int, id: Int, value: Int): Boolean =
         WidgetWriter.send(proxy, module, id, value)
-    }
 
     /** Ses alanı (arka hoparlör): beyaz listeden geçer. */
-    fun sendSoundField(balance: Int, fade: Int) {
-        WidgetWriter.sendSoundField(balance, fade)
-    }
+    fun sendSoundField(balance: Int, fade: Int): Boolean = WidgetWriter.sendSoundField(balance, fade)
 
-    fun setCentralLock(context: Context, locked: Boolean) {
-        WidgetWriter.sendLock(context, locked)
-    }
+    fun setCentralLock(context: Context, locked: Boolean): Boolean = WidgetWriter.sendLock(context, locked)
 
     @Suppress("UNUSED_PARAMETER")
     fun openSettings(activity: Activity) = Unit

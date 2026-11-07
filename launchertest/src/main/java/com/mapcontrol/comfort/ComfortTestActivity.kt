@@ -26,8 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    `shade_open_stop [--ei after_ms 2000] [--ei stop 3]`.
  *  - `defrost_front`, `defrost_front_max` (`--ei v 1|0`; 0 araca OEM kapatma değeri 2 olarak gider), `defrost_rear` (`--ei v 1|0|2`).
  *  - `wheel_heat --ei v 1|0`: v hedef durumdur; CS 160 okunur, farklıysa 160 ← 1 (anahtar, OEM gibi) gönderilir.
- *  - Bagaj kapağı (HEPSİ DOĞRULANMADI ADAY): `trunk_open_vr` (VR 121←1), `trunk_close_vr` (VR 121←2), `trunk_open_cs` (CS 92←3),
- *    `trunk_close_cs` (CS 92←4), `trunk_stop_cs` (CS 92←2), `trunk_open_stop_cs [--ei after_ms 2000]` (aç, bekle, durdur).
+ *  - Bagaj kapağı: `trunk_open_cs` (CS 92←1), `trunk_close_cs` (CS 92←2) araçta doğrulandı (launcher ile aynı kodlama);
+ *    `trunk_open_vr` (VR 121←1), `trunk_close_vr` (VR 121←2) doğrulanmamış aday.
  *    Yazmadan sonra 10 sn boyunca PLG 98 / TRUNK 19 / CS 92 geçişleri günlüğe yazılır.
  * Yazan komutlarda HER yazmadan önce park kapısı denetlenir; reddedilirse dizi durur. Yazmadan sonra ilgili kimlikler
  * okunur ve değişimler "ComfortTest" etiketiyle günlüğe yazılır. Sonda geri alma/temizleme YAPILMAZ.

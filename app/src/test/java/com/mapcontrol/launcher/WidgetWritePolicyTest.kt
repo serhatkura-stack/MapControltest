@@ -2,7 +2,9 @@ package com.mapcontrol.launcher
 
 import com.desaysv.ivi.extra.project.carinfo.CarSettingID
 import com.desaysv.ivi.extra.project.carinfo.HvacID
+import com.desaysv.ivi.extra.project.carinfo.NewEnergyID
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
+import com.mapcontrol.comfort.ParkGate
 import com.mapcontrol.vehicle.VehicleQuickControls
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,7 +18,20 @@ class WidgetWritePolicyTest {
     private val hv = VDEventCarInfo.MODULE_HVAC
     private val vr = 327696
 
-    private fun allowed(m: Int, i: Int, v: Int) = WidgetWritePolicy.evaluate(m, i, v) is WidgetWritePolicy.Verdict.Allowed
+    private val ne = VDEventCarInfo.MODULE_NEW_ENERGY
+
+    /** Beyaz listede mi (doğrulama ve park kapısından bağımsız). */
+    private fun allowed(m: Int, i: Int, v: Int) = WidgetWritePolicy.find(m, i, v) != null
+
+    private val parked = { ParkGate.evaluate(0, 0, ParkGate.GEAR_PARK) }
+    private fun moving(kmh: Int) = { ParkGate.evaluate(kmh, kmh, ParkGate.GEAR_PARK) }
+    private fun inGear(gear: Int) = { ParkGate.evaluate(0, 0, gear) }
+
+    private val trunkOpen = TrunkMath.command(true)
+    private val lockId = CarSettingID.ID_CAR_IVI_LOCK
+    private val driveMode = DriveModes.WRITE_VALUES.first()
+
+    private fun refusedForPark(v: WidgetWritePolicy.Verdict) = v is WidgetWritePolicy.Verdict.ParkRefused
 
     @Test fun everyValueTheWidgetsCanSendIsWhitelisted() {
         // Koltuk: SeatHeatModel.encode(0..3) (ısıtma ve soğutma aynı kodlama).
@@ -74,30 +89,87 @@ class WidgetWritePolicyTest {
         assertEquals(WidgetWritePolicy.Verdict.NotWhitelisted, WidgetWritePolicy.evaluate(cs, 10, 1))
     }
 
-    @Test fun noDrivingLockOnlyTheWhitelist() {
-        // Sürüş kilidi yok: karar yalnızca beyaz listeye bakar, park/hız sorulmaz; ret nedeni yalnızca "beyaz liste dışı".
-        assertEquals(listOf("Allowed", "NotWhitelisted"),
-            WidgetWritePolicy.Verdict::class.java.declaredClasses.map { it.simpleName }.sorted())
-        assertTrue(WidgetWritePolicy::class.java.declaredFields.none { it.name.contains("MOVING") })
-        val lock = WidgetWritePolicy.evaluate(cs, CarSettingID.ID_CAR_IVI_LOCK, 2)
-        assertTrue(lock is WidgetWritePolicy.Verdict.Allowed)
-        assertEquals("sent", WidgetWritePolicy.resultText(lock))
-        assertEquals("refused-not-whitelisted", WidgetWritePolicy.resultText(WidgetWritePolicy.evaluate(cs, 10, 1)))
+    @Test fun `hız 0'dan büyükken bagaj komutu reddedilir`() {
+        for (kmh in listOf(1, 5, 60)) {
+            val v = WidgetWritePolicy.evaluate(trunkOpen.module, trunkOpen.id, trunkOpen.value, moving(kmh))
+            assertTrue("hız $kmh", refusedForPark(v))
+        }
+        val close = TrunkMath.command(false)
+        assertTrue(refusedForPark(WidgetWritePolicy.evaluate(close.module, close.id, close.value, moving(3))))
+        assertTrue(WidgetWritePolicy.resultText(WidgetWritePolicy.evaluate(trunkOpen.module, trunkOpen.id, trunkOpen.value, moving(5)))
+            .startsWith("refused-park"))
     }
 
-    @Test fun gateOpensWithVerifiedOrWritesOn() {
+    @Test fun `vites P değilken kilit ve sürüş modu reddedilir`() {
+        for (gear in listOf(0, 2, 3, 4)) {
+            assertTrue("kilit vites $gear", refusedForPark(WidgetWritePolicy.evaluate(cs, lockId, 2, inGear(gear))))
+            assertTrue("kilit aç vites $gear", refusedForPark(WidgetWritePolicy.evaluate(cs, lockId, 1, inGear(gear))))
+            assertTrue("mod vites $gear", refusedForPark(WidgetWritePolicy.evaluate(ne, NewEnergyID.ID_DRIVE_MODE, driveMode, inGear(gear))))
+            assertTrue("bagaj vites $gear", refusedForPark(WidgetWritePolicy.evaluate(trunkOpen.module, trunkOpen.id, trunkOpen.value, inGear(gear))))
+        }
+        // Hareket halinde de reddedilir.
+        assertTrue(refusedForPark(WidgetWritePolicy.evaluate(cs, lockId, 2, moving(20))))
+        assertTrue(refusedForPark(WidgetWritePolicy.evaluate(ne, NewEnergyID.ID_DRIVE_MODE, driveMode, moving(20))))
+    }
+
+    @Test fun `hız ya da vites bilinmiyorsa reddedilir`() {
+        val unknowns = listOf(
+            { ParkGate.evaluate(null, 0, ParkGate.GEAR_PARK) },
+            { ParkGate.evaluate(0, 0, null) },
+            { ParkGate.evaluate(null, null, null) },
+        )
+        for (park in unknowns) {
+            assertTrue(refusedForPark(WidgetWritePolicy.evaluate(trunkOpen.module, trunkOpen.id, trunkOpen.value, park)))
+            assertTrue(refusedForPark(WidgetWritePolicy.evaluate(cs, lockId, 2, park)))
+            assertTrue(refusedForPark(WidgetWritePolicy.evaluate(ne, NewEnergyID.ID_DRIVE_MODE, driveMode, park)))
+        }
+        // Park kararı verilmezse varsayılan "okunamadı" sayılır.
+        assertTrue(refusedForPark(WidgetWritePolicy.evaluate(cs, lockId, 2)))
+    }
+
+    @Test fun `doğrulanmamış giriş kapıdan geçemez`() {
         assertFalse(WidgetWritePolicy.gate(false, false))
-        assertTrue(WidgetWritePolicy.gate(true, false))
-        assertTrue(WidgetWritePolicy.gate(false, true))
-        assertTrue(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(false, true), readOnly = false))
-        assertFalse(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(false, true), readOnly = true))
-        assertFalse(ClimateWriter.canWrite(WidgetWritePolicy.gate(false, false), readOnly = false))
-        // Yazmalar her zaman açık (test anahtarı kaldırıldı): doğrulanmamış özellikler de beyaz listeden geçerek gider.
+        assertFalse(WidgetWritePolicy.gate(false, true))
+        assertFalse(WidgetWritePolicy.gate(true, false))
+        val unverified = WidgetWritePolicy.ENTRIES.filter { !it.verified }.map { it.widget }.toSet()
+        assertEquals(setOf("ClimateTempDriver", "ClimateTempPassenger", "ClimatePower", "ClimateAc", "ClimateAuto", "ClimateFan",
+            "RearSpeaker", "SportAmbient", "SteerHeat"), unverified)
+        // Park halinde bile geçmez.
+        for (e in WidgetWritePolicy.ENTRIES.filter { !it.verified }) {
+            val v = WidgetWritePolicy.evaluate(e.module, e.id, e.values.first(), parked)
+            assertTrue(e.widget, v is WidgetWritePolicy.Verdict.NotVerified)
+            assertEquals("refused-not-verified", WidgetWritePolicy.resultText(v))
+        }
+        assertFalse(ComfortWriter.rearSpeakerEnabled)
+        assertFalse(SportAmbient.enabled)
+        assertFalse(ClimateWriter.enabled(quiet = false))
+    }
+
+    @Test fun `doğrulanmış giriş geçer`() {
+        assertTrue(WidgetWritePolicy.gate(true, true))
         assertTrue(LauncherEdition.WRITES_ON)
         assertFalse(LauncherEdition.READ_ONLY)
+        // Park kapısız doğrulanmış girdiler (koltuk, klima dock'u) sürüşte de geçer; park kararı hiç sorulmaz.
+        val noPark: () -> ParkGate.Decision = { throw AssertionError("park kapısı sorulmamalı") }
+        for (e in WidgetWritePolicy.ENTRIES.filter { it.verified && !it.parkOnly }) {
+            val v = WidgetWritePolicy.evaluate(e.module, e.id, e.values.first(), noPark)
+            assertTrue(e.widget, v is WidgetWritePolicy.Verdict.Allowed)
+            assertEquals("sent", WidgetWritePolicy.resultText(v))
+        }
+        // Park kapılılar yalnızca hız 0 ve vites P iken geçer.
+        assertEquals(setOf("Trunk", "Lock", "DriveMode"), WidgetWritePolicy.ENTRIES.filter { it.parkOnly }.map { it.widget }.toSet())
+        assertTrue(WidgetWritePolicy.ENTRIES.filter { it.parkOnly }.all { it.verified })
+        assertTrue(WidgetWritePolicy.evaluate(trunkOpen.module, trunkOpen.id, trunkOpen.value, parked) is WidgetWritePolicy.Verdict.Allowed)
+        assertTrue(WidgetWritePolicy.evaluate(cs, lockId, 2, parked) is WidgetWritePolicy.Verdict.Allowed)
+        assertTrue(WidgetWritePolicy.evaluate(ne, NewEnergyID.ID_DRIVE_MODE, driveMode, parked) is WidgetWritePolicy.Verdict.Allowed)
         assertTrue(ComfortWriter.trunkEnabled)
-        assertTrue(ComfortWriter.rearSpeakerEnabled)
-        assertTrue(ClimateWriter.enabled)
+        assertTrue(ClimateWriter.enabled(quiet = true))
+        assertTrue(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(true, true), readOnly = false))
+        assertFalse(ComfortWriter.canWrite(true, WidgetWritePolicy.gate(true, true), readOnly = true))
+        // Beyaz liste dışı yine ayrı nedenle reddedilir.
+        assertEquals("refused-not-whitelisted", WidgetWritePolicy.resultText(WidgetWritePolicy.evaluate(cs, 10, 1, parked)))
+        assertEquals(listOf("Allowed", "NotVerified", "NotWhitelisted", "ParkRefused"),
+            WidgetWritePolicy.Verdict::class.java.declaredClasses.map { it.simpleName }.sorted())
     }
 
     @Test fun logLineFormat() {
@@ -117,10 +189,10 @@ class WidgetWritePolicyTest {
         assertNull(OurBottomBar.decodeFan(11))
     }
 
-    @Test fun rearSpeakerIsAllowed() {
+    @Test fun rearSpeakerIsWhitelistedButNotVerified() {
         val v = WidgetWritePolicy.evaluate(
             com.desaysv.ivi.vdb.event.id.dsp.VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, SoundFieldMath.FRONT_EXTREME,
         )
-        assertTrue(v is WidgetWritePolicy.Verdict.Allowed)
+        assertTrue(v is WidgetWritePolicy.Verdict.NotVerified)
     }
 }

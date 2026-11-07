@@ -98,10 +98,14 @@ class ClimateMathTest {
         assertTrue(ClimateWriter.canWrite(verified = true, readOnly = false))
     }
 
-    @Test fun writesAlwaysOnButFanZeroNeverSent() {
-        // Yazmalar her zaman açık (test anahtarı kaldırıldı); fan 0 ya da negatif hiçbir zaman gönderilmez.
+    @Test fun onlyVerifiedDockPathWritesAndFanZeroNeverSent() {
+        // Panel yolu (10/13/12, güç) doğrulanmadı: kapalı. Dock yolu (76/78/77) doğrulandı: açık. Fan 0 ya da negatif hiç gönderilmez.
         assertFalse(ClimateWriter.CLIMATE_WRITE_VERIFIED)
-        assertTrue(ClimateWriter.enabled)
+        assertTrue(ClimateWriter.CLIMATE_DOCK_WRITE_VERIFIED)
+        assertFalse(ClimateWriter.enabled(quiet = false))
+        assertTrue(ClimateWriter.enabled(quiet = true))
+        assertFalse(ClimateWriter.setPower(true))
+        assertFalse(ClimateWriter.setTemperature(ClimateSide.DRIVER, 21.0, quiet = false))
         assertFalse(ClimateWriter.setFan(0, quiet = true))
         assertFalse(ClimateWriter.setFan(-1, quiet = true))
     }

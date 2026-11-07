@@ -12,15 +12,16 @@ import org.junit.Test
 class OemWidgetsTest {
     private val hv = com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo.MODULE_HVAC
 
-    private fun allowed(m: Int, i: Int, v: Int) = WidgetWritePolicy.evaluate(m, i, v) is WidgetWritePolicy.Verdict.Allowed
+    private fun whitelisted(m: Int, i: Int, v: Int) = WidgetWritePolicy.find(m, i, v) != null
 
     @Test fun everyNewCommandIsWhitelisted() {
-        for (fade in 0..SoundFieldMath.MAX) assertTrue("fade $fade", allowed(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, fade))
+        for (fade in 0..SoundFieldMath.MAX) assertTrue("fade $fade", whitelisted(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, fade))
     }
 
     @Test fun newWritesStayGatedAndRefuseOtherValues() {
         assertFalse(ComfortWriter.REAR_SPEAKER_WRITE_VERIFIED)
-        assertTrue(ComfortWriter.rearSpeakerEnabled)  // yazmalar her zaman açık; beyaz liste yine geçerli
+        assertFalse(ComfortWriter.rearSpeakerEnabled)  // doğrulanmadı: kapı kapalı
+        assertTrue(WidgetWritePolicy.evaluate(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, 10) is WidgetWritePolicy.Verdict.NotVerified)
         assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, SoundFieldMath.MAX + 1))
         assertNull(WidgetWritePolicy.find(VDEventDsp.SOUND_FIELD, SoundFieldMath.WRITE_ID, -1))
         assertNotNull(WidgetWritePolicy.find(hv, 18, 1))

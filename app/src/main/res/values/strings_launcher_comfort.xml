@@ -9,6 +9,8 @@
     <string name="launcher_trunk_open">Open</string>
     <string name="launcher_trunk_percent">%1$d%% open</string>
     <string name="launcher_trunk_unverified">Not verified yet</string>
+    <string name="launcher_write_unverified">Not verified in the car yet</string>
+    <string name="launcher_write_park_only">Works only when the car is stopped and in P</string>
     <string name="launcher_trunk_stop_unknown">Stop is not verified yet</string>
     <string name="launcher_trunk_close_title">Close the trunk?</string>
     <string name="launcher_trunk_close_message">Make sure nobody is behind the car.</string>

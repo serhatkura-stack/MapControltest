@@ -121,19 +121,29 @@ internal object ClimateMath {
 }
 
 /**
- * Klima yazma noktası. Yazmalar her zaman açık ([LauncherEdition.WRITES_ON]); araca ulaşan tek yol
- * `LauncherEdition.sendItemValue` → [WidgetWriter] (beyaz liste + `WidgetWrite` günlüğü).
+ * Klima yazma noktası. Yalnızca araçta doğrulanmış yol açıktır: dock kimlikleri (76/78/77, ayar "fabrika paneli: Gizle").
+ * Panel kimlikleri (10/13/12) ve klima gücü (18/1/4) doğrulanana dek kapalı. Araca ulaşan tek yol
+ * `LauncherEdition.sendItemValue` → [WidgetWriter] (beyaz liste + doğrulama + `WidgetWrite` günlüğü).
  */
 internal object ClimateWriter {
 
-    /** Araç testinde doğrulanınca true yapılır (koltuk soğutmadaki SEAT_VENT_WRITE_VERIFIED gibi). */
+    /** Panel kimlikleri (10/13/12) ve güç sırası (18/1/4) araçta DOĞRULANMADI; doğrulanınca true yapılır. */
     const val CLIMATE_WRITE_VERIFIED = false
+
+    /**
+     * Dock kimlikleri araçta doğrulandı: sürücü 76 / yolcu 78 sıcaklığı ve fan 77 yazınca geri okumada panel değerleri
+     * (10/13/12) yeni değere geçti.
+     */
+    const val CLIMATE_DOCK_WRITE_VERIFIED = true
 
     /** Saf kapı: yalnızca doğrulanmışsa ve salt-okur sürüm değilse yazılır. */
     fun canWrite(verified: Boolean, readOnly: Boolean): Boolean = verified && !readOnly
 
-    /** Arayüzün "yazılacak mı / bilgi mesajı mı" kararı için. */
-    val enabled: Boolean get() = canWrite(WidgetWritePolicy.gate(CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITES_ON), LauncherEdition.READ_ONLY)
+    /** Arayüzün "yazılacak mı / bilgi mesajı mı" kararı için: [quiet] dock yolu, değilse panel yolu. */
+    fun enabled(quiet: Boolean): Boolean = canWrite(
+        WidgetWritePolicy.gate(if (quiet) CLIMATE_DOCK_WRITE_VERIFIED else CLIMATE_WRITE_VERIFIED, LauncherEdition.WRITES_ON),
+        LauncherEdition.READ_ONLY,
+    )
 
     /**
      * Sıcaklık kimliği. [quiet] (ayar "fabrika paneli: Gizle"): OEM alt dock'unun kimlikleri, sürücü 76 / yolcu 78, aynı ham
@@ -165,14 +175,14 @@ internal object ClimateWriter {
 
     /** Sıcaklığı yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setTemperature(side: ClimateSide, celsius: Double, quiet: Boolean): Boolean {
-        if (!enabled) return false
+        if (!enabled(quiet)) return false
         powerOnIfOff(quiet)
         return send(tempId(side, quiet), ClimateMath.encodeTemp(celsius))
     }
 
     /** Fan kademesini (1..10) yazar. Kapalıyken ya da level < 1 iken (0 yazılmaz) false döner ve araca dokunmaz. */
     fun setFan(level: Int, quiet: Boolean): Boolean {
-        if (!enabled) return false
+        if (!enabled(quiet)) return false
         if (level < 1) return false
         powerOnIfOff(quiet)
         if (quiet) {
@@ -187,7 +197,7 @@ internal object ClimateWriter {
      * Kapalıyken (yazma kapısı) ya da servis yokken false döner; ilk yazma reddedilirse devam yazmaları gönderilmez.
      */
     fun setPower(on: Boolean): Boolean {
-        if (!enabled) return false
+        if (!enabled(quiet = false)) return false
         val plan = ClimateMath.powerPlan(on)
         for ((id, raw) in plan.first) if (!send(id, raw)) return false
         if (plan.followUp.isEmpty()) return true
@@ -216,7 +226,6 @@ internal object ClimateWriter {
             android.util.Log.w("WidgetWrite", "widget=Climate id=$id value=$raw result=refused-no-service")
             return false
         }
-        LauncherEdition.sendItemValue(proxy, VDEventCarInfo.MODULE_HVAC, id, raw)
-        return true
+        return LauncherEdition.sendItemValue(proxy, VDEventCarInfo.MODULE_HVAC, id, raw)
     }
 }

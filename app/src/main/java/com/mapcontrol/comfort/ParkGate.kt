@@ -2,11 +2,12 @@ package com.mapcontrol.comfort
 
 /**
  * Park kapısı kararı (saf). Girdi: gösterge hızı (ID_SPEED_GAUGE_DISPLAY 119) ve eski hız (ID_CAR_SPEED 0).
- * Tavan perdesi ve bagaj yazmaları bu kapıdan geçmeden araca gitmez.
+ * Launcher'da bagaj, merkezi kilit ve sürüş modu yazmaları ([com.mapcontrol.launcher.WidgetWritePolicy], `parkOnly`) bu
+ * kapıdan geçmeden araca gitmez; konfor test aracı da her yazmadan önce sorar.
  *
  * Karar hıza ve vitese dayanır: 119 numaralı sinyal okunmalı ve 0 olmalı; eski hız cevap veriyorsa o da 0 olmalı;
- * vites (ID_GEARBOX_STATE 26) okunmalı ve P (== 1, bu araçta ölçüldü) olmalı. Yalnızca adb test aracı kullanır;
- * launcher widget'larına sürüş/park kilidi KONMAZ. El freni kapıya katılmaz, yalnızca günlüğe yazılır.
+ * vites (ID_GEARBOX_STATE 26) okunmalı ve P (== 1, bu araçta ölçüldü) olmalı. Hız ya da vites okunamazsa reddedilir.
+ * El freni kapıya katılmaz.
  */
 object ParkGate {
 

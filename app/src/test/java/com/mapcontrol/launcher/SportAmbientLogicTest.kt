@@ -106,7 +106,7 @@ class SportAmbientLogicTest {
 
     @Test fun writeGateClosedInRealBuildAndWhitelisted() {
         assertFalse(SportAmbient.AMBIENT_WRITE_VERIFIED)
-        assertTrue(SportAmbient.enabled)  // yazmalar her zaman açık; beyaz liste yine geçerli
+        assertFalse(SportAmbient.enabled)  // doğrulanmadı: kapı kapalı, araca hiçbir şey gitmez
         val cs = VDEventCarInfo.MODULE_CAR_SETTING
         val e = WidgetWritePolicy.find(cs, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR, sport)
         assertNotNull(e)

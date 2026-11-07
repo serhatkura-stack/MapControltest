@@ -1,5 +1,6 @@
 package com.mapcontrol.comfort
 
+import com.mapcontrol.launcher.TrunkMath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,7 +19,7 @@ class ComfortPlanTest {
             ComfortPlan.Write(cs, 10, 3), ComfortPlan.Write(cs, 10, 6), ComfortPlan.Write(cs, 10, 0),
             ComfortPlan.Write(vr, 124, 1), ComfortPlan.Write(vr, 124, 2), ComfortPlan.Write(vr, 124, 3),
             ComfortPlan.Write(vr, 121, 1), ComfortPlan.Write(vr, 121, 2),
-            ComfortPlan.Write(cs, 92, 3), ComfortPlan.Write(cs, 92, 4), ComfortPlan.Write(cs, 92, 2),
+            ComfortPlan.Write(cs, 92, 1), ComfortPlan.Write(cs, 92, 2),
             ComfortPlan.Write(hv, 65, 1), ComfortPlan.Write(hv, 65, 2),
             ComfortPlan.Write(hv, 24, 1), ComfortPlan.Write(hv, 24, 2),
             ComfortPlan.Write(hv, 80, 0), ComfortPlan.Write(hv, 80, 1), ComfortPlan.Write(hv, 80, 2),
@@ -206,8 +207,8 @@ class ComfortPlanTest {
         assertEquals(327684, ComfortPlan.MODULE_READONLY_INFO)
         // Yalnızca belirtilen değerler; yakın değerler ve okuma modülüne yazma reddedilir.
         for (w in listOf(
-            ComfortPlan.Write(vr, 121, 0), ComfortPlan.Write(vr, 121, 3), ComfortPlan.Write(cs, 92, 0), ComfortPlan.Write(cs, 92, 1),
-            ComfortPlan.Write(cs, 92, 5), ComfortPlan.Write(ComfortPlan.MODULE_READONLY_INFO, 98, 0), ComfortPlan.Write(ComfortPlan.MODULE_READONLY_INFO, 19, 1),
+            ComfortPlan.Write(vr, 121, 0), ComfortPlan.Write(vr, 121, 3), ComfortPlan.Write(cs, 92, 0), ComfortPlan.Write(cs, 92, 3),
+            ComfortPlan.Write(cs, 92, 4), ComfortPlan.Write(cs, 92, 5), ComfortPlan.Write(ComfortPlan.MODULE_READONLY_INFO, 98, 0), ComfortPlan.Write(ComfortPlan.MODULE_READONLY_INFO, 19, 1),
             ComfortPlan.Write(hv, 121, 1), ComfortPlan.Write(cs, 121, 1),
         )) rejectsWrite(w)
     }
@@ -225,24 +226,18 @@ class ComfortPlanTest {
         fun only(name: String) = (ComfortPlan.parse(name).steps.single() as ComfortPlan.Step.Send).write
         assertEquals(ComfortPlan.Write(vr, 121, 1), only("trunk_open_vr"))
         assertEquals(ComfortPlan.Write(vr, 121, 2), only("trunk_close_vr"))
-        assertEquals(ComfortPlan.Write(cs, 92, 3), only("trunk_open_cs"))
-        assertEquals(ComfortPlan.Write(cs, 92, 4), only("trunk_close_cs"))
-        assertEquals(ComfortPlan.Write(cs, 92, 2), only("trunk_stop_cs"))
-        for (n in listOf("trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs", "trunk_stop_cs", "trunk_open_stop_cs")) {
+        // Launcher ile tek kodlama: CS 92 ← 1 aç, 2 kapat.
+        assertEquals(ComfortPlan.Write(cs, 92, TrunkMath.CMD_OPEN), only("trunk_open_cs"))
+        assertEquals(ComfortPlan.Write(cs, 92, TrunkMath.CMD_CLOSE), only("trunk_close_cs"))
+        rejects { ComfortPlan.parse("trunk_stop_cs") }
+        rejects { ComfortPlan.parse("trunk_open_stop_cs") }
+        for (n in listOf("trunk_open_vr", "trunk_close_vr", "trunk_open_cs", "trunk_close_cs")) {
             val c = ComfortPlan.parse(n)
             assertEquals(ComfortPlan.Kind.WRITE, c.kind)
             assertEquals(10_000L, c.watchMs)
             assertEquals(listOf(ComfortPlan.PLG_POSITION, ComfortPlan.TRUNK_STATE, ComfortPlan.REAR_DOOR_CONTROL), c.watch)
             for (s in c.steps) if (s is ComfortPlan.Step.Send) assertTrue(s.write in ComfortPlan.ALLOWED)
         }
-        val both = ComfortPlan.parse("trunk_open_stop_cs", afterMs = 1500)
-        assertEquals(
-            listOf(
-                ComfortPlan.Step.Send(ComfortPlan.Write(cs, 92, 3)), ComfortPlan.Step.Wait(1500), ComfortPlan.Step.Send(ComfortPlan.Write(cs, 92, 2)),
-            ),
-            both.steps,
-        )
-        rejects { ComfortPlan.parse("trunk_open_stop_cs", afterMs = 10_001) }
     }
 
     @Test fun trunkInfoIsReadOnly() {

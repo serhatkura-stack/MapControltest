@@ -71,8 +71,8 @@ internal class SeatHeatModel(
 
     /**
      * Seviyeyi (0..3) doğrudan yazar: ekran hemen güncellenir, komut sıralı kuyrukta gider, kısa süre sonra gerçek durum okunur.
-     * Yazılamıyorsa (test sürümü, doğrulanmamış soğutma) sakin bir bilgi mesajı gösterir ve false döner. Sürüş kilidi yoktur;
-     * araç komutu reddederse sonraki okuma eski seviyeyi geri getirir.
+     * Yazılamıyorsa (test sürümü, doğrulanmamış soğutma) sakin bir bilgi mesajı gösterir ve false döner. Koltuk widget'ı sürüşte de
+     * kullanılır (park kapısı yok); araç komutu reddederse sonraki okuma eski seviyeyi geri getirir.
      */
     fun set(driver: Boolean, level: Int): Boolean {
         val id = if (driver) {

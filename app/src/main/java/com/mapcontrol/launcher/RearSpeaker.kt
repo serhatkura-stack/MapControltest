@@ -187,7 +187,7 @@ internal fun ComfortReader.readSound(): ComfortReading {
 }
 
 /**
- * Arka hoparlör: arkada uyuyan çocuk uyanmasın diye sürücü sürerken de dokunur (sürüş kilidi yok, onay penceresi yok). Değer
+ * Arka hoparlör: arkada uyuyan çocuk uyanmasın diye sürücü sürerken de dokunur (park kapısı yok, onay penceresi yok). Değer
  * "Açık" (tüm hoparlörler) ya da "Kapalı" (arka sessiz, fader ön uçta; yanında küçük ay). Tek dokunuşla arka hoparlörleri kapatır,
  * tekrar dokununca eski değeri geri verir. Yazma yalnızca [ComfortWriter.rearSpeakerEnabled] ise gider (doğrulanana dek bilgi
  * mesajı). Şema solda, yazılar sağda.

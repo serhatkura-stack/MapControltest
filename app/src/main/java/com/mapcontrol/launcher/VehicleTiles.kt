@@ -16,7 +16,8 @@ import java.util.concurrent.Executor
 
 /**
  * Merkezi kilit düğmesi (1×2, uygulama kutucuğuyla aynı ayak izi): yolcunun da kolayca uzanacağı net bir düğme.
- * Büyük, ortalanmış kilit ikonu; altında küçük durum etiketi ("Kilitli" / "Kilit açık"). Dokununca kilidi açar/kapatır.
+ * Büyük, ortalanmış kilit ikonu; altında küçük durum etiketi ("Kilitli" / "Kilit açık"). Dokununca kilidi açar/kapatır;
+ * komut yalnızca araç dururken ve vites P'deyken gider (park kapısı, [WidgetWritePolicy]), aksi halde kısa neden gösterilir.
  */
 internal class LockTile(private val context: Context) : SizedWidget, Themeable, StripSource {
 
