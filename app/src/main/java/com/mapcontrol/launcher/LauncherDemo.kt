@@ -94,23 +94,12 @@ internal object LauncherDemo {
     @Volatile
     var sportSummary = false
 
-    /**
-     * `--ez launcher_demo_fast_rpm true`: hızlı devir canlıymış gibi spor ekranı RPM önce düzeninde açılır (büyük ibre devir
-     * 0–8000, demo devri 3400; ortada dijital hız). Verilmezse bugünkü hız önce düzeni.
-     */
-    const val EXTRA_FAST_RPM = "launcher_demo_fast_rpm"
-
-    @Volatile
-    var sportFastRpm = false
-        private set
-
     /** Spor önizleme ekstralarını varsayılana döndürür (yalnız bellekte; demo hiçbir şeyi kalıcı yazmaz). */
     internal fun resetSportPreview() {
         sportForced = null
         sportNoG = false
         sportDials = null
         sportSummary = false
-        sportFastRpm = false
     }
 
     /** Demo şarkı adı (`--es launcher_demo_title "..."`): uzun başlığın kartta sığmasını denemek için. */
@@ -341,7 +330,6 @@ internal object LauncherDemo {
         if (intent.hasExtra(EXTRA_NO_G)) sportNoG = intent.getBooleanExtra(EXTRA_NO_G, false)
         if (intent.hasExtra(EXTRA_SPORT_DIALS)) sportDials = intent.getStringExtra(EXTRA_SPORT_DIALS)
         if (intent.hasExtra(EXTRA_SPORT_SUMMARY)) sportSummary = intent.getBooleanExtra(EXTRA_SPORT_SUMMARY, false)
-        if (intent.hasExtra(EXTRA_FAST_RPM)) sportFastRpm = intent.getBooleanExtra(EXTRA_FAST_RPM, false)
     }
 
     /**

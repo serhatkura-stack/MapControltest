@@ -45,9 +45,6 @@ class SportGate(private val stableMs: Long = STABLE_MS) {
 
 /** Spor kadranlarının saf çözümleri. */
 object SportMath {
-    /** Devir kadranı üst sınırı (×1000 ölçek 0–8) ve kırmızı bölgenin başlangıcı. */
-    const val RPM_MAX = 8_000
-    const val RED_ZONE_RPM = 6_500
     /** Kadran yayı: 0 sol altta (135°), 8 sağ altta; saat yönünde 270° (tuval açısı, 0° = sağ). */
     const val START_DEG = 135f
     const val SWEEP_DEG = 270f
@@ -60,7 +57,6 @@ object SportMath {
 
     const val RAW_MAX = 3_000 // 12 000 dev/dk; üstü bozuk okuma
 
-    /** İbre açısı (tuval derecesi): devir 0..[RPM_MAX] aralığına kırpılır. */
     /**
      * İbre yeni devre gitsin mi: yalnız [deadband]'den büyük farkta. Dururken fark gösterilen devirden, hareket sürerken
      * gidilen hedeften ölçülür: rölanti kıpırtısı süren hareketi her 100 ms yeniden başlatıp ekranı durmadan çizdirmez
@@ -68,8 +64,6 @@ object SportMath {
      */
     fun needleShouldMove(moving: Boolean, target: Float, shown: Float, rpm: Float, deadband: Float): Boolean =
         kotlin.math.abs(rpm - if (moving) target else shown) >= deadband
-
-    fun needleDeg(rpm: Float): Float = START_DEG + SWEEP_DEG * (rpm.coerceIn(0f, RPM_MAX.toFloat()) / RPM_MAX)
 
     /**
      * Ana (büyük) kadran hızdır (spor-modu-brief sonu, kullanıcı kararı "önce hız"): 0–[SPEED_MAX] km/sa aynı 270° yayda.

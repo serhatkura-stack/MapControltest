@@ -157,7 +157,7 @@ internal object SportArt {
         mediaDial(c, g.media)
         carDial(c, g.car, g)
         g.subs.forEach { subDial(context, c, it, g) }
-        if (g.rpmFirst) rpmDial(context, c, g) else speedDial(context, c, g)
+        speedDial(context, c, g)
         return bmp
     }
 
@@ -285,57 +285,6 @@ internal object SportArt {
     }
 
     /**
-     * Ana kadran, RPM önce düzeni (hızlı devir canlıyken, [RpmFrameReader]): devir 0–[SportMath.RPM_MAX], kırmızı bölge
-     * [SportMath.RED_ZONE_RPM]'den sonra; ortada dijital hız. 1c80d30 öncesi devir kadranının aynısı.
-     */
-    private fun rpmDial(context: Context, c: Canvas, g: SportGeometry) {
-        val d = g.rpm
-        val bw = d.r * 0.075f
-        bezel(c, d.cx, d.cy, d.r, bw, bright = 1.08f)
-        val rf = d.r - bw - 2f
-        face(c, d.cx, d.cy, rf, lift = 0.15f)
-        val rT = rf - rf * 0.045f
-        val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        // Kırmızı bölge: dış izde ince yay.
-        p.style = Paint.Style.STROKE
-        val red0 = SportMath.needleDeg(SportMath.RED_ZONE_RPM.toFloat())
-        val red1 = SportMath.needleDeg(SportMath.RPM_MAX.toFloat())
-        p.strokeWidth = rf * 0.03f
-        p.color = SportInk.RED
-        val rr = rT + rf * 0.012f
-        c.drawArc(RectF(d.cx - rr, d.cy - rr, d.cx + rr, d.cy + rr), red0, red1 - red0, false, p)
-        p.style = Paint.Style.FILL
-        // Bölüntü: her 100 dev/dk ince, 500 orta, 1000 uzun.
-        p.strokeCap = Paint.Cap.BUTT
-        for (i in 0..SportMath.RPM_MAX / 100) {
-            val rpm = i * 100
-            val deg = SportMath.needleDeg(rpm.toFloat())
-            val major = rpm % 1000 == 0
-            val half = !major && rpm % 500 == 0
-            val red = rpm >= SportMath.RED_ZONE_RPM
-            p.color = when {
-                red -> SportInk.RED
-                major -> SportInk.INK
-                half -> 0xD9FFFFFF.toInt()
-                else -> 0x8CFFFFFF.toInt()
-            }
-            p.strokeWidth = when { major -> rf * 0.016f; half -> rf * 0.009f; else -> rf * 0.0055f }
-            val len = when { major -> rf * 0.11f; half -> rf * 0.065f; else -> rf * 0.038f }
-            line(c, d.cx, d.cy, deg, rT - len, rT, p)
-        }
-        // Rakamlar 0..8 (ince, büyük).
-        val num = textPaint(context, rf * 0.165f, SportInk.INK, 300)
-        val rn = rf * 0.70f
-        for (k in 0..8) {
-            val a = Math.toRadians(SportMath.needleDeg(k * 1000f).toDouble())
-            centered(c, k.toString(), d.cx + cos(a).toFloat() * rn, d.cy + sin(a).toFloat() * rn, num)
-        }
-        hubAndGear(c, g, d, rf, p)
-        // Birim etiketi en altta, vites penceresinin altında: ibre o bölgeye inmez.
-        centered(c, "RPM ×1000", d.cx, d.cy + rf * SportGeometry.RPM_LABEL_Y, textPaint(context, rf * 0.05f, SportInk.INK_3, 500).apply { letterSpacing = 0.12f })
-    }
-
-    /**
      * Ana kadran: hız 0–[SportMath.SPEED_MAX] km/sa (kullanıcı kararı "önce hız", spor-modu-brief sonu). Bölüntü her 5 km/sa
      * ince, 10'da orta, 20'de uzun; rakamlar 20'şer. Kırmızı bölge yok (sakin); tek sıcak vurgu ibre ve tepe işareti.
      */
@@ -431,8 +380,6 @@ internal class SportGeometry(
     val w: Int,
     val h: Int,
     val dials: List<SportDial>,
-    /** Ana kadran devir mi (RPM önce, hızlı devir canlı) yoksa hız mı. */
-    val rpmFirst: Boolean = false,
 ) {
     /** [slot] küçük kadran yuvası (0 sol üst, 1 sol alt, 2 sağ üst, 3 sağ alt); büyük kadranlarda -1. */
     class Dial(val cx: Float, val cy: Float, val r: Float, val kind: SportDial? = null, val slot: Int = -1)
@@ -471,9 +418,9 @@ internal class SportGeometry(
     fun sub(kind: SportDial): Dial? = subs.firstOrNull { it.kind == kind }
 
     /** Aynı boyut ve aynı seçim (durağan çizim yeniden kullanılabilir). */
-    fun sameAs(o: SportGeometry?): Boolean = o != null && o.w == w && o.h == h && o.dials == dials && o.rpmFirst == rpmFirst
+    fun sameAs(o: SportGeometry?): Boolean = o != null && o.w == w && o.h == h && o.dials == dials
 
-    /** Ana kadran yüz yarıçapı ([rpmFirst]'e göre devir ya da hız kadranı). */
+    /** Ana kadran (hız) yüz yarıçapı. */
     val rpmFace: Float get() = rpm.r - rpm.r * 0.075f - 2f
 
     /**

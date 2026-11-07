@@ -64,23 +64,6 @@ class SportVhalTest {
         assertEquals(SportVhalMath.RpmSource.NONE, none.source)
     }
 
-    @Test fun arrivalLogCountsIntervalsPerWindow() {
-        val log = ArrivalLog()
-        assertEquals("n=0", log.takeLine())
-        log.mark(1_000)
-        assertEquals("n=1", log.takeLine())
-        // Pencere sınırını aşan aralık da sayılır (son varış korunur).
-        log.mark(1_100)
-        log.mark(1_300)
-        assertEquals("n=2 ort=150ms min=100 max=200", log.takeLine())
-        log.reset()
-        log.markIfChanged(0, 750)
-        log.markIfChanged(500, 750)
-        log.markIfChanged(5_000, 760)
-        log.markIfChanged(5_500, null)
-        assertEquals("n=2 ort=5000ms min=5000 max=5000", log.takeLine())
-    }
-
     @Test fun streamingRpmStaysVisibleWhileArriving() {
         val r = RpmReadout(3_000)
         assertEquals(2_400, r.next(0, 2_400, arrivedAt = 0))

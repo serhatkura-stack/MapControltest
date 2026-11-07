@@ -53,14 +53,6 @@ class SportLogicTest {
         assertNull(SportMath.rpm(0xFFFF))
     }
 
-    @Test fun needleCoversTheArcAndClamps() {
-        assertEquals(135f, SportMath.needleDeg(0f), 0.01f)
-        assertEquals(405f, SportMath.needleDeg(8_000f), 0.01f)
-        assertEquals(270f, SportMath.needleDeg(4_000f), 0.01f)
-        assertEquals(405f, SportMath.needleDeg(12_000f), 0.01f)
-        assertEquals(135f, SportMath.needleDeg(-50f), 0.01f)
-    }
-
     @Test fun gearText() {
         assertEquals("P", SportMath.gearText(1))
         assertEquals("R", SportMath.gearText(2))
@@ -476,8 +468,8 @@ class SportLogicTest {
         assertTrue(SportGeometry.GEAR_Y - SportGeometry.GEAR_HH > SportGeometry.SPEED_UNIT_Y + SportGeometry.SPEED_UNIT_SIZE / 2f)
         assertTrue(SportGeometry.RPM_LABEL_Y > SportGeometry.GEAR_Y + SportGeometry.GEAR_HH)
         assertTrue(SportGeometry.RPM_LABEL_Y < 0.95f)
-        // Alt boşluk: ibre 0'da 135°, 8 000'de 45°; hız bölgesi (aşağı, 90°) hiç süpürülmez.
-        assertTrue(SportMath.needleDeg(0f) >= 135f - 1e-3f && SportMath.needleDeg(SportMath.RPM_MAX.toFloat()) <= 405f + 1e-3f)
+        // Alt boşluk: ibre 0'da 135°, en üst hızda 405° (45°); hız bölgesi (aşağı, 90°) hiç süpürülmez.
+        assertTrue(SportMath.speedDeg(0f) >= 135f - 1e-3f && SportMath.speedDeg(SportMath.SPEED_MAX.toFloat()) <= 405f + 1e-3f)
         assertEquals("km/sa", SportGeometry.SPEED_UNIT_TEXT)
     }
 

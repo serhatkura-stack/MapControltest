@@ -32,9 +32,6 @@
     <!-- Spor hız kadranı: android.car PERF_VEHICLE_SPEED 10 Hz (tehlikeli izin; uygulama durağanken bir kez sorar ya da
          adb shell pm grant <paket> android.car.permission.CAR_SPEED). Yoksa ReadOnly 119 gösterge hızı kullanılır. -->
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
-    <!-- Spor devir ibresi: araç servisinin MCU çerçeveleri (Spi2Ethenet günlüğü, sinyal 0x8D) logcat'ten okunur; yalnız spor
-         ekranı görünürken. adb shell pm grant <paket> android.permission.READ_LOGS. Yoksa devir yavaş kaynaktan. -->
-    <uses-permission android:name="android.permission.READ_LOGS" />
 
     <application
         android:allowBackup="false"
