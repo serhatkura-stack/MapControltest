@@ -1042,7 +1042,7 @@ class HomeLauncherActivity : Activity() {
      * Arama sayfası için "ana ekran biz miyiz": sistem varsayılanı biz ya da FrostNav launcher modu açık (araçta varsayılan HOME
      * OEM launcher kalıyor, Ana ekran tuşunu FrostNav yakalıyor; 7 Kasım araç testi: PhoneCallActivity açık kaldı).
      */
-    private fun isHomeForCalls(): Boolean = defaultHome || com.mapcontrol.util.LauncherModeManager.isEnabled(this)
+    private fun isHomeForCalls(): Boolean = defaultHome || LauncherEdition.launcherModeOn(this)
 
     /** Varsayılan HOME biz miyiz: PackageManager sorgusu arka planda (Binder ana iş parçacığında değil). */
     private fun refreshDefaultHome() {

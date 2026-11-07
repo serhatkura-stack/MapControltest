@@ -14,6 +14,9 @@ import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
  * her biri beyaz listeden ([WidgetWritePolicy]) geçer (sürüş kilidi yok) ve `WidgetWrite` etiketiyle günlüğe yazılır.
  */
 internal object LauncherEdition {
+    /** FrostNav launcher modu açık mı (Ana ekran tuşunu FrostNav yakalıyor; sistem varsayılan HOME OEM olabilir). */
+    fun launcherModeOn(context: Context): Boolean = false
+
 
     /** Widget yazmaları her zaman açık (kapılar açık, beyaz liste şartıyla). */
     const val WRITES_ON = true

@@ -22,6 +22,9 @@ import com.mapcontrol.util.WifiController
  * komutlar hiçbir şey yapmaz ve Ayarlar girişi yoktur. Launcher'ın geri kalanı iki derlemede aynıdır.
  */
 internal object LauncherEdition {
+    /** FrostNav launcher modu açık mı (Ana ekran tuşunu FrostNav yakalıyor; sistem varsayılan HOME OEM olabilir). */
+    fun launcherModeOn(context: Context): Boolean = com.mapcontrol.util.LauncherModeManager.isEnabled(context)
+
 
     /** true: araç verisi yalnızca okunur, dokunuşlar komut göndermez. */
     const val READ_ONLY = false
