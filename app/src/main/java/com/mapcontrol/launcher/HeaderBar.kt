@@ -291,8 +291,6 @@ class HeaderBar(
         weatherBox.addView(weatherIcon, LinearLayout.LayoutParams(icon, icon))
         weatherBox.addView(gap(context, 12))
         weatherBox.addView(weatherTemp)
-        weatherBox.addView(gap(context, 12))
-        weatherBox.addView(weatherLabel)
         weatherBox.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, h)
         return weatherBox
     }
@@ -572,13 +570,10 @@ class HeaderBar(
     private fun bindWeather(snapshot: OpenMeteoWeatherSnapshot) {
         lastWeather = snapshot
         weatherTemp.text = context.getString(R.string.launcher_degrees, Math.round(carOutsideC ?: snapshot.temperatureC.toDouble()).toInt())
-        weatherLabel.text = OpenMeteoWeatherLabels.labelFor(context, snapshot.weatherCode, snapshot.day)
-        // Yalnızca elimizde doğru ikonu olan durum için hava ikonu; diğerlerinde nötr termometre.
-        weatherIcon.setImageResource(when {
-            snapshot.weatherCode in 45..48 -> R.drawable.ic_mdi_weather_fog
-            snapshot.weatherCode in 1..3 -> R.drawable.ic_sahne_partly_cloudy_fill
-            else -> R.drawable.ic_mdi_thermometer
-        })
+        // 7 Kasım araç testi: konuma göre hava durumu yazısı yanlıştı (güneşliyken "Sağanak"). Yalnız sıcaklık gösterilir
+        // (araç dış sıcaklığı; yoksa hava servisinin sıcaklığı), durum yazısı ve hava ikonu yok.
+        weatherLabel.text = ""
+        weatherIcon.setImageResource(R.drawable.ic_mdi_thermometer)
         // Eski veri ikincil tonda; veri hiç yoksa grup gizli kalır.
         val updatedAt = weatherClient.lastUpdatedMs
         val stale = carOutsideC == null && updatedAt > 0L && System.currentTimeMillis() - updatedAt > WEATHER_STALE_MS
