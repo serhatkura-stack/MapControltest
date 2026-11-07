@@ -182,6 +182,7 @@ internal class SportStageView(
     /** 773 bir kez 62 ile uyuştu mu (birim doğrulaması); uyuşmadan gösterime girmez. */
     private var vhalRpmTrusted = false
     private var rpmSource = SportVhalMath.RpmSource.NONE
+    private var last62Logged: Int? = null
     private val calibration = SpeedCalibration()
     /** Hızlı devir (MCU çerçeveleri, logcat Spi2Ethenet); yalnız görünürken çalışır. */
     private val rpmFrames = RpmFrameReader(activity) { if (rpmPending.compareAndSet(false, true)) main.post(rpmPost) }
@@ -500,6 +501,12 @@ internal class SportStageView(
             // Devir: 773 (VDBus VHAL) taze ve 62 ile doğrulanmışsa o; yoksa ReadOnly 62 (normal veri katmanı, değişince).
             val ro = if (snap.connected && VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null
             rpm62Arrivals.markIfChanged(now, ro)
+            // Devir avı (yalnız debug): doğru ama yavaş ReadOnly 62 değeri değişince yazılır; MCU çerçeve sinyalleri sonradan
+            // bununla karşılaştırılır (7 Kasım: 0x8D gerçek devir değil).
+            if (BuildConfig.DEBUG && ro != null && ro != last62Logged) {
+                last62Logged = ro
+                android.util.Log.i(VhalSportReader.TAG, "ro62=$ro")
+            }
             val vr = vhal.rpm
             val vAt = vhal.rpmAt
             if (!vhalRpmTrusted && vr != null && ro != null && now - vAt < SportVhalMath.FRESH_MS && SportVhalMath.agrees(vr, ro)) {
