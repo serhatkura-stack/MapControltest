@@ -162,7 +162,7 @@ class MiniDashLogicTest {
         assertTrue(m.wide)
         assertTrue(m.showNav)
         assertEquals(0, m.headerDp)
-        assertTrue(m.infoDp in 340..420)
+        assertTrue(m.infoDp in 372..420)
         assertTrue(m.sideDp in 420..560)
         // Bilgi ve yan sütunlardan sonra araç sahnesine en az yarı ekran kalır.
         assertTrue(1920 - m.infoDp - m.sideDp - 2 * m.paddingDp - 2 * m.gapDp >= 800)

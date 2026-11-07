@@ -248,7 +248,8 @@ internal data class MiniLayout(
                 headerDp = header,
                 pillText = wide || widthDp >= 860,
                 sideDp = if (wide) (widthDp * 0.29f).toInt().coerceIn(420, 560) else (widthDp * 0.38f).toInt().coerceIn(280, 380),
-                infoDp = if (wide) (widthDp * 0.2f).toInt().coerceIn(340, 420) else 0,
+                // En az 372: "Müzik aç" + "Tam ekran" yazılı düğmeleri yan yana kesilmeden sığar (1707 genişlikte 341 yetmiyordu).
+                infoDp = if (wide) (widthDp * 0.2f).toInt().coerceIn(372, 420) else 0,
                 mediaDp = media,
                 coverDp = if (media >= 96) media - 24 else 0,
                 playDp = if (tight) 72 else 80,

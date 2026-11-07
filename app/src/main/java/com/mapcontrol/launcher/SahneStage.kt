@@ -163,6 +163,8 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
      * Mini gösterge menzil ile yakıtı kendi üst satırında büyük gösterir ([MiniDashActivity]); ana ekranda hep true.
      */
     internal var showRange = true
+    /** Mini gösterge: veri yokken kilit hapı da gizli (tek bekleme satırı "Araç verisi bekleniyor" kalır). */
+    internal var hideLockWhileWaiting = false
         set(value) {
             if (field == value) return
             field = value
@@ -360,6 +362,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
         rangeBlock.visibility = if (!showRange) View.GONE else if (waiting) View.INVISIBLE else View.VISIBLE
         skeleton.visibility = if (waiting && showRange) View.VISIBLE else View.GONE
         waitNote.visibility = if (waiting) View.VISIBLE else View.GONE
+        lockChip.visibility = if (waiting && hideLockWhileWaiting) View.INVISIBLE else View.VISIBLE
     }
 
     /** Arabada yanan parçalar (§10 genel kural): yakıt kapağı açıkken kapak, motor suyu / akü uyarısında kaput. */
