@@ -242,7 +242,66 @@ public final class SplitScreenLauncher {
         boolean first = launchFreeform(app, pkg1, parts[0]);
         boolean second = launchFreeform(app, pkg2, parts[1]);
         Log.d(TAG, "first=" + first + " second=" + second + " usable=" + usable);
+        if (first && second) {
+            // Başka uygulamanın önceden açık görevi açılış sınırlarını almaz (eski yerinde öne gelir): görev kimliği olay
+            // günlüğünden bulunup sınırlarla yeniden öne alınır. Kendi Mini göstergemiz yukarıda yeni görevle açıldı.
+            boolean waited = false;
+            String[] slots = {pkg1, pkg2};
+            for (int i = 0; i < slots.length; i++) {
+                if (SplitSlot.packageOf(slots[i]).equals(self)) {
+                    continue;
+                }
+                if (!waited) {
+                    Thread.sleep(PLACE_WAIT_MS);
+                    waited = true;
+                }
+                placeExistingTask(app, SplitSlot.packageOf(slots[i]), parts[i]);
+            }
+        }
         return first && second ? Result.STARTED : Result.LAUNCH_FAILED;
+    }
+
+    /** Açılıştan sonra görevin olay günlüğüne düşmesi için beklenen süre. */
+    private static final long PLACE_WAIT_MS = 700L;
+
+    /**
+     * [pkg]'nin görevini ([SplitTaskFinder] ile olay günlüğünden) bulup {@code moveTaskToFront} ile [bounds]'a yerleştirir.
+     * Yeni açılmış görevde zararsızdır (sınırlar zaten aynı). READ_LOGS yoksa ya da görev bulunamazsa yalnız loglanır.
+     */
+    private static void placeExistingTask(Context context, String pkg, Rect bounds) {
+        int taskId;
+        try {
+            Process p = new ProcessBuilder(SplitTaskFinder.logcatArgs()).redirectErrorStream(true).start();
+            String out;
+            try (java.io.InputStream in = p.getInputStream()) {
+                java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+                byte[] b = new byte[8192];
+                int n;
+                while ((n = in.read(b)) > 0) {
+                    buf.write(b, 0, n);
+                }
+                out = buf.toString("UTF-8");
+            }
+            p.waitFor();
+            taskId = SplitTaskFinder.lastTaskId(out, pkg);
+        } catch (Exception e) {
+            Log.w(TAG, "place: event log unreadable for " + pkg + ": " + e.getClass().getSimpleName());
+            return;
+        }
+        if (taskId < 0) {
+            Log.w(TAG, "place: no task id for " + pkg);
+            return;
+        }
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) {
+                return;
+            }
+            am.moveTaskToFront(taskId, 0, freeformOptions(bounds));
+            Log.i(TAG, "place: task " + taskId + " (" + pkg + ") -> " + bounds);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "place: moveTaskToFront failed for " + pkg + ": " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -459,6 +518,26 @@ public final class SplitScreenLauncher {
         return sideBySideFor(dm.widthPixels, dm.heightPixels);
     }
 
+    /** Serbest pencere açılış seçenekleri (MyCar {@code r()} anahtarları birebir): mod 5, [bounds], ekran 0. */
+    @NonNull
+    private static Bundle freeformOptions(Rect bounds) {
+        ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchBounds(new Rect(bounds));
+        options.setLaunchDisplayId(Display.DEFAULT_DISPLAY);
+        Bundle bundle = options.toBundle();
+        if (bundle == null) {
+            bundle = new Bundle();
+        }
+        bundle.putInt("android.activity.windowingMode", WINDOWING_MODE_FREEFORM);
+        bundle.putInt("android:windowingMode", WINDOWING_MODE_FREEFORM);
+        bundle.putParcelable("android.activity.launchBounds", new Rect(bounds));
+        bundle.putParcelable("android:launchBounds", new Rect(bounds));
+        bundle.putInt("android:freeformWindowSize", 1);
+        bundle.putInt("android:multiWindowMode", 1);
+        bundle.putBoolean("android:overrideTransition", true);
+        return bundle;
+    }
+
     /** MyCar {@code r()}: pencere modu, sınırlar ve ekran 0. Anahtarlar birebir korunur. */
     private static boolean launchFreeform(Context context, String packageName, Rect bounds) {
         try {
@@ -468,22 +547,7 @@ public final class SplitScreenLauncher {
             }
             intent.addCategory(Intent.CATEGORY_LAUNCHER);
             intent.setFlags(LAUNCH_FLAGS);
-
-            ActivityOptions options = ActivityOptions.makeBasic();
-            options.setLaunchBounds(new Rect(bounds));
-            options.setLaunchDisplayId(Display.DEFAULT_DISPLAY);
-            Bundle bundle = options.toBundle();
-            if (bundle == null) {
-                bundle = new Bundle();
-            }
-            bundle.putInt("android.activity.windowingMode", WINDOWING_MODE_FREEFORM);
-            bundle.putInt("android:windowingMode", WINDOWING_MODE_FREEFORM);
-            bundle.putParcelable("android.activity.launchBounds", new Rect(bounds));
-            bundle.putParcelable("android:launchBounds", new Rect(bounds));
-            bundle.putInt("android:freeformWindowSize", 1);
-            bundle.putInt("android:multiWindowMode", 1);
-            bundle.putBoolean("android:overrideTransition", true);
-            context.startActivity(intent, bundle);
+            context.startActivity(intent, freeformOptions(bounds));
             return true;
         } catch (Exception e) {
             Log.e(TAG, "launch failed: " + packageName, e);
