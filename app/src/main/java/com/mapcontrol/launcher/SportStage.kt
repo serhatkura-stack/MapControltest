@@ -336,7 +336,7 @@ internal class SportStageView(
         if (!LauncherDemo.enabled) {
             carSpeed.start()
             vhal.start()
-            rpmFrames.start()
+            if (RPM_FIRST_ENABLED) rpmFrames.start()
             askSpeedPermission()
         }
         logStart()
@@ -511,7 +511,9 @@ internal class SportStageView(
             val framesLive = rpmFrames.live(now)
             rpm = if (framesLive) rpmFrames.rpm else pick.rpm
             rpmAt = if (framesLive) rpmFrames.rpmAt else pick.arrivedAt
-            if (visibleNow && layoutGate.update(now, framesLive)) setWant(layoutGate.rpmFirst)
+            // 7 Kasım araç videosu: 0x8D rölantide doğru (765) ama yük altında gerçek devirden yüksek (≈3700'e karşı ≈2500) ve
+            // 4094'te tavan yapıyor; motor devri değil. Devir önce düzeni kapalı, ana kadran sürüşte değişmez (hız önce).
+            if (RPM_FIRST_ENABLED && visibleNow && layoutGate.update(now, framesLive)) setWant(layoutGate.rpmFirst)
             if (pick.source != rpmSource) {
                 rpmSource = pick.source
                 android.util.Log.i(VhalSportReader.TAG, "devir kaynağı=${pick.source.key}")
@@ -636,7 +638,7 @@ internal class SportStageView(
     /** Giriş kararı (bitmap çizilmeden önce): demoda ekstra, yoksa bu süreçte en son yerleşen düzen (izin hâlâ varsa). */
     private fun decideEntry() {
         if (visibleNow) return
-        setWant(if (LauncherDemo.enabled) LauncherDemo.sportFastRpm else SportRpmLayout.last && RpmFrameReader.hasPermission(activity))
+        setWant(if (LauncherDemo.enabled) LauncherDemo.sportFastRpm else RPM_FIRST_ENABLED && SportRpmLayout.last && RpmFrameReader.hasPermission(activity))
     }
 
     /** İstenen düzen: yeni yerleşim ve bitmap arka planda; hazır olunca [applyMode]. */
@@ -705,7 +707,7 @@ internal class SportStageView(
         // Devir yalnız hızlı kaynak (VDBus 773) doğrulanınca gösterilir; ReadOnly 62 ~5 sn'de bir değiştiği için
         // ekranda yanıltıcı (7 Kasım, kullanıcı: "devir alamadık"). Demoda gösterilmez.
         // RPM önce düzeninde devir zaten büyük ibrede: küçük okuma gizli. Hız önce düzeninde MCU çerçeveleri de hızlı kaynak.
-        val fast = rpmSource == SportVhalMath.RpmSource.VHAL || rpmFrames.live(now)
+        val fast = rpmSource == SportVhalMath.RpmSource.VHAL || (RPM_FIRST_ENABLED && rpmFrames.live(now))
         val show = v != null && !sweeping && !LauncherDemo.enabled && fast && !rpmMode
         if (v != null) setText(rpmText, activity.getString(R.string.launcher_sport_rpm, v))
         if (show == rpmShown) return
@@ -1285,6 +1287,8 @@ internal class SportStageView(
         const val G_DEADBAND_DP = 2
         /** Dijital hızın tasarım boyuna oranı (ibre birincil okuma). */
         const val SECONDARY_SPEED_SCALE = 0.5f
+        /** Devir önce düzeni (0x8D gerçek devirle eşleşene kadar kapalı). */
+        const val RPM_FIRST_ENABLED = false
         /** Yeni 0–100 sonucu bu süre (en iyi olmasa da) kadranda kalır; sonra sürüşün en iyisi. */
         const val RESULT_SHOW_MS = 10_000L
         const val FLASH_MS = 1_400L
