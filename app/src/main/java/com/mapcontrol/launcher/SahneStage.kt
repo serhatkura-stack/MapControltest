@@ -163,14 +163,20 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
      * Mini gösterge menzil ile yakıtı kendi üst satırında büyük gösterir ([MiniDashActivity]); ana ekranda hep true.
      */
     internal var showRange = true
-    /** Mini gösterge: veri yokken kilit hapı da gizli (tek bekleme satırı "Araç verisi bekleniyor" kalır). */
-    internal var hideLockWhileWaiting = false
         set(value) {
             if (field == value) return
             field = value
             fitKey = emptyList()
             applyWaiting()
             requestLayout()
+        }
+
+    /** Mini gösterge: veri yokken kilit hapı da gizli (tek bekleme satırı "Araç verisi bekleniyor" kalır). */
+    internal var hideLockWhileWaiting = false
+        set(value) {
+            if (field == value) return
+            field = value
+            applyWaiting()
         }
 
     /** Spor ekranının araç modülü için açık parçalar ve camlar (her araç özetinde; [animate] ilk özetten sonra). */
