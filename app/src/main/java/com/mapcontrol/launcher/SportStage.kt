@@ -114,6 +114,11 @@ internal object SportDemo {
  * araç modülü (açık kapı/bagaj, stop parıltısı). "Önce hız" kararı: spor-modu-brief sonu (6 Kasım); devir ReadOnly 62
  * araçta ~5 sn'de bir değiştiği için büyük ibre olamaz.
  *
+ * RPM önce düzeni: hızlı devir ([RpmFrameReader], MCU çerçeveleri ~7/sn) canlıysa büyük ibre devir (0–8000, kırmızı
+ * bölge), ortada büyük dijital hız. Karar kare başına değil: girişte bu süreçte en son yerleşen düzen ([SportRpmLayout]),
+ * görünürken kaynak 3 sn kesintisiz canlı/kayıp kalınca ([RpmLayoutGate]); yeni düzenin bitmap'i arka planda çizilir ve
+ * hazır olunca tek seferde uygulanır ([applyMode]). Demo: `--ez launcher_demo_fast_rpm true`.
+ *
  * Düzenleme modunda küçük kadrana uzun basınca seçici açılır ([SportDialPicker]); seçim kalıcıdır ([SportDialPrefs]).
  *
  * Performans (hedef: sürüşte spor ekranı CPU'su %10'un çok altında): bütün durağan çizim ([SportArt.render]) boyut ve
@@ -178,6 +183,20 @@ internal class SportStageView(
     private var vhalRpmTrusted = false
     private var rpmSource = SportVhalMath.RpmSource.NONE
     private val calibration = SpeedCalibration()
+    /** Hızlı devir (MCU çerçeveleri, logcat Spi2Ethenet); yalnız görünürken çalışır. */
+    private val rpmFrames = RpmFrameReader(activity) { if (rpmPending.compareAndSet(false, true)) main.post(rpmPost) }
+    private val rpmPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val rpmPost = Runnable {
+        rpmPending.set(false)
+        if (visibleNow) onFastRpm()
+    }
+    /** İstenen düzen (RPM önce mi); bitmap hazır olunca [rpmMode] olur. */
+    private val layoutGate = RpmLayoutGate(SportRpmLayout.last)
+    private val wantRpm: Boolean get() = layoutGate.rpmFirst
+    /** Ekrandaki düzen (bitmap, ibre ölçeği, dijital hız boyu bununla uyumlu). */
+    private var rpmMode = false
+    /** Hızlı kaynaktan görülen en yüksek devir (oturumun tepe devri silinince, yani yeni sürüşte sıfırlanır). */
+    private var fastPeakRpm = 0
     private var speedText: String = SpeedReadout.DASH
     private val slots = ArrayList<Slot>()
     private val media = SportMediaDial(activity)
@@ -199,8 +218,8 @@ internal class SportStageView(
     private var sweeping = false
     private var editing = false
     private var picker: SportDialPicker? = null
-    /** İbrenin gösterdiği hız (km/sa). */
-    private var shownKmh = 0f
+    /** İbrenin gösterdiği değer: hız (km/sa) ya da RPM önce düzeninde devir. */
+    private var shownNeedle = 0f
     // Tek ibre animatörü (10 Hz takipte her seferinde yenisi kurulmaz): başlangıç/hedef alanlardan okunur.
     private var needleFrom = 0f
     private var needleTo = 0f
@@ -208,8 +227,8 @@ internal class SportStageView(
     private var needleCancelled = false
     private val needleAnim: ValueAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
         addUpdateListener {
-            shownKmh = needleFrom + (needleTo - needleFrom) * (it.animatedValue as Float)
-            needle.rotation = SportMath.speedDeg(shownKmh)
+            shownNeedle = needleFrom + (needleTo - needleFrom) * (it.animatedValue as Float)
+            needle.rotation = needleDeg(shownNeedle)
         }
         addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationCancel(animation: Animator) { needleCancelled = true }
@@ -313,9 +332,11 @@ internal class SportStageView(
         lastGearState = null
         speedReadout.reset()
         rpmReadout.reset()
+        layoutGate.restart(wantRpm)
         if (!LauncherDemo.enabled) {
             carSpeed.start()
             vhal.start()
+            rpmFrames.start()
             askSpeedPermission()
         }
         logStart()
@@ -336,6 +357,9 @@ internal class SportStageView(
         visibleNow = false
         carSpeed.stop()
         vhal.stop()
+        rpmFrames.stop()
+        main.removeCallbacks(rpmPost)
+        rpmPending.set(false)
         media.onHidden()
         car.setActive(false)
         TripSource.remove(tripListener)
@@ -468,6 +492,7 @@ internal class SportStageView(
             ready = kmh == 0
             range = if (needsRange()) LauncherDemo.vehicle().rangeKm else null
             gaugeKmh = kmh
+            if (wantRpm != LauncherDemo.sportFastRpm) setWant(LauncherDemo.sportFastRpm)
         } else {
             val snap = metrics.currentSnapshot()
             val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
@@ -481,8 +506,11 @@ internal class SportStageView(
                 android.util.Log.i(VhalSportReader.TAG, "773 doğrulandı: 773=$vr 62=$ro")
             }
             val pick = SportVhalMath.chooseRpm(now, vr, vAt, vhalRpmTrusted, ro)
-            rpm = pick.rpm
-            rpmAt = pick.arrivedAt
+            // MCU çerçeveleri (Spi2Ethenet 0x8D) canlıysa en hızlısı o.
+            val framesLive = rpmFrames.live(now)
+            rpm = if (framesLive) rpmFrames.rpm else pick.rpm
+            rpmAt = if (framesLive) rpmFrames.rpmAt else pick.arrivedAt
+            if (visibleNow && layoutGate.update(now, framesLive)) setWant(layoutGate.rpmFirst)
             if (pick.source != rpmSource) {
                 rpmSource = pick.source
                 android.util.Log.i(VhalSportReader.TAG, "devir kaynağı=${pick.source.key}")
@@ -524,6 +552,7 @@ internal class SportStageView(
         val fastLive = !demo && (carSpeed.live || vhal.speedLive)
         if (!fastLive) showSpeed(now, kmh)
         bindRpm(now, rpm, rpmAt)
+        if (rpm != null && rpmMode && !demo) notePeakRpm(rpm)
         if (SportSpeedLog.enabled) logSummary(now, kmh)
         setText(gear, gearText)
         for (i in slots.indices) {
@@ -574,9 +603,75 @@ internal class SportStageView(
                 SportDial.G, SportDial.CLOCK -> Unit
             }
         }
-        bindPeak(if (demo) SportDemo.MAX_KMH else maxKmh)
-        if (!sweeping && !fastLive) moveNeedle(kmh.coerceAtLeast(0).toFloat(), NEEDLE_SLOW_MS)
+        if (rpmMode) {
+            bindPeak(if (demo) SportDemo.PEAK_RPM else peakRpm())
+            // Hızlı devir kendi haberiyle sürer ([onFastRpm]); tik yalnız yavaş kaynakta ya da demoda.
+            if (!sweeping && (demo || !rpmFrames.live(now))) moveNeedle((rpm ?: 0).toFloat(), NEEDLE_SLOW_MS)
+        } else {
+            bindPeak(if (demo) SportDemo.MAX_KMH else maxKmh)
+            if (!sweeping && !fastLive) moveNeedle(kmh.coerceAtLeast(0).toFloat(), NEEDLE_SLOW_MS)
+        }
     }
+
+    /** Hızlı devir değişti (okuyucudan, [RpmFrameReader.BAND_RPM] üstü): RPM önce düzeninde ibre tiki beklemez. */
+    private fun onFastRpm() {
+        if (LauncherDemo.enabled || !rpmMode) return
+        val r = rpmFrames.rpm
+        if (r < 0) return
+        notePeakRpm(r)
+        if (!sweeping) moveNeedle(r.toFloat(), NEEDLE_MS)
+    }
+
+    private fun notePeakRpm(r: Int) {
+        if (SportSessionStore.session.peakRpm == null) fastPeakRpm = 0
+        if (r > fastPeakRpm) fastPeakRpm = r
+    }
+
+    /** Bu sürüşün en yüksek devri: oturum (ReadOnly 62) ve hızlı kaynak. */
+    private fun peakRpm(): Int? = maxOf(SportSessionStore.session.peakRpm ?: 0, fastPeakRpm).takeIf { it > 0 }
+
+    // --- Düzen (RPM önce / hız önce) ---
+
+    /** Giriş kararı (bitmap çizilmeden önce): demoda ekstra, yoksa bu süreçte en son yerleşen düzen (izin hâlâ varsa). */
+    private fun decideEntry() {
+        if (visibleNow) return
+        setWant(if (LauncherDemo.enabled) LauncherDemo.sportFastRpm else SportRpmLayout.last && RpmFrameReader.hasPermission(activity))
+    }
+
+    /** İstenen düzen: yeni yerleşim ve bitmap arka planda; hazır olunca [applyMode]. */
+    private fun setWant(rpm: Boolean) {
+        if (layoutGate.rpmFirst != rpm) layoutGate.restart(rpm)
+        if (!LauncherDemo.enabled) SportRpmLayout.last = rpm
+        val g = geometry
+        if (g != null && g.rpmFirst != rpm) {
+            geometry = SportGeometry(g.w, g.h, g.dials, rpm).also { n -> slots.forEach { s -> s.dial = n.subs[s.index] } }
+            ensureArt()
+            requestLayout()
+        } else if (g != null && artCurrent() && rpmMode != rpm) {
+            applyMode(rpm)
+        }
+    }
+
+    /** Yeni düzenin bitmap'i ekranda: ibre ölçeği, tepe işareti, dijital hız boyu ve küçük devir okuması uyarlanır. */
+    private fun applyMode(rpm: Boolean) {
+        if (rpmMode == rpm) return
+        rpmMode = rpm
+        android.util.Log.i(RpmFrameReader.TAG, "düzen=${if (rpm) "rpm" else "hız"}")
+        needleEnd = null
+        needleAnim.cancel()
+        if (visibleNow) sweeping = false
+        shownPeak = -1
+        if (rpm) hideRpm()
+        snapNeedle(targetNeedle())
+        if (visibleNow) {
+            needle.alpha = 0f
+            needle.animate().alpha(1f).setStartDelay(0).setDuration(MODE_FADE_MS).start()
+        }
+        requestLayout()
+        if (visibleNow) refresh()
+    }
+
+    private fun needleDeg(v: Float): Float = if (rpmMode) SportMath.needleDeg(v) else SportMath.speedDeg(v)
 
     /** Hızlı hız değişti ("sport-io"dan, yalnız 0,5 km/sa üstü değişimde): ibre ve dijital hız tiki beklemez. */
     private fun onCarSpeed() {
@@ -592,7 +687,7 @@ internal class SportStageView(
 
     private fun followFast(actualKmh: Float) {
         val kmh = calibration.display(actualKmh)
-        if (!sweeping) moveNeedle(kmh, NEEDLE_MS)
+        if (!sweeping && !rpmMode) moveNeedle(kmh, NEEDLE_MS)
         showSpeed(SystemClock.elapsedRealtime(), Math.round(kmh))
     }
 
@@ -608,7 +703,9 @@ internal class SportStageView(
         val v = if (LauncherDemo.enabled) rpm else rpmReadout.next(now, rpm, arrivedAt)
         // Devir yalnız hızlı kaynak (VDBus 773) doğrulanınca gösterilir; ReadOnly 62 ~5 sn'de bir değiştiği için
         // ekranda yanıltıcı (7 Kasım, kullanıcı: "devir alamadık"). Demoda gösterilmez.
-        val show = v != null && !sweeping && !LauncherDemo.enabled && rpmSource == SportVhalMath.RpmSource.VHAL
+        // RPM önce düzeninde devir zaten büyük ibrede: küçük okuma gizli. Hız önce düzeninde MCU çerçeveleri de hızlı kaynak.
+        val fast = rpmSource == SportVhalMath.RpmSource.VHAL || rpmFrames.live(now)
+        val show = v != null && !sweeping && !LauncherDemo.enabled && fast && !rpmMode
         if (v != null) setText(rpmText, activity.getString(R.string.launcher_sport_rpm, v))
         if (show == rpmShown) return
         rpmShown = show
@@ -658,7 +755,7 @@ internal class SportStageView(
             // Devir kaynaklarının varış aralıkları (yalnız sayı): 773 akıyor mu, 62'den hızlı mı?
             android.util.Log.i(VhalSportReader.TAG, "özet ${now - logAt}ms 773 ${vhal.rpmArrivals.takeLine()} son=${vhal.rpm ?: "-"} | " +
                 "62 değişim ${rpm62Arrivals.takeLine()} | 519 ${vhal.speedArrivals.takeLine()} olay=${vhal.speedEvents.getAndSet(0)} | " +
-                "kaynak=${rpmSource.key} doğrulandı=$vhalRpmTrusted")
+                "kaynak=${rpmSource.key} doğrulandı=$vhalRpmTrusted | çerçeve=${rpmFrames.live(now)} düzen=${if (rpmMode) "rpm" else "hız"}")
         }
         logAt = now
         logCpuMs = cpu
@@ -700,13 +797,13 @@ internal class SportStageView(
         slot.second?.rotation = s * 6f
     }
 
-    /** Tepe işareti: bu sürüşün en yüksek (gösterge) hızı. */
-    private fun bindPeak(kmh: Int?) {
-        val q = kmh ?: 0
+    /** Tepe işareti: bu sürüşün en yüksek (gösterge) hızı; RPM önce düzeninde en yüksek devir (50'lik adım). */
+    private fun bindPeak(value: Int?) {
+        val q = if (rpmMode) (value ?: 0) / PEAK_STEP_RPM * PEAK_STEP_RPM else value ?: 0
         if (q == shownPeak) return
         shownPeak = q
         peak.visibility = if (q > 0) VISIBLE else INVISIBLE
-        peak.rotation = SportMath.speedDeg(q.toFloat())
+        peak.rotation = needleDeg(q.toFloat())
     }
 
     /** Yeni 0–100 sonucu: değer kısa süre kırmızı-turuncu parlar ve hafifçe büyüyüp yerine oturur. */
@@ -736,13 +833,14 @@ internal class SportStageView(
     private fun moveNeedle(kmh: Float, ms: Long, delay: Long = 0, interp: android.animation.TimeInterpolator = DECEL, end: (() -> Unit)? = null) {
         // [NEEDLE_DEADBAND_KMH]'den küçük fark ibreyi oynatmaz (yoksa 10 Hz takipte kısa hareketler birbirine eklenip ekran
         // durmadan çizilir). Hareket sürerken fark hedefe göre ölçülür (hızlı değişim kaçmaz).
-        if (end == null && !SportMath.needleShouldMove(needleAnim.isStarted, needleTo, shownKmh, kmh, NEEDLE_DEADBAND_KMH)) return
+        if (end == null && !SportMath.needleShouldMove(needleAnim.isStarted, needleTo, shownNeedle, kmh,
+                if (rpmMode) NEEDLE_DEADBAND_RPM else NEEDLE_DEADBAND_KMH)) return
         needleMoves++
         // Süren hareketin bitiş işi düşer (yerine yenisi geldi).
         needleEnd = null
         needleAnim.cancel()
         needleCancelled = false
-        needleFrom = shownKmh
+        needleFrom = shownNeedle
         needleTo = kmh
         needleEnd = end
         needleAnim.duration = ms
@@ -754,8 +852,8 @@ internal class SportStageView(
     private fun snapNeedle(kmh: Float) {
         needleEnd = null
         needleAnim.cancel()
-        shownKmh = kmh
-        needle.rotation = SportMath.speedDeg(kmh)
+        shownNeedle = kmh
+        needle.rotation = needleDeg(kmh)
     }
 
     // --- G sensörü ---
@@ -867,8 +965,9 @@ internal class SportStageView(
         }
         // Gerçek spor araç ibresi gibi ağır: hız ibresi yavaşça sona çıkar, tepede kısa bekler, gerçek hıza yumuşak iner.
         // İniş bitene dek canlı hız ibreyi sürmez (inişi kesmesin); sonra canlı değere bağlanır.
-        moveNeedle(SportMath.SPEED_MAX.toFloat(), SportTransition.SWEEP_UP_MS, delay = SportTransition.SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
-            moveNeedle(targetKmh(), SportTransition.SWEEP_DOWN_MS, delay = SportTransition.SWEEP_HOLD_MS, interp = DECEL_SOFT) {
+        val top = if (rpmMode) SportMath.RPM_MAX.toFloat() else SportMath.SPEED_MAX.toFloat()
+        moveNeedle(top, SportTransition.SWEEP_UP_MS, delay = SportTransition.SWEEP_DELAY_MS, interp = ACCEL_DECEL) {
+            moveNeedle(targetNeedle(), SportTransition.SWEEP_DOWN_MS, delay = SportTransition.SWEEP_HOLD_MS, interp = DECEL_SOFT) {
                 sweeping = false
                 refresh()
             }
@@ -897,13 +996,22 @@ internal class SportStageView(
         live.forEach { it.animate().cancel(); it.alpha = 1f }
         sweeping = false
         refresh()
-        snapNeedle(targetKmh())
+        snapNeedle(targetNeedle())
     }
 
     private fun hideRpm() {
         rpmShown = false
         rpmText.animate().cancel()
         rpmText.alpha = 0f
+    }
+
+    /** İbrenin ineceği değer: RPM önce düzeninde devir, yoksa hız. */
+    private fun targetNeedle(): Float {
+        if (!rpmMode) return targetKmh()
+        if (LauncherDemo.enabled) return LauncherDemo.rpm().toFloat()
+        if (rpmFrames.live()) return rpmFrames.rpm.toFloat()
+        val raw = metrics.getCombined(ReadOnlyID.ID_ENGINE_RPM)
+        return (if (VehicleMetricsSnapshot.isValid(raw)) SportMath.rpm(raw) else null)?.toFloat() ?: 0f
     }
 
     /** İbrenin ineceği gerçek hız (hızlı kaynak, yoksa gösterge hızı). */
@@ -932,14 +1040,18 @@ internal class SportStageView(
     // --- Çizim ve yerleşim ---
 
     /** Durağan çizim hazır mı (boyut biliniyor ve bitmap çizildi). */
-    val ready: Boolean get() = art != null
+    val ready: Boolean get() = artCurrent()
+
+    /** Bitmap var ve istenen yerleşimle (boyut, seçim, düzen) aynı. */
+    private fun artCurrent(): Boolean = art != null && (geometry?.sameAs(artGeometry) ?: true)
 
     /**
      * Bitmap hazır olunca bir kez çağrılır (hazırsa hemen). Çizim [ART_TRIES] denemede de olmazsa (bellek yetmedi)
      * bekleyenler bırakılır ve çağrılmaz: spor ekranı boş kadranlarla açılmaz, Normal kalır.
      */
     fun whenReady(block: () -> Unit) {
-        if (art != null) { block(); return }
+        decideEntry()
+        if (artCurrent()) { block(); return }
         if (released) return
         readyWaiters += block
         ensureArt()
@@ -947,6 +1059,7 @@ internal class SportStageView(
 
     /** Geçişten önce (karar süzgeci sayarken) durağan çizimi arka planda başlatır. */
     fun prepare() {
+        decideEntry()
         ensureArt()
     }
 
@@ -978,6 +1091,7 @@ internal class SportStageView(
                 artFailures = 0
                 art = bmp
                 artGeometry = g
+                if (g.rpmFirst != rpmMode) applyMode(g.rpmFirst)
                 invalidate()
                 if (waitingArt) {
                     waitingArt = false
@@ -999,7 +1113,7 @@ internal class SportStageView(
         val h = MeasureSpec.getSize(heightMeasureSpec)
         setMeasuredDimension(w, h)
         if (w <= 0 || h <= 0) return
-        val g = geometry?.takeIf { it.w == w && it.h == h && it.dials == dials } ?: SportGeometry(w, h, dials).also {
+        val g = geometry?.takeIf { it.w == w && it.h == h && it.dials == dials && it.rpmFirst == wantRpm } ?: SportGeometry(w, h, dials, wantRpm).also {
             geometry = it
             slots.forEach { s -> s.dial = it.subs[s.index] }
             if (glows.isNotEmpty()) ensureGlows(it)
@@ -1021,7 +1135,7 @@ internal class SportStageView(
         gear.measure(exactly(win.width().toInt()), exactly(win.height().toInt()))
         val wrap = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         // İbre zaten hızı gösteriyor: dijital hız ikincil okuma (kullanıcı: "hız iki kez görünüyor").
-        speed.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedSize * SECONDARY_SPEED_SCALE)
+        speed.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedSize * speedScale())
         speed.measure(exactly((g.rpmFace * 1.1f).toInt()), wrap)
         speedUnit.setTextSize(TypedValue.COMPLEX_UNIT_PX, g.speedUnitSize)
         speedUnit.measure(exactly((g.rpmFace * 0.6f).toInt()), wrap)
@@ -1083,7 +1197,7 @@ internal class SportStageView(
         centerAt(needle, g.rpm.cx, g.rpm.cy)
         needle.pivotX = needle.measuredWidth / 2f
         needle.pivotY = needle.measuredHeight / 2f
-        needle.rotation = SportMath.speedDeg(shownKmh)
+        needle.rotation = needleDeg(shownNeedle)
         centerAt(peak, g.rpm.cx, g.rpm.cy)
         peak.pivotX = peak.measuredWidth / 2f
         peak.pivotY = peak.measuredHeight / 2f
@@ -1091,7 +1205,7 @@ internal class SportStageView(
         centerAt(gear, win.centerX(), win.centerY())
         // Rakamların görsel ortası (büyük harf yüksekliği) hedefte: satır kutusu yazı tipi boşluklarıyla kayar.
         val fm = speed.paint.fontMetrics
-        centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * SECONDARY_SPEED_SCALE * SportGeometry.CAP / 2f)
+        centerAt(speed, g.rpm.cx, g.speedY + (fm.ascent + fm.descent) / 2f + g.speedSize * speedScale() * SportGeometry.CAP / 2f)
         centerAt(speedUnit, g.rpm.cx, g.speedUnitY)
         centerAt(rpmText, g.rpm.cx, g.rpmTextY)
         g.sub(SportDial.G)?.let { gRangePx = it.r * SportGeometry.G_RANGE }
@@ -1118,6 +1232,9 @@ internal class SportStageView(
         glows.forEach { centerAt(it, it.dial.cx, it.dial.cy) }
     }
 
+    /** Dijital hız boyu: hız önce düzeninde ibre zaten hızı gösterir (ikincil, yarı boy); RPM önce düzeninde tam boy. */
+    private fun speedScale(): Float = if (rpmMode) 1f else SECONDARY_SPEED_SCALE
+
     private fun exactly(px: Int) = MeasureSpec.makeMeasureSpec(maxOf(0, px), MeasureSpec.EXACTLY)
 
     companion object {
@@ -1135,6 +1252,12 @@ internal class SportStageView(
         const val NEEDLE_SLOW_MS = 450L
         /** İbreyi oynatan en küçük hız farkı (kadranda ~0,6°). */
         const val NEEDLE_DEADBAND_KMH = 0.5f
+        /** RPM önce düzeninde ibreyi oynatan en küçük devir farkı (rölanti kıpırtısı oynatmaz). */
+        const val NEEDLE_DEADBAND_RPM = 50f
+        /** Devir tepe işaretinin adımı. */
+        const val PEAK_STEP_RPM = 50
+        /** Düzen değişiminde ibrenin belirme süresi. */
+        const val MODE_FADE_MS = 250L
         const val RPM_FADE_MS = 300L
 
         /** CAR_SPEED izni bu süreçte soruldu mu (bir kez). */
