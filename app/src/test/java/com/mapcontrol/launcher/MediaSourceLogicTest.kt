@@ -39,14 +39,71 @@ class PhonePriorityTest {
     @Test fun reappearingSessionAfterGoneCounts() {
         // Telefon koptu (oturum yok), yeniden bağlanıp çalmaya başladı: kaynak radyoya düşmüştü → BT'ye geç.
         val p = primed()
-        p.onBtGone()
+        p.onBtGone(50_000L)
         assertEquals(Decision.SWITCH, p.onBtState(true, 100_000L, fm, { true }, { false }))
     }
 
-    @Test fun goneBeforeAnyObservationStaysUnknown() {
+    @Test fun noSessionAtStartupCountsAsPaused() {
+        // Süreç başında BT oturumu yok (OEM A2DP kopuşta oturumu pasif yapar). Telefon bağlanınca oturum zaten PLAYING
+        // görünür (msgTrack ile yeniden etkinleşir): bu bir geçiştir, telefon öne alınır.
         val p = PhonePriority()
-        p.onBtGone()
-        assertEquals(Decision.NO_TRANSITION, p.onBtState(true, 100_000L, fm, { true }, { false }))
+        p.onBtGone(0L)
+        assertEquals(Decision.SWITCH, p.onBtState(true, 100_000L, fm, { true }, { false }))
+    }
+
+    @Test fun oemFallbackAfterLinkLossIsNotAUserPick() {
+        // Telefon çalıyordu, bağlantı koptu: oturum gitti, sonra OEM 13 → FM'e düştü. Telefon 3 sn sonra yeniden bağlanıp
+        // çalmaya devam etti: geçilmeli (asıl şikâyet "düşünce araba radyoya düşüyor").
+        val p = primed()
+        p.onBtState(true, 1_000L, OemAudioSource.BT_MUSIC, { true }, { false })
+        p.onBtGone(100_000L)
+        assertFalse(p.onOemSourceAway(100_200L))
+        assertEquals(Decision.SWITCH, p.onBtState(true, 103_000L, fm, { true }, { false }))
+    }
+
+    @Test fun oemFallbackBeforeLossSignalIsUndone() {
+        // Sıra tersse (önce kaynak 13 → FM, sonra oturum gitti): kopuş, az önceki kaynak değişimini seçim olmaktan çıkarır.
+        val p = primed()
+        p.onBtState(true, 1_000L, OemAudioSource.BT_MUSIC, { true }, { false })
+        assertTrue(p.onOemSourceAway(100_000L))
+        p.onBtGone(100_300L)
+        assertEquals(Decision.SWITCH, p.onBtState(true, 104_000L, fm, { true }, { false }))
+    }
+
+    @Test fun oemPickWhileConnectedIsAUserPick() {
+        // Telefon bağlı ve çalarken kullanıcı OEM uygulamasında FM'i seçti; OEM telefonu duraklattı. Telefon hemen yeniden
+        // çalarsa (ör. bildirim) kaynak geri alınmaz.
+        val p = primed()
+        p.onBtState(true, 1_000L, OemAudioSource.BT_MUSIC, { true }, { false })
+        assertTrue(p.onOemSourceAway(100_000L))
+        p.onBtState(false, 101_000L, fm, { true }, { false })
+        assertEquals(Decision.USER_PICK, p.onBtState(true, 105_000L, fm, { true }, { false }))
+        p.onBtState(false, 106_000L, fm, { true }, { false })
+        assertEquals(Decision.SWITCH, p.onBtState(true, 110_000L, fm, { true }, { false }))
+    }
+
+    @Test fun oemSourceChangeWithoutSessionIsNotAUserPick() {
+        val p = PhonePriority()
+        assertFalse(p.onOemSourceAway(100_000L))
+        p.onBtGone(200_000L)
+        assertFalse(p.onOemSourceAway(204_999L))
+    }
+
+    @Test fun transitionPeek() {
+        val p = PhonePriority()
+        assertFalse(p.isTransition(true))
+        p.onBtGone(0L)
+        assertTrue(p.isTransition(true))
+        assertFalse(p.isTransition(false))
+        p.onBtState(true, 100_000L, OemAudioSource.BT_MUSIC, { true }, { false })
+        assertFalse(p.isTransition(true))
+    }
+
+    @Test fun btSessionStateMapping() {
+        assertEquals(true, MediaSourcePick.btPlaying(3))
+        assertEquals(false, MediaSourcePick.btPlaying(2))
+        assertEquals(false, MediaSourcePick.btPlaying(null))
+        assertNull(MediaSourcePick.btPlaying(7)) // ERROR: OEM A2DP kopuşu
     }
 
     @Test fun guards() {

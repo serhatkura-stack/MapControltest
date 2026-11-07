@@ -9,22 +9,32 @@ package com.mapcontrol.launcher
  * (`i/e.java:337-347`, liste `b/b.java:17` boş): istemedi, `checkAudioFocus` 1000 ms sonra (`i/e.java:227-243`, postDelayed
  * 1000) telefonu duraklattı (AVRCP PAUSE, keyCode 70). OEM telefonu öne almıyor; bu sınıf "geç" kararını verir.
  *
- * Yalnızca BT oturumunun duraklamış → çalıyor geçişinde (ilk gözlem geçiş sayılmaz) ve şunların hiçbiri yoksa geçilir:
- * ayar kapalı, kaynak bilinmiyor ya da zaten 13, arama sürüyor, son [ownMs] içinde kendi Oynat'ımız (geçişi biz yaptık),
- * son [userPickMs] içinde kullanıcı başka kaynak seçti (bizim seçici ya da OEM'de `CURRENT_SOURCE_TYPE` değişimi), son
- * geçişten [debounceMs] geçmedi.
+ * Yalnızca BT oturumunun duraklamış → çalıyor geçişinde (süreç başında oturum zaten varken ilk gözlem geçiş sayılmaz; oturum
+ * yokken görülmesi "duraklamış" sayılır) ve şunların hiçbiri yoksa geçilir: ayar kapalı, kaynak bilinmiyor ya da zaten 13,
+ * arama sürüyor, son [ownMs] içinde kendi Oynat'ımız (geçişi biz yaptık), son [userPickMs] içinde kullanıcı başka kaynak
+ * seçti, son geçişten [debounceMs] geçmedi.
+ *
+ * Kullanıcı seçimi: bizim seçici her zaman; OEM'de `CURRENT_SOURCE_TYPE`'ın 13 dışına geçmesi yalnızca BT oturumu varken ve
+ * bağlantı kopmamışken ([lostGraceMs] içinde, iki yönde de). OEM A2DP servisi kopuşta oturumu pasif yapar ve durumu
+ * ERROR'a çeker (DsvBluetooth `A2dpMediaBrowserService.java:195-198,511`): OEM'in kendi 13 → radyo düşüşü kullanıcı seçimi
+ * sayılsaydı telefon yeniden bağlanıp çalınca geçilmez, OEM 1 sn sonra telefonu duraklatırdı (asıl şikâyet).
  */
 internal class PhonePriority(
     private val debounceMs: Long = DEBOUNCE_MS,
     private val userPickMs: Long = USER_PICK_MS,
     private val ownMs: Long = OWN_MS,
+    private val lostGraceMs: Long = LOST_GRACE_MS,
 ) {
     enum class Decision { NO_TRANSITION, SWITCH, DISABLED, UNKNOWN_SOURCE, ALREADY_BT, IN_CALL, OWN_PLAY, USER_PICK, DEBOUNCE }
 
-    /** Son bilinen BT oturumu çalıyor mu (bilinmiyorsa null). */
+    /** Son bilinen BT oturumu çalıyor mu (hiç gözlenmediyse null). */
     private var btPlaying: Boolean? = null
+    /** BT oturumu şu an var mı (son gözlem bir durumdu, "yok" değil). */
+    private var btPresent = false
     private var lastSwitch = Long.MIN_VALUE / 2
     private var lastUserPick = Long.MIN_VALUE / 2
+    private var lastOemAway = Long.MIN_VALUE / 2
+    private var lastBtLost = Long.MIN_VALUE / 2
     private var lastOwn = Long.MIN_VALUE / 2
 
     /** Kendi kartımız / seçicimiz BT'yi çaldırdı (Oynat, İleri/Geri, seçicide Bluetooth). */
@@ -32,20 +42,40 @@ internal class PhonePriority(
         lastOwn = now
     }
 
-    /** Kullanıcı BT dışı bir kaynak seçti (bizim seçici) ya da OEM kaynağı canlı olarak 13 dışına geçti. */
+    /** Kullanıcı bizim seçicide BT dışı bir kaynak seçti. */
     fun onUserPick(now: Long) {
         lastUserPick = now
     }
 
-    /** BT oturumu yok: bir sonraki çalma (yeniden bağlanınca) geçiş sayılır. */
-    fun onBtGone() {
-        if (btPlaying != null) btPlaying = false
+    /**
+     * OEM kaynağı canlı olarak BT dışı bir kaynağa geçti. Kullanıcı seçimi sayılır mı (true: sayıldı): BT oturumu varken ve
+     * son [lostGraceMs] içinde kopmadıysa. Kopuş biraz sonra gelirse [onBtGone] bunu geri alır.
+     */
+    fun onOemSourceAway(now: Long): Boolean {
+        if (!btPresent || now - lastBtLost < lostGraceMs) return false
+        lastOemAway = now
+        return true
     }
+
+    /**
+     * BT oturumu yok (pasif / koptu): bir sonraki çalma geçiş sayılır. Süreç başında oturum yoksa da "duraklamış" sayılır:
+     * telefon sonradan bağlanıp çalarken gelirse öncelik çalışır. Az önceki OEM kaynak değişimi kopuşun düşüşüdür.
+     */
+    fun onBtGone(now: Long) {
+        btPlaying = false
+        btPresent = false
+        lastBtLost = now
+        if (now - lastOemAway < lostGraceMs) lastOemAway = Long.MIN_VALUE / 2
+    }
+
+    /** [onBtState] bu durumla duraklamış → çalıyor geçişi görür mü (ayar / arama okumasını geçişe saklamak için). */
+    fun isTransition(playing: Boolean): Boolean = playing && btPlaying == false
 
     /** [enabled] ve [inCall] yalnızca geçişte sorulur (BT oturumu ~500 ms'de bir durum yollar). */
     fun onBtState(playing: Boolean, now: Long, oemSource: Int?, enabled: () -> Boolean, inCall: () -> Boolean): Decision {
         val prev = btPlaying
         btPlaying = playing
+        btPresent = true
         if (!playing || prev != false) return Decision.NO_TRANSITION
         return when {
             !enabled() -> Decision.DISABLED
@@ -53,7 +83,7 @@ internal class PhonePriority(
             oemSource == OemAudioSource.BT_MUSIC -> Decision.ALREADY_BT
             inCall() -> Decision.IN_CALL
             now - lastOwn < ownMs -> Decision.OWN_PLAY
-            now - lastUserPick < userPickMs -> Decision.USER_PICK
+            now - maxOf(lastUserPick, lastOemAway) < userPickMs -> Decision.USER_PICK
             now - lastSwitch < debounceMs -> Decision.DEBOUNCE
             else -> {
                 lastSwitch = now
@@ -66,6 +96,7 @@ internal class PhonePriority(
         const val DEBOUNCE_MS = 5_000L
         const val USER_PICK_MS = 10_000L
         const val OWN_MS = 5_000L
+        const val LOST_GRACE_MS = 5_000L
     }
 }
 

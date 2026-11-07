@@ -48,6 +48,7 @@ public final class LauncherMediaNotificationListener extends NotificationListene
         GoogleMapsNavNotificationCoordinator.onListenerConnected(this);
         GoogleMapsNavNotificationCoordinator.resyncActiveNotifications(this);
         NavigationSource.onListenerConnected(this);
+        BtSessionWatcher.start(this);
         for (Listener current : listeners) {
             current.onListenerConnected();
         }
@@ -72,6 +73,7 @@ public final class LauncherMediaNotificationListener extends NotificationListene
     public void onListenerDisconnected() {
         GoogleMapsNavNotificationCoordinator.onListenerDisconnected();
         NavigationSource.onListenerDisconnected();
+        BtSessionWatcher.stop();
         for (Runnable watcher : accessLostWatchers) {
             watcher.run();
         }

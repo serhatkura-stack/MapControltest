@@ -119,10 +119,6 @@ public final class LauncherMediaController {
 
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
-            MediaController active = activeController;
-            if (active != null && MediaSourcePick.INSTANCE.isBluetooth(active.getPackageName())) {
-                OemAudioSource.INSTANCE.onBtPlayback(appContext, isPlayingState(state));
-            }
             notifyState();
             scheduleProgressTick(state);
             // Seçili oturum durdu: başka çalan varsa ona geç.
@@ -144,27 +140,11 @@ public final class LauncherMediaController {
      * oturum listesi değişmedi ve kart radyoda kaldı.
      */
     private final List<MediaController> watched = new ArrayList<>();
-    private final List<MediaController.Callback> watchedCallbacks = new ArrayList<>();
 
     private final MediaController.Callback watcherCallback = new MediaController.Callback() {
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
             if (isPlayingState(state)) {
-                mainHandler.post(LauncherMediaController.this::refreshActiveController);
-            }
-        }
-    };
-
-    /**
-     * Seçili olmayan Bluetooth oturumu: her durum değişimi telefon önceliğine gider (duraklama da; yoksa sonraki Oynat
-     * geçiş sayılmaz), çalmaya başlayınca kart yeniden seçer ({@link OemAudioSource#onBtPlayback}).
-     */
-    private final MediaController.Callback btWatcherCallback = new MediaController.Callback() {
-        @Override
-        public void onPlaybackStateChanged(PlaybackState state) {
-            boolean playing = isPlayingState(state);
-            OemAudioSource.INSTANCE.onBtPlayback(appContext, playing);
-            if (playing) {
                 mainHandler.post(LauncherMediaController.this::refreshActiveController);
             }
         }
@@ -181,12 +161,9 @@ public final class LauncherMediaController {
                     && c.getSessionToken().equals(activeController.getSessionToken()))) {
                 continue;
             }
-            MediaController.Callback cb = MediaSourcePick.INSTANCE.isBluetooth(c.getPackageName())
-                    ? btWatcherCallback : watcherCallback;
             try {
-                c.registerCallback(cb, mainHandler);
+                c.registerCallback(watcherCallback, mainHandler);
                 watched.add(c);
-                watchedCallbacks.add(cb);
             } catch (Exception ignored) {
                 // oturum kapanmış olabilir
             }
@@ -194,15 +171,14 @@ public final class LauncherMediaController {
     }
 
     private void unwatchOthers() {
-        for (int i = 0; i < watched.size(); i++) {
+        for (MediaController c : watched) {
             try {
-                watched.get(i).unregisterCallback(watchedCallbacks.get(i));
+                c.unregisterCallback(watcherCallback);
             } catch (Exception ignored) {
                 // no-op
             }
         }
         watched.clear();
-        watchedCallbacks.clear();
     }
 
     private final Runnable progressTick = () -> {
@@ -238,6 +214,8 @@ public final class LauncherMediaController {
         sessionManager = (MediaSessionManager) appContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         registerSessionsListener();
         refreshActiveController();
+        // Telefon önceliği kartın ömründen bağımsız (süreç boyu); dinleyici henüz bağlanmadıysa bu bir şey yapmaz.
+        BtSessionWatcher.start(appContext);
     }
 
     public void stop() {
@@ -552,7 +530,6 @@ public final class LauncherMediaController {
         // İzin yeni açıldıysa listener'ı kaydet
         registerSessionsListener();
         List<MediaController> all = loadControllers();
-        feedBluetooth(all);
         // Hiçbiri çalmıyorsa seçili oturum (hâlâ listedeyse) korunur: duraklatılan müzik radyoya atlamaz. BT oturumu varken
         // OEM radyosunun boş ("am") oturumu karta seçilmez (MediaSourcePick).
         MediaController next = pickController(all, activeController);
@@ -620,18 +597,6 @@ public final class LauncherMediaController {
 
     static boolean isPlayingState(@Nullable PlaybackState state) {
         return state != null && state.getState() == PlaybackState.STATE_PLAYING;
-    }
-
-    /**
-     * Telefon önceliği: Bluetooth oturumunun güncel durumu (yoksa null). 7 Kasım araç: telefonda Oynat'a basılınca bu
-     * oturum PLAYING oldu (OEM BT servisi de aynı oturumu izliyor: {@code BTSer-MediaCON onPlaybackStateChanged: playState=3}).
-     */
-    private void feedBluetooth(@Nullable List<MediaController> controllers) {
-        if (controllers == null) {
-            return;
-        }
-        MediaController bt = findBluetooth(controllers);
-        OemAudioSource.INSTANCE.onBtPlayback(appContext, bt != null ? Boolean.valueOf(isPlaying(bt)) : null);
     }
 
     /** Bir Bluetooth (A2DP) oturumu var mı (seçicide Bluetooth satırı için). */

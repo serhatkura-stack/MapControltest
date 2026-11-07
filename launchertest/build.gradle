@@ -17,6 +17,7 @@ def syncLauncherSources = tasks.register('syncLauncherSources', Sync) {
         exclude 'com/mapcontrol/launcher/AppFrostNavFeatures.kt'
         include 'com/mapcontrol/weather/OpenMeteoWeather*.java'
         include 'com/mapcontrol/media/LauncherMediaController.java'
+        include 'com/mapcontrol/media/BtSessionWatcher.java'
         include 'com/mapcontrol/vehicle/VehicleMetricsRepository.java'
         include 'com/mapcontrol/vehicle/VehicleMetricsSnapshot.java'
         include 'com/mapcontrol/vehicle/VehicleMetricsCache.java'

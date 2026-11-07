@@ -44,6 +44,20 @@ internal object MediaSourcePick {
 
     fun isBluetooth(pkg: String?) = pkg == BT_PKG
 
+    /**
+     * Telefon önceliğine giden BT oturumu durumu ([PlaybackState] kodu; null: durum yok). PLAYING (3) → true; ERROR (7) →
+     * null ("oturum yok": OEM A2DP servisi kopuşta durumu "bluetooth disconnected" hatasıyla ERROR'a çeker, DsvBluetooth
+     * `A2dpMediaBrowserService.java:511`); gerisi false.
+     */
+    fun btPlaying(state: Int?): Boolean? = when (state) {
+        STATE_PLAYING -> true
+        STATE_ERROR -> null
+        else -> false
+    }
+
+    private const val STATE_PLAYING = 3
+    private const val STATE_ERROR = 7
+
     fun isOemAudio(pkg: String?) = pkg == OEM_AUDIO_PKG || pkg == OEM_AUDIO_PKG_OLD
 
     /**
@@ -433,8 +447,12 @@ internal object OemAudioSource {
         // Sonraki her değişim (bildirim ya da aboneliğin kaçırdığını yakalayan okuma) geçiştir ([SourceFollow]).
         if (!sourceFollow.onSource(type)) return
         Log.i(TAG, "source: $old -> $type live=$live")
-        // Kullanıcı OEM uygulamasında (ya da bizim seçicide) BT dışı kaynak seçti: telefon önceliği bir süre karışmaz.
-        if (old != null && type != BT_MUSIC) phonePriority.onUserPick(SystemClock.elapsedRealtime())
+        // Kullanıcı OEM uygulamasında BT dışı kaynak seçti: telefon önceliği bir süre karışmaz. BT kopunca OEM'in kendi
+        // radyoya düşüşü seçim sayılmaz ([PhonePriority.onOemSourceAway]).
+        if (old != null && type != BT_MUSIC) {
+            val pick = phonePriority.onOemSourceAway(SystemClock.elapsedRealtime())
+            Log.i(TAG, "phone-priority: oemSourceAway=$type userPick=$pick")
+        }
         main.post { sourceListeners.forEach { it.onOemSourceChanged(type) } }
     }
 
@@ -447,20 +465,26 @@ internal object OemAudioSource {
     private fun markOwnPlay() = phonePriority.onOwnPlay(SystemClock.elapsedRealtime())
 
     /**
-     * `com.android.bluetooth` A2DP oturumunun çalma durumu (LauncherMediaController her gözlemde çağırır; [playing] null:
-     * BT oturumu yok). Duraklamış → çalıyor geçişinde [PhonePriority] "geç" derse kartın Oynat'ıyla aynı BT geçişi gider
-     * ([sendBtSwitch]); telefon zaten çaldığı için oturuma ayrıca oynat gönderilmez. Ana iş parçacığında çağrılır.
+     * `com.android.bluetooth` A2DP oturumunun çalma durumu (süreç boyu yaşayan BtSessionWatcher her gözlemde çağırır;
+     * [playing] null: BT oturumu yok ya da koptu). Duraklamış → çalıyor geçişinde [PhonePriority] "geç" derse kartın
+     * Oynat'ıyla aynı BT geçişi gider ([sendBtSwitch]); telefon zaten çaldığı için oturuma ayrıca oynat gönderilmez.
+     * Ana iş parçacığında çağrılır.
      */
     fun onBtPlayback(context: Context, playing: Boolean?) {
         val now = SystemClock.elapsedRealtime()
+        // Ayar ve ses kipi kilit dışında okunur (update/readSource io'da aynı kilidi alır; ilk okuma diske gidebilir).
+        // Yalnızca geçişte okunur (oturum çalarken ~500 ms'de bir durum yollar); karar yine kilit altında verilir.
+        val transition = playing == true && synchronized(this) { phonePriority.isTransition(true) }
+        val enabled = transition && MediaPrefs.phonePriority(context)
+        val calling = transition && inCall(context)
         var source: Int? = null
         val decision = synchronized(this) {
             source = sourceFollow.source
             if (playing == null) {
-                phonePriority.onBtGone()
+                phonePriority.onBtGone(now)
                 null
             } else {
-                phonePriority.onBtState(playing, now, source, { MediaPrefs.phonePriority(context) }, { inCall(context) })
+                phonePriority.onBtState(playing, now, source, { enabled }, { calling })
             }
         } ?: return
         if (decision == PhonePriority.Decision.NO_TRANSITION) return
