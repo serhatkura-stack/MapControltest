@@ -84,9 +84,40 @@ internal object WifiAccess {
     enum class PermissionAction { REQUEST, OPEN_APP_SETTINGS }
 
     /**
-     * İzin düğmesinin işi: daha önce sorulup reddedildiyse ve sistem artık gerekçe göstermiyorsa ("Bir daha sorma" ya da
-     * politika) pencere açılmaz, uygulama ayrıntıları açılır; aksi halde çalışma anında izin istenir.
+     * İzin düğmesinin işi: daha önce reddedildiyse ve sistem artık gerekçe göstermiyorsa ("Bir daha sorma", Android 11+'da iki
+     * ret ya da politika) pencere açılmaz, uygulama ayrıntıları açılır; aksi halde çalışma anında izin istenir.
      */
-    fun permissionAction(askedBefore: Boolean, showRationale: Boolean): PermissionAction =
-        if (askedBefore && !showRationale) PermissionAction.OPEN_APP_SETTINGS else PermissionAction.REQUEST
+    @JvmStatic
+    fun permissionAction(deniedBefore: Boolean, showRationale: Boolean): PermissionAction =
+        if (deniedBefore && !showRationale) PermissionAction.OPEN_APP_SETTINGS else PermissionAction.REQUEST
+
+    enum class PermissionResult { GRANTED, DENIED, CANCELLED }
+
+    /**
+     * İzin penceresi sonucu; istekte ilk izin ACCESS_FINE_LOCATION olmalı. Boş dizi: pencere yarıda kesildi (sayılmaz).
+     * Android 12+'da "Yaklaşık" seçilirse yalnızca COARSE verilir: Wi-Fi tarama sonuçları FINE ister, bu yüzden ret sayılır.
+     */
+    @JvmStatic
+    fun permissionResult(grantResults: IntArray): PermissionResult = when {
+        grantResults.isEmpty() -> PermissionResult.CANCELLED
+        grantResults[0] == PERMISSION_GRANTED -> PermissionResult.GRANTED
+        else -> PermissionResult.DENIED
+    }
+
+    /**
+     * Bu süreçte konum izni en az bir kez reddedildi mi (başlatıcı paneli ve FrostNav sekmesi ortak; izin uygulamaya ait).
+     * Pencere açılmadan önce değil sonuçta işlenir: dışına dokunup kapatmak ya da yarıda kesilmek düğmeyi "Ayarları aç"a çevirmez.
+     */
+    @Volatile private var deniedBefore = false
+
+    /** Sonucu işler ve döner; yalnızca gerçek ret [deniedBefore]'u açar. */
+    @JvmStatic
+    fun onPermissionResult(grantResults: IntArray): PermissionResult =
+        permissionResult(grantResults).also { if (it == PermissionResult.DENIED) deniedBefore = true }
+
+    @JvmStatic
+    fun isDeniedBefore(): Boolean = deniedBefore
+
+    /** PackageManager.PERMISSION_GRANTED (JVM testinde Android sınıfı olmadan). */
+    private const val PERMISSION_GRANTED = 0
 }

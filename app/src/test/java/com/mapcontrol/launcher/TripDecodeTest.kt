@@ -66,13 +66,15 @@ class TripDecodeTest {
         assertNull(TripDecode.tripKm(null))
     }
 
-    /** 150 boş-ama-null-olmayan dönerse 71'e düşülmeli (araçta 71 = [0,0,43,24] = 11032 km, göstergeyle eşleşti). */
-    @Test fun totalKmFallsBackWhenPrimaryInvalid() {
+    /** 71 doğrulanmış kaynak (araçta [0,0,43,24] = 11032 km, göstergeyle eşleşti); 150 yalnızca 71 geçersizse kullanılır. */
+    @Test fun totalKmPrefersVerifiedGrandTotal() {
         val grand = (43 shl 8) or 24
-        assertEquals(11032, TripDecode.totalKm(0, grand))
-        assertEquals(11032, TripDecode.totalKm(-1, grand))
-        assertEquals(11032, TripDecode.totalKm(null, grand))
-        assertEquals(12000, TripDecode.totalKm(12000, grand))
+        assertEquals(11032, TripDecode.totalKm(grand, 110320))
+        assertEquals(11032, TripDecode.totalKm(grand, 0))
+        assertEquals(11032, TripDecode.totalKm(grand, null))
+        assertEquals(12000, TripDecode.totalKm(0, 12000))
+        assertEquals(12000, TripDecode.totalKm(-1, 12000))
+        assertEquals(12000, TripDecode.totalKm(null, 12000))
         assertNull(TripDecode.totalKm(0, 0))
         assertNull(TripDecode.totalKm(null, null))
     }

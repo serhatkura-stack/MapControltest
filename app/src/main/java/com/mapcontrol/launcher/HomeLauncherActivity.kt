@@ -696,8 +696,6 @@ class HomeLauncherActivity : Activity() {
         hideSystemBars()
         LauncherEdition.setHomeForeground(true)
         resumed = true
-        // Konum/izin ayarlarından dönüşte açık Wi-Fi paneli yeni durumu gösterir.
-        wifiPanel?.refresh()
         syncAutoNight()
         // FrostNav "Ana ekran" sekmesinde tema/alt çubuk/düzen tercihleri değiştiyse (renkler ve çubuklar kurulumda okunur) yeniden kur.
         val sig = HomeScreenPrefs.signature(this)
@@ -772,9 +770,9 @@ class HomeLauncherActivity : Activity() {
             PhoneSource.onPermissionsResult(this)
             return
         }
+        // Wi-Fi paneli reddi de bilmeli (kalıcı retten sonra satırdaki düğme "Ayarları aç"a döner); yarıda kesilen pencere ret sayılmaz.
+        if (requestCode == WifiPanel.REQ_LOCATION) { wifiPanel?.onPermissionResult(WifiAccess.onPermissionResult(grantResults)); return }
         val granted = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
-        // Wi-Fi paneli reddi de bilmeli (satırdaki düğme "Ayarları aç"a döner).
-        if (requestCode == WifiPanel.REQ_LOCATION) { wifiPanel?.onPermissionResult(granted); return }
         if (!granted) return
         when (requestCode) {
             CarSpeedReader.REQ_PERMISSION -> CarSpeedReader.onPermissionResult()

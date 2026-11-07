@@ -2069,7 +2069,7 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == WifiTabBuilder.LOCATION_PERMISSION_REQUEST && wifiTabBuilder != null) {
-            wifiTabBuilder.onLocationPermissionResult();
+            wifiTabBuilder.onLocationPermissionResult(grantResults);
             return;
         }
         if (requestCode == DmsFaceRecognitionTabBuilder.CAMERA_PERMISSION_REQUEST
@@ -2111,6 +2111,9 @@ public class MainActivity extends AppCompatActivity {
         SunroofGestureOverlayManager.getInstance(this).onActivityResumed();
         if (currentTab == TAB_CAMERA_360 && camera360TabBuilder != null) {
             camera360TabBuilder.onTabVisible();
+        }
+        if (currentTab == 0 && wifiTabBuilder != null) {
+            wifiTabBuilder.onHostResumed();
         }
         MapControlVDBusKeyBridge.refreshSubscription(true, true);
         ImmersiveFullscreenHelper.reapplyIfLauncherMode(this);

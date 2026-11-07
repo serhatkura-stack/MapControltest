@@ -24,6 +24,7 @@ import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.content.ContextCompat;
 
 import com.mapcontrol.R;
+import com.mapcontrol.launcher.WifiAccess;
 import com.mapcontrol.ui.theme.UiStyles;
 import com.mapcontrol.util.NetworkWifiHelper;
 import com.mapcontrol.util.WifiController;
@@ -298,16 +299,26 @@ public class WifiTabBuilder {
         }
     }
 
+    /** Son çizimde liste yerine izin/konum satırı mı vardı ({@link #onHostResumed()} yalnızca o zaman yeniden dener). */
+    private boolean gateShown;
+
     /** Konum izni ya da sistem konumu eksikse listenin yerine açıklama + düğme koyar ve true döner. */
     private boolean showLocationGateIfNeeded() {
         boolean permission = WifiController.hasLocationPermission(context);
         boolean locationOn = WifiController.isLocationOn(context);
-        if (permission && locationOn) {
+        gateShown = !(permission && locationOn);
+        if (!gateShown) {
             return false;
         }
         if (wifiListContainer == null) {
             return true;
         }
+        // Kalıcı retten sonra ("Bir daha sorma" / Android 11+'da iki ret) sistem pencere göstermez: düğme uygulama ayarlarını açar.
+        android.app.Activity activity = context instanceof android.app.Activity ? (android.app.Activity) context : null;
+        boolean openAppSettings = !permission && (activity == null
+                || WifiAccess.permissionAction(WifiAccess.isDeniedBefore(),
+                        activity.shouldShowRequestPermissionRationale(android.Manifest.permission.ACCESS_FINE_LOCATION))
+                        == WifiAccess.PermissionAction.OPEN_APP_SETTINGS);
         wifiListContainer.removeAllViews();
         TextView msg = new TextView(context);
         msg.setText(permission ? R.string.launcher_wifi_location_off : R.string.launcher_wifi_need_location);
@@ -316,11 +327,12 @@ public class WifiTabBuilder {
         msg.setPadding(8, 8, 8, 8);
         wifiListContainer.addView(msg);
         Button action = new Button(context);
-        action.setText(permission ? R.string.launcher_wifi_location_settings : R.string.launcher_wifi_grant);
+        action.setText(permission ? R.string.launcher_wifi_location_settings
+                : openAppSettings ? R.string.launcher_wifi_open_settings : R.string.launcher_wifi_grant);
         applyControlButtonStyle(action, UiStyles.color(context, R.color.oemAccent));
         action.setOnClickListener(v -> {
-            if (!permission && context instanceof android.app.Activity) {
-                ((android.app.Activity) context).requestPermissions(new String[]{
+            if (!permission && !openAppSettings) {
+                activity.requestPermissions(new String[]{
                         android.Manifest.permission.ACCESS_FINE_LOCATION,
                         android.Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_PERMISSION_REQUEST);
             } else {
@@ -349,9 +361,24 @@ public class WifiTabBuilder {
         }
     }
 
-    /** Konum izni penceresi kapanınca (MainActivity) liste yeniden denenir; reddedildiyse açıklama satırı kalır. */
-    public void onLocationPermissionResult() {
+    /**
+     * Konum izni penceresi kapanınca (MainActivity) liste yeniden denenir; reddedildiyse açıklama satırı kalır, kalıcı retse
+     * düğme "Ayarları aç" olur. Yarıda kesilen pencere ret sayılmaz.
+     */
+    public void onLocationPermissionResult(int[] grantResults) {
+        WifiAccess.onPermissionResult(grantResults);
         scanWifiNetworks();
+    }
+
+    /**
+     * Uygulama öne gelince (MainActivity.onResume, Wi-Fi sekmesi açıkken): liste yerine izin/konum satırı varsa yeniden dener;
+     * konum ayarından ya da uygulama ayarından dönünce "Yenile"ye basmak gerekmez. Liste zaten görünüyorsa taranmaz
+     * (Android 9+ tarama kotası: 2 dakikada 4).
+     */
+    public void onHostResumed() {
+        if (gateShown) {
+            scanWifiNetworks();
+        }
     }
 
     private void displayWifiNetworks() {

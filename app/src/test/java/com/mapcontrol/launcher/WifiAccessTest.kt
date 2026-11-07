@@ -15,11 +15,22 @@ class WifiAccessTest {
     }
 
     @Test fun firstAskRequestsAtRuntime() {
-        assertEquals(WifiAccess.PermissionAction.REQUEST, WifiAccess.permissionAction(askedBefore = false, showRationale = false))
-        assertEquals(WifiAccess.PermissionAction.REQUEST, WifiAccess.permissionAction(askedBefore = true, showRationale = true))
+        assertEquals(WifiAccess.PermissionAction.REQUEST, WifiAccess.permissionAction(deniedBefore = false, showRationale = false))
+        assertEquals(WifiAccess.PermissionAction.REQUEST, WifiAccess.permissionAction(deniedBefore = true, showRationale = true))
     }
 
     @Test fun deniedForeverOpensAppSettings() {
-        assertEquals(WifiAccess.PermissionAction.OPEN_APP_SETTINGS, WifiAccess.permissionAction(askedBefore = true, showRationale = false))
+        assertEquals(WifiAccess.PermissionAction.OPEN_APP_SETTINGS, WifiAccess.permissionAction(deniedBefore = true, showRationale = false))
+    }
+
+    @Test fun permissionResultReadsFineFirst() {
+        assertEquals(WifiAccess.PermissionResult.GRANTED, WifiAccess.permissionResult(intArrayOf(0, 0)))
+        assertEquals(WifiAccess.PermissionResult.DENIED, WifiAccess.permissionResult(intArrayOf(-1, -1)))
+        // Android 12+ "Yaklaşık": yalnızca COARSE; Wi-Fi tarama sonuçları FINE ister.
+        assertEquals(WifiAccess.PermissionResult.DENIED, WifiAccess.permissionResult(intArrayOf(-1, 0)))
+    }
+
+    @Test fun interruptedDialogIsNotADenial() {
+        assertEquals(WifiAccess.PermissionResult.CANCELLED, WifiAccess.permissionResult(intArrayOf()))
     }
 }

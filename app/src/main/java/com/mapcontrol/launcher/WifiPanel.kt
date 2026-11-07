@@ -137,15 +137,19 @@ internal class WifiPanel(
         popup?.dismiss()
     }
 
-    /** İzin penceresi kapanınca, ayarlardan dönünce (onResume) ya da dışarıdan içeriği tazeler. */
+    /** İzin penceresi verilince ya da dışarıdan içeriği tazeler (ayarlara gidince onStop paneli kapatır; dönüşte yeniden açılır). */
     fun refresh() {
         if (isShowing) { render(); scan() }
     }
 
-    /** Konum izni penceresinin sonucu: verildiyse yeniden taranır; reddedildiyse satır kalır, kısa bir not düşülür. */
-    fun onPermissionResult(granted: Boolean) {
+    /**
+     * Konum izni penceresinin sonucu (onResume'dan önce gelir): verildiyse bir kez yeniden taranır; reddedildiyse satır kalır,
+     * kısa bir not düşülür; yarıda kesildiyse yalnızca yeniden çizilir.
+     */
+    fun onPermissionResult(result: WifiAccess.PermissionResult) {
         if (!isShowing) return
-        if (granted) { status = null; refresh(); return }
+        if (result == WifiAccess.PermissionResult.GRANTED) { status = null; refresh(); return }
+        if (result == WifiAccess.PermissionResult.CANCELLED) { render(); return }
         status = activity.getString(R.string.launcher_wifi_permission_denied)
         statusAlert = true
         render()
@@ -437,13 +441,12 @@ internal class WifiPanel(
      * düğme "Ayarları aç" olur ve uygulama ayrıntılarını açar (pencere hiç açılmayacağı için düğme boşa basılmasın).
      */
     private fun permissionRow(): View = baseRow().apply {
-        val action = WifiAccess.permissionAction(askedLocation,
+        val action = WifiAccess.permissionAction(WifiAccess.isDeniedBefore(),
             activity.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION))
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply { setText(R.string.launcher_wifi_need_location) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = activity.dp(12) })
         if (action == WifiAccess.PermissionAction.REQUEST) {
             addView(pill(R.string.launcher_wifi_grant) {
-                askedLocation = true
                 activity.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
             })
         } else {
@@ -454,7 +457,7 @@ internal class WifiPanel(
         }
     }
 
-    /** Sistem konumu kapalı: açıklama + konum ayarlarını açan düğme; dönüşte (onResume) panel yenilenir. */
+    /** Sistem konumu kapalı: açıklama + konum ayarlarını açan düğme; ayarlara gidince panel kapanır, yeniden açılınca güncel durum çizilir. */
     private fun locationOffRow(): View = baseRow().apply {
         addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY, maxLines = 3).apply { setText(R.string.launcher_wifi_location_off) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = activity.dp(12) })
@@ -601,8 +604,6 @@ internal class WifiPanel(
     companion object {
         /** HomeLauncherActivity izin kodları birbirinden ayrı olmalı: 4711 telefon izinleriydi, Wi-Fi sonucu oraya gidiyordu. */
         const val REQ_LOCATION = 4712
-        /** Bu süreçte konum izni bir kez istendi mi ([WifiAccess.permissionAction] için). */
-        private var askedLocation = false
         private const val WIDTH_DP = 600
         private const val PAD_DP = 16
         private const val ROW_DP = LauncherTheme.TOUCH_MIN_DP
