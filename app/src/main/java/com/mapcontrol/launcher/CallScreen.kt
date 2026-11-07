@@ -56,6 +56,7 @@ internal class CallScreen(
     private lateinit var nameText: TextView
     private lateinit var numberText: TextView
     private lateinit var stateText: TextView
+    private var oemPill = false
     private lateinit var digitsText: TextView
     private lateinit var keypad: LinearLayout
     private lateinit var controls: LinearLayout
@@ -158,14 +159,17 @@ internal class CallScreen(
         keyViews.forEach { k -> if (k.isEnabled != keysOn) { k.isEnabled = keysOn; k.alpha = if (keysOn) 1f else DISABLED_ALPHA } }
         // Aranıyorken Tuş takımı soluk (yalnız konuşmada çalışır).
         controlViews[PhoneUiLogic.CallControl.KEYPAD]?.alpha = if (keysOn) 1f else DISABLED_ALPHA
+        // OEM hapı süreyi/durumu yazıyorsa bizde ikinci kez yazılmaz (CallBanner ile aynı kural); sayaç da durur.
+        oemPill = PhoneUiLogic.oemPillShowsDuration(call.kind, s.backend)
+        stateText.visibility = if (oemPill) View.GONE else View.VISIBLE
         when (call.kind) {
             CallKind.INCOMING -> setTextIfChanged(stateText, context.getString(R.string.launcher_call_incoming))
-            CallKind.DIALING -> setTextIfChanged(stateText, context.getString(R.string.launcher_call_dialing))
-            CallKind.ACTIVE -> tickTimer()
+            CallKind.DIALING -> if (!oemPill) setTextIfChanged(stateText, context.getString(R.string.launcher_call_dialing))
+            CallKind.ACTIVE -> if (!oemPill) tickTimer()
             CallKind.ENDED -> setTextIfChanged(stateText, context.getString(R.string.launcher_call_ended))
             CallKind.NONE -> Unit
         }
-        if (call.kind != CallKind.ACTIVE) main.removeCallbacks(timer)
+        if (call.kind != CallKind.ACTIVE || oemPill) main.removeCallbacks(timer)
     }
 
     /** Sessiz ve ses yönü: seçiliyken ikon ve etiket AMBER yanar (halka yok); ses telefondayken etiket "Araca aktar". */
@@ -376,7 +380,7 @@ internal class CallScreen(
     /** Süreyi yazar ve bir sonraki saniye sınırına kurar (yalnız konuşma sürerken ve sayfa açıkken). */
     private fun tickTimer() {
         main.removeCallbacks(timer)
-        if (root == null || call.kind != CallKind.ACTIVE) return
+        if (root == null || call.kind != CallKind.ACTIVE || oemPill) return
         val started = call.startedAtMs
         val elapsed = if (started > 0L) SystemClock.elapsedRealtime() - started else 0L
         setTextIfChanged(stateText, PhoneUiLogic.formatDuration(elapsed))

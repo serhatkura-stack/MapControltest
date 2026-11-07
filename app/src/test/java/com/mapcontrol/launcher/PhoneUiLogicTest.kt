@@ -336,4 +336,106 @@ class PhoneUiLogicTest {
         assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.ACTIVE, CallKind.ENDED, isDefaultHome = true, alreadyForThisCall = false))
         assertFalse(PhoneUiLogic.shouldBringToFront(CallKind.ENDED, CallKind.NONE, isDefaultHome = true, alreadyForThisCall = false))
     }
+
+    // --- OEM arama hapı ile çift gösterim ---
+
+    @Test
+    fun oemPillOwnsDurationOnlyForDesaySvDialingAndActive() {
+        val vd = PhoneBackendName.VDBUS
+        assertTrue(PhoneUiLogic.oemPillShowsDuration(CallKind.DIALING, vd))
+        assertTrue(PhoneUiLogic.oemPillShowsDuration(CallKind.ACTIVE, vd))
+        // Gelen aramada OEM büyük şeridi var, küçük hap yok; bitti/arama yokta hap kalkar: durum bizde.
+        assertFalse(PhoneUiLogic.oemPillShowsDuration(CallKind.INCOMING, vd))
+        assertFalse(PhoneUiLogic.oemPillShowsDuration(CallKind.ENDED, vd))
+        assertFalse(PhoneUiLogic.oemPillShowsDuration(CallKind.NONE, vd))
+        // OEM yığını dışındaki arka uçlarda (emülatör, demo, Telecom, HFP istemci) süre bizde kalır.
+        for (b in listOf(PhoneBackendName.TELECOM, PhoneBackendName.HFP_CLIENT, PhoneBackendName.DEMO, PhoneBackendName.NONE)) {
+            for (k in CallKind.values()) assertFalse("$b $k", PhoneUiLogic.oemPillShowsDuration(k, b))
+        }
+    }
+
+    @Test
+    fun compactPillSitsRightOfClockAndBeforeRightGroup() {
+        // 1920 genişlik: saat 900-1020, sağ grup 1450'den, sağ sınır 1896, boşluk 16.
+        val s = PhoneUiLogic.compactPillSlot(1020, 1450, 1896, 16, 580, 300)!!
+        assertEquals(1036, s.leftPx)
+        assertEquals(1450 - 16 - 1036, s.widthPx)
+        // Hap saatin üstüne binmez ve sağ gruba değmez.
+        assertTrue(s.leftPx >= 1020 + 16)
+        assertTrue(s.leftPx + s.widthPx <= 1450 - 16)
+        // Geniş boşlukta en çok 580.
+        assertEquals(580, PhoneUiLogic.compactPillSlot(1020, 2400, 2536, 16, 580, 300)!!.widthPx)
+        // Sağ grup boşsa sağ sınırdan boşluk kadar önce biter.
+        assertEquals(1896 - 16 - 1036, PhoneUiLogic.compactPillSlot(1020, null, 1896, 16, 900, 300)!!.widthPx)
+    }
+
+    @Test
+    fun compactPillCoversRightGroupWhenGapTooNarrowButNeverTheClock() {
+        // Saat ile sağ grup arası 200 (< 300): hap tarih/hava üstüne uzanır, saat açık kalır.
+        val s = PhoneUiLogic.compactPillSlot(1020, 1252, 1896, 16, 580, 300)!!
+        assertEquals(1036, s.leftPx)
+        assertEquals(580, s.widthPx)
+        // Aralık en küçük genişliğe (220) yetiyorsa hap sağ grubun önünde kalır, ad kısalır.
+        val narrow = PhoneUiLogic.compactPillSlot(1020, 1302, 1896, 16, 580, 220)!!
+        assertEquals(1036, narrow.leftPx)
+        assertEquals(1302 - 16 - 1036, narrow.widthPx)
+        assertTrue(narrow.leftPx + narrow.widthPx <= 1302 - 16)
+        // Sağ kenara da sığmıyorsa ya da saat ölçülmemişse null (çağıran üst ortaya koyar).
+        assertEquals(null, PhoneUiLogic.compactPillSlot(1700, 1800, 1896, 16, 580, 300))
+        assertEquals(null, PhoneUiLogic.compactPillSlot(null, 1450, 1896, 16, 580, 300))
+        assertEquals(null, PhoneUiLogic.compactPillSlot(0, 1450, 1896, 16, 580, 300))
+    }
+
+    // --- Favoriler "Son arama"yı tekrar etmez ---
+
+    @Test
+    fun favoritesSkipTheLastCallContact() {
+        val list = people(5)
+        val lastById = PhoneRecent(RecentType.OUTGOING, "Kişi 2", "0555 999 99 99", 5L, contactId = "c:2")
+        assertEquals(listOf("c:1", "c:3", "c:4"), PhoneUiLogic.favoriteCells(list, exclude = lastById).map { it.id })
+        // Numara biçimi farklı olsa da son 9 hane eşitse aynı kişi.
+        val lastByNumber = PhoneRecent(RecentType.INCOMING, "Başka Ad", "+90 555 000 00 01", 5L)
+        assertEquals(listOf("c:2", "c:3", "c:4"), PhoneUiLogic.favoriteCells(list, exclude = lastByNumber).map { it.id })
+        // Numara eşleşmezse isim (büyük/küçük harf, boşluk farkı yok).
+        val lastByName = PhoneRecent(RecentType.MISSED, " kişi 3 ", "0555 111 11 11", 5L)
+        assertEquals(listOf("c:1", "c:2", "c:4"), PhoneUiLogic.favoriteCells(list, exclude = lastByName).map { it.id })
+        // Başka biri ise liste değişmez.
+        val other = PhoneRecent(RecentType.MISSED, "Mehmet", "0555 222 22 22", 5L)
+        assertEquals(listOf("c:1", "c:2", "c:3"), PhoneUiLogic.favoriteCells(list, exclude = other).map { it.id })
+        assertEquals(PhoneUiLogic.favoriteCells(list), PhoneUiLogic.favoriteCells(list, exclude = null))
+    }
+
+    @Test
+    fun compactGridSkipsTheLastCallContact() {
+        val last = PhoneRecent(RecentType.OUTGOING, "Kişi 1", "0555 000 00 01", 5L, contactId = "c:1")
+        val ids = PhoneUiLogic.compactGrid(people(3), faceBody, true, exclude = last).flatten()
+            .filterIsInstance<PhoneUiLogic.FavCell.Contact>().map { it.contact.id }
+        assertEquals(listOf("c:2", "c:3"), ids)
+        // Kısa numara (6 haneden az) yalnız başına eşleşme sayılmaz.
+        val short = PhoneRecent(RecentType.OUTGOING, null, "112", 5L)
+        assertFalse(PhoneUiLogic.isSamePerson(PhoneContact("c:9", "Acil", "112"), short))
+    }
+
+    // --- "Son arama" adı iki satır ---
+
+    @Test
+    fun lastCallNameTwoLinesFitsBothCards() {
+        assertEquals(2, PhoneUiLogic.LAST_NAME_MAX_LINES)
+        assertTrue(PhoneUiLogic.lastCardCaptionVisible(1))
+        assertFalse(PhoneUiLogic.lastCardCaptionVisible(2))
+        // Asistanlı kart: PANEL_LAST_CALL_DP, iç pay her yanda FACE_CARD_PAD_DP (PhonePanel aynı sabitleri kullanır).
+        val name = PhoneUiLogic.LAST_NAME_SP
+        val cap = PhoneUiLogic.LAST_CAPTION_SP
+        val faceInner = PhoneUiLogic.PANEL_LAST_CALL_DP - 2 * PhoneUiLogic.FACE_CARD_PAD_DP
+        assertTrue(PhoneUiLogic.lastCardTextDp(1, true, name, cap) <= faceInner)
+        assertTrue(PhoneUiLogic.lastCardTextDp(2, PhoneUiLogic.lastCardCaptionVisible(2), name, cap) <= faceInner)
+        // İki satır + başlık sığmazdı: başlığın kalkması gerekli.
+        assertTrue(PhoneUiLogic.lastCardTextDp(2, true, name, cap) > faceInner)
+        // Asistansız büyük kart: en az COMPACT_LAST_MIN_DP, iç pay 2 × COMPACT_CARD_PAD_DP.
+        val cName = PhoneUiLogic.C_LAST_NAME_SP
+        val cCap = PhoneUiLogic.C_LAST_CAPTION_SP
+        val compactInner = PhoneUiLogic.COMPACT_LAST_MIN_DP - 2 * PhoneUiLogic.COMPACT_CARD_PAD_DP
+        assertTrue(PhoneUiLogic.lastCardTextDp(1, true, cName, cCap) <= compactInner)
+        assertTrue(PhoneUiLogic.lastCardTextDp(2, false, cName, cCap) <= compactInner)
+    }
 }

@@ -61,6 +61,44 @@ internal object PhoneUiLogic {
         else -> PhoneButtonAction.SHEET
     }
 
+    /**
+     * OEM küçük arama hapı (SVBluetoothPhone PhoneCallService, mShowType 2: 240×54, x 421 y 16, her uygulamanın üstünde)
+     * süreyi/durumu kendisi gösteriyor mu: arama DesaySV telefon yığınından geliyorsa ([PhoneBackendName.VDBUS]) ve
+     * aranıyor ya da konuşma sürüyorsa. O zaman bizim hap süre/durum yazmaz ve saniye sayacı durur (araçta her şey iki
+     * kez görünüyordu); ad, sessiz işareti ve Kapat kalır. Gelen aramada ve "Arama bitti"de OEM hapı yok. Telecom/HFP
+     * istemci/demo arka uçlarında (OEM yığını yok ya da emülatör) süre bizde kalır.
+     *
+     * Not: Android Auto yansıtmasında OEM hapının durumu bilinmiyor (launcher'da yansıtma sinyali yok); aramayı VDBus
+     * bildirdiği sürece hap var sayılır.
+     */
+    fun oemPillShowsDuration(kind: CallKind, backend: String): Boolean =
+        backend == PhoneBackendName.VDBUS && (kind == CallKind.DIALING || kind == CallKind.ACTIVE)
+
+    /** Kompakt arama hapının yeri (piksel, şerit çerçevesine göre): sol kenar ve genişlik. */
+    data class PillSlot(val leftPx: Int, val widthPx: Int)
+
+    /**
+     * Kompakt arama hapı başlıktaki saatin üstüne binmez: saatin sağ kenarı + [gapPx]'ten başlar, sağ grubun (tarih,
+     * hava) solundan [gapPx] önce biter, en çok [maxWidthPx]. Bu boşluk [minWidthPx]'ten darsa sağ grubun üstüne
+     * uzanır (yalnız bakılan bilgi; saat yine açık), [rightLimitPx]'e dek. Saat ölçülmemişse null: çağıran ortalar.
+     */
+    fun compactPillSlot(
+        clockRightPx: Int?,
+        rightGroupLeftPx: Int?,
+        rightLimitPx: Int,
+        gapPx: Int,
+        maxWidthPx: Int,
+        minWidthPx: Int,
+    ): PillSlot? {
+        if (clockRightPx == null || clockRightPx <= 0) return null
+        val left = clockRightPx + gapPx
+        val beforeGroup = (rightGroupLeftPx ?: rightLimitPx).coerceAtMost(rightLimitPx) - gapPx - left
+        if (beforeGroup >= minWidthPx) return PillSlot(left, minOf(maxWidthPx, beforeGroup))
+        val toEdge = rightLimitPx - left
+        if (toEdge >= minWidthPx) return PillSlot(left, minOf(maxWidthPx, toEdge))
+        return null
+    }
+
     fun bannerMode(call: CallState): BannerMode = when (call.kind) {
         CallKind.NONE -> BannerMode.HIDDEN
         CallKind.INCOMING -> BannerMode.INCOMING
@@ -165,8 +203,8 @@ internal object PhoneUiLogic {
      * kısa satır ortalanır, [compactSlots]). İki satır [bodyDp] gövdeye sığmıyorsa ([COMPACT_ROW_MIN_DP]) tek satıra
      * iner ve ilk [COMPACT_ONE_ROW_FAVORITES] kişi gösterilir.
      */
-    fun compactGrid(favorites: List<PhoneContact>, bodyDp: Int, hasLast: Boolean): List<List<FavCell>> {
-        val named = favoriteCells(favorites, COMPACT_FAVORITES)
+    fun compactGrid(favorites: List<PhoneContact>, bodyDp: Int, hasLast: Boolean, exclude: PhoneRecent? = null): List<List<FavCell>> {
+        val named = favoriteCells(favorites, COMPACT_FAVORITES, exclude)
         val twoRows = named.size > COMPACT_ONE_ROW_FAVORITES &&
             compactSizes(bodyDp, 2, hasLast).rowDp >= COMPACT_ROW_MIN_DP
         val shown = if (twoRows) named else named.take(COMPACT_ONE_ROW_FAVORITES)
@@ -202,9 +240,57 @@ internal object PhoneUiLogic {
     /** "Son arama" kartı: ismi olan ilk (en yeni) kayıt; isimsizler atlanır. Yoksa null (kart gizlenir). */
     fun lastNamedRecent(recents: List<PhoneRecent>): PhoneRecent? = recents.firstOrNull { hasName(it.name) }
 
-    /** Paneldeki favori hücreleri: yalnızca isimli kişiler, en çok [max]; çıplak numara asla. */
-    fun favoriteCells(favorites: List<PhoneContact>, max: Int = PANEL_FAVORITES): List<PhoneContact> =
-        favorites.filter { hasName(it.name) }.take(max)
+    /**
+     * Paneldeki favori hücreleri: yalnızca isimli kişiler, en çok [max]; çıplak numara asla. [exclude] ("Son arama"
+     * kartındaki kayıt) favorilerde tekrar edilmez; boşalan yeri sıradaki favori doldurur ([isSamePerson]).
+     */
+    fun favoriteCells(favorites: List<PhoneContact>, max: Int = PANEL_FAVORITES, exclude: PhoneRecent? = null): List<PhoneContact> =
+        favorites.filter { hasName(it.name) && (exclude == null || !isSamePerson(it, exclude)) }.take(max)
+
+    /**
+     * Favori kişi ile son arama kaydı aynı kişi mi: rehber kimliği eşitse; değilse numaraların son 9 hanesi (en az 6 hane)
+     * eşitse; numara yoksa/eşleşmezse iki taraf da isimliyse ve isimler (büyük/küçük harf ve boşluk farkı yok) eşitse.
+     */
+    fun isSamePerson(c: PhoneContact, r: PhoneRecent): Boolean {
+        if (r.contactId != null && r.contactId == c.id) return true
+        val a = digitsOf(c.number).takeLast(9)
+        val b = digitsOf(r.number).takeLast(9)
+        if (a.length >= 6 && a == b) return true
+        val rn = r.name
+        return hasName(c.name) && hasName(rn) && c.name.trim().equals(rn!!.trim(), ignoreCase = true)
+    }
+
+    /** "Son arama" adı en çok bu kadar satıra kaydırılır; taşarsa ikinci satırın sonunda "…". */
+    const val LAST_NAME_MAX_LINES = 2
+
+    /**
+     * "Son arama" kartında küçük "Son arama" başlığı görünsün mü: ad tek satırdaysa evet; iki satıra kaydıysa başlık
+     * kalkar ki ad + zaman satırı kartın iç yüksekliğine sığsın ([lastCardTextDp], [PhoneUiLogicTest] denetler).
+     */
+    fun lastCardCaptionVisible(nameLines: Int): Boolean = nameLines <= 1
+
+    /**
+     * Kart metin sütununun yaklaşık yüksekliği (dp; üst sınır tahmini): satır ≈ 1,17 × yazı boyu, yazı payı açıksa
+     * (includeFontPadding, başlık ve zaman yazısı) +0,16 ×. Ad yazısında yazı payı kapalı. Zaman satırı en az 20dp
+     * (simge). Yazı boyları gündüz +1sp büyüyebilir ([dayBumpSp]).
+     */
+    fun lastCardTextDp(nameLines: Int, captionVisible: Boolean, nameSp: Float, captionSp: Float, dayBumpSp: Float = 1f): Int {
+        fun lines(n: Int, sp: Float, pad: Boolean) = if (n <= 0) 0f else (sp + dayBumpSp) * (1.17f * n + if (pad) 0.16f else 0f)
+        val caption = if (captionVisible) lines(1, captionSp, true) + LAST_CAPTION_GAP_DP else 0f
+        val time = maxOf(20f, lines(1, captionSp, true)) + LAST_TIME_GAP_DP
+        return kotlin.math.ceil(caption + lines(nameLines, nameSp, false) + time).toInt()
+    }
+
+    /** Asistanlı "Son arama" kartının iç payı (dp, her yan) ve yazı boyları; [PhonePanel] ile test aynı değeri kullanır. */
+    const val FACE_CARD_PAD_DP = 10
+    const val LAST_CAPTION_SP = 15f
+    const val LAST_NAME_SP = 21f
+    /** Asistansız büyük kartın yazı boyları. */
+    const val C_LAST_CAPTION_SP = 16f
+    const val C_LAST_NAME_SP = 22f
+
+    const val LAST_CAPTION_GAP_DP = 1
+    const val LAST_TIME_GAP_DP = 2
 
     /**
      * "Son arama" kartının fotoğraf anahtarı: kaydın kendi anahtarı, yoksa eşleşen kişinin (kimlikle, sonra numaranın

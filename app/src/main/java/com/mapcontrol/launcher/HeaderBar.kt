@@ -232,6 +232,47 @@ class HeaderBar(
         view.invalidate()
     }
 
+    // --- Arama hapı yerleşimi için konumlar (yalnız okunur; başlığın düzeni değişmez) ---
+
+    private val slotLoc = IntArray(2)
+    private var slotListener: (() -> Unit)? = null
+    private val slotLayoutListener = View.OnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
+        if (l != ol || r != or) slotListener?.invoke()
+    }
+
+    /** Saat (spor modunda saat plakası; saat gizliyse tarihli plaka) ekranda nerede: arama hapı bunun sağına yerleşir. */
+    private fun clockAnchor(): View = if (clockPlate.parent != null) clockPlate else time
+
+    /** Saatin sağ kenarı, [relativeTo]'nun sol kenarına göre piksel. Henüz ölçülmediyse null. */
+    fun clockRightPx(relativeTo: View): Int? {
+        val a = clockAnchor()
+        if (a.width <= 0 || !a.isShown) return null
+        return xIn(a, relativeTo)?.plus(a.width)
+    }
+
+    /** Sağ grubun (sürüş rozeti, tarih, hava) sol kenarı, [relativeTo]'ya göre piksel. Grup boşsa ya da ölçülmediyse null. */
+    fun rightGroupLeftPx(relativeTo: View): Int? {
+        if (rightGroup.width <= 0 || !rightGroup.isShown) return null
+        return xIn(rightGroup, relativeTo)
+    }
+
+    private fun xIn(v: View, relativeTo: View): Int? {
+        if (!v.isAttachedToWindow || !relativeTo.isAttachedToWindow) return null
+        v.getLocationInWindow(slotLoc)
+        val x = slotLoc[0]
+        relativeTo.getLocationInWindow(slotLoc)
+        return x - slotLoc[0]
+    }
+
+    /** Saat ya da sağ grup yatayda yer/boy değiştirince (saat yazısı, spor modu, tarih) [listener] çağrılır; null kaldırır. */
+    fun setOnClockSlotChanged(listener: (() -> Unit)?) {
+        slotListener = listener
+        listOf(view, time, clockPlate, rightGroup).forEach {
+            it.removeOnLayoutChangeListener(slotLayoutListener)
+            if (listener != null) it.addOnLayoutChangeListener(slotLayoutListener)
+        }
+    }
+
     /** Spor ekranında analog saat kadranı seçili: dijital saat spor modunda gizlenir, tarih kalır. */
     private var sportClockHidden = false
 

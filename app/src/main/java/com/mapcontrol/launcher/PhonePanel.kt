@@ -109,10 +109,8 @@ internal class PhonePanel(
         setText(R.string.phone_last_call)
         maxLines = 1
     }
-    private val lastName = sahneText(context, LAST_NAME_SP, Sahne.INK, 600).apply {
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-    }
+    /** Uzun ad iki satıra kayar, taşarsa ikinci satırın sonunda "…" ([twoLineName]). */
+    private val lastName = sahneText(context, LAST_NAME_SP, Sahne.INK, 600).apply { twoLineName(this, lastLabel) }
     private val lastGlyph = ImageView(context).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
     private val lastTime = sahneText(context, CAPTION_SP, Sahne.INK_3, 400).apply { maxLines = 1 }
     private val callBack = LinearLayout(context).apply {
@@ -138,20 +136,21 @@ internal class PhonePanel(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = rounded(context, Sahne.SOFT_FILL, Sahne.SQUARE_RADIUS_DP, Sahne.HAIR_2)
-        setPadding(context.dp(10), context.dp(10), context.dp(10), context.dp(10))
+        val pad = context.dp(PhoneUiLogic.FACE_CARD_PAD_DP)
+        setPadding(pad, pad, pad, pad)
         // Avatar gölgesi kendi sınırından taşar: kartın iç payına çizilebilsin.
         clipChildren = false
         addView(lastAvatar, LinearLayout.LayoutParams(context.dp(LAST_AVATAR_DP), context.dp(LAST_AVATAR_DP)))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(lastLabel)
-            addView(lastName, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(1) })
+            addView(lastName, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(PhoneUiLogic.LAST_CAPTION_GAP_DP) })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 addView(lastGlyph, LinearLayout.LayoutParams(context.dp(18), context.dp(18)))
                 addView(lastTime, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(6) })
-            }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(2) })
+            }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(PhoneUiLogic.LAST_TIME_GAP_DP) })
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = context.dp(14); marginEnd = context.dp(10) })
         addView(callBack, LinearLayout.LayoutParams(context.dp(TOUCH_DP), context.dp(TOUCH_DP)))
     }
@@ -343,7 +342,8 @@ internal class PhonePanel(
             applyState(st)
         }
         if (st == PhoneUiLogic.PanelState.CONTENT) {
-            val favs = PhoneUiLogic.favoriteCells(s.favorites)
+            // "Son arama" kartındaki kişi favorilerde tekrar edilmez; yerini sıradaki favori alır.
+            val favs = PhoneUiLogic.favoriteCells(s.favorites, exclude = PhoneUiLogic.lastNamedRecent(s.recents))
             if (favs != shownFavorites) bindFavorites(favs)
             bindLast(s)
             rebuildCompact()
@@ -502,7 +502,7 @@ internal class PhonePanel(
         if (showAssistant || state != PhoneUiLogic.PanelState.CONTENT || compactBodyDp <= 0) return
         val s = snap ?: return
         val last = shownLast
-        val grid = PhoneUiLogic.compactGrid(s.favorites, compactBodyDp, last != null)
+        val grid = PhoneUiLogic.compactGrid(s.favorites, compactBodyDp, last != null, exclude = last)
         val slots = PhoneUiLogic.compactSlots(grid)
         val cellW = if (compactBodyWDp > 0) compactBodyWDp / slots else Int.MAX_VALUE
         val sizes = PhoneUiLogic.compactSizes(compactBodyDp, grid.size, last != null, cellW)
@@ -573,15 +573,15 @@ internal class PhonePanel(
                 LinearLayout.LayoutParams(context.dp(sizes.lastAvatarDp), context.dp(sizes.lastAvatarDp)))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(sahneText(context, C_CAPTION_SP, Sahne.INK_3, 500).apply {
+                val caption = sahneText(context, C_CAPTION_SP, Sahne.INK_3, 500).apply {
                     setText(R.string.phone_last_call)
                     maxLines = 1
-                })
+                }
+                addView(caption)
                 addView(sahneText(context, C_LAST_NAME_SP, Sahne.INK, 600).apply {
                     text = name
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(2) })
+                    twoLineName(this, caption)
+                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(PhoneUiLogic.LAST_CAPTION_GAP_DP) })
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
@@ -592,7 +592,7 @@ internal class PhonePanel(
                         imageTintList = ColorStateList.valueOf(if (r.type == RecentType.MISSED) Sahne.ALERT else Sahne.INK_3)
                     }, LinearLayout.LayoutParams(context.dp(20), context.dp(20)))
                     addView(time, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = context.dp(6) })
-                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(3) })
+                }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(PhoneUiLogic.LAST_TIME_GAP_DP) })
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = context.dp(16); marginEnd = context.dp(12) })
             addView(call, LinearLayout.LayoutParams(WRAP, context.dp(callH)))
         }
@@ -660,6 +660,23 @@ internal class PhonePanel(
         setOnClickListener { dial(c.number) }
         if (PhoneUiLogic.canPin(c.id)) setOnLongClickListener { togglePin(c); true }
         pressFeedback()
+    }
+
+    /**
+     * "Son arama" adı: en çok [PhoneUiLogic.LAST_NAME_MAX_LINES] satır, taşarsa ikinci satırın sonunda "…" (yazı payı
+     * kapalı). İki satıra kaydığında küçük "Son arama" başlığı ([caption]) kalkar ki ad + zaman kart yüksekliğine sığsın
+     * ([PhoneUiLogic.lastCardCaptionVisible]); tek satıra dönünce geri gelir.
+     */
+    private fun twoLineName(name: TextView, caption: View) {
+        name.maxLines = PhoneUiLogic.LAST_NAME_MAX_LINES
+        name.ellipsize = TextUtils.TruncateAt.END
+        name.includeFontPadding = false
+        name.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val lines = (v as TextView).layout?.lineCount ?: return@addOnLayoutChangeListener
+            val want = if (PhoneUiLogic.lastCardCaptionVisible(lines)) View.VISIBLE else View.GONE
+            // Başlığın görünürlüğü adın genişliğini değiştirmez: döngü olmaz; düzen geçişinin dışında uygulanır.
+            if (caption.visibility != want) v.post { caption.visibility = want }
+        }
     }
 
     private fun nameText(value: String, sizeSp: Float = NAME_SP): TextView = sahneText(context, sizeSp, Sahne.INK_2, 500).apply {
@@ -730,8 +747,8 @@ internal class PhonePanel(
         const val LABEL_SP = 16f
         const val DEVICE_SP = 18f
         const val ASSIST_SP = 22f
-        const val CAPTION_SP = 15f
-        const val LAST_NAME_SP = 21f
+        const val CAPTION_SP = PhoneUiLogic.LAST_CAPTION_SP
+        const val LAST_NAME_SP = PhoneUiLogic.LAST_NAME_SP
         const val CALLBACK_SP = 14f
         const val NAME_SP = 16f
         const val MSG_SP = 22f
@@ -739,8 +756,8 @@ internal class PhonePanel(
         const val BUTTON_SP = 20f
         const val DISABLED_ALPHA = 0.4f
         // Asistansız düzen.
-        const val C_CAPTION_SP = 16f
-        const val C_LAST_NAME_SP = 22f
+        const val C_CAPTION_SP = PhoneUiLogic.C_LAST_CAPTION_SP
+        const val C_LAST_NAME_SP = PhoneUiLogic.C_LAST_NAME_SP
         const val C_LAST_INITIALS_SP = 28f
         const val C_CALLBACK_SP = 19f
         const val C_CALLBACK_FACE_SP = 16f

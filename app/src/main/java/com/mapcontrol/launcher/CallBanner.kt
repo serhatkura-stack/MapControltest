@@ -21,21 +21,25 @@ import androidx.annotation.StringRes
 import com.mapcontrol.R
 
 /**
- * Arama şeridi: ekranın üstünde ortada TEK parça cam şerit (karar §15). Yalnızca bir arama varken görünür
- * ([PhoneUiLogic.bannerMode]); süre yalnızca burada ve bir kez yazılır (ayrı yeşil hap ya da ikinci süre yok).
+ * Arama şeridi (karar §15). Yalnızca bir arama varken görünür ([PhoneUiLogic.bannerMode]).
  *
- *  - Aranıyor / konuşma / bitti: başlık bandı yüksekliğinde (76dp), en çok 640dp genişlikte hap. Soldan sağa: 44dp
- *    yuvarlak fotoğraf (yoksa baş harf), ad (yoksa numara, tek satır), " · " ve süre ya da "Aranıyor…" / "Arama bitti",
- *    yalnızca sessizdeyken küçük mikrofon-kapalı işareti (parça AMBER yanar, rozet yok) ve sağda 76×76 **Kapat**.
- *  - Gelen arama: büyük düzen; arayanın adı, "Gelen arama"; solda kırmızı **Reddet**, sağda yeşil **Cevapla** (96dp).
+ *  - Aranıyor / konuşma / bitti: başlık bandı yüksekliğinde (76dp) kompakt hap, başlıktaki saatin SAĞINDA (saatin sağ
+ *    kenarı + 16dp'den sağ grubun önüne dek, en çok [COMPACT_MAX_W_DP]; [PhoneUiLogic.compactPillSlot]); saati örtmez.
+ *    Soldan sağa: 44dp yuvarlak fotoğraf (yoksa baş harf), ad (yoksa numara, tek satır), yalnızca sessizdeyken küçük
+ *    mikrofon-kapalı işareti (parça AMBER yanar, rozet yok) ve sağda 76×76 **Kapat**. Süre / "Aranıyor…" yalnız OEM
+ *    küçük hapı yokken ad yanında yazılır ([PhoneUiLogic.oemPillShowsDuration]); "Arama bitti" hep yazılır.
+ *  - Gelen arama: büyük düzen, üst ortada; arayanın adı, "Gelen arama"; solda kırmızı **Reddet**, sağda yeşil
+ *    **Cevapla** (96dp).
  *
  * Yerleşim OEM arama pencerelerine göre (SVBluetoothPhone PhoneCallService.java:929-958, TYPE_PHONE, bizim ekranın
- * üstüne çizilir; 160 dpi'de dp = px): gelen aramada OEM şeridi 1200×234 üst ortada (y 0-234), konuşmada küçük hap
- * x 421-661, y 16-70. Bu yüzden gelen arama kartı OEM şeridinin altından başlar ([INCOMING_TOP_DP]; üst omuzdaki
- * "Kilitli" hapını da örtmez) ve kompakt hap OEM hapına değmeyecek kadar dardır ([COMPACT_MAX_W_DP]).
+ * üstüne çizilir; 160 dpi'de dp = px): gelen aramada OEM şeridi 1200×234 üst ortada (y 0-234), aranıyor/konuşmada küçük
+ * yeşil hap (mShowType 2) x 421-661, y 16-70 ve süreyi kendisi sayar. Bu yüzden gelen arama kartı OEM şeridinin altından
+ * başlar ([INCOMING_TOP_DP]; üst omuzdaki "Kilitli" hapını da örtmez); DesaySV yığınında kompakt hap süre yazmaz
+ * (araçta süre iki kez görünüyordu) ve saatin sağında durduğu için OEM hapına (saatin solu) değmez.
  *
  * Şeridin gövdesine (düğmeler dışı) dokunmak tam ekran arama sayfasını açar ([onOpen]). Tek zamanlayıcı konuşma
- * süresidir: yalnızca konuşma sürerken, şerit görünürken ve arama sayfası onu örtmüyorken saniyede bir, yazı değişince.
+ * süresidir: yalnızca konuşma sürerken, süre bizde yazılıyorken, şerit görünürken ve arama sayfası onu örtmüyorken
+ * saniyede bir, yazı değişince.
  *
  * Yalnızca ana ekran görünürken dinler ([onVisible]/[onHidden]). İsim/numara günlüğe yazılmaz.
  */
@@ -45,6 +49,8 @@ internal class CallBanner(
     private val onIncoming: (() -> Unit)? = null,
     /** Şerit gövdesine dokunuş: tam ekran arama sayfası. */
     private val onOpen: (() -> Unit)? = null,
+    /** Kompakt hap saatin sağına yerleşir; konumlar başlıktan okunur (null: üst ortada). */
+    private val header: HeaderBar? = null,
 ) : LauncherWidget, PhoneListener {
 
     private val context: Context = activity
@@ -53,6 +59,10 @@ internal class CallBanner(
     /** Tam ekran arama sayfası açık: şerit gizli, süre burada sayılmaz. */
     private var covered = false
     private var call: CallState = CallState.IDLE
+    /** Aramayı bildiren arka uç ([PhoneBackendName]); OEM hapı yalnız DesaySV yığınında. */
+    private var backend: String = PhoneBackendName.NONE
+    /** OEM küçük hapı süreyi/durumu gösteriyor: bizim hap yalnız ad + sessiz + Kapat ([PhoneUiLogic.oemPillShowsDuration]). */
+    private var oemPill = false
     private var mode = PhoneUiLogic.BannerMode.HIDDEN
     /** Kurulu düğme dizisinin kipi (kip değişince yeniden kurulur). */
     private var builtFor: PhoneUiLogic.BannerMode? = null
@@ -115,12 +125,26 @@ internal class CallBanner(
         setOnClickListener { if (mode != PhoneUiLogic.BannerMode.HIDDEN) onOpen?.invoke() }
     }
 
-    /** Genişlik en çok [MAX_W_DP] (kompaktta [COMPACT_MAX_W_DP]), ekranda her yandan 24dp pay. */
+    /**
+     * Çerçeve ekran genişliğinde (dokunulmaz; boş yeri alttakine geçer), kart içinde konumlanır: kompakt hap saatin
+     * sağında ([compactSlot]); gelen arama kartı (ya da saat henüz ölçülmediyse hap) üst ortada, en çok [MAX_W_DP]
+     * (kompaktta [COMPACT_MAX_W_DP]), her yandan 24dp pay.
+     */
     private val frame = object : FrameLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val parentW = MeasureSpec.getSize(widthMeasureSpec)
-            val w = minOf(context.dp(if (compact) COMPACT_MAX_W_DP else MAX_W_DP), parentW - context.dp(2 * SIDE_DP)).coerceAtLeast(0)
-            super.onMeasure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), heightMeasureSpec)
+            val lp = card.layoutParams as FrameLayout.LayoutParams
+            val slot = if (compact) compactSlot(this, parentW) else null
+            if (slot != null) {
+                lp.gravity = Gravity.TOP or Gravity.START
+                lp.leftMargin = slot.leftPx
+                lp.width = slot.widthPx
+            } else {
+                lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                lp.leftMargin = 0
+                lp.width = minOf(context.dp(if (compact) COMPACT_MAX_W_DP else MAX_W_DP), parentW - context.dp(2 * SIDE_DP)).coerceAtLeast(0)
+            }
+            super.onMeasure(MeasureSpec.makeMeasureSpec(parentW, MeasureSpec.EXACTLY), heightMeasureSpec)
         }
     }.apply {
         visibility = View.GONE
@@ -131,7 +155,24 @@ internal class CallBanner(
 
     override val view: View get() = frame
 
-    init { applyTheme() }
+    init {
+        applyTheme()
+        // Saat yazısı / spor modu / tarih değişince hap yeniden yerleşir (düzen geçişinin dışında, bir sonraki karede).
+        header?.setOnClockSlotChanged { if (compact && frame.visibility == View.VISIBLE) frame.post { frame.requestLayout() } }
+    }
+
+    /** Kompakt hapın yeri: saatin sağ kenarı + [CLOCK_GAP_DP] ile sağ grup arası ([PhoneUiLogic.compactPillSlot]). */
+    private fun compactSlot(frame: View, parentW: Int): PhoneUiLogic.PillSlot? {
+        val h = header ?: return null
+        return PhoneUiLogic.compactPillSlot(
+            clockRightPx = h.clockRightPx(frame),
+            rightGroupLeftPx = h.rightGroupLeftPx(frame),
+            rightLimitPx = parentW - context.dp(SIDE_DP),
+            gapPx = context.dp(CLOCK_GAP_DP),
+            maxWidthPx = context.dp(COMPACT_MAX_W_DP),
+            minWidthPx = context.dp(COMPACT_MIN_W_DP),
+        )
+    }
 
     /** Tema değişti: cam ve düğmeler yeni jetonlarla yeniden kurulur. */
     fun applyTheme() {
@@ -197,6 +238,8 @@ internal class CallBanner(
         frame.visibility = View.GONE
         mode = PhoneUiLogic.BannerMode.HIDDEN
         call = CallState.IDLE
+        backend = PhoneBackendName.NONE
+        oemPill = false
     }
 
     override fun release() = onHidden()
@@ -204,8 +247,9 @@ internal class CallBanner(
     override fun onPhoneChanged(snapshot: PhoneSnapshot) {
         if (!visible) return
         val next = snapshot.call
-        if (next == call) return
+        if (next == call && snapshot.backend == backend) return
         call = next
+        backend = snapshot.backend
         bindCall()
     }
 
@@ -220,6 +264,7 @@ internal class CallBanner(
         val next = PhoneUiLogic.bannerMode(call)
         val was = mode
         mode = next
+        oemPill = PhoneUiLogic.oemPillShowsDuration(call.kind, backend)
         if (next == PhoneUiLogic.BannerMode.HIDDEN) {
             main.removeCallbacks(timer)
             if (was != PhoneUiLogic.BannerMode.HIDDEN) hide()
@@ -236,6 +281,8 @@ internal class CallBanner(
             applyCompact(next != PhoneUiLogic.BannerMode.INCOMING)
             buildButtons(next)
         }
+        // OEM hapı süreyi/durumu yazıyorsa bizde ikinci kez yazılmaz (yalnız ad + sessiz + Kapat).
+        status.visibility = if (compact && !oemPill) View.VISIBLE else View.GONE
         when (next) {
             PhoneUiLogic.BannerMode.INCOMING -> setTextIfChanged(sub,
                 listOfNotNull(context.getString(R.string.launcher_call_incoming), label.number).joinToString(" · "))
@@ -247,7 +294,8 @@ internal class CallBanner(
         if (next != PhoneUiLogic.BannerMode.ACTIVE) main.removeCallbacks(timer)
         // Sessiz: yalnızca işaret yanar (rozet/halka yok); gelen aramada gösterilmez.
         mutedMark.visibility = if (call.muted && compact && call.inCall) View.VISIBLE else View.GONE
-        card.contentDescription = listOf(title.text, if (compact) status.text else sub.text, context.getString(R.string.call_screen_open_cd))
+        val detail = if (!compact) sub.text else if (status.visibility == View.VISIBLE) status.text else ""
+        card.contentDescription = listOf(title.text, detail, context.getString(R.string.call_screen_open_cd))
             .filter { it.isNotEmpty() }.joinToString(", ")
         if (was == PhoneUiLogic.BannerMode.HIDDEN) show()
         if (next == PhoneUiLogic.BannerMode.INCOMING && was != PhoneUiLogic.BannerMode.INCOMING) onIncoming?.invoke()
@@ -375,10 +423,13 @@ internal class CallBanner(
 
     private val timer = Runnable { tickTimer() }
 
-    /** Süreyi yazar ve bir sonraki saniye sınırına kurar (konuşma sürerken, şerit görünür ve örtülü değilken). */
+    /**
+     * Süreyi yazar ve bir sonraki saniye sınırına kurar (konuşma sürerken, şerit görünür ve örtülü değilken). OEM hapı
+     * süreyi sayıyorsa hiç kurulmaz.
+     */
     private fun tickTimer() {
         main.removeCallbacks(timer)
-        if (!visible || covered || mode != PhoneUiLogic.BannerMode.ACTIVE) return
+        if (!visible || covered || oemPill || mode != PhoneUiLogic.BannerMode.ACTIVE) return
         val started = call.startedAtMs
         val elapsed = if (started > 0L) SystemClock.elapsedRealtime() - started else 0L
         setStatus(PhoneUiLogic.formatDuration(elapsed))
@@ -419,8 +470,15 @@ internal class CallBanner(
         /** Kompakt hap yüksekliği (başlık bandı) ve Kapat düğmesinin dokunma alanı. */
         const val STRIP_DP = 76
         const val END_INSET_DP = 6
-        /** 580: 1920 genişlikte x 670-1250; OEM küçük hapı (x 421-661) ile çakışmaz. */
+        /** Kompakt hapın en büyük genişliği; asıl sınır saat ile sağ grup arası boşluk ([compactSlot]). */
         const val COMPACT_MAX_W_DP = 580
+        /**
+         * Saat ile sağ grup arası en az bu kadarsa hap o aralıkta kalır (ad kısalır, "…"): avatar 76 + ad en az ~68 +
+         * Kapat 76. Daha darsa (yalnız çok dar başlıkta) sağ grubun üstüne uzanır ki Kapat'a dokunulabilsin.
+         */
+        const val COMPACT_MIN_W_DP = 220
+        /** Saatin sağ kenarı ile hap arası. */
+        const val CLOCK_GAP_DP = 16
         /**
          * Gelen arama kartının şerit çerçevesi içindeki üst payı: etkinlik 12dp aşağıda başlatır, kart 12 + 234 = 246'da
          * başlar (OEM gelen arama şeridi 234 yüksek, y=0).
