@@ -164,7 +164,7 @@ class SahneStage(private val activity: Activity) : ViewGroup(activity), Launcher
 
     /**
      * false: menzil omzu (ve veri beklerken yerindeki iskelet) gizlenir; araç yalnızca kilit hapını ve şerit payını gözetir.
-     * Mini gösterge menzil ile yakıtı kendi üst satırında büyük gösterir ([MiniDashActivity]); ana ekranda hep true.
+     * Mini gösterge menzil ile yakıtı kendi üst satırında büyük gösterir (mini gösterge etkinliği); ana ekranda hep true.
      */
     internal var showRange = true
         set(value) {

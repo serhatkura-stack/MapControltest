@@ -415,7 +415,7 @@ internal object AudioModeMap {
 
 /**
  * Konuşma sayacının başlangıcı. VDBTDialInfo.time = OEM'in arama başlangıcı, **SystemClock.elapsedRealtime** (duvar
- * saati değil): OEM BT servisi (T1E24) değeri elapsedRealtime ile koyar; ilk değer
+ * saati değil): OEM BT servisi değeri elapsedRealtime ile koyar; ilk değer
  * BluetoothHeadsetClientCall.getCreationElapsedMilli. elapsedRealtime cihaz
  * genelinde tek saat olduğundan doğrudan bizim [android.os.SystemClock.elapsedRealtime] ile karşılaştırılır; çevirme
  * yok. Değer makul değilse (0, gelecekte ya da 12 saatten eski) null: çağıran [PhoneStateMap.nextCall]'ın kendi
@@ -477,10 +477,10 @@ internal object CallPoll {
  * Rehber/geçmiş yenileme kararı (saf). Bellek içi depo süreç boyunca tutulur; boş bir okuma dolu depoyu SİLMEZ
  * (yalnızca farklı bir telefon bağlanınca depo sıfırlanır).
  *
- * OEM gerçeği (bizim araç T1E24): _CACHE haritası yalnızca o PBAP oturumunda bir
+ * OEM gerçeği (araçta ölçüldü): _CACHE haritası yalnızca o PBAP oturumunda bir
  * indirme bitince dolar ve PBAP kopunca silinir. _DB yolu indirme
  * sonrası hiç yanıt vermez, kullanılmaz. Boş harita tek {total 0} yayını verir
- * (6 Kasım araç: BT yığını yeniden başladı, PBAP koptu, indirme bitmeden istendi).
+ * (araçta: BT yığını yeniden başladı, PBAP koptu, indirme bitmeden istendi).
  * Çözüm: önbellek boşsa bağlantı başına EN ÇOK BİR KEZ PHONE_BOOK_SYNC (262346) ctrl 1 tür 50 (rehber+geçmiş
  * indirmesi), indirme parçaları PHONE_BOOK_CONTACTS_LIST/RECORD_LIST (262347/262348) yayınlarından
  * toplanır; PHONE_BOOK_SYNC durum yayını FINISHED (1) gelince önbellek yeniden istenir.

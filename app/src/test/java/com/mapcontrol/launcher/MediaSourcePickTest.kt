@@ -23,7 +23,7 @@ class MediaSourcePickTest {
     @Test fun emptyListPicksNothing() = assertEquals(-1, MediaSourcePick.pick(emptyList(), -1))
 
     @Test fun ourCarOemAudioPackage() {
-        // Bizim araç: dumpsys media_session package=com.desaysv.svaudioapp; arkadaşın aracı com.desaysv.audioapp.
+        // Bu araç: dumpsys media_session package=com.desaysv.svaudioapp; bazı yazılım sürümlerinde com.desaysv.audioapp.
         assertEquals("com.desaysv.svaudioapp", MediaSourcePick.OEM_AUDIO_PKG)
         assertTrue(MediaSourcePick.isOemAudio("com.desaysv.svaudioapp"))
         assertTrue(MediaSourcePick.isOemAudio("com.desaysv.audioapp"))
@@ -40,7 +40,7 @@ class MediaSourcePickTest {
         // 6 Kasım: radyo ("am") seçili, BT oturumu var, hiçbiri çalmıyor → kart BT'yi göstermeli.
         assertEquals(1, MediaSourcePick.pick(listOf(radio, bt), 0))
         assertEquals(1, MediaSourcePick.pick(listOf(radio, bt), -1))
-        assertEquals(1, MediaSourcePick.pick(listOf(radioOld, bt), 0))   // arkadaşın aracı
+        assertEquals(1, MediaSourcePick.pick(listOf(radioOld, bt), 0))   // eski yazılım sürümü
     }
 
     @Test fun pausedSelectionKeptOtherwise() {
@@ -69,7 +69,7 @@ class MediaSourcePickTest {
     }
 
     @Test fun switchPayloadUsesReasonCards() {
-        // SVLauncher AudioSourceManager.java:719-727 (reason=8); svaudioapp BTMusicService.java:105-127 reason 13'ü yok sayar.
+        // OEM başlatıcı kartının yolu (reason=8); OEM ses uygulaması reason 13'ü yok sayar.
         val p = OemAudioSource.switchPayload()
         assertEquals(13, p.mediaType)
         assertEquals(6, p.playAction)
@@ -107,13 +107,13 @@ class MediaSourcePickTest {
     }
 
     @Test fun skipPayloadsMatchOem() {
-        // SVLauncher AudioSourceManager.java:334-349,734-762: {mediaType=geçerli, playAction 5 ileri / 4 geri}, bilgi yok.
+        // OEM başlatıcı kartının yükü: {mediaType=geçerli, playAction 5 ileri / 4 geri}, bilgi yok.
         val n = OemAudioSource.skipPayload(9, next = true)
         assertEquals(9, n.mediaType)
         assertEquals(5, n.playAction)
         assertNull(n.mediaPlayActionInfo)
         assertEquals(4, OemAudioSource.skipPayload(10, next = false).playAction)
-        // svaudioapp BTMusicManager.java:596-602 + OEM BT servisi h/g.java:254-259: playCtrl 5 ileri, 4 geri, playType 0.
+        // OEM ses uygulaması ve OEM BT servisi: playCtrl 5 ileri, 4 geri, playType 0.
         val b = OemAudioSource.btCtrlPayload(OemAudioSource.CTRL_NEXT)
         assertEquals(5, b.playCtrl)
         assertEquals(0, b.playType)
@@ -177,7 +177,7 @@ class MediaSourcePickTest {
     }
 
     @Test fun btPlayPayloadMatchesSvAudioApp() {
-        // svaudioapp BTMusicManager.java:364-370,524-526: MUSIC_PLAY{playCtrl=1, playType=0}.
+        // OEM ses uygulamasının yolu: MUSIC_PLAY{playCtrl=1, playType=0}.
         val p = OemAudioSource.btPlayPayload()
         assertEquals(1, p.playCtrl)
         assertEquals(0, p.playType)

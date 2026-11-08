@@ -7,7 +7,7 @@ import com.mapcontrol.R
 
 /**
  * Sürüş moduna göre launcher'ın vurgu rengi (salt-okur; araca hiçbir şey yazılmaz).
- * Mod değerleri [DriveModes] tablosudur (okuma = yazma, 7 Kasım ölçümü): 0 Eko, 1 Normal, 2 Spor, 3 Kar, 4 Çamur, 5 Arazi, 7 Kum.
+ * Mod değerleri [DriveModes] tablosudur (okuma = yazma, araçta ölçüldü): 0 Eko, 1 Normal, 2 Spor, 3 Kar, 4 Çamur, 5 Arazi, 7 Kum.
  * Yalnızca vurgu değişir; zemin, kart ve metin renkleri aynı kalır. Normal mod varsayılan vurguyu korur.
  *
  * Renkler beyaz yazıyla okunur kalacak şekilde seçildi: gündüz >= 4.5:1, gece >= 3:1 (büyük/kalın yazı).

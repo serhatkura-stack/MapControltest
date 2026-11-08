@@ -267,7 +267,7 @@ object CarAnimSpec {
     /**
      * Yakıt kapağı: sağ arka çamurlukta (görünüşte alt kenar), arka kemerin arka yarısının üstünde, arka kapı dikişinin
      * (x≈172) gerisinde; gövde kenarına (y≈338) oturan küçük kapak. Taraf OEM kardeş model görsellerinden (sol yan görünüşte
-     * arka çamurluk temiz) ve araç fotoğraflarından tahmin. TODO(Tur 6): göstergedeki yakıt pompası okunun yönüyle doğrula.
+     * arka çamurluk temiz) ve araç fotoğraflarından tahmin. TODO: göstergedeki yakıt pompası okunun yönüyle doğrula.
      */
     val FUEL_CAP = Box(127f, 321f, 26f, 11f)
 
@@ -426,13 +426,13 @@ data class CarLights(
 
 /**
  * Işık sinyallerinin değerleri (ReadOnly modülü). null = değer araçta doğrulanmadı, sinyal okunmaz ve o ışık kapalı kalır
- * (karar §11: "fren / geri vites okunamazsa o kısım kapalı kalır; Tur 6'da doğrulanır"). Okuma yalnızca yolculuk
+ * (karar §11: "fren / geri vites okunamazsa o kısım kapalı kalır; araçta doğrulanır"). Okuma yalnızca yolculuk
  * okuyucusunun canlı katmanında ([TripSource], 1 sn; motor kapalı ve hız 0 iken 3 sn) yapılır; yeni bir yoklama yoktur.
  */
 internal object CarLightSignals {
     /**
-     * ID_PARKING_LAMP_STATE (1): 1 = lambalar açık. 2026-10-29 far testinde 1 → 0 → 1 değişti (KATALOG "0/1"); yönün
-     * (1 açık mı) ve kısa farla aynı olup olmadığının Tur 6'da doğrulanması gerekiyor.
+     * ID_PARKING_LAMP_STATE (1): 1 = lambalar açık. araç far testinde 1 → 0 → 1 değişti; yönün
+     * (1 açık mı) ve kısa farla aynı olup olmadığı ayrıca doğrulanacak.
      */
     val HEAD_ON_VALUE: Int? = 1
 

@@ -48,7 +48,7 @@ object LauncherStartup {
     }
 
     /**
-     * Ana ekran dışındaki bir etkinlik (ör. [MiniDashActivity]) için: süreçte henüz hiç kare çizilmediyse bekleyenleri bu
+     * Ana ekran dışındaki bir etkinlik (ör. mini gösterge etkinliği) için: süreçte henüz hiç kare çizilmediyse bekleyenleri bu
      * pencerenin ilk karesinden sonra çalıştırır. [begin]'den farkı: bekleyenleri silmez ve durumu sıfırlamaz (ana ekranın
      * kendi açılışını bozmaz).
      */

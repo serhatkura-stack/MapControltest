@@ -11,7 +11,7 @@ import com.mapcontrol.vehicle.DriveModeStyle
  * 6 hiç görülmedi (bilinmeyen sayılır). FrostNav'ın yazması ve aracın sürüş modu ekranındaki seçici (öğe kimliği = gönderilen değer)
  * aynı tabloyu kullanır ([DriveModeStyle] sabitleri). 29 Ekim'deki ayrı okuma haritası (5 = Kum, 6 = Arazi) yanlıştı.
  *
- * [DriveAccent], [DriveModeTile] ve veri denetimi tablosu (DataCheckTable) değeri buradan çözer.
+ * [DriveAccent], [DriveModeTile] ve veri denetimi tablosu değeri buradan çözer.
  */
 internal enum class DriveMode(val value: Int, @StringRes val label: Int, val trName: String) {
     ECO(DriveModeStyle.ECO, R.string.launcher_drive_eco, "Eco"),
@@ -24,7 +24,7 @@ internal enum class DriveMode(val value: Int, @StringRes val label: Int, val trN
 }
 
 internal object DriveModes {
-    // Mod değerleri (okuma = yazma; 7 Kasım ölçümü). 6 tanımsız.
+    // Mod değerleri (okuma = yazma; araçta ölçüldü). 6 tanımsız.
     const val ECO = DriveModeStyle.ECO
     const val NORMAL = DriveModeStyle.NORMAL
     const val SPORT = DriveModeStyle.SPORT
@@ -36,7 +36,7 @@ internal object DriveModes {
     /** Okunan değerin modu; bilinmeyen değer (6 dahil) null. */
     fun fromRead(value: Int?): DriveMode? = value?.let { v -> DriveMode.values().firstOrNull { it.value == v } }
 
-    /** Yazılabilecek bütün değerler (beyaz liste: [WidgetWritePolicy]). */
+    /** Yazılabilecek bütün değerler (araca yazma beyaz listesi). */
     val WRITE_VALUES: Set<Int> = DriveMode.values().map { it.value }.toSet()
 
     /** Tiggo 7 varsayılanı (config okunamazsa): Eko / Normal / Spor. */

@@ -117,7 +117,7 @@ final class ClimateAutomationWrites {
                 // belirsiz olduğu için mevcut 0 korunuyor (kodlama doğrulanmadı)
                 return Collections.singletonList(hvac(HvacID.ID_AC_REAR_DEFROST, 0));
             case ClimateAutomationStore.CLIMATE:
-                // OEM: A/C 1 ve güç 18 için 1 aç, 2 kapat; 0 hiç yazılmaz. Otomatik 4: T1E24_INT dalında 2 ile
+                // OEM: A/C 1 ve güç 18 için 1 aç, 2 kapat; 0 hiç yazılmaz. Otomatik 4: bazı yazılım sürümlerinde 2 ile
                 // kapatılır; sesli komut da her modelde 4 ← 2
                 return Arrays.asList(
                         hvac(HvacID.ID_AC_STATE, 2), hvac(HvacID.ID_AC_WORKING, 2), hvac(HvacID.ID_AC_AUTO_STATE, 2));

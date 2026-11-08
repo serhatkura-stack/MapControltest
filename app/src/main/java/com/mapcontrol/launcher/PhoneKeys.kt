@@ -65,7 +65,7 @@ class VoiceKeyPolicy(private val debounceMs: Long = DEBOUNCE_MS) {
  * için FavoriteKey'in {19} aboneliğiyle çakışmaz. Araç uykusu aboneliği düşürebildiği için dinlerken 30 sn'de bir
  * yenilenir (FavoriteKey'in de yaptığı tek zamanlayıcı).
  *
- * Abonelik tuşu yutmaz, OEM aboneleri de görür. Döküm analizi (6 Kasım): OEM ses servisi (com.desaysv.vrservice)
+ * Abonelik tuşu yutmaz, OEM aboneleri de görür. Yazılım incelemesi: OEM ses servisi (com.desaysv.vrservice)
  * uzun basışta (1) yalnızca kendi uyanmasını bastıran bir bayrak kurar, asistanı yalnızca kısa basışta (3) açar;
  * yani projeksiyon yokken çift eylem yok. Projeksiyon varken OEM CarPlay/Android Auto uygulaması tuşu telefona
  * iletir: bunun için PHONELINK PHONE_STATE (851970) izlenir ve bağlıyken tuş yok sayılır. Projeksiyonun ses durumu

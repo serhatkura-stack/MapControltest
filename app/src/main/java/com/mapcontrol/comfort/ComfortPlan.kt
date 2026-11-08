@@ -161,7 +161,7 @@ object ComfortPlan {
         Signal("cs240_iç_alarm", MODULE_CAR_SETTING, 240),
         Signal("hvac69_PTC_ısıtıcı", MODULE_HVAC, 69),
         Signal("hvac70_akıllı_klima", MODULE_HVAC, 70),
-        Signal("hvac97_oto_buğu_T1E24", MODULE_HVAC, 97),
+        Signal("hvac97_oto_buğu", MODULE_HVAC, 97),
         Signal("ro14_ACC", MODULE_READONLY_INFO, 14),
         Signal("ro26_vites", MODULE_READONLY_INFO, 26),
         Signal("ro74_motor", MODULE_READONLY_INFO, 74),

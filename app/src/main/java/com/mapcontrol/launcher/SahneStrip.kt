@@ -139,7 +139,7 @@ data class StripState(
 
 /**
  * Şerit biçimini destekleyen widget: durumunu [stripState] ile verir, değişince [onStripChanged]'i çağırır ve
- * dokunuşu kutucuktaki ile aynı yoldan ([stripTap]) işler; yazma kuralları (WidgetWritePolicy, doğrulama bayrakları,
+ * dokunuşu kutucuktaki ile aynı yoldan ([stripTap]) işler; yazma kuralları (yazma politikası, doğrulama bayrakları,
  * onaylar) widget'ın kendi kodunda kalır. Desteklemeyen widget şeritte başlık + ikonla görünür ve
  * dokunuş kutucuğun kök görünümüne ([View.performClick]) gider.
  */

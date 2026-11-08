@@ -14,7 +14,7 @@ import java.util.List;
 
 import org.junit.Test;
 
-/** Konfor otomasyonunun araca yazdığı değerler: OEM ile aynı olmalı (katalog/BULGULAR-root-3kasim.md madde 4). */
+/** Konfor otomasyonunun araca yazdığı değerler: OEM ile aynı olmalı (araç ölçümleri). */
 public class ClimateAutomationWritesTest {
 
     private static final int HV = ClimateAutomationWrites.MODULE_HVAC;

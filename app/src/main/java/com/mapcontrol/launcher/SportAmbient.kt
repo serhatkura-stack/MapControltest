@@ -134,7 +134,7 @@ internal object SportAmbient {
     fun sync(context: Context) {
         val c = context.applicationContext
         app = c
-        // Kapı kapalıysa (gerçek sürümde doğrulanana kadar hep) dinleyici bile kurulmaz; test sürümünde anahtar değişince
+        // Kapı kapalıysa (gerçek sürümde doğrulanana kadar hep) dinleyici bile kurulmaz; anahtar değişince
         // etkinlik yeniden kurulur ve buradan yeniden bakılır.
         val need = !LauncherDemo.enabled && enabled && (isOn(c) || state(c).applied)
         val repo = VehicleMetricsRepository.getInstance(c)

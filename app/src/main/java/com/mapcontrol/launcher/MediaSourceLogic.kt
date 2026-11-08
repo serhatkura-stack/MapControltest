@@ -3,7 +3,7 @@ package com.mapcontrol.launcher
 /**
  * Telefon önceliği kararı (saf, JVM'de sınanır; [OemAudioSource] kilit altında kullanır).
  *
- * 7 Kasım araç (tur7-1048): kaynak AM (10) iken telefonda Oynat'a basıldı. `com.android.bluetooth` A2DP oturumu PLAYING
+ * Araç testi: kaynak AM (10) iken telefonda Oynat'a basıldı. `com.android.bluetooth` A2DP oturumu PLAYING
  * oldu (OEM BT servisi `BTSer-MediaCON onPlaybackStateChanged: playState=3`; aynı oturumu
  * MediaBrowser ile izliyor), ama OEM BT servisi odak 42'yi yalnızca `carAudioType` listesindeyse ister
  * (liste boş): istemedi, `checkAudioFocus` 1000 ms sonra (postDelayed

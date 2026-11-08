@@ -67,7 +67,7 @@ object SportMath {
 
     /**
      * Ana (büyük) kadran hızdır (spor-modu-brief sonu, kullanıcı kararı "önce hız"): 0–[SPEED_MAX] km/sa aynı 270° yayda.
-     * Devir ReadOnly 62 araçta ~5 sn'de bir değişiyor (tur 6), ibre için işe yaramıyor; kadranın altında küçük okumadır.
+     * Devir ReadOnly 62 araçta ~5 sn'de bir değişiyor (araç testi), ibre için işe yaramıyor; kadranın altında küçük okumadır.
      */
     const val SPEED_MAX = 220
     /** Hız rakamları ve uzun bölüntü adımı (km/sa). */
@@ -337,7 +337,7 @@ data class SportSummary(
  * z = -6,42 / -5,07 / -3,62 m/s² okundu (fren = araç geriye ivmelenir → -z geriye).
  *  - [linear] false (yalnız TYPE_ACCELEROMETER): yerçekimi alçak geçiren süzgeçle kestirilip çıkarılır; ekranın eğimi
  *    böylece sıfırlanır. Araç dururken ([still]) hızlı öğrenir ([GRAVITY_TAU_STILL_S]), giderken neredeyse sabit tutulur
- *    ([GRAVITY_TAU_MOVING_S]): uzun fren ya da viraj yerçekimi sanılıp noktadan silinmez (Tur 6: "G çok az oynuyor").
+ *    ([GRAVITY_TAU_MOVING_S]): uzun fren ya da viraj yerçekimi sanılıp noktadan silinmez (araç testi geri bildirimi: "G çok az oynuyor").
  *  - Sonuç [DISPLAY_TAU_S] ile yumuşatılır (titreşim ve yol pürüzü).
  * Çıktı g biriminde ve **hissedilen kuvvet** yönünde (ivmenin tersi; G-metre noktası yolcuyu iten yöne gider):
  *  - [lateral] sağa itiş +: sola dönüşte araç sola ivmelenir (ivme -x), yolcu sağa itilir, değer +.

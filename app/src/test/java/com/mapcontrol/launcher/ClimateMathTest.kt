@@ -54,7 +54,7 @@ class ClimateMathTest {
     }
 
     /**
-     * OEM (T1E24) fanı 1'in altına indirince klimayı kapatmaz: panel, dock ve sesli komut 1'de durur; kapatma ayrı güç
+     * OEM fanı 1'in altına indirince klimayı kapatmaz: panel, dock ve sesli komut 1'de durur; kapatma ayrı güç
      * düğmesidir (HVAC 18 ← 2). Biz de aynısını yaparız: sürükleme 1'de durur, 0 hiçbir fan kimliğine yazılamaz.
      */
     @Test fun fanBelowOneDoesNotTurnClimateOff() {

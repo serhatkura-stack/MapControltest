@@ -18,7 +18,7 @@ import kotlin.math.abs
 
 /**
  * Spor hız kadranının hızlı kaynağı: android.car [CarPropertyManager] PERF_VEHICLE_SPEED (m/s, gerçek hız) 10 Hz.
- * İzin `android.car.permission.CAR_SPEED` (tehlikeli, verilebilir; tur 6). Olaylar ana iş parçacığına değil ortak
+ * İzin `android.car.permission.CAR_SPEED` (tehlikeli, verilebilir; araçta doğrulandı). Olaylar ana iş parçacığına değil ortak
  * "sport-io" iş parçacığına gelir; hız [SpeedPostGate] bandından çok değişince ana iş parçacığına tek bekleyen [onChange]
  * gönderilir (dururken gelen 0 olayları ana iş parçacığını uyandırmaz).
  *

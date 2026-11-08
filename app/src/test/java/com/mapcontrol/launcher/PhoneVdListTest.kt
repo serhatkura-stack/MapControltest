@@ -9,7 +9,7 @@ import org.junit.Test
 /** VDBus rehber parçaları: sunucu 10'arlık parçalar yayar (index = parçanın son sırası, total = liste boyu). */
 class PhoneVdListTest {
 
-    /** Sunucunun parçalama kuralı (SVVDSBluetooth v/o.java:52-80) birebir: test girdisi üretmek için. */
+    /** Sunucunun (araçtaki BT servisi) parçalama kuralı: test girdisi üretmek için. */
     private fun serverChunks(n: Int): List<Triple<Int, Int, List<Int>>> {
         if (n == 0) return listOf(Triple(0, 0, emptyList()))
         val list = (0 until n).toList()
@@ -64,7 +64,7 @@ class PhoneVdListTest {
     }
 
     @Test fun nullKeyMatchesDbPublish() {
-        // Veritabanı yolu key=null yayar (q/v.java:63-91).
+        // Veritabanı yolu key=null yayar.
         val c = VdListCollector<Int>(null)
         assertEquals(VdListCollector.Offer.ACCEPTED, c.offer(null, 1, 2, listOf(1, 2)))
         assertEquals(listOf(1, 2), c.result())

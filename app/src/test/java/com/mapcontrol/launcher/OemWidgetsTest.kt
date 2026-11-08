@@ -153,7 +153,7 @@ class OemWidgetsTest {
         assertEquals(10, SoundFieldMath.CENTER)
     }
 
-    // --- Katalog ---
+    // --- Widget listesi ---
 
     @Test fun newWidgetsAreRegisteredWithSizes() {
         assertEquals(listOf(Span(2, 2), Span(2, 1)), WidgetType.REAR_SPEAKER.sizes)

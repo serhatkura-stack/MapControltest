@@ -314,7 +314,7 @@ class PhoneLogicTest {
         }
     }
 
-    // ---- Döküm analizi (6 Kasım): VDBus uuid seçimi, projeksiyon, yedek veri yolu ----
+    // ---- Yazılım incelemesi: VDBus uuid seçimi, projeksiyon, yedek veri yolu ----
 
     @Test fun vdRejectPicksIncomingOrWaitingUuid() {
         val list = listOf(DialInfoLite(0, uuid = "a"), DialInfoLite(5, uuid = "w"))

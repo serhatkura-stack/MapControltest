@@ -33,9 +33,9 @@ internal object MediaSourcePick {
     const val BT_PKG = "com.android.bluetooth"
 
     /**
-     * OEM ses merkezi (radyo/USB). Bizim araç (T1E24): `com.desaysv.svaudioapp`
+     * OEM ses merkezi (radyo/USB). Bu araç yazılımında `com.desaysv.svaudioapp`
      * (dumpsys media_session: RadioMediaSessionBrowserService / MediaPlaybackService).
-     * Arkadaşın aracı (T18FL4): `com.desaysv.audioapp`.
+     * Bazı yazılım sürümlerinde `com.desaysv.audioapp`.
      */
     const val OEM_AUDIO_PKG = "com.desaysv.svaudioapp"
     const val OEM_AUDIO_PKG_OLD = "com.desaysv.audioapp"
@@ -109,7 +109,7 @@ internal object MediaSourcePick {
         ALREADY_BT,
         /** VDBus BT `MUSIC_PLAY{playCtrl=1, playType=0}`: OEM BT servisi odak 42'yi alır ve çalar (OEM ses uygulamasının yolu). */
         BT_PLAY,
-        /** VDBus MEDIA `OPEN_SOURCE` reason=8: medya servisi OEM ses uygulaması BTMusicService'i başlatır, o da BT_PLAY gönderir. */
+        /** VDBus MEDIA `OPEN_SOURCE` reason=8: medya servisi OEM ses uygulamasının BT müzik servisini başlatır, o da BT_PLAY gönderir. */
         OPEN_SOURCE,
         /** VDBus yok: yalnızca BT oturumuna oynat (odak 42 değilse A2dpMediaBrowserService bunu yok sayar). */
         PLAIN,
@@ -188,7 +188,7 @@ internal class SourceFollow {
 }
 
 /**
- * OEM ses kaynağını Bluetooth müziğine geçirme (bizim araç T1E24, 6 Kasım ölçümü):
+ * OEM ses kaynağını Bluetooth müziğine geçirme (araçta ölçüldü):
  *
  * - Araçta ses kaynağını müzik odağının sahibi belirler. BT müziğin odağını (usage=1, content=2, legacyStreamType=42)
  * yalnızca OEM BT servisi `com.desaysv.ivi.vds.bt` ister: `MUSIC_PLAY` (262948).
@@ -196,9 +196,9 @@ internal class SourceFollow {
  * - `com.android.bluetooth` oturumuna giden play/next/prev, odak 42 değilse yok sayılır.
  * Bu yüzden ilk yol OEM ses uygulamasının kendi yolu: `MUSIC_PLAY{1,0}` (yol BT_PLAY).
  * - Yedek: OEM başlatıcı kartının yolu `set(MEDIA_SOURCE_PLAY_STATUS, VDMediaPlay{13, 6,
- * info{reason=8}})`. Medya servisi bunu OEM ses uygulaması `BTMusicService`'e
- * iletir; o yalnızca reason 2/6/8'e tepki verir. Arkadaşın aracındaki reason=13
- * (REASON_SOURCE_LIST) bizim OEM ses uygulamasında yok sayılır. disPlayView=2 ile OEM ekranı açılmaz.
+ * info{reason=8}})`. Medya servisi bunu OEM ses uygulamasının BT müzik servisine
+ * iletir; o yalnızca reason 2/6/8'e tepki verir. reason=13
+ * (REASON_SOURCE_LIST) bu OEM ses uygulamasında yok sayılır. disPlayView=2 ile OEM ekranı açılmaz.
  * - Geçerli kaynak `CURRENT_SOURCE_TYPE` (393217), yük `media.bean.VDMediaType`.
  *
  * Kullanıcı Oynat'a ya da seçicide bir kaynağa bastığında, bir de telefonda Oynat'a basılınca ("Telefon önceliği",
@@ -259,7 +259,7 @@ internal object OemAudioSource {
     /**
      * OEM başlatıcı kartının İleri/Geri yükü; kart tıklaması bilgi eklemez.
      *
-     * Radyoda (9/10) OEM kartıyla aynı zincir, 7 Kasım günlüğüyle doğrulandı: medya servisi 5/4'ü `FM_AM_PLAY_STATUS`
+     * Radyoda (9/10) OEM kartıyla aynı zincir, araç günlüğüyle doğrulandı: medya servisi 5/4'ü `FM_AM_PLAY_STATUS`
      * NEXT_CHANNEL 7 / PREV_CHANNEL 6'ya çevirir, OEM radyo servisi OEM ses uygulamasına "next"/"pre"
      * yollar, OEM ses uygulaması çoklu kipte `MULTI_SEEK_FORWARD/BACKWARD` → istasyon LİSTESİNDE sonraki/önceki
      * (araçta `RadioControlTool dealMessage: radioAction = MULTI_SEEK_FORWARD` görüldü).
@@ -595,7 +595,7 @@ internal object OemAudioSource {
         }
     }
 
-    /** VDBus init ana iş parçacığında (PhoneBackends/FavoriteKey gibi); bağlanma ve binder çağrıları arka planda. */
+    /** VDBus init ana iş parçacığında (diğer VDBus kullanıcıları gibi); bağlanma ve binder çağrıları arka planda. */
     private fun ensureBus(context: Context): VDBus? {
         bus?.let { return it }
         return try {

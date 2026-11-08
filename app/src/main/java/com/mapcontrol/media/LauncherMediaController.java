@@ -415,7 +415,7 @@ public final class LauncherMediaController {
     private boolean selfGrantTried;
 
     /**
-     * Araçta "Bildirim erişimi" ayar ekranı yok (T1E24 Ayarlar'ı NOTIFICATION_LISTENER_SETTINGS'i çözmüyor; 6 Kasım ölçümü):
+     * Araçta "Bildirim erişimi" ayar ekranı yok (araç Ayarlar'ı NOTIFICATION_LISTENER_SETTINGS'i çözmüyor; araçta ölçüldü):
      * kullanıcı bu izni ekrandan veremez. Kurulum aracı WRITE_SECURE_SETTINGS verdiyse dinleyicimizi listeye kendimiz ekleriz
      * (yalnız ekleme; diğer dinleyiciler korunur). İzin yoksa sessizce geçer, kart "izin gerekli" durumunda kalır.
      */

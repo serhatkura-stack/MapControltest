@@ -14,7 +14,7 @@ internal enum class ClimateSide { DRIVER, PASSENGER }
  */
 internal object ClimateMath {
     /**
-     * Sıcaklık adımı. Geçerli aralık (OEM, T1E24: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
+     * Sıcaklık adımı. Geçerli aralık (OEM: ham = (°C - 15,5) * 2): ham 0 = LO, 1..29 = 16,0..30,0 °C, ham 30 = HI.
      * 30 °C üstü (ham 31..33) OEM'de yoktur ve yazılmaz.
      */
     const val TEMP_STEP = 0.5
@@ -88,7 +88,7 @@ internal object ClimateMath {
 
     /**
      * Fan ham değeri doğrudan kademedir (okuma da öyle); yazılan 1..10. Fanı 1'in altına indirmek klimayı KAPATMAZ ve 0 yazılmaz:
-     * OEM de böyle (T1E24, 6 Kasım ölçümü). Otomatik panel çubuğu en az 1 yazar (eksi düğmesi 1'de durur); alt dock da
+     * OEM de böyle (araçta ölçüldü). Otomatik panel çubuğu en az 1 yazar (eksi düğmesi 1'de durur); alt dock da
      * 1'in altına inmez; sesli komut "en düşük" kademede kalır. Kapatma yalnızca ayrı güç düğmesi: HVAC 18 ← 2
      * (sesli "klimayı kapat" da aynı).
      */
@@ -147,7 +147,7 @@ internal object ClimateWriter {
 
     /**
      * Sıcaklık kimliği. [quiet] (ayar "fabrika paneli: Gizle"): OEM alt dock'unun kimlikleri, sürücü 76 / yolcu 78, aynı ham
-     * kodlama. Bizim araçta (T1E24) doğrulandı: dock sürücü → HVAC 76,
+     * kodlama. Araçta doğrulandı: dock sürücü → HVAC 76,
      * yolcu → 78, klima tipinden bağımsız.
      * Aksi halde OEM panelinin 10 / 13.
      */
@@ -164,14 +164,14 @@ internal object ClimateWriter {
      * KARAR (belirsiz kanıt, mevcut davranış korunuyor): bizim aracın OEM dock'u otomatik klimada (config 4 == 1, günlükte
      * `HvacConfig =0`) fanı 77'ye DEĞİL 12'ye yazar
      * (HVAC 12). 77 bizim SystemUI'de yalnız elektrikli/manuel klima düzeninin fanıdır
-     * ve arkadaşın dock'unun kimliğidir. 12 aynı zamanda panelin kimliği; 12 yazmasının
+     * ve bazı yazılım sürümlerinin dock'unun kimliğidir. 12 aynı zamanda panelin kimliği; 12 yazmasının
      * ECU'da paneli (HVAC 9 bit 0) açıp açmadığı araçta ölçülmedi, 77'nin bizim ECU'da kademeyi değiştirdiği de günlükle
      * kanıtlanmadı. Araç testi bitene kadar 77 kalır; her dock fan yazmasında karar `WidgetWrite` günlüğüne düşer.
      */
     fun fanId(quiet: Boolean): Int = if (quiet) HvacID.ID_AC_SET_BLOW_LEVEL else HvacID.ID_AC_BLOW_SPEED_LEVEL
 
     /** OEM dock'unun bizim araçtaki fan kimliği (otomatik klima): bilgi ve test için; yazmada kullanılmıyor (bkz. [fanId]). */
-    const val OEM_DOCK_FAN_ID_T1E24 = 12
+    const val OEM_DOCK_FAN_ID_AUTO = 12
 
     /** Sıcaklığı yazar. Kapalıyken false döner ve araca dokunmaz. */
     fun setTemperature(side: ClimateSide, celsius: Double, quiet: Boolean): Boolean {
@@ -187,7 +187,7 @@ internal object ClimateWriter {
         powerOnIfOff(quiet)
         if (quiet) {
             android.util.Log.i(WidgetWritePolicy.LOG_TAG, "widget=Climate fan dock-id=${fanId(true)} " +
-                "(OEM T1E24 auto dock uses $OEM_DOCK_FAN_ID_T1E24; kept pending car test)")
+                "(OEM auto dock uses $OEM_DOCK_FAN_ID_AUTO; kept pending car test)")
         }
         return send(fanId(quiet), ClimateMath.encodeFan(level))
     }

@@ -30,7 +30,7 @@ data class RoofState(
  */
 object RoofDecode {
 
-    // --- ID_CAR_SUNSHADE (CarSetting 10): araçta ölçüldü (2026-10-19 ve 10-30 probe günlükleri, KATALOG) ---
+    // --- ID_CAR_SUNSHADE (CarSetting 10): araçta ölçüldü (araç günlükleri) ---
     const val SHADE_CLOSED = 1
     const val SHADE_OPENING = 2
     /** 3 ve 6: hareket yarıda durdu (10-30'da 2 → 3, 4 → 3; 10-19'da 2 → 6, 4 → 6 görüldü). */

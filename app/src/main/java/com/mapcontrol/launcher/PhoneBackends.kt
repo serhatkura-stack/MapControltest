@@ -1035,11 +1035,11 @@ internal object VdbusBtNotify {
 /**
  * VDBus rehber ve geçmiş (yıldız bilgisi yok: favoriler yalnızca sıklıktan).
  *
- * Davranış bizim araçta (T1E24) ölçüldü; arkadaşın T18T28 sürümünde de aynı.
+ * Davranış araçta ölçüldü; başka bir araç yazılımı sürümünde de aynı.
  *
- * OEM telefon uygulaması rehberi VDBus'tan DEĞİL, BT servisinin AndLinker arayüzünden alır. Bizim araçta o servis
- * (AndLinkerService) exported=true ve izinsiz; arkadaşın sürümünde exported=false. OTA ile kapanabileceği için burada
- * kullanılmıyor; aynı veri BT servisinin VDBus PBAP dağıtıcısında da var:
+ * OEM telefon uygulaması rehberi VDBus'tan DEĞİL, BT servisinin ayrı bir bağlayıcı arayüzünden alır. O arayüzün dışa
+ * açıklığı araç yazılımı sürümüne göre değişiyor ve OTA ile kapanabilir; bu yüzden burada kullanılmıyor. Aynı veri BT
+ * servisinin VDBus PBAP dağıtıcısında da var:
  *
  * 1. ..._LIST_CACHE (262376 rehber / 262377 geçmiş) STANDART aboneliği ([VdbusBtNotify]).
  * 2. set PHONE_BOOK_SYNC_CACHE (262375) = VDBTPhoneBookSync{ctrl 1, tür 7 rehber / 6 geçmiş, adres null = bağlı
@@ -1447,7 +1447,7 @@ internal class ContactsDataBackend(private val ctx: Context) : DataBackend {
 }
 
 /**
- * Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Döküm analizi (6 Kasım): OEM yazılımı
+ * Sesli asistan: bağlı telefonda HFP sesli tanıma (BVRA → Siri / Google). Yazılım incelemesi: OEM yazılımı
  * BVRA'yı hiç çağırmaz ve bunun için VDBus olayı ya da dışa açık intent yoktur; yol BluetoothHeadsetClient
  * (yalnızca android.permission.BLUETOOTH + etkin kullanıcı denetimi).
  *

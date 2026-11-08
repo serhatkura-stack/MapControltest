@@ -252,7 +252,7 @@ class ClimatePanelPolicyTest {
         assertTrue(ClimatePanelBits.anyShown { if (it == "hvacshow") "true" else null })
         assertFalse(ClimatePanelBits.anyShown { if (it == "hvacshow") "false" else null })
         assertFalse(ClimatePanelBits.anyShown { null })
-        // Arkadaşın build'i: yedek anahtarlar.
+        // Bazı yazılım sürümleri: yedek anahtarlar.
         assertTrue(ClimatePanelBits.anyShown { if (it == "hvacShow") "true" else null })
         assertTrue(ClimatePanelBits.anyShown { if (it == "HVAC_DIALOG_IS_SHOW") "true" else null })
         assertFalse(ClimatePanelBits.anyShown { "TRUE" })
@@ -276,6 +276,6 @@ class ClimatePanelPolicyTest {
 
     @Test fun dockFanIdStaysAt77UntilCarTestEvenThoughOemAutoDockUses12() {
         assertEquals(77, ClimateWriter.fanId(quiet = true))
-        assertEquals(12, ClimateWriter.OEM_DOCK_FAN_ID_T1E24)
+        assertEquals(12, ClimateWriter.OEM_DOCK_FAN_ID_AUTO)
     }
 }

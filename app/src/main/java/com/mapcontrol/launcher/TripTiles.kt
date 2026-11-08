@@ -544,7 +544,7 @@ internal abstract class TripCard(
  * - Aynı okuma iki kez sayılmaz: sinyal ~2,2 sn'de bir değişir, canlı yoklama 1 sn'de bir; örnek yalnızca değer
  *   değiştiyse ya da son örnekten bu yana [SAMPLE_GAP_MS] geçtiyse eklenir.
  * Kanıt: gerçek sürüş kaydı 2026-10-30 (7-10 km/sa 26-39, 20-25 km/sa 17-18, boşta 2,7-5 L/100 km): /10 ölçeği
- * makul; gösterge paneliyle karşılaştırma bekliyor (Tur 6 Ek 4).
+ * makul; gösterge paneliyle karşılaştırma bekliyor.
  * Tüketim kutucuğu ve Spor "Anlık" kadranı aynı kuralları bu sınıfla kullanır (her tüketici kendi örneğiyle).
  */
 internal class ConsumptionSmoother {
