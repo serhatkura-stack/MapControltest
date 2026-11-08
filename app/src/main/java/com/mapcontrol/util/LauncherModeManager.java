@@ -71,8 +71,11 @@ public final class LauncherModeManager {
         syncMiniDashEntry(context, enabled);
         if (enabled) {
             pinHomeAsDeviceOwner(context);
+            // Bildirim dinleyicisi zaten bağlıysa telefon önceliği izlemesi hemen başlasın (bağlı değilse yoksayılır).
+            com.mapcontrol.media.BtSessionWatcher.start(context);
         } else {
             clearDeviceOwnerHomePin(context);
+            com.mapcontrol.media.BtSessionWatcher.stop();
         }
     }
 

@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification;
 
 import com.mapcontrol.launcher.NavigationSource;
 import com.mapcontrol.nav.GoogleMapsNavNotificationCoordinator;
+import com.mapcontrol.util.LauncherModeManager;
 
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -48,7 +49,10 @@ public final class LauncherMediaNotificationListener extends NotificationListene
         GoogleMapsNavNotificationCoordinator.onListenerConnected(this);
         GoogleMapsNavNotificationCoordinator.resyncActiveNotifications(this);
         NavigationSource.onListenerConnected(this);
-        BtSessionWatcher.start(this);
+        // Telefon önceliği yalnız launcher modu açıkken çalışır; mod kapalıyken Bluetooth oturumu izlenmez.
+        if (LauncherModeManager.isEnabled(this)) {
+            BtSessionWatcher.start(this);
+        }
         for (Listener current : listeners) {
             current.onListenerConnected();
         }

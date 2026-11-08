@@ -17,6 +17,7 @@ import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaPlayActionInfo
 import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaType
 import com.desaysv.ivi.vdb.client.listener.VDBindListener
 import com.desaysv.ivi.vdb.client.listener.VDNotifyListener
+import com.mapcontrol.util.LauncherModeManager
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
 
@@ -473,7 +474,7 @@ internal object OemAudioSource {
         // Ayar ve ses kipi kilit dışında okunur (update/readSource io'da aynı kilidi alır; ilk okuma diske gidebilir).
         // Yalnızca geçişte okunur (oturum çalarken ~500 ms'de bir durum yollar); karar yine kilit altında verilir.
         val transition = playing == true && synchronized(this) { phonePriority.isTransition(true) }
-        val enabled = transition && MediaPrefs.phonePriority(context)
+        val enabled = transition && PhonePriorityGate.allowed(LauncherModeManager.isEnabled(context), MediaPrefs.phonePriority(context))
         val calling = transition && inCall(context)
         var source: Int? = null
         val decision = synchronized(this) {
