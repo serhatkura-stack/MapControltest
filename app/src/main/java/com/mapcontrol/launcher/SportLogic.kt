@@ -604,7 +604,7 @@ class SpeedPostGate(private val band: Float = BAND_KMH) {
 
 /**
  * Araç kadranındaki motor torku halkasının çözümü (saf, JVM'de sınanır). Kaynak ReadOnly 106 `ID_MEAN_EFFECTIVE_TORQUE`;
- * ham değer [AwdMath.engineNm] ile çözülür (Nm = ham − 2000; kod tek yerde). Tiggo 7 (7 Kasım sürüşü): rölantide ~2000
+ * ham değer [engineNm] ile çözülür (Nm = ham − 2000; kod tek yerde). Tiggo 7 (7 Kasım sürüşü): rölantide ~2000
  * (0 Nm), sert gazda ~2287..2509, motor freninde ~1956..1964 (negatif); motorun tepe torku ~290 Nm.
  *
  * Tam ölçek [FULL_SCALE_NM]; doluluk 0..1'e kırpılır. Motor freni (negatif) ve rölanti kıpırtısı ([NOISE_NM] ve altı) boş
@@ -614,6 +614,22 @@ class SpeedPostGate(private val band: Float = BAND_KMH) {
  */
 internal object SportTorque {
     const val FULL_SCALE_NM = 300
+
+    /** Motor torku ofseti: Nm = ham − ofset. Rölanti ~2000. */
+    const val ENGINE_OFFSET = 2000
+
+    /** Yok/okunamıyor işareti (iki bayt da 0xFF). */
+    const val INVALID_RAW = 0xFFFF
+
+    /** Motor ham değeri için makul aralık (ofsetli kodlama: 2000 ± bin). */
+    val ENGINE_RAW_RANGE = 1000..3000
+
+    /** Motor torku, Nm; geçersizse null. Negatif değer (motor freni) korunur. */
+    fun engineNm(raw: Int?): Int? {
+        if (raw == null || raw == INVALID_RAW || raw !in ENGINE_RAW_RANGE) return null
+        return raw - ENGINE_OFFSET
+    }
+
     /** Rölantide ham değer 2000±5 oynar: bu kadarı boş halka sayılır (rölantide halka kıpırdamaz). */
     const val NOISE_NM = 8
     const val SWEEP_DEG = 270f
@@ -657,7 +673,7 @@ internal object SportTorque {
         Math.abs(target - shown) < SETTLE_POS && Math.abs(vel) < SETTLE_VEL
 
     /** Ham 106 → halka doluluğu 0..1; geçersizse null. */
-    fun fraction(raw: Int?): Float? = AwdMath.engineNm(raw)?.let { fractionOfNm(it) }
+    fun fraction(raw: Int?): Float? = engineNm(raw)?.let { fractionOfNm(it) }
 
     /** Nm → doluluk 0..1 (negatif ve rölanti kıpırtısı 0). */
     fun fractionOfNm(nm: Int): Float = if (nm <= NOISE_NM) 0f else (nm.toFloat() / FULL_SCALE_NM).coerceIn(0f, 1f)

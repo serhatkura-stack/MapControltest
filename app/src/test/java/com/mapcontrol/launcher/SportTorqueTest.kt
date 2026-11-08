@@ -8,6 +8,19 @@ import org.junit.Test
 class SportTorqueTest {
     private fun eq(expected: Float, actual: Float?) = assertEquals(expected, actual!!, 1e-4f)
 
+    @Test fun engineOffset() {
+        assertEquals(0, SportTorque.engineNm(2000))
+        assertEquals(287, SportTorque.engineNm(2287))
+        assertEquals(-36, SportTorque.engineNm(1964))
+    }
+
+    @Test fun engineInvalid() {
+        assertNull(SportTorque.engineNm(null))
+        assertNull(SportTorque.engineNm(0xFFFF))
+        assertNull(SportTorque.engineNm(0))
+        assertNull(SportTorque.engineNm(5000))
+    }
+
     @Test fun idleIsEmpty() {
         eq(0f, SportTorque.fraction(2000))
         // Rölanti kıpırtısı (2000±5) halkayı oynatmaz.

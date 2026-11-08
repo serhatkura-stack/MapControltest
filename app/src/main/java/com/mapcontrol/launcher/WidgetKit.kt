@@ -31,7 +31,6 @@ enum class WidgetType(val key: String, @StringRes val label: Int, @DrawableRes v
     // Birleşik koltuk (ısıtma + soğutma tek widget'ta, taraf başına bir tane); 4×4 büyük biçim Sahne panelindedir.
     SEAT_DRIVER("seat_driver", R.string.launcher_widget_seat_driver, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 4))),
     SEAT_PASSENGER("seat_passenger", R.string.launcher_widget_seat_passenger, R.drawable.ic_mdi_car_seat_heater, listOf(Span(2, 2), Span(4, 4))),
-    AWD("awd", R.string.launcher_widget_awd, R.drawable.ic_mdi_car_cog, listOf(Span(4, 4), Span(2, 2))),
     PHOTO("photo", R.string.launcher_widget_photo, R.drawable.ic_mdi_image, listOf(Span(2, 2), Span(4, 2), Span(4, 4))),
     TRUNK("trunk", R.string.launcher_widget_trunk, R.drawable.ic_mdi_car_trunk, listOf(Span(2, 2), Span(2, 4))),
     SCREEN_OFF("screen_off", R.string.launcher_widget_screen_off, R.drawable.ic_mdi_weather_night, listOf(Span(2, 2), Span(1, 2))),
@@ -101,7 +100,6 @@ object WidgetFactory {
         WidgetType.APP -> AppShortcutTile(activity, placed.extra, placed.id)
         WidgetType.SEAT_DRIVER -> SeatTile(activity, driverSeat = true)
         WidgetType.SEAT_PASSENGER -> SeatTile(activity, driverSeat = false)
-        WidgetType.AWD -> AwdTile(activity)
         WidgetType.TRUNK -> TrunkTile(activity)
         WidgetType.PHOTO -> PhotoTile(activity, placed.id)
         WidgetType.SCREEN_OFF -> ScreenOffTile(activity)

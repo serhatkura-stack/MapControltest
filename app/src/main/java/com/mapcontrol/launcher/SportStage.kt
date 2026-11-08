@@ -688,7 +688,7 @@ internal class SportStageView(
 
     /** Ham 106 → tork halkası; geçersiz okuma [TORQUE_MAX_MISS] tike dek son değeri korur, sonra halka söner. */
     private fun bindTorque(now: Long, raw: Int?) {
-        val nm = AwdMath.engineNm(raw)
+        val nm = SportTorque.engineNm(raw)
         if (nm == null) {
             torqueMiss = minOf(torqueMiss + 1, TORQUE_MAX_MISS + 1)
             if (torqueMiss <= TORQUE_MAX_MISS && torqueShown != null) return
