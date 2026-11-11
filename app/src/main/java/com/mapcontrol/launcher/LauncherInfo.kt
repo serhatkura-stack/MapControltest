@@ -16,7 +16,7 @@ object LauncherInfo {
     @Volatile var mode: LayoutMode = LayoutMode.PARK
     @Volatile private var logged = false
 
-    /** Derleme işlemesi (GIT_SHA); BuildConfig'te yoksa (ör. birim testi) "?" döner. */
+    /** Derleme işlemesi (GIT_SHA); BuildConfig'te yoksa (ör. test derlemesi) "?" döner. */
     private fun buildCommit(): String = try {
         Class.forName("com.mapcontrol.BuildConfig").getField("GIT_SHA").get(null) as? String
     } catch (e: Exception) {

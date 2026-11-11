@@ -34,5 +34,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# Yedek dosyalar (APK'ya girmesin)
+*.bak
 # Silent installer dex asset (uygulama içinde gerekli)
 !app/src/main/assets/*.dex

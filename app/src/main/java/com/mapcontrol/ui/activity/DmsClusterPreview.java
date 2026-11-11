@@ -117,7 +117,7 @@ final class DmsClusterPreview {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         try {
-            windowManager.addView(root, params);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("DmsPreview", windowManager, root, params);
         } catch (RuntimeException e) {
             root = null;
             image = null;

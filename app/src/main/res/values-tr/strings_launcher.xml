@@ -112,9 +112,10 @@
     <string name="launcher_bar_home">Ana ekran</string>
     <string name="launcher_bar_apps">Uygulamalar</string>
     <string name="launcher_bar_settings">Ayarlar</string>
-    <string name="launcher_read_only_climate">Salt okuma: klima araçtan değiştirilir</string>
+    <string name="launcher_read_only_climate">Test sürümü: klima araçtan değiştirilir</string>
     <string name="launcher_climate_pending">Klima kontrolü araç testinden sonra açılacak</string>
     <string name="launcher_climate_panel_failed">Klima paneli açılamadı</string>
+    <string name="launcher_climate_sync">Senkron</string>
     <string name="launcher_climate_driver">Sürücü sıcaklığı</string>
     <string name="launcher_climate_passenger">Yolcu sıcaklığı</string>
     <string name="launcher_climate_fan">Fan kademesi</string>
@@ -174,6 +175,10 @@
     <string name="launcher_drive_theme">Sürüş moduna göre renk</string>
     <string name="launcher_auto_drive_layout">Sürüşte ayrı düzen</string>
     <string name="launcher_auto_drive_layout_hint">Araç giderken ayrı bir sürüş düzeni gösterir.</string>
+    <string name="launcher_sport_mode">Spor modu (deneysel)</string>
+    <string name="launcher_sport_close_oem_dialog">Sürüş modu penceresini kapat</string>
+    <string name="launcher_sport_ambient">Spor modunda ambiyans rengi</string>
+    <string name="launcher_sport_ambient_unverified">Spor modunda ambiyans rengi (henüz doğrulanmadı)</string>
     <string name="launcher_toggle_on">Açık</string>
     <string name="launcher_toggle_off">Kapalı</string>
     <string name="launcher_toggle_show">Göster</string>
@@ -235,8 +240,20 @@
     <string name="launcher_favorite_key_yandex_navi">Yandex Navi</string>
     <string name="launcher_favorite_key_yandex_maps">Yandex Haritalar</string>
     <string name="launcher_favorite_key_missing">%1$s kurulu değil</string>
-    <string name="launcher_sport_mode">Spor modu (deneysel)</string>
-    <string name="launcher_sport_ambient">Spor modunda ambiyans rengi</string>
-    <string name="launcher_sport_ambient_unverified">Spor modunda ambiyans rengi (henüz doğrulanmadı)</string>
-    <string name="launcher_sport_close_oem_dialog">Sürüş modu penceresini kapat</string>
+    <string name="launcher_cluster_map">Gösterge haritası (deneysel)</string>
+    <string name="launcher_cluster_map_hint">Yandex haritası göstergede, gösterge öğeleriyle tek katman halinde (kenarları zemine erir). Açılmazsa eski tam ekran yansıtma kullanılır.</string>
+    <string name="launcher_cluster_frame">Gösterge çerçevesi</string>
+    <string name="launcher_cluster_frame_auto">Otomatik</string>
+    <string name="launcher_cluster_frame_night">Gece</string>
+    <string name="launcher_cluster_frame_day">Gündüz</string>
+    <string name="launcher_cluster_frame_satellite">Uydu</string>
+    <string name="launcher_cluster_map_app">Harita uygulaması</string>
+    <string name="launcher_cluster_map_navi">Yandex Navigator</string>
+    <string name="launcher_cluster_map_maps">Yandex Haritalar</string>
+    <string name="launcher_cluster_window">Harita penceresi</string>
+    <string name="launcher_cluster_window_mid">Orta</string>
+    <string name="launcher_cluster_window_wide">Geniş</string>
+    <string name="launcher_cluster_window_full">Tam</string>
+    <string name="launcher_cluster_ambient">Ambiyans rengiyle uyum</string>
+    <string name="launcher_cluster_map_next">Göstergeye yansıt bir sonraki açılışında uygulanır</string>
 </resources>

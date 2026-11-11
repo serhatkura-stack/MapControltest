@@ -229,7 +229,7 @@ class OemDriveDialogCloser(private val delayMs: Long = DELAY_MS) {
     }
 
     companion object {
-        /** Mod değişiminden ~300 ms sonra (pencere açılmış olsun). */
+        /** Dökümdeki öneri: mod değişiminden ~300 ms sonra (pencere açılmış olsun). */
         const val DELAY_MS = 300L
         /** Süre dolduktan sonra pencerenin odağı almasını bekleme payı. */
         const val FOCUS_WAIT_MS = 1_500L

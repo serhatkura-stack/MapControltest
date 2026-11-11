@@ -109,7 +109,7 @@ internal object SportDemo {
  * Spor modunun orta alanı (kronograf): solda yuvarlak medya modülü, ortada büyük HIZ kadranı (0–220 km/sa, ibre + dijital
  * hız, bu sürüşün en yüksek hızında tepe işareti), altında vites penceresi ve küçük devir okuması (eskiyse gizli), iki
  * yanda dört küçük ve sakin alt kadran (seçilebilir, [SportDials]; varsayılan 0–100, G, Anlık, Maks), sağda burnu yukarı
- * araç modülü (açık kapı/bagaj, stop parıltısı). "Önce hız" kararı (6 Kasım); devir ReadOnly 62
+ * araç modülü (açık kapı/bagaj, stop parıltısı). "Önce hız" kararı: spor-modu-brief sonu (6 Kasım); devir ReadOnly 62
  * araçta ~5 sn'de bir değiştiği için büyük ibre olamaz.
  *
  * Düzenleme modunda küçük kadrana uzun basınca seçici açılır ([SportDialPicker]); seçim kalıcıdır ([SportDialPrefs]).

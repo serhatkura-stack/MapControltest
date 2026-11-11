@@ -17,7 +17,7 @@ import android.widget.FrameLayout
  *
  * Biçim [SportTransition.choose] ile seçilir (6 Kasım kararı):
  *  - Araç duruyor: giriş (~2,2 sn) karartma (250 ms) · değişim · karartma kalkar, kadran çerçeveleri sırayla parlar, ibre
- *    ağırca sona süpürür, tepede bekler, gerçek hıza iner (önce hız), canlı değerler
+ *    ağırca sona süpürür, tepede bekler, gerçek hıza iner (hız ibresi; spor-modu-brief sonu "önce hız"), canlı değerler
  *    belirir. Çıkış (~1,5 sn, sakin): değerler söner, ibre iner, karartma (400 ms) · değişim · karartma yavaşça kalkar; parlama yok.
  *  - Araç gidiyor: karartma ve süpürme yok; ~500 ms çapraz geçiş (orta alan, kök zemin), hız ibresi doğrudan gerçek hızda,
  *    medya ve uyarı şeridi geçiş boyunca ekranda. Çıkış da aynı sakin geçiş; sürüş özeti gösterilmez.

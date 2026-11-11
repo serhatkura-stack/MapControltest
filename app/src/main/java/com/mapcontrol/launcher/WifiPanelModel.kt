@@ -10,7 +10,7 @@ internal data class WifiRow(val scan: WifiScan, val saved: Boolean)
 
 /** Panelin Wi-Fi'ye dokunan tek yüzü; uygulamada MapControl'ın WifiController'ı kullanılır. */
 internal interface WifiBackend {
-    /** Yakındaki ağlar taranıp bağlanılabiliyor mu (false: yalnızca aç/kapa + geçerli ağ). */
+    /** Yakındaki ağlar taranıp bağlanılabiliyor mu (test sürümünde false: yalnızca aç/kapa + geçerli ağ). */
     val canList: Boolean
     fun isEnabled(): Boolean
     /** Arka planda açar/kapatır, bitince ana iş parçacığında [done] çağrılır. */

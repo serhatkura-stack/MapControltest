@@ -16,7 +16,7 @@ class PickerGridTest {
         val f = PickerGrid.fit(n, t7W, t7H)
         assertTrue(f.fits)
         assertTrue(f.cols * f.rows >= n)
-        assertTrue(f.cols in 4..8)
+        assertTrue(f.cols in 6..8)
         assertTrue(f.tileH >= LauncherTheme.TOUCH_MIN_DP)
         assertTrue(f.tileH <= PickerGrid.MAX_TILE_H_DP)
     }

@@ -334,7 +334,7 @@ internal class RearSpeakerTile(context: Context) : ComfortTile(context) {
     private fun onTap() {
         val fade = SoundFieldMath.valid(reading.sound?.fade)
         val target = SoundFieldMath.targetFade(fade, store.restoreFade)
-        // Okunamıyorsa (salt okuma dışında) tahmin etme. Okuma "tahmin" ise (son yazımız) yine de ondan ilerlenir.
+        // Okunamıyorsa (test sürümü dışında) tahmin etme. Okuma "tahmin" ise (son yazımız) yine de ondan ilerlenir.
         if (target == null && !LauncherEdition.READ_ONLY) return
         val enabled = ComfortWriter.rearSpeakerEnabled
         if (enabled && target != null) {

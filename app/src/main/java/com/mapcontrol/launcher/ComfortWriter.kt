@@ -209,7 +209,7 @@ internal object ComfortWriter {
 
     /**
      * Arka hoparlör: ses alanını yazar; [balance] korunur, [fade] ön-arka dengesidir (0..[SoundFieldMath.MAX]). Kapalıyken false döner ve araca dokunmaz.
-     * Gönderim `LauncherEdition.sendSoundField` üzerindendir (beyaz liste kapısından geçer).
+     * Gönderim `LauncherEdition.sendSoundField` üzerindendir (test sürümünde beyaz liste kapısından geçer).
      */
     fun setFader(balance: Int, fade: Int): Boolean {
         if (!rearSpeakerEnabled) return false

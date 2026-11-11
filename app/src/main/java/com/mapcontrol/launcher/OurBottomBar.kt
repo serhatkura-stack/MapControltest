@@ -6,7 +6,15 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.LinearGradient
 import android.graphics.Outline
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.StateListDrawable
 import android.graphics.drawable.Drawable
@@ -26,6 +34,8 @@ import com.desaysv.ivi.extra.project.carinfo.HvacID
 import com.desaysv.ivi.extra.project.carinfo.proxy.CarInfoProxy
 import com.desaysv.ivi.vdb.event.id.carinfo.VDEventCarInfo
 import com.mapcontrol.R
+import com.mapcontrol.media.LauncherMediaController
+import com.mapcontrol.media.LauncherMediaController.MediaState
 import com.mapcontrol.util.AppIconHelper
 import com.mapcontrol.util.AppLaunchHelper
 import com.mapcontrol.util.ProjectionTargetApps
@@ -40,10 +50,12 @@ internal data class ClimateReadout(
 
 /**
  * Launcher'ın kendi alt çubuğu ("Alt çubuk: Bizimki"): OEM gezinme çubuğu gizlenirken yerini alır.
- * Tek parça "dock" şeridi, bölümler ince ayraçlarla: ana ekran · uygulamalar · araç (kare düğmeler), sürücü sıcaklığı · fan ·
- * yolcu sıcaklığı ([ClimateControl]: sürükle/dokun/uzun bas), ayarlar · telefon (kare düğmeler). Telefon düğmesi ana
- * ekranda telefon sayfasını ya da panelini açar ([onPhoneTap]), uzun basış bağlı telefonun sesli asistanıdır. Klima yazması yalnızca doğrulanmış dock yolunda gider ([ClimateWriter.enabled]); panel yolu seçiliyse değer kısa
- * süre değişir, sonra araçtakine döner. Okuma 3 sn'de bir, yalnızca ekran görünürken.
+ * Tek parça koyu "dock" şeridi, bölümler ince ayraçlarla: ana ekran · uygulamalar · araç (kare düğmeler), medya (kapak,
+ * başlık, sanatçı, oynat/duraklat; oturum yokken "Müzik"), sürücü sıcaklığı · fan · yolcu sıcaklığı
+ * ([ClimateControl]: sürükle/dokun/uzun bas), ayarlar · telefon (kare düğmeler). Klima yazması yalnızca doğrulanmış dock
+ * yolunda gider ([ClimateWriter.enabled]); panel yolu seçiliyse değer kısa süre değişir, sonra araçtakine döner.
+ * Okuma 3 sn'de bir, yalnızca ekran görünürken.
+
  */
 class OurBottomBar(
     private val activity: Activity,
@@ -377,6 +389,7 @@ class OurBottomBar(
         private const val PHONE_PACKAGE = "com.desaysv.bluetooth.phone"
         private const val ERROR_TOAST_WINDOW_MS = 500L
         private const val POLL_MS = 3_000L
+        private const val DASH = "—"
 
         private const val APPS_SHEET_WIDTH_DP = 1280
         private const val APPS_HEIGHT_DP = 440

@@ -18,6 +18,7 @@ import java.io.InputStreamReader;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.mapcontrol.util.AppLaunchHelper;
+import com.mapcontrol.launcher.cluster.ClusterMap;
 import com.mapcontrol.util.DisplayHelper;
 
 public class ClusterDisplayManager {
@@ -131,8 +132,14 @@ public class ClusterDisplayManager {
                                     callback.log("Launch intent bulunamadı: " + targetPackage);
                                 } else {
                                     int clusterId = AppLaunchHelper.getClusterDisplayId(context);
-                                    AppLaunchHelper.launchAppOnDisplay(context, tp, clusterId, Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-                                    callback.log("Intent cluster'da başlatıldı (displayId=" + clusterId + ")");
+                                    // Gösterge haritası (deneysel, varsayılan kapalı): yalnızca Yandex, eski yolun ekranında çerçeveli
+                                    // küçük pencere; olmazsa eski tam ekran yol.
+                                    if (ClusterMap.isEnabled(context) && ClusterMap.startFramed(context, tp, clusterId)) {
+                                        callback.log("Intent cluster'da çerçeveli pencerede başlatıldı");
+                                    } else {
+                                        AppLaunchHelper.launchAppOnDisplay(context, tp, clusterId, Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                                        callback.log("Intent cluster'da başlatıldı (displayId=" + clusterId + ")");
+                                    }
                                 }
                             }
                         } catch (Exception e) {
@@ -165,6 +172,7 @@ public class ClusterDisplayManager {
     public void closeClusterDisplay(boolean sendBackground) {
         openSessionId.incrementAndGet();
         try {
+            ClusterMap.onProjectionClosed(context);
             VDNaviDisplayArea payloadDA = new VDNaviDisplayArea();
             payloadDA.setNaviDisplayArea(0);
             payloadDA.setNaviDisplayAreaResult("false");

@@ -10,10 +10,12 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.mapcontrol.R
 import com.mapcontrol.weather.OpenMeteoWeatherClient
+import com.mapcontrol.weather.OpenMeteoWeatherLabels
 import com.mapcontrol.weather.OpenMeteoWeatherSnapshot
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Üst şerit (sol direksiyonlu araç için): solda dokunma işleri (ayarlar, Wi-Fi, düzenle), ortada saat,

@@ -118,7 +118,7 @@ internal class LockTile(private val context: Context) : SizedWidget, Themeable, 
             false -> show(R.drawable.ic_mdi_lock_open_variant, LauncherTheme.TEXT, context.getString(R.string.launcher_unlocked))
             null -> show(R.drawable.ic_mdi_lock, LauncherTheme.TEXT_SECONDARY, context.getString(R.string.launcher_unavailable))
         }
-        // Salt okumada veri yokken de dokunuş açıklama göstermeli.
+        // Test sürümünde veri yokken de dokunuş açıklama göstermeli.
         root.isEnabled = locked != null || LauncherEdition.READ_ONLY
     }
 

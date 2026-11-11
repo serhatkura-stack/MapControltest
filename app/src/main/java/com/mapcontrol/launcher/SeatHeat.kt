@@ -59,19 +59,19 @@ internal class SeatHeatModel(
         main.removeCallbacks(poll)
     }
 
-    /** Dokunuş: sıradaki seviyeyi yollar. [LauncherEdition.READ_ONLY] iken yalnızca bilgi mesajı gösterir. */
+    /** Dokunuş: sıradaki seviyeyi yollar. Test sürümünde yalnızca bilgi mesajı gösterir. */
     fun cycle(driver: Boolean) {
         set(driver, nextLevel(if (driver) state.driver else state.passenger))
     }
 
-    /** Bu model şu an araca yazabilir mi (salt okuma kapalı; soğutmada yazma doğrulanmış). */
+    /** Bu model şu an araca yazabilir mi (test sürümü değil; soğutmada yazma doğrulanmış ya da test anahtarı açık). */
     val writable: Boolean
         get() = !LauncherEdition.READ_ONLY &&
             (!vent || WidgetWritePolicy.gate(LauncherEdition.SEAT_VENT_WRITE_VERIFIED, LauncherEdition.WRITES_ON))
 
     /**
      * Seviyeyi (0..3) doğrudan yazar: ekran hemen güncellenir, komut sıralı kuyrukta gider, kısa süre sonra gerçek durum okunur.
-     * Yazılamıyorsa (salt okuma, doğrulanmamış soğutma) sakin bir bilgi mesajı gösterir ve false döner. Koltuk widget'ı sürüşte de
+     * Yazılamıyorsa (test sürümü, doğrulanmamış soğutma) sakin bir bilgi mesajı gösterir ve false döner. Koltuk widget'ı sürüşte de
      * kullanılır (park kapısı yok); araç komutu reddederse sonraki okuma eski seviyeyi geri getirir.
      */
     fun set(driver: Boolean, level: Int): Boolean {
@@ -80,7 +80,7 @@ internal class SeatHeatModel(
         } else {
             if (vent) CarSettingID.ID_CAR_COPILOT_SEAT_VENTILATION else CarSettingID.ID_CAR_COPILOT_SEAT_HEAT
         }
-        // Salt okumada dokunuş hiçbir şey yazmaz; sürücü boşuna basmasın diye sakin bir açıklama gösterilir.
+        // Test sürümünde dokunuş hiçbir şey yazmaz; sürücü boşuna basmasın diye sakin bir açıklama gösterilir.
         if (LauncherEdition.READ_ONLY) {
             Toast.makeText(context, R.string.launcher_read_only_seat, Toast.LENGTH_LONG).show()
             return false

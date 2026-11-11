@@ -426,7 +426,7 @@ internal object ClimatePanelGuard {
     fun start(context: Context) {
         if (worker != null) return
         val ctx = context.applicationContext
-        if (!ClimatePanelPolicy.mayAct(com.mapcontrol.util.LauncherModeManager.isEnabled(ctx))) return
+        if (!ClimatePanelPolicy.mayAct(LauncherEdition.launcherModeOn(ctx))) return
         app = ctx
         val t = HandlerThread("ClimatePanelLock").apply { start() }
         thread = t
@@ -473,7 +473,7 @@ internal object ClimatePanelGuard {
         Log.i(TAG, "lock stopped (launcher mode off)")
     }
 
-    private fun modeOn(): Boolean = app?.let { ClimatePanelPolicy.mayAct(com.mapcontrol.util.LauncherModeManager.isEnabled(it)) } ?: false
+    private fun modeOn(): Boolean = app?.let { ClimatePanelPolicy.mayAct(LauncherEdition.launcherModeOn(it)) } ?: false
 
     /** Ana ekrana dönüşte: araç uykusunda düşmüş olabilecek abonelik tazelenir. */
     fun refresh() {

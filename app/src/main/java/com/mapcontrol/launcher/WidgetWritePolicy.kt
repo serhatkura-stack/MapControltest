@@ -122,7 +122,7 @@ internal object WidgetWritePolicy {
             (SportAmbientLogic.COLOR_MIN..SportAmbientLogic.COLOR_MAX).toSet(),
             listOf(sig("cs11_ambient_color", CS, CarSettingID.ID_CAR_AMBIENT_LIGHT_COLOR), sig("cs7_ambient_light", CS, CarSettingID.ID_CAR_AMBIENT_LIGHT)),
             verified = SportAmbient.AMBIENT_WRITE_VERIFIED),
-        // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç. Yalnızca park halinde ([LOCK_WRITE_VERIFIED]).
+        // Merkezi kilit: VehicleQuickControls.centralLockValue → 2 kilitle, 1 aç. Sürüşte de çalışır ([LOCK_WRITE_VERIFIED]).
         Entry("Lock", CS, CarSettingID.ID_CAR_IVI_LOCK, setOf(1, 2),
             listOf(sig("cs169_ivi_lock", CS, CarSettingID.ID_CAR_IVI_LOCK)), verified = LOCK_WRITE_VERIFIED),
         // Sürüş modu: NewEnergy 4 YAZMA değerleri (MapControl'ın araçta çalışan yazması, OEM seçicisi): Eko 0, Normal 1, Spor 2,

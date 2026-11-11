@@ -16,6 +16,8 @@ import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.mapcontrol.R
+import com.mapcontrol.launcher.cluster.ClusterMap
+import com.mapcontrol.launcher.cluster.ClusterMapMath
 import com.mapcontrol.util.AppLaunchHelper
 
 /** Launcher görünümü: sistemi izle ya da sabit gündüz/gece. */
@@ -202,6 +204,10 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             setText(R.string.launcher_phone_priority_hint)
         }, fullWidth())
 
+        // Gösterge haritası (deneysel): yalnızca gösterge ekranı varsa ve bu derleme sunuyorsa (gömülü MapControl derlemesinde
+        // gizli: gösterge işi donduruldu, [LauncherEdition.CLUSTER_MAP_SETTING]). Varsayılan kapalı.
+        if (LauncherEdition.CLUSTER_MAP_SETTING && ClusterMap.hasCluster(activity)) addClusterMapControls(d)
+
         addView(gap(activity, 24, vertical = true))
         addView(row(R.drawable.ic_mdi_view_grid, R.string.launcher_edit_title) {
             d.dismiss()
@@ -330,6 +336,88 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
                 }
             }, LinearLayout.LayoutParams(activity.dp(TOGGLE_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+
+    /** "Gösterge haritası (deneysel)" Açık | Kapalı; açıkken çerçeve stili, harita uygulaması ve pencere boyu. */
+    private fun LinearLayout.addClusterMapControls(d: Dialog) {
+        val on = ClusterMap.isEnabled(activity)
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_cluster_map, on) { value ->
+            d.dismiss()
+            // Yalnızca kaydedilir: harita "Göstergeye yansıt" açılınca çerçevelenir. Yansıtma sürerken kapatılırsa
+            // çerçeve kalkar ve harita eski yoldan yeniden açılır.
+            ClusterMap.setEnabled(activity, value)
+            if (value) {
+                Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
+            } else {
+                ClusterMap.stopAndRestore(activity, "ayar kapatıldı")
+            }
+        }, fullWidth())
+        addView(gap(activity, 4, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP - 2f, LauncherTheme.TEXT_SECONDARY, maxLines = 2).apply {
+            setText(R.string.launcher_cluster_map_hint)
+        }, fullWidth())
+        if (!on) return
+        val frame = ClusterMap.frameChoice(activity)
+        addLabeledSegments(R.string.launcher_cluster_frame, listOf(
+            R.string.launcher_cluster_frame_auto, R.string.launcher_cluster_frame_night,
+            R.string.launcher_cluster_frame_day, R.string.launcher_cluster_frame_satellite,
+        ), ClusterMapMath.FrameChoice.values().indexOf(frame)) { i ->
+            d.dismiss()
+            ClusterMap.setFrameChoice(activity, ClusterMapMath.FrameChoice.values()[i])
+            ClusterMap.refreshStyle(activity)
+        }
+        val app = ClusterMap.mapApp(activity)
+        addLabeledSegments(R.string.launcher_cluster_map_app, listOf(R.string.launcher_cluster_map_navi, R.string.launcher_cluster_map_maps),
+            ClusterMapMath.MapApp.values().indexOf(app)) { i ->
+            d.dismiss()
+            ClusterMap.setMapApp(activity, ClusterMapMath.MapApp.values()[i])
+            // Açık haritaya dokunulmaz: sonraki yansıtmada uygulanır.
+            if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
+        }
+        val win = ClusterMap.windowSize(activity)
+        addLabeledSegments(R.string.launcher_cluster_window, listOf(R.string.launcher_cluster_window_mid, R.string.launcher_cluster_window_wide, R.string.launcher_cluster_window_full),
+            ClusterMapMath.WindowSize.values().indexOf(win)) { i ->
+            d.dismiss()
+            ClusterMap.setWindowSize(activity, ClusterMapMath.WindowSize.values()[i])
+            // Açık haritaya dokunulmaz: sonraki yansıtmada uygulanır.
+            if (ClusterMap.isRunning()) Toast.makeText(activity, R.string.launcher_cluster_map_next, Toast.LENGTH_LONG).show()
+        }
+        // Ambiyans rengiyle uyum: açık katmana hemen uygulanır (renk okunamazsa stil renkleri kalır).
+        addView(gap(activity, 12, vertical = true))
+        addView(onOffControl(R.string.launcher_cluster_ambient, ClusterMap.ambientMatch(activity)) { value ->
+            d.dismiss()
+            ClusterMap.setAmbientMatch(activity, value)
+        }, fullWidth())
+    }
+
+    /** Küçük etiket + eşit parçalı seçim (tema seçimiyle aynı görünüm); seçili olana dokunmak bir şey yapmaz. */
+    private fun LinearLayout.addLabeledSegments(@StringRes labelRes: Int, labels: List<Int>, selectedIndex: Int, onPick: (Int) -> Unit) {
+        addView(gap(activity, 12, vertical = true))
+        addView(text(activity, LauncherTheme.LABEL_SP, LauncherTheme.TEXT_SECONDARY).apply { setText(labelRes) }, fullWidth())
+        addView(gap(activity, 8, vertical = true))
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(activity, LauncherTheme.CONTROL, SEGMENT_RADIUS_DP)
+            val p = activity.dp(6)
+            setPadding(p, p, p, p)
+            labels.forEachIndexed { i, label ->
+                if (i > 0) addView(gap(activity, 6))
+                val selected = i == selectedIndex
+                addView(text(activity, LauncherTheme.BODY_SP,
+                    if (selected) LauncherTheme.ON_ACCENT else LauncherTheme.TEXT, medium = true).apply {
+                    setText(label)
+                    gravity = Gravity.CENTER
+                    if (selected) background = rounded(activity, LauncherTheme.ACCENT, SEGMENT_RADIUS_DP - 4)
+                    isClickable = true
+                    isFocusable = true
+                    isSelected = selected
+                    contentDescription = activity.getString(labelRes) + ": " + activity.getString(label)
+                    setOnClickListener { if (!selected) onPick(i) }
+                    pressFeedback()
+                }, LinearLayout.LayoutParams(0, activity.dp(LauncherTheme.TOUCH_MIN_DP), 1f))
+            }
+        }, fullWidth())
+    }
 
     /**
      * "Spor modunda ambiyans rengi" (varsayılan kapalı): spor başlarken ambiyans OEM kırmızı-turuncusuna geçer, bitince eski

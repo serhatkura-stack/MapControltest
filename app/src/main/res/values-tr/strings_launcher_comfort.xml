@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="launcher_read_only_comfort">Salt okuma: araçtan değiştirilir</string>
+    <string name="launcher_read_only_comfort">Test sürümü: araçtan değiştirilir</string>
     <string name="launcher_comfort_pending">Araç testinden sonra açılacak</string>
     <string name="launcher_widget_trunk">Bagaj</string>
     <string name="launcher_trunk_closed">Kapalı</string>

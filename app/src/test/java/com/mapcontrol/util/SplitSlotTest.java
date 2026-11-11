@@ -36,7 +36,7 @@ public class SplitSlotTest {
 
     @Test
     public void miniDashForBothPackages() {
-        for (String self : new String[]{"com.mapcontrol", "com.mapcontrol.debug"}) {
+        for (String self : new String[]{"com.mapcontrol", "com.mapcontrol.launchertest"}) {
             String slot = SplitSlot.miniDash(self);
             assertTrue(SplitSlot.isComponent(slot));
             assertTrue(SplitSlot.isMiniDash(slot, self));
@@ -44,8 +44,8 @@ public class SplitSlotTest {
             assertEquals(SplitSlot.MINI_DASH_CLASS, SplitSlot.classOf(slot));
         }
         assertEquals("com.mapcontrol/.launcher.MiniDashActivity", SplitSlot.miniDash("com.mapcontrol"));
-        assertEquals("com.mapcontrol.debug/com.mapcontrol.launcher.MiniDashActivity",
-                SplitSlot.miniDash("com.mapcontrol.debug"));
+        assertEquals("com.mapcontrol.launchertest/com.mapcontrol.launcher.MiniDashActivity",
+                SplitSlot.miniDash("com.mapcontrol.launchertest"));
     }
 
     @Test
@@ -54,7 +54,7 @@ public class SplitSlotTest {
         assertFalse(SplitSlot.isAllowed(self, self));
         assertFalse(SplitSlot.isAllowed("com.mapcontrol/.ui.activity.MainActivity", self));
         assertFalse(SplitSlot.isAllowed("com.other/.launcher.MiniDashActivity", self));
-        assertFalse(SplitSlot.isMiniDash(SplitSlot.miniDash("com.mapcontrol.debug"), self));
+        assertFalse(SplitSlot.isMiniDash(SplitSlot.miniDash("com.mapcontrol.launchertest"), self));
         assertTrue(SplitSlot.isAllowed("com.foo", self));
         assertFalse(SplitSlot.isAllowed("", self));
         assertFalse(SplitSlot.isAllowed(null, self));

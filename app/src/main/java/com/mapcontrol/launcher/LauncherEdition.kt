@@ -17,6 +17,9 @@ import com.mapcontrol.util.WifiController
 
 /**
  * Launcher'ın araca komut gönderen ve MapControl'e bağlanan tek noktası.
+ *
+ * Salt-okur test derlemesi bu dosyanın kendi sürümünü kullanır: orada
+ * komutlar hiçbir şey yapmaz ve Ayarlar girişi yoktur. Launcher'ın geri kalanı iki derlemede aynıdır.
  */
 internal object LauncherEdition {
     /** MapControl launcher modu açık mı (Ana ekran tuşunu MapControl yakalıyor; sistem varsayılan HOME OEM olabilir). */
@@ -31,6 +34,9 @@ internal object LauncherEdition {
      * açık); bagaj, kilit ve sürüş modu ayrıca park kapısından geçer. Her komut `WidgetWrite` etiketiyle günlüğe yazılır.
      */
     const val WRITES_ON = true
+
+    /** Ayarlardaki deneysel "Gösterge haritası" satırı. Gömülü MapControl (Berk) derlemesi: gizli, gösterge işi donduruldu (6 Kasım). */
+    const val CLUSTER_MAP_SETTING = false
 
     @Suppress("UNUSED_PARAMETER")
     fun init(context: Context) = Unit

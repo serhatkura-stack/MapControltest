@@ -205,7 +205,7 @@ public final class YandexClusterNavOverlay {
         } catch (Exception ignored) {
         }
         try {
-            wm.addView(root, params);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("YandexNavCard", wm, root, params);
             lastZOrderRaiseUptimeMs = now;
         } catch (Exception ignored) {
             overlayRoot = null;
@@ -391,7 +391,7 @@ public final class YandexClusterNavOverlay {
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     PixelFormat.TRANSLUCENT);
-            windowManager.addView(overlayRoot, overlayLayoutParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("YandexNavCard", windowManager, overlayRoot, overlayLayoutParams);
             lastZOrderRaiseUptimeMs = SystemClock.uptimeMillis();
         } catch (Exception e) {
             android.util.Log.e("ClusterNavOverlay", "overlay oluşturulamadı", e);

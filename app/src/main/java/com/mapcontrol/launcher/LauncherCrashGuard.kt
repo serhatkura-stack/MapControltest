@@ -8,8 +8,8 @@ import android.content.pm.ApplicationInfo
  * çökme döngüsü bekçisi. İki kural vardır ve biri yeterlidir: launcher başladıktan [WINDOW_MS] içinde süreç
  * [CRASH_LIMIT] kez çökerse ya da launcher açıldıktan sonraki çökmeler (aralarında [HEALTHY_MS]'den uzun sağlıklı
  * çalışma olsa da) son [LONG_WINDOW_MS] içinde [LONG_CRASH_LIMIT] kez olursa "tetiklendi" işaretlenir; uygulama tarafı (MapControlApplication) bunu görüp HOME sabitlemesini kaldırır, alias'ı
- * kapatır ve Launcher Modu'nu kapatır (aracın kendi ana ekranı döner). Bu sınıf yalnızca
- * SharedPreferences yazar; kapatma işini uygulama yapar.
+ * kapatır ve Launcher Modu'nu kapatır (aracın kendi ana ekranı döner). Test derlemesi [util] paketini
+ * görmediği için bu sınıf yalnızca SharedPreferences yazar; kapatma işini uygulama yapar.
  */
 object LauncherCrashGuard {
     const val PREFS = "launcher_crash_guard"

@@ -14,7 +14,7 @@ class MapControlLinkTest {
 
     @Test
     fun fallsBackToMapControl() {
-        assertEquals("com.mapcontrol", MapControlLink.choosePackage("com.mapcontrol.preview", setOf("com.mapcontrol")))
+        assertEquals("com.mapcontrol", MapControlLink.choosePackage("com.mapcontrol.launchertest", setOf("com.mapcontrol")))
     }
 
     @Test
@@ -25,6 +25,6 @@ class MapControlLinkTest {
 
     @Test
     fun nullWhenNothingInstalled() {
-        assertNull(MapControlLink.choosePackage("com.mapcontrol.preview", setOf("com.other")))
+        assertNull(MapControlLink.choosePackage("com.mapcontrol.launchertest", setOf("com.other")))
     }
 }

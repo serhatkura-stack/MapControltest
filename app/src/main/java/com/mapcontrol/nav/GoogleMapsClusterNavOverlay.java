@@ -200,7 +200,7 @@ public final class GoogleMapsClusterNavOverlay {
         lastZOrderRaiseUptimeMs = now;
         try {
             windowManager.removeView(overlayRoot);
-            windowManager.addView(overlayRoot, overlayLayoutParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("GoogleNavCard", windowManager, overlayRoot, overlayLayoutParams);
         } catch (Exception ignored) {
         }
     }
@@ -394,7 +394,7 @@ public final class GoogleMapsClusterNavOverlay {
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     PixelFormat.TRANSLUCENT);
-            windowManager.addView(overlayRoot, overlayLayoutParams);
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("GoogleNavCard", windowManager, overlayRoot, overlayLayoutParams);
             lastZOrderRaiseUptimeMs = SystemClock.uptimeMillis();
         } catch (Exception e) {
             android.util.Log.e("ClusterNavOverlay", "overlay oluşturulamadı", e);

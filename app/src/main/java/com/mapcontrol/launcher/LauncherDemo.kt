@@ -155,7 +155,7 @@ internal object LauncherDemo {
 
     /** Bluetooth paneli önizlemesi: demo açıkken ve gerçek eşleşmiş cihaz yokken gösterilen örnek liste (adresler geçersiz, bağlanma denenmez). */
     internal fun bluetoothDevices(): List<BtDevice> = if (!enabled) emptyList() else listOf(
-        BtDevice("DEMO-1", "Demo iPhone", BtKind.PHONE, phone = true, audio = true),
+        BtDevice("DEMO-1", "Serhat'ın iPhone'u", BtKind.PHONE, phone = true, audio = true),
         BtDevice("DEMO-2", "AirPods", BtKind.AUDIO),
         BtDevice("DEMO-3", "Galaxy S23", BtKind.PHONE),
     )

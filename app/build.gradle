@@ -117,7 +117,8 @@ dependencies {
         exclude group: 'io.sentry', module: 'sentry-android-replay'
     }
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.json:json:20180813'
+    // Android'in org.json'u birim testlerde taklit (stub) olduğundan gerçek uygulama: AutomationBackupTest için.
+    testImplementation 'org.json:json:20231013'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 

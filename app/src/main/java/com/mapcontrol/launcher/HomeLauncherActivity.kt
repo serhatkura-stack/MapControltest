@@ -157,9 +157,13 @@ class HomeLauncherActivity : Activity() {
         // Debug: telefon panelinde asistan düğmesi (yeniden kurulumda eski istek ayarın üstüne yazmasın).
         if (savedInstanceState == null) PhonePrefs.applyShowAssistantExtra(this, intent)
         dataCheckExtra = DataCheckSheet.applyFrom(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterCardDebug.applyFrom(this, intent)
         LauncherSafeArea.applyFrom(this, intent)
         LauncherBottomBar.applyFrom(this, intent)
         LauncherTheme.applyFrom(systemConfig, ThemeMode.read(this))
+        // Gösterge haritası (deneysel): debug ekstraları; açıksa Otomatik çerçeve yeni gündüz/gece durumuna geçer.
+        com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterMap.refreshStyle(this)
         // Sürüş modu vurgusu: seçenek kapalıysa varsayılan vurgu; demo isteği ilk kurulumda hemen uygulanır.
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
@@ -227,7 +231,7 @@ class HomeLauncherActivity : Activity() {
                 insets
             }
         }
-        // İçerik her zaman bir FrameLayout: kök düzen, sürüş ekranının zemini ve en üstte arama şeridi.
+        // İçerik her zaman bir FrameLayout: kök düzen ve en üstte arama şeridi.
         // Kök düzene bağlı her şey (rootLayout, tema geçişi, karşılama, iç boşluk dinleyicisi) `root`'u kullanır, içerik görünümünü değil.
         setContentView(FrameLayout(this).apply {
             clipChildren = false
@@ -299,6 +303,7 @@ class HomeLauncherActivity : Activity() {
         consumeEditExtra(intent)
         consumeShowCall(intent)
         PhonePrefs.applyShowAssistantExtra(this, intent)
+        com.mapcontrol.launcher.cluster.ClusterMap.applyFrom(this, intent)
         LauncherDemo.applyDriveMode(intent)
         LauncherDemo.applyMoving(intent)
         LauncherDemo.applyPreview(intent)
@@ -367,6 +372,8 @@ class HomeLauncherActivity : Activity() {
         refreshDrivePrefs()
         if (!driveAccentOn) LauncherTheme.driveMode = DriveAccent.NORMAL
         LauncherTheme.applyFrom(systemConfig, ThemeMode.read(this))
+        // Gösterge haritası Otomatik stil: gündüz/gece değişince çerçeve bir kez yeniden çizilir (kapalıysa bir şey yapmaz).
+        com.mapcontrol.launcher.cluster.ClusterMap.refreshStyle(this)
         window.decorView.setBackgroundColor(LauncherTheme.GROUND)
         rootLayout?.setBackgroundColor(LauncherTheme.GROUND)
 
@@ -800,8 +807,8 @@ class HomeLauncherActivity : Activity() {
         v.animate().cancel()
         v.removeCallbacks(showDriveMapHint)
         if (show) {
-            // Hemen tam görünür: belirme animasyonu ana ekran öndeki yerini yarılara bırakınca yarıda kalabiliyor ve durum
-            // çubuğu şeridinde kartlar görünüyordu. Yarılar zaten kendi açılış animasyonuyla gelir.
+            // Hemen tam görünür: öykünücüde (7 Kasım) belirme animasyonu ana ekran öndeki yerini yarılara bırakınca yarıda kaldı ve
+            // durum çubuğu şeridinde kartlar göründü. Yarılar zaten kendi açılış animasyonuyla gelir.
             v.alpha = 1f
             if (v.visibility != View.VISIBLE) {
                 v.visibility = View.VISIBLE
@@ -861,7 +868,7 @@ class HomeLauncherActivity : Activity() {
         super.onDestroy()
     }
 
-    /** İzin sonuçları: telefon izinleri, Wi-Fi paneli konum izni, fotoğraf widget'ı depolama izni. */
+    /** İzin sonuçları: depolama verilince açık fotoğraf seçici yenilenir. */
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Telefon izinleri (rehber, geçmiş, arama): kısmi verilse de sonuç yeniden okunur.
@@ -1221,7 +1228,7 @@ class HomeLauncherActivity : Activity() {
     }
 
     private fun openSettings() {
-        // Doğrudan MapControl ayarları; ayar ekranı olmayan derlemede launcher paneli.
+        // Tam sürümde doğrudan MapControl ayarları; salt-okur test sürümünde launcher paneli.
         if (LauncherEdition.HAS_SETTINGS) LauncherEdition.openSettings(this) else settings.show()
     }
 
@@ -1291,15 +1298,15 @@ class HomeLauncherActivity : Activity() {
         const val SPORT_TAG = "SportMode"
         /** Soğuk açılışta karşılama için güç sinyalinin en çok beklendiği süre (ekran bu sırada siyah). */
         const val WELCOME_ARM_MS = 1_500L
-        /** Sürüş ekranı zemininin kalkma süresi (ana ekrana dönüşte kartlar yumuşak belirir). */
-        const val DRIVE_FADE_MS = 180L
-        /** Zemindeki "Haritayı aç" ipucu açılıştan bu kadar sonra belirir (o ana dek harita penceresi üstünü örter). */
-        const val DRIVE_HINT_DELAY_MS = 2_500L
         const val RESET_SHEET_WIDTH_DP = 640
         const val PHONE_SHEET_WIDTH_DP = 760
         const val PHONE_SHEET_HEIGHT_DP = 440
         /** Arama şeridinin üst kenardan payı (başlığın üstünde durur). */
         const val CALL_BANNER_TOP_DP = 12
+        /** Sürüş ekranı zemininin kalkma süresi (ana ekrana dönüşte kartlar yumuşak belirir). */
+        const val DRIVE_FADE_MS = 180L
+        /** Zemindeki "Haritayı aç" ipucu açılıştan bu kadar sonra belirir (o ana dek harita penceresi üstünü örter). */
+        const val DRIVE_HINT_DELAY_MS = 2_500L
         /** Öne getirmede arama sayfasını açtıran ekstra (karar §15). */
         const val EXTRA_SHOW_CALL = "launcher_show_call"
         /** OEM arama ekranı açıldıktan sonra launcher'ın öne alınma gecikmesi. */

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Hava durumu (Open-Meteo). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Araç verisini okumak için araç veri servisine bağlanma. -->
+    <uses-permission android:name="ivi.vds.permission.SERVICE" />
+    <!-- Alt şeritteki uygulama seçicisi. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Fotoğraf widget'ı: İndirilenler klasöründeki resimleri listeler. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Bluetooth paneli ve başlık göstergesi: durum ve eşleşmiş cihazları okuma (aç/kapa izni bu sürümde yok). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <!-- Veri kontrolü: son GPS konumu. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Telefon paneli: rehber, arama geçmişi, arama başlatma, HFP istemci (bağlı telefon adı, asistan) ve
+         Telecom hesabı. Araçta sistem izin penceresi yoksa adb shell pm grant com.mapcontrol.launchertest
+         android.permission.READ_CONTACTS (READ_CALL_LOG, CALL_PHONE, READ_PHONE_STATE) ile verilir.
+         MODIFY_AUDIO_SETTINGS: görüşmede "Sessiz" (mikrofon kapatma). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Telefon: Telecom ile cevap/kapat (yansımasız yedek; araçta adb pm grant ile verilir). -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Gösterge haritası (deneysel): göstergeye çerçeve penceresi. Araçta: adb shell appops set com.mapcontrol.launchertest SYSTEM_ALERT_WINDOW allow -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Spor hız kadranı: android.car PERF_VEHICLE_SPEED 10 Hz (tehlikeli izin; uygulama durağanken bir kez sorar ya da
+         adb shell pm grant <paket> android.car.permission.CAR_SPEED). Yoksa ReadOnly 119 gösterge hızı kullanılır. -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="Launcher Test"
+        android:supportsRtl="true">
+
+        <!-- android.car isteğe bağlı kitaplık (CarPropertyManager hız okuması); araçta yoksa uygulama yine kurulur. -->
+        <uses-library android:name="android.car" android:required="false" />
+
+        <!-- HOME kategorisi yok: aracın kendi ana ekranı değişmez; uygulama listesinden açılır. -->
+        <activity
+            android:name=".launcher.HomeLauncherActivity"
+            android:exported="true"
+            android:label="Launcher Test"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Mini gösterge: bölünmüş ekranın bir yarısında (960 x ~610) açılan, boyutu değişebilen ayrı ekran (ana ekran
+             bölünemez). Uygulama listesinde ayrı simgesi var; serbest pencere (freeform) bölmesinde seçilebilir. Kendi görev
+             ilişkisi (taskAffinity) ana ekranla ve FrostNav'la aynı göreve karışmasın diye. -->
+        <activity
+            android:name="com.mapcontrol.launcher.MiniDashActivity"
+            android:exported="true"
+            android:label="Mini gösterge"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.mapcontrol.launchertest.minidash"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Konfor yazma testi (perde, buğu, direksiyon ısıtma): Koruma deseni
+             (intent-filter yok, exported=true, ack + shell başlatan denetimi + park kapısı kodda). -->
+        <activity
+            android:name="com.mapcontrol.comfort.ComfortTestActivity"
+            android:exported="true"
+            android:label="Konfor Test"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <!-- Ekranı karart: tam siyah, en düşük parlaklık; dokununca kapanır. -->
+        <activity
+            android:name=".launcher.ScreenOffActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Medya kartı: çalan şarkıyı okumak için bildirim erişimi (kullanıcı ayarlardan verir). -->
+        <service
+            android:name=".media.LauncherMediaNotificationListener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

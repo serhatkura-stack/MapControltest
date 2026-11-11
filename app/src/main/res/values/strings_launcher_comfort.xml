@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="launcher_read_only_comfort">Read-only: change it from the car</string>
+    <string name="launcher_read_only_comfort">Test build: change it from the car</string>
     <string name="launcher_comfort_pending">Will open after the car test</string>
     <string name="launcher_widget_trunk">Trunk</string>
     <string name="launcher_trunk_closed">Closed</string>

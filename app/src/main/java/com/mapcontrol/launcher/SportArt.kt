@@ -285,7 +285,7 @@ internal object SportArt {
     }
 
     /**
-     * Ana kadran: hız 0–[SportMath.SPEED_MAX] km/sa ("önce hız" kararı). Bölüntü her 5 km/sa
+     * Ana kadran: hız 0–[SportMath.SPEED_MAX] km/sa (kullanıcı kararı "önce hız", spor-modu-brief sonu). Bölüntü her 5 km/sa
      * ince, 10'da orta, 20'de uzun; rakamlar 20'şer. Kırmızı bölge yok (sakin); tek sıcak vurgu ibre ve tepe işareti.
      */
     private fun speedDial(context: Context, c: Canvas, g: SportGeometry) {

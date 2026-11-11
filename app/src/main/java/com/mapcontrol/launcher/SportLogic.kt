@@ -66,7 +66,7 @@ object SportMath {
         kotlin.math.abs(rpm - if (moving) target else shown) >= deadband
 
     /**
-     * Ana (büyük) kadran hızdır ("önce hız" kararı): 0–[SPEED_MAX] km/sa aynı 270° yayda.
+     * Ana (büyük) kadran hızdır (spor-modu-brief sonu, kullanıcı kararı "önce hız"): 0–[SPEED_MAX] km/sa aynı 270° yayda.
      * Devir ReadOnly 62 araçta ~5 sn'de bir değişiyor (araç testi), ibre için işe yaramıyor; kadranın altında küçük okumadır.
      */
     const val SPEED_MAX = 220

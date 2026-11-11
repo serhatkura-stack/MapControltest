@@ -33,6 +33,8 @@
     
     <!-- Camera permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Kamera izni donanımı zorunlu kılmasın (lint PermissionImpliesUnsupportedChromeOsHardware). -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     
     <!-- Bluetooth -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />

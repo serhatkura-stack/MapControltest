@@ -382,7 +382,6 @@ object SahneSlots {
         return cleared.copy(rightLower = SahneSlot(newId(cleared, WidgetType.PHONE), WidgetType.PHONE))
     }
 
-
     /**
      * v1 → v2 bir kerelik GEÇMİŞ geçiş (yalnız v1 kayıtlara; yeni kayıtlara uygulanmaz): o zaman yolculuk kartı sürüşte
      * canlı tüketimi öncü satırında gösteriyordu, şeritteki "Anlık tüketim" kutucuğu onu yineliyordu (7 Kasım'dan beri
