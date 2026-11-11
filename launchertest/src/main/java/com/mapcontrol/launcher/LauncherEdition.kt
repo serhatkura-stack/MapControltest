@@ -29,10 +29,6 @@ internal object LauncherEdition {
 
     const val HAS_SETTINGS = false
 
-    /** Bu derlemede ok resmi ayrı resmi MapControl uygulamasına ait; denetlenemez, işlem yok. */
-    @Suppress("UNUSED_PARAMETER")
-    fun setHomeForeground(front: Boolean) = Unit
-
     /** Test uygulamasında açılış servisi yok. */
     @Suppress("UNUSED_PARAMETER")
     fun onLauncherShown(context: Context) = Unit
