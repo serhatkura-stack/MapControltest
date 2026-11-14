@@ -265,10 +265,6 @@
     <string name="launcher_cluster_window_full">Full</string>
     <string name="launcher_cluster_ambient">Match ambient light colour</string>
     <string name="launcher_cluster_map_next">Applies the next time the map is projected to the cluster</string>
-    <string name="launcher_sport_mode">Sport mode (experimental)</string>
-    <string name="launcher_sport_ambient">Sport ambient color</string>
-    <string name="launcher_sport_ambient_unverified">Sport ambient color (not verified yet)</string>
-    <string name="launcher_sport_close_oem_dialog">Close drive mode popup</string>
     <string name="launcher_media_open_app">Open %1$s</string>
     <string name="launcher_media_open_failed">Could not open the app</string>
 </resources>

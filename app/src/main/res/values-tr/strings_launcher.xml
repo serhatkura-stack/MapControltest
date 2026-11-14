@@ -265,10 +265,6 @@
     <string name="launcher_cluster_window_full">Tam</string>
     <string name="launcher_cluster_ambient">Ambiyans rengiyle uyum</string>
     <string name="launcher_cluster_map_next">Göstergeye yansıt bir sonraki açılışında uygulanır</string>
-    <string name="launcher_sport_mode">Spor modu (deneysel)</string>
-    <string name="launcher_sport_ambient">Spor modunda ambiyans rengi</string>
-    <string name="launcher_sport_ambient_unverified">Spor modunda ambiyans rengi (henüz doğrulanmadı)</string>
-    <string name="launcher_sport_close_oem_dialog">Sürüş modu penceresini kapat</string>
     <string name="launcher_media_open_app">%1$s uygulamasını aç</string>
     <string name="launcher_media_open_failed">Uygulama açılamadı</string>
 </resources>
