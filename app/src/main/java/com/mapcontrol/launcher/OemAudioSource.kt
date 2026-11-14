@@ -17,6 +17,7 @@ import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaPlayActionInfo
 import com.desaysv.ivi.vdb.event.id.media.bean.VDMediaType
 import com.desaysv.ivi.vdb.client.listener.VDBindListener
 import com.desaysv.ivi.vdb.client.listener.VDNotifyListener
+import com.mapcontrol.util.LauncherModeManager
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
 
