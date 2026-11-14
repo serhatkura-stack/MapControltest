@@ -313,6 +313,12 @@ public final class DisplayHelper {
         }
     }
 
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    private static boolean onMainThread() {
+        return android.os.Looper.myLooper() == android.os.Looper.getMainLooper();
+    }
+
     /**
      * Görünümü soldurup kaldırır; solma sonu çalışmazsa (iptal, görünür değil) süre + 150 ms sonra yine kaldırılır.
      * Amaç kaydı hemen "çıkıyor" olarak işaretlenir; aynı amaçla yeni pencere bu arada eklenebilir.
@@ -324,10 +330,11 @@ public final class DisplayHelper {
             if (done[0]) {
                 return;
             }
-            done[0] = true;
             try {
                 wm.removeViewImmediate(view);
+                done[0] = true;
             } catch (Exception ignored) {
+                // Başarısızsa işaretleme: diğer yol (animasyon sonu / gecikmeli yedek) yeniden denesin.
             }
         };
         try {
@@ -395,6 +402,25 @@ public final class DisplayHelper {
      * yansıtana kadar oradaki siyahlığı doldurur. {@link #hideBootSplash()} çağrılana kadar kalır.
      */
     public static void showBootSplashOnDisplay(Context context, int displayId) {
+        showBootSplashOnDisplay(context, displayId, false);
+    }
+
+    /**
+     * @param evenIfProjectionOpen true yalnız göstergede ön planda uygulama olmadığı doğrulanınca ("Ana Ekrana Al"
+     *                             sonrası boş gösterge); diğer yollar yansıtma açıkken splash basmaz.
+     */
+    public static void showBootSplashOnDisplay(Context context, int displayId, boolean evenIfProjectionOpen) {
+        // Pencere hep ana thread'de eklenip kaldırılır; başka thread'de eklenen görünümü ana thread kaldıramaz
+        // (removeViewImmediate hata verir, yakalanır) ve splash göstergede sahipsiz kalır.
+        if (!onMainThread()) {
+            MAIN.post(() -> showBootSplashOnDisplay(context, displayId, evenIfProjectionOpen));
+            return;
+        }
+        // Yansıtma açıkken splash, göstergedeki uygulamanın (ör. Yandex) üstünü örter: harita arkada çalışır ama
+        // görünmez, ana ekranda "Aç" da uygulamayı göstergede öne getirdiği için hiçbir şey olmaz gibi görünür.
+        if (!evenIfProjectionOpen && ClusterNavigationState.getLastKnownOpen()) {
+            return;
+        }
         try {
             if (bootSplashView != null || bootSplashBlockedForInstall) {
                 return;
@@ -443,15 +469,26 @@ public final class DisplayHelper {
                     android.graphics.PixelFormat.TRANSLUCENT
             );
 
+            // addView (Berk) burada OverlayWindows.add içinde yapılır; eklenemezse bootSplashView atanmaz.
+            com.mapcontrol.launcher.cluster.OverlayWindows.add("BootSplash", bootSplashWindowManager, overlay, bootSplashParams);
             bootSplashView = overlay;
-            com.mapcontrol.launcher.cluster.OverlayWindows.add("BootSplash", bootSplashWindowManager, bootSplashView, bootSplashParams);
 
             startBootSplashAnimations(overlay, bootSplashAnimators);
         } catch (Exception ignored) {
+            // Eklenemediyse alan dolu kalmasın; yoksa sonraki gösterimler erken döner.
+            bootSplashView = null;
+            bootSplashWindowManager = null;
+            bootSplashParams = null;
+            bootSplashDisplayContext = null;
+            bootSplashDisplayId = Display.INVALID_DISPLAY;
         }
     }
 
     public static void hideBootSplash() {
+        if (!onMainThread()) {
+            MAIN.post(DisplayHelper::hideBootSplash);
+            return;
+        }
         try {
             cancelBootSplashAnimations();
             if (bootSplashView != null && bootSplashWindowManager != null) {
@@ -476,6 +513,11 @@ public final class DisplayHelper {
      */
     public static void refreshBootSplashAfterConfigurationChange(Context applicationContext) {
         if (bootSplashView == null || bootSplashParams == null) {
+            return;
+        }
+        if (ClusterNavigationState.getLastKnownOpen()) {
+            // Yansıtma açıkken kalmış bir splash varsa yenilemek yerine kaldır.
+            hideBootSplash();
             return;
         }
         if (bootSplashDisplayId == Display.INVALID_DISPLAY) {

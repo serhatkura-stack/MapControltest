@@ -20,6 +20,8 @@
     <!-- Foreground Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.READ_LOGS"/>
+    <!-- Tanılama paketi: dumpsys bluetooth_manager (development izni; install.sh pm grant verir, yoksa atlanır). -->
+    <uses-permission android:name="android.permission.DUMP" tools:ignore="ProtectedPermissions"/>
     <!-- Bölünmüş ekran: önceden açık başka uygulama görevini sınırlarıyla öne almak (moveTaskToFront, normal izin). -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     
@@ -295,6 +297,11 @@
         <!-- adb kurulumundan once kamerayi kapatir. DUMP: yalnizca adb shell gonderebilir. -->
         <receiver
             android:name=".dvr.InstallPrepareReceiver"
+            android:permission="android.permission.DUMP"
+            android:exported="true" />
+        <!-- adb ile kaldirmadan once cihaz sahipligini birakir. DUMP: yalnizca adb shell gonderebilir. -->
+        <receiver
+            android:name=".admin.ReleaseOwnerReceiver"
             android:permission="android.permission.DUMP"
             android:exported="true" />
 

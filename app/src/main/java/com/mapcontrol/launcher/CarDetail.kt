@@ -175,7 +175,7 @@ internal class CarDetailSheet(private val activity: Activity) {
         val (windows, windowsOpen) = list(m.windows, WINDOW_NAMES)
         row(s(R.string.launcher_detail_windows), windows, windowsOpen)
         row(s(R.string.launcher_detail_sunroof), openClosed(m.sunroof), m.sunroof == true)
-        row(s(R.string.launcher_detail_outside), m.outsideC?.let { activity.getString(R.string.launcher_temp_c, Math.round(it).toInt()) } ?: dash, false)
+        row(s(R.string.launcher_detail_outside), m.outsideC?.let { activity.getString(R.string.launcher_temp_c, TripDecode.outsideText(it)) } ?: dash, false)
         rows = stateRows
         val number = java.text.NumberFormat.getIntegerInstance(java.util.Locale.getDefault())
         val service = listOfNotNull(
@@ -254,11 +254,15 @@ internal class CarDetailSheet(private val activity: Activity) {
 
         private fun carW(w: Int) = (w * CAR_FRACTION).toInt()
 
+        /** Çizilen tuval genişliği: gövde [carW] çerçevesini doldursun diye modelin ölçeğiyle büyür ([CarGeometry.bodyScale]; Tiggo 7 ve Jaecoo 7'de tam 1). */
+        private fun drawW(cw: Int) = (cw * car.model.geometry.bodyScale).toInt()
+
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val w = MeasureSpec.getSize(widthMeasureSpec)
             val cw = carW(w)
-            car.measure(MeasureSpec.makeMeasureSpec(CarStageView.widthFor(cw), MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(CarStageView.heightFor(cw), MeasureSpec.EXACTLY))
+            val dw = drawW(cw)
+            car.measure(MeasureSpec.makeMeasureSpec(car.widthFor(dw), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(car.heightFor(dw), MeasureSpec.EXACTLY))
             val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             labels.forEach { it.measure(free, free) }
             val labelH = labels.maxOf { it.measuredHeight }
@@ -273,8 +277,11 @@ internal class CarDetailSheet(private val activity: Activity) {
             val ch = (cw * CarAnimSpec.BASE_H / CarAnimSpec.BASE_W).toInt()
             val bodyLeft = (w - cw) / 2
             val bodyTop = (h - ch) / 2
-            val cl = bodyLeft - CarStageView.carLeft(cw)
-            val ct = bodyTop - CarStageView.carTop(cw)
+            // Tuval, gövde çerçevesiyle aynı merkezde modelin ölçeği kadar büyük (ölçek 1 ise aynı kutu).
+            val dw = drawW(cw)
+            val dh = (dw * CarAnimSpec.BASE_H / CarAnimSpec.BASE_W).toInt()
+            val cl = bodyLeft - (dw - cw) / 2 - car.carLeft(dw)
+            val ct = bodyTop - (dh - ch) / 2 - car.carTop(dw)
             car.layout(cl, ct, cl + car.measuredWidth, ct + car.measuredHeight)
             val gap = context.dp(LABEL_GAP_DP)
             labels.forEachIndexed { i, label ->

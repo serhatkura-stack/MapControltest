@@ -450,6 +450,13 @@
     <string name="camera360_viewer_select_all">Select all</string>
     <string name="camera360_viewer_select_none">Clear</string>
     <string name="camera360_viewer_select_hint">Tap clips to select</string>
+    <string name="camera360_viewer_source_internal">Car</string>
+    <string name="camera360_viewer_source_usb">USB</string>
+    <string name="camera360_viewer_no_usb">No USB drive plugged in</string>
+    <string name="camera360_viewer_usb_removed">USB drive removed, showing in-car clips</string>
+    <string name="camera360_viewer_empty_usb">No clips on USB</string>
+    <string name="camera360_viewer_empty_usb_sub">Recordings in the %1$s folder on the USB drive appear here.</string>
+    <string name="camera360_viewer_fullscreen">Full screen</string>
     <string name="camera360_export_n">USB (%1$d)</string>
     <string name="camera360_delete">Delete</string>
     <string name="camera360_delete_n">Delete (%1$d)</string>
@@ -933,7 +940,7 @@
     <string name="gps_status_lost">SIGNAL LOST</string>
     <string name="gps_status_lost_hint">Waiting for the phone again</string>
     <string name="gps_status_needs_mock">PERMISSION NEEDED</string>
-    <string name="gps_status_needs_mock_hint">Developer options \u2192 Select mock location app \u2192 MapControl</string>
+    <string name="gps_status_needs_mock_hint">Mock location permission missing. Reinstall MapControl with the Installer</string>
     <string name="gps_status_location_off">LOCATION OFF</string>
     <string name="gps_status_location_off_hint">Turn on system location</string>
     <string name="gps_status_network_error">NO NETWORK</string>
@@ -953,4 +960,12 @@
     <string name="home_screen_car_vertical">Vertical</string>
     <string name="home_screen_car_horizontal_help">The car lies sideways with its nose to the right.</string>
     <string name="home_screen_car_vertical_help">The car stands upright with its nose up. Lights and doors work the same.</string>
+    <string name="home_screen_car_model">Car model</string>
+    <string name="home_screen_car_model_tiggo">Tiggo 7</string>
+    <string name="home_screen_car_model_jaecoo7">Jaecoo 7</string>
+    <string name="home_screen_car_model_tiggo8">Tiggo 8</string>
+    <string name="home_screen_car_model_help_auto">Follows the \"Vehicle screen\" setting: Tiggo 7, Tiggo 8, or Jaecoo 7 on the Jaecoo (vertical) screen.</string>
+    <string name="home_screen_car_model_help_tiggo">The home screen shows the Tiggo 7.</string>
+    <string name="home_screen_car_model_help_jaecoo7">The home screen shows the Jaecoo 7.</string>
+    <string name="home_screen_car_model_help_tiggo8">The home screen shows the Tiggo 8.</string>
 </resources>

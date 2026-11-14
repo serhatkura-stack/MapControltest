@@ -6,7 +6,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -213,11 +212,11 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
             d.dismiss()
             onEditHome()
         }, fullWidth())
-        if (isInstalled(VEHICLE_SETTINGS_PACKAGE)) {
+        if (VehicleSettingsApp.isAvailable(activity)) {
             addView(gap(activity, 12, vertical = true))
             addView(row(R.drawable.ic_mdi_car, R.string.launcher_vehicle_settings) {
                 d.dismiss()
-                openApp(VEHICLE_SETTINGS_PACKAGE)
+                launcher.runSafely { VehicleSettingsApp.open(activity) }
             }, fullWidth())
         }
         addView(gap(activity, 12, vertical = true))
@@ -558,12 +557,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     private fun fullWidth() = sheetFullWidth()
 
     /** Java yardımcısı senkron çalıştığı için arka planda açılır. */
-    private fun openApp(packageName: String) {
-        launcher.runSafely {
-            if (!DriveScreen.openLeftover(activity, packageName)) AppLaunchHelper.launchAppOnDisplay(activity, packageName, Display.DEFAULT_DISPLAY, 0)
-        }
-    }
-
     /** Launcher MapControl'ın dışında çalışıyorsa ve MapControl kuruluysa açılacak paket; yoksa null. */
     private fun mapcontrolPackage(): String? = MapControlLink.choosePackage(
         activity.packageName,
@@ -589,8 +582,6 @@ class LauncherSettings(private val activity: Activity, private val onEditHome: (
     }
 
     private companion object {
-        /** Aracın kendi araç ayarları uygulaması (Desay SV). */
-        const val VEHICLE_SETTINGS_PACKAGE = "com.desaysv.vehiclesetting"
         const val ROW_HEIGHT_DP = 80
         /** Açık | Kapalı parçasının genişliği (etiket kalan alanı alır). */
         const val TOGGLE_WIDTH_DP = 300
